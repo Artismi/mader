@@ -3,7 +3,6 @@ import { google } from "googleapis";
 import { NuovaIdeaModal } from "@/components/ui/nuova-idea-modal";
 import { NuovoTaskModal } from "@/components/ui/nuovo-task-modal";
 import { WeeklyCalendar } from "@/components/ui/weekly-calendar";
-import { ToolPanels } from "@/components/ui/tool-panels";
 import { FocusList } from "@/components/ui/focus-list";
 import { PlannerWidget } from "@/components/ui/planner-widget";
 
@@ -26,7 +25,7 @@ export default async function DailyBriefingPage() {
       .eq('category', 'task')
       .lt('deadline', todayStr)
       .order('deadline', { ascending: true })
-      .limit(4);
+      .limit(5);
 
     urgentTasks = overdue || [];
 
@@ -37,13 +36,13 @@ export default async function DailyBriefingPage() {
       .eq('category', 'task')
       .gte('deadline', todayStr)
       .order('deadline', { ascending: true })
-      .limit(4);
+      .limit(5);
 
     suggestedTasks = upcoming || [];
 
     const { data: allTasks } = await supabase
       .from('tasks')
-      .select('*')
+      .select('*, clients(name)')
       .eq('status', 'todo')
       .gte('deadline', todayStr)
       .order('deadline', { ascending: true });
@@ -61,21 +60,20 @@ export default async function DailyBriefingPage() {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: tokenData.provider_token });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
       try {
         const timeMax = new Date();
-        timeMax.setDate(timeMax.getDate() + 7);
+        timeMax.setDate(timeMax.getDate() + 14);
         const res = await calendar.events.list({
           calendarId: 'primary',
           timeMin: new Date().toISOString(),
           timeMax: timeMax.toISOString(),
-          maxResults: 50,
+          maxResults: 100,
           singleEvents: true,
           orderBy: 'startTime',
         });
         calendarEvents = res.data.items || [];
       } catch (e) {
-        console.error("Error fetching calendar", e);
+        console.error("Calendar fetch error", e);
       }
     }
   }
@@ -85,15 +83,16 @@ export default async function DailyBriefingPage() {
   });
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-6 pt-24 pb-32">
+    // Full-viewport layout — no page scroll
+    <div className="h-screen overflow-hidden flex flex-col pt-16">
 
-      {/* LAYER 1 — ANCHOR */}
-      <div className="flex items-end justify-between pb-8 border-b border-white/5 mb-10">
-        <div>
-          <h1 className="text-5xl font-black tracking-tighter">Buongiorno.</h1>
-          <p className="text-[11px] text-white/25 font-bold uppercase tracking-[0.3em] mt-2">
+      {/* Top bar — compatto */}
+      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-white/[0.06]">
+        <div className="flex items-baseline gap-4">
+          <h1 className="text-xl font-black tracking-tight text-white/90">Buongiorno.</h1>
+          <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/20 hidden sm:block">
             {dateLabel}
-          </p>
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <NuovaIdeaModal />
@@ -101,25 +100,23 @@ export default async function DailyBriefingPage() {
         </div>
       </div>
 
-      {/* LAYER 2 — FOCUS + AGENDA */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+      {/* Main area — due colonne indipendenti */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
 
-        {/* Focus List + Planner */}
-        <div className="lg:col-span-4 space-y-10">
+        {/* Sidebar sinistra — scrollabile indipendentemente */}
+        <aside className="hidden lg:flex flex-col w-72 flex-shrink-0 border-r border-white/[0.05] overflow-y-auto scrollbar-hide px-5 py-5 gap-8">
           <FocusList urgentTasks={urgentTasks} suggestedTasks={suggestedTasks} />
-          <div className="border-t border-white/5 pt-10">
+          <div className="border-t border-white/5 pt-6">
             <PlannerWidget />
           </div>
-        </div>
+        </aside>
 
-        {/* Weekly Calendar */}
-        <div className="lg:col-span-8">
+        {/* Calendario — occupa tutto lo spazio restante */}
+        <main className="flex-1 min-w-0 overflow-hidden p-4">
           <WeeklyCalendar initialEvents={calendarEvents} initialTasks={allTasksForCalendar} />
-        </div>
-      </div>
+        </main>
 
-      {/* LAYER 3 — STRUMENTI */}
-      <ToolPanels />
+      </div>
     </div>
-  )
+  );
 }

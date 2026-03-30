@@ -129,6 +129,34 @@ export async function markTaskDone(taskId: string) {
     return updateTaskStatus(taskId, 'done')
 }
 
+export async function duplicateTask(data: {
+    title: string
+    type: string
+    category: 'task' | 'engagement'
+    deadline: string
+    client_id: string | null
+    duration_minutes?: number
+}) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Non autenticato')
+
+    const { error } = await supabase.from('tasks').insert({
+        user_id: user.id,
+        title: data.title,
+        type: data.type,
+        category: data.category,
+        status: 'todo',
+        client_id: data.client_id,
+        deadline: data.deadline,
+        duration_minutes: data.duration_minutes || 60,
+    })
+
+    if (error) throw new Error(error.message)
+    revalidatePath('/')
+    revalidatePath('/incarichi')
+}
+
 export async function deleteIdea(ideaId: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
