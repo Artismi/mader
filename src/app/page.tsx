@@ -5,6 +5,7 @@ import { NuovoTaskModal } from "@/components/ui/nuovo-task-modal";
 import { WeeklyCalendar } from "@/components/ui/weekly-calendar";
 import { ToolPanels } from "@/components/ui/tool-panels";
 import { FocusList } from "@/components/ui/focus-list";
+import { PlannerWidget } from "@/components/ui/planner-widget";
 
 export default async function DailyBriefingPage() {
   const supabase = await createClient();
@@ -103,9 +104,12 @@ export default async function DailyBriefingPage() {
       {/* LAYER 2 — FOCUS + AGENDA */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
-        {/* Focus List */}
-        <div className="lg:col-span-4">
+        {/* Focus List + Planner */}
+        <div className="lg:col-span-4 space-y-10">
           <FocusList urgentTasks={urgentTasks} suggestedTasks={suggestedTasks} />
+          <div className="border-t border-white/5 pt-10">
+            <PlannerWidget />
+          </div>
         </div>
 
         {/* Weekly Calendar */}
