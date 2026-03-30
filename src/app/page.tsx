@@ -1,10 +1,10 @@
-import { CheckCircle2, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { google } from "googleapis";
 import { NuovaIdeaModal } from "@/components/ui/nuova-idea-modal";
 import { NuovoTaskModal } from "@/components/ui/nuovo-task-modal";
 import { WeeklyCalendar } from "@/components/ui/weekly-calendar";
 import { ToolPanels } from "@/components/ui/tool-panels";
+import { FocusList } from "@/components/ui/focus-list";
 
 export default async function DailyBriefingPage() {
   const supabase = await createClient();
@@ -104,72 +104,8 @@ export default async function DailyBriefingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
         {/* Focus List */}
-        <div className="lg:col-span-4 space-y-10 pt-1">
-
-          <p className="text-sm text-white/30 italic leading-relaxed">
-            {urgentTasks.length === 0 && suggestedTasks.length === 0
-              ? "Nessuna priorità attiva."
-              : urgentTasks.length > 0
-                ? `${urgentTasks.length} ${urgentTasks.length === 1 ? 'task in ritardo' : 'task in ritardo'} · ${suggestedTasks.length} in arrivo.`
-                : `${suggestedTasks.length} task in arrivo.`
-            }
-          </p>
-
-          {urgentTasks.length > 0 && (
-            <section>
-              <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-red-400/50 mb-5 flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5" /> In Ritardo
-              </h2>
-              <div className="space-y-5">
-                {urgentTasks.map(task => (
-                  <div key={task.id} className="flex items-start gap-3 group cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-400/50 mt-[7px] shrink-0" />
-                    <div>
-                      <h3 className="text-sm font-bold text-white/70 group-hover:text-white transition-colors leading-snug">
-                        {task.title}
-                      </h3>
-                      {task.clients?.name && (
-                        <p className="text-[10px] font-bold text-white/20 mt-0.5 uppercase tracking-wider">
-                          {task.clients.name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {suggestedTasks.length > 0 && (
-            <section>
-              <h2 className="text-[10px] font-black uppercase tracking-[0.25em] text-white/20 mb-5 flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Prossimi
-              </h2>
-              <div className="space-y-4">
-                {suggestedTasks.map(task => (
-                  <div key={task.id} className="flex items-start gap-3 group cursor-pointer">
-                    <div className="w-4 h-4 rounded-full border border-white/12 group-hover:border-accent/40 transition-colors shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-sm font-medium text-white/45 group-hover:text-white/75 transition-colors leading-snug">
-                        {task.title}
-                      </span>
-                      {task.clients?.name && (
-                        <p className="text-[10px] font-bold text-white/15 mt-0.5 uppercase tracking-wider">
-                          {task.clients.name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {urgentTasks.length === 0 && suggestedTasks.length === 0 && (
-            <p className="text-xs text-white/15 italic">
-              Aggiungi un task per iniziare.
-            </p>
-          )}
+        <div className="lg:col-span-4">
+          <FocusList urgentTasks={urgentTasks} suggestedTasks={suggestedTasks} />
         </div>
 
         {/* Weekly Calendar */}

@@ -5,6 +5,7 @@ import { Plus, X, Briefcase } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
+import { updateTask } from '@/app/actions'
 
 const CATEGORIE = [
     { value: 'social', label: 'Social' },
@@ -15,27 +16,53 @@ const CATEGORIE = [
     { value: 'general', label: 'Generale' },
 ]
 
-interface TaskFormModalProps {
-    open: boolean;
-    onClose: () => void;
-    initialDate?: string;
+interface EditTask {
+    id: string
+    title: string
+    type: string
+    category: 'task' | 'engagement'
+    deadline: string
+    client_id: string | null
 }
 
-export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps) {
+interface TaskFormModalProps {
+    open: boolean
+    onClose: () => void
+    initialDate?: string
+    initialTitle?: string
+    initialClientId?: string
+    editTask?: EditTask
+}
+
+export function TaskFormModal({ open, onClose, initialDate, initialTitle, initialClientId, editTask }: TaskFormModalProps) {
     const [title, setTitle] = useState('')
     const [categoria, setCategoria] = useState('general')
-    const [deadline, setDeadline] = useState(initialDate || '')
+    const [deadline, setDeadline] = useState('')
     const [clientId, setClientId] = useState('')
-    const [clients, setClients] = useState<{ id: string; name: string }[]>([])
     const [category, setCategory] = useState<'task' | 'engagement'>('task')
+    const [clients, setClients] = useState<{ id: string; name: string }[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
+    const isEditing = !!editTask
+
+    // Popola campi quando si apre in modalità edit o con valori iniziali
     useEffect(() => {
-        if (initialDate) {
-            setDeadline(initialDate)
+        if (!open) return
+        if (editTask) {
+            setTitle(editTask.title)
+            setCategoria(editTask.type)
+            setCategory(editTask.category)
+            setDeadline(editTask.deadline.split('T')[0])
+            setClientId(editTask.client_id || '')
+        } else {
+            setTitle(initialTitle || '')
+            setDeadline(initialDate || '')
+            setClientId(initialClientId || '')
+            setCategory('task')
+            setCategoria('general')
         }
-    }, [initialDate, open])
+    }, [open, editTask, initialDate, initialTitle, initialClientId])
 
     useEffect(() => {
         if (!open) return
@@ -51,21 +78,32 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
         setLoading(true)
         setError('')
         try {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error('Non autenticato. Esci e rifai il login.')
-            const { error: err } = await supabase.from('tasks').insert({
-                title: title.trim(),
-                type: categoria,
-                category: category,
-                deadline: new Date(deadline).toISOString(),
-                status: 'todo',
-                client_id: clientId || null,
-                user_id: user.id,
-            })
-            if (err) throw new Error(err.message)
-            handleClose()
-            window.location.reload()
+            if (isEditing) {
+                await updateTask(editTask!.id, {
+                    title: title.trim(),
+                    type: categoria,
+                    category,
+                    deadline: new Date(deadline).toISOString(),
+                    client_id: clientId || null,
+                })
+                handleClose()
+            } else {
+                const supabase = createClient()
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) throw new Error('Non autenticato. Esci e rifai il login.')
+                const { error: err } = await supabase.from('tasks').insert({
+                    title: title.trim(),
+                    type: categoria,
+                    category,
+                    deadline: new Date(deadline).toISOString(),
+                    status: 'todo',
+                    client_id: clientId || null,
+                    user_id: user.id,
+                })
+                if (err) throw new Error(err.message)
+                handleClose()
+                window.location.reload()
+            }
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Errore nel salvataggio')
         } finally {
@@ -100,7 +138,9 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
 
                 <div className="flex items-center gap-3 mb-6 font-sans">
                     <Briefcase className="w-6 h-6 text-accent" />
-                    <h2 className="text-xl font-bold text-gray-900">Nuovo Incarico</h2>
+                    <h2 className="text-xl font-bold text-gray-900">
+                        {isEditing ? 'Modifica Incarico' : 'Nuovo Incarico'}
+                    </h2>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -126,7 +166,7 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
                         <Input
                             value={title}
                             onChange={e => setTitle(e.target.value)}
-                            placeholder={category === 'task' ? "es. Post carosello Instagram..." : "es. Lavoro al pomeriggio..."}
+                            placeholder={category === 'task' ? 'es. Post carosello Instagram...' : 'es. Lavoro al pomeriggio...'}
                             autoFocus
                             required
                         />
@@ -177,9 +217,11 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
                     {error && <p className="text-sm text-red-600">{error}</p>}
 
                     <div className="flex justify-end gap-3 pt-2">
-                        <Button type="button" variant="ghost" className="text-gray-500 hover:text-gray-700" onClick={handleClose}>Annulla</Button>
+                        <Button type="button" variant="ghost" className="text-gray-500 hover:text-gray-700" onClick={handleClose}>
+                            Annulla
+                        </Button>
                         <Button type="submit" variant="primary" isLoading={loading} disabled={!title.trim() || !deadline}>
-                            Crea Incarico
+                            {isEditing ? 'Salva Modifiche' : 'Crea Incarico'}
                         </Button>
                     </div>
                 </form>

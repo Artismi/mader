@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-export async function addIdea(text: string) {
+export async function addIdea(text: string, clientId?: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Non autenticato')
@@ -11,6 +11,7 @@ export async function addIdea(text: string) {
     const { error } = await supabase.from('ideas').insert({
         user_id: user.id,
         text: text.trim(),
+        client_id: clientId || null,
         assigned: false,
     })
 
@@ -96,6 +97,36 @@ export async function deleteTask(taskId: string) {
     if (error) throw new Error(error.message)
     revalidatePath('/incarichi')
     revalidatePath('/')
+}
+
+export async function updateTask(
+    taskId: string,
+    data: {
+        title?: string
+        type?: string
+        category?: 'task' | 'engagement'
+        deadline?: string
+        client_id?: string | null
+        status?: string
+    }
+) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Non autenticato')
+
+    const { error } = await supabase
+        .from('tasks')
+        .update(data)
+        .eq('id', taskId)
+        .eq('user_id', user.id)
+
+    if (error) throw new Error(error.message)
+    revalidatePath('/')
+    revalidatePath('/incarichi')
+}
+
+export async function markTaskDone(taskId: string) {
+    return updateTaskStatus(taskId, 'done')
 }
 
 export async function deleteIdea(ideaId: string) {

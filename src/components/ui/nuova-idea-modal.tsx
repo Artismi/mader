@@ -1,15 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, X, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { addIdea } from '@/app/actions'
+import { createClient } from '@/lib/supabase/client'
+import { TaskFormModal } from './nuovo-task-modal'
 
 export function NuovaIdeaModal() {
     const [open, setOpen] = useState(false)
     const [text, setText] = useState('')
+    const [clientId, setClientId] = useState('')
+    const [clients, setClients] = useState<{ id: string; name: string }[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+    const [convertTitle, setConvertTitle] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (!open) return
+        const supabase = createClient()
+        supabase.from('clients').select('id, name').order('name').then(({ data }) => {
+            setClients(data || [])
+        })
+    }, [open])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -17,9 +30,8 @@ export function NuovaIdeaModal() {
         setLoading(true)
         setError('')
         try {
-            await addIdea(text)
-            setText('')
-            setOpen(false)
+            await addIdea(text, clientId || undefined)
+            handleClose()
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Errore nel salvataggio')
         } finally {
@@ -27,10 +39,27 @@ export function NuovaIdeaModal() {
         }
     }
 
+    const handleConvert = async () => {
+        if (!text.trim()) return
+        setLoading(true)
+        setError('')
+        try {
+            await addIdea(text, clientId || undefined)
+            const ideaText = text
+            handleClose()
+            setConvertTitle(ideaText)
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Errore')
+            setLoading(false)
+        }
+    }
+
     const handleClose = () => {
         setOpen(false)
         setText('')
+        setClientId('')
         setError('')
+        setLoading(false)
     }
 
     return (
@@ -48,7 +77,6 @@ export function NuovaIdeaModal() {
                         <button
                             onClick={handleClose}
                             className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
-                            aria-label="Chiudi"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -66,14 +94,46 @@ export function NuovaIdeaModal() {
                                 className="w-full border border-gray-200 rounded-xl p-4 text-sm resize-none h-32 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-shadow"
                                 autoFocus
                             />
-                            {error && (
-                                <p className="text-sm text-red-600">{error}</p>
+
+                            {clients.length > 0 && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                                        Cliente (opzionale)
+                                    </label>
+                                    <select
+                                        value={clientId}
+                                        onChange={e => setClientId(e.target.value)}
+                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent text-gray-800"
+                                    >
+                                        <option value="">— Nessun cliente —</option>
+                                        {clients.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             )}
-                            <div className="flex justify-end gap-3">
+
+                            {error && <p className="text-sm text-red-600">{error}</p>}
+
+                            <div className="flex justify-end gap-2 pt-1">
                                 <Button type="button" variant="ghost" onClick={handleClose}>
                                     Annulla
                                 </Button>
-                                <Button type="submit" variant="primary" isLoading={loading} disabled={!text.trim()}>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    isLoading={loading}
+                                    disabled={!text.trim() || loading}
+                                    onClick={handleConvert}
+                                >
+                                    → Trasforma in Task
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    variant="primary"
+                                    isLoading={loading}
+                                    disabled={!text.trim() || loading}
+                                >
                                     Salva Idea
                                 </Button>
                             </div>
@@ -81,6 +141,14 @@ export function NuovaIdeaModal() {
                     </div>
                 </div>
             )}
+
+            {/* Conversione idea → task: apre TaskFormModal pre-compilato */}
+            <TaskFormModal
+                open={convertTitle !== null}
+                onClose={() => setConvertTitle(null)}
+                initialTitle={convertTitle ?? ''}
+                initialClientId={clientId}
+            />
         </>
     )
 }
