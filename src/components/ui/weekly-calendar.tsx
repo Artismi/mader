@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TaskFormModal } from './nuovo-task-modal';
 import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 interface CalendarEvent {
   id: string;
@@ -12,10 +13,12 @@ interface CalendarEvent {
   start: Date;
   end: Date;
   type: 'event' | 'task';
+  category?: 'task' | 'engagement';
   color?: string;
 }
 
 export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents: any[], initialTasks: any[] }) {
+  const router = useRouter();
   const [viewDate, setViewDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
@@ -48,13 +51,16 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
         type: 'event' as const,
         color: 'bg-accent/20 border-accent/40 text-accent-foreground'
       })),
-      ...(initialTasks || []).filter(t => t.deadline).map(t => ({
+      ...(initialTasks || []).map(t => ({
         id: t.id,
         title: t.title,
         start: new Date(t.deadline),
         end: new Date(new Date(t.deadline).getTime() + 3600000), // Default 1h
         type: 'task' as const,
-        color: 'bg-white/10 border-white/20 text-white/90 shadow-lg'
+        category: t.category as 'task' | 'engagement',
+        color: t.category === 'engagement' 
+          ? 'bg-amber-500/10 border-amber-500/20 text-amber-200/90' 
+          : 'bg-white/10 border-white/20 text-white/90 shadow-lg'
       }))
     ];
     return events;
@@ -103,10 +109,27 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
             .eq('id', eventId);
         
         if (!error) {
-            // Re-fetch manuale o reload
-            window.location.reload();
+            router.refresh();
         }
     }
+  };
+  const handleDelete = async (id: string) => {
+    if (!confirm('Eliminare questo impegno?')) return;
+    const supabase = createClient();
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (!error) {
+        router.refresh();
+    }
+  };
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isCurrentHour = (day: Date, hour: number) => {
+    return day.toDateString() === currentTime.toDateString() && currentTime.getHours() === hour;
   };
 
   return (
@@ -123,8 +146,14 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
             <h2 className="text-sm font-bold tracking-[0.2em] uppercase text-white/90">
               Agenda Settimanale
             </h2>
-            <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-1">
+            <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-1 flex items-center gap-2">
               Visualizzazione 12 Ore • Drag & Drop Attivo
+              {initialEvents.length > 0 && (
+                <span className="flex items-center gap-1 text-green-400/60 ml-2">
+                  <div className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />
+                  Google Sync OK
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -206,8 +235,7 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
                          <Plus className="w-4 h-4 text-accent/30" />
                       </div>
 
-                      {/* Event Cards */}
-                      <div className="absolute inset-x-3 top-3 flex flex-col gap-3 z-10">
+                      <div className="absolute inset-x-2 top-2 flex flex-col gap-2 z-10">
                         {events.map((event) => (
                           <div 
                             key={event.id}
@@ -216,19 +244,29 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
                             onDragEnd={handleDragEnd}
                             onClick={(e) => e.stopPropagation()}
                             className={clsx(
-                              "p-4 rounded-2xl border text-[11px] font-bold leading-tight shadow-2xl transition-all duration-300",
-                              "hover:scale-[1.03] hover:brightness-110",
-                              event.type === 'task' ? "cursor-grab active:cursor-grabbing border-white/20 bg-white/5 backdrop-blur-md" : "cursor-default opacity-60 border-accent/20 bg-accent/10",
+                              "group/card p-3 rounded-xl border text-[10px] font-bold leading-tight shadow-xl transition-all duration-300",
+                              "hover:scale-[1.02] hover:brightness-110",
+                              event.type === 'task' ? "cursor-grab active:cursor-grabbing border-white/10 bg-white/5 backdrop-blur-md" : "cursor-default opacity-60 border-accent/20 bg-accent/10",
                               event.color
                             )}
                           >
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center justify-between mb-1">
                                 <span className={clsx(
-                                    "px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest",
-                                    event.type === 'task' ? "bg-white/10 text-white/50" : "bg-accent/20 text-accent"
+                                    "px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest",
+                                    event.type === 'task' 
+                                      ? (event.category === 'engagement' ? "bg-amber-500/20 text-amber-400" : "bg-white/10 text-white/50") 
+                                      : "bg-accent/20 text-accent"
                                 )}>
-                                    {event.type === 'task' ? 'Task' : 'Evento'}
+                                    {event.type === 'task' ? (event.category === 'engagement' ? 'Impegno' : 'Progetto') : 'Evento'}
                                 </span>
+                                {event.type === 'task' && (
+                                  <button 
+                                    onClick={() => handleDelete(event.id)}
+                                    className="opacity-0 group-hover/card:opacity-100 p-1 hover:bg-red-500/20 rounded-md transition-all"
+                                  >
+                                    <X className="w-3 h-3 text-red-400" />
+                                  </button>
+                                )}
                             </div>
                             <span className="block truncate text-white/90">{event.title}</span>
                           </div>

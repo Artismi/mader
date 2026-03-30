@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, Calendar as CalendarIcon, Plus, LayoutGrid, FileText } from "lucide-react";
+import { CheckCircle2, Clock, Calendar as CalendarIcon, Plus, LayoutGrid } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { google } from "googleapis";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { AIChatWidget } from "@/components/ui/ai-chat-widget";
 import { NuovaIdeaModal } from "@/components/ui/nuova-idea-modal";
 import { NuovoTaskModal } from "@/components/ui/nuovo-task-modal";
 import { WeeklyCalendar } from "@/components/ui/weekly-calendar";
+import { PlannerWidget } from "@/components/ui/planner-widget";
 
 export default async function DailyBriefingPage() {
   const supabase = await createClient();
@@ -24,6 +25,7 @@ export default async function DailyBriefingPage() {
       .from('tasks')
       .select(`*, clients(name)`)
       .eq('status', 'todo')
+      .eq('category', 'task')
       .lt('deadline', todayStr)
       .order('deadline', { ascending: true })
       .limit(4);
@@ -34,6 +36,7 @@ export default async function DailyBriefingPage() {
       .from('tasks')
       .select(`*, clients(name)`)
       .eq('status', 'todo')
+      .eq('category', 'task')
       .gte('deadline', todayStr)
       .order('deadline', { ascending: true })
       .limit(4);
@@ -182,19 +185,17 @@ export default async function DailyBriefingPage() {
             </div>
           </div>
 
-          <div className="glass-card p-6 border-white/5 opacity-80 hover:opacity-100 transition-opacity">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 mb-4 flex items-center">
-              <FileText className="w-4 h-4 mr-2" /> Post-it
-            </h2>
-            <p className="text-sm text-white/70 italic leading-relaxed">
-              "Usa il calendario in basso per riorganizzare la settimana trascinando gli impegni."
-            </p>
-          </div>
+          <PlannerWidget />
+        </div>
         </div>
       </div>
 
-      {/* Full Width Bottom Section: Weekly Calendar */}
-      <section className="col-span-12">
+      {/* Full Width Bottom Section: Weekly Calendar (Separated) */}
+      <section className="pt-24 pb-20 border-t border-white/5">
+         <div className="flex items-center gap-3 mb-10 ml-4">
+            <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(124,58,237,0.8)]" />
+            <h2 className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Agenda Operativa</h2>
+         </div>
          <WeeklyCalendar initialEvents={calendarEvents} initialTasks={allTasksForCalendar} />
       </section>
     </div>

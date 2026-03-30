@@ -27,6 +27,7 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
     const [deadline, setDeadline] = useState(initialDate || '')
     const [clientId, setClientId] = useState('')
     const [clients, setClients] = useState<{ id: string; name: string }[]>([])
+    const [category, setCategory] = useState<'task' | 'engagement'>('task')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
@@ -56,6 +57,7 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
             const { error: err } = await supabase.from('tasks').insert({
                 title: title.trim(),
                 type: categoria,
+                category: category,
                 deadline: new Date(deadline).toISOString(),
                 status: 'todo',
                 client_id: clientId || null,
@@ -74,6 +76,7 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
     const handleClose = () => {
         setTitle('')
         setCategoria('general')
+        setCategory('task')
         setDeadline('')
         setClientId('')
         setError('')
@@ -101,12 +104,29 @@ export function TaskFormModal({ open, onClose, initialDate }: TaskFormModalProps
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+                        <button
+                            type="button"
+                            onClick={() => setCategory('task')}
+                            className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${category === 'task' ? 'bg-white text-accent shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            Progetto
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setCategory('engagement')}
+                            className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${category === 'engagement' ? 'bg-white text-accent shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            Impegno
+                        </button>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Titolo</label>
                         <Input
                             value={title}
                             onChange={e => setTitle(e.target.value)}
-                            placeholder="es. Post carosello Instagram..."
+                            placeholder={category === 'task' ? "es. Post carosello Instagram..." : "es. Lavoro al pomeriggio..."}
                             autoFocus
                             required
                         />

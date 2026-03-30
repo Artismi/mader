@@ -1,57 +1,70 @@
-import { NextResponse } from 'next/server';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { streamText } from 'ai';
 import { createClient } from '@/lib/supabase/server';
-import { UsageService } from '@/lib/api/usage';
+
+export const maxDuration = 30;
 
 export async function POST(req: Request) {
-    try {
-        const supabase = await createClient();
-        // 2) auth userifica autenticazione (RLS)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-        if (authError || !user) {
-          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // 2. Controllo Budget API AI (ANTHROPIC)
-        const budgetResult = await UsageService.checkAndIncrement('anthropic', user.id);
-        if (!budgetResult.allowed) {
-            return NextResponse.json({ 
-                error: `Budget AI Esaurito: Hai raggiunto il limite di ${budgetResult.limit} chiamate mensili.`,
-                code: 'BUDGET_EXCEEDED'
-            }, { status: 403 });
-        }
-
-        // 2. Parsa il body inviato dal frontend
-        const body = await req.json();
-        const { textInput } = body;
-
-        if (!textInput) {
-            return NextResponse.json({ error: 'Missing textInput' }, { status: 400 });
-        }
-
-        // 3. Qui avverrà l'integrazione con Claude via SDK (Track 2)
-        // Claude dovrà generare le Fasi, i Subtask, le Date e il Buffer.
-
-        // Per ora restituiamo un mock JSON che simula l'output di Claude:
-        const mockClaudeResponse = {
-            action: 'PLAN_CREATED',
-            estimatedHours: '2-12',
-            bufferDays: 2,
-            phases: [
-                { name: 'Analisi Richiesta', subtasks: ['Lettura Vault', 'Definizione stile'], date: 'Oggi' },
-                { name: 'Produzione', subtasks: ['Creazione Grafica', 'Stesura Copy'], date: 'Domani' }
-            ]
-        };
-
-        return NextResponse.json(mockClaudeResponse, { status: 200 });
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-        console.error('API Error:', error);
-        return NextResponse.json(
-            { error: 'Internal Server Error', details: error.message },
-            { status: 500 }
-        );
+    if (authError || !user) {
+        return new Response('Unauthorized', { status: 401 });
     }
+
+    const { prompt } = await req.json();
+
+    // Fetch contesto reale da Supabase
+    const now = new Date();
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const [{ data: tasks }, { data: clients }] = await Promise.all([
+        supabase
+            .from('tasks')
+            .select('title, deadline, status, clients(name)')
+            .eq('status', 'todo')
+            .order('deadline', { ascending: true })
+            .limit(20),
+        supabase
+            .from('clients')
+            .select('name')
+            .limit(10),
+    ]);
+
+    const taskList = (tasks || []).map(t => {
+        const clientName = (t.clients as any)?.name || 'Nessun cliente';
+        const deadline = t.deadline
+            ? new Date(t.deadline).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+            : 'Senza scadenza';
+        return `- ${t.title} [${clientName}] → ${deadline}`;
+    }).join('\n');
+
+    const clientList = (clients || []).map(c => c.name).join(', ') || 'Nessun cliente registrato';
+
+    const systemPrompt = `Sei il Co-Pilot di Creative OS, un assistente per freelance creativi.
+Il tuo compito è analizzare il contesto lavorativo e fornire piani chiari, concreti e motivanti.
+Rispondi sempre in italiano, in modo diretto e professionale.
+Non aggiungere introduzioni generiche. Vai subito al punto.`;
+
+    const contextPrompt = `Oggi è ${now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
+
+CLIENTI ATTIVI: ${clientList}
+
+TASK APERTI (ordinati per scadenza):
+${taskList || 'Nessun task aperto.'}
+
+RICHIESTA: ${prompt || 'Analizza la mia settimana e dimmi su cosa concentrarmi oggi e nei prossimi giorni. Raggruppa per priorità e cliente.'}`;
+
+    const google = createGoogleGenerativeAI({
+        apiKey: process.env.GEMINI_API_KEY!,
+    });
+
+    const result = streamText({
+        model: google('gemini-2.0-flash-exp'),
+        system: systemPrompt,
+        prompt: contextPrompt,
+    });
+
+    return result.toTextStreamResponse();
 }
