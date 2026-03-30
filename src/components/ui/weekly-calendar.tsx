@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { TaskFormModal } from './nuovo-task-modal';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';

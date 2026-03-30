@@ -188,7 +188,6 @@ export default async function DailyBriefingPage() {
           <PlannerWidget />
         </div>
         </div>
-      </div>
 
       {/* Full Width Bottom Section: Weekly Calendar (Separated) */}
       <section className="pt-24 pb-20 border-t border-white/5">
