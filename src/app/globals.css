@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --cos-primary: #1A1A2E;
+  --cos-accent: #7C3AED;
+  --cos-surface: #F8F7FF;
+  --cos-border: rgba(196, 181, 253, 0.4);
+  --cos-ext-bg: #0F0F1A;
+
+  --background: #0F0F1A;
+  --foreground: #F8F7FF;
+  
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --paper-bg: rgba(248, 247, 255, 0.95);
+}
+
+@theme inline {
+  --color-primary: var(--cos-primary);
+  --color-accent: var(--cos-accent);
+  --color-surface: var(--cos-surface);
+  --color-border: var(--cos-border);
+  --color-ext-bg: var(--cos-ext-bg);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Georgia', 'Times New Roman', serif;
+  --font-mono: var(--font-geist-mono);
+  
+  --shadow-desk: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+  --shadow-paper: 
+    0 1px 1px rgba(0,0,0,0.05), 
+    0 2px 2px rgba(0,0,0,0.05), 
+    0 4px 4px rgba(0,0,0,0.05), 
+    0 8px 8px rgba(0,0,0,0.05),
+    0 16px 16px rgba(0,0,0,0.05);
+}
+
+.desk-surface {
+  background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.desk-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-desk);
+}
+
+.paper-sheet {
+  background: var(--paper-bg);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paperNoise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paperNoise)' opacity='0.02'/%3E%3C/svg%3E");
+  color: var(--cos-primary);
+  box-shadow: var(--shadow-paper);
+  border-radius: 8px;
+  position: relative;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 15px 35px -12px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}

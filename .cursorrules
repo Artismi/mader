@@ -1,0 +1,63 @@
+# Creative OS — .cursorrules
+
+# Aggiornato: 2026-03-08
+
+## Progetto
+
+Creative OS: overlay intelligente per freelance creativi.
+
+Portale Next.js 14 + Estensione Chrome, stesso repo.
+
+## Stato attuale
+
+- Fase corrente: F2 — Portale base
+
+- Ultimo completato: F1 Fondamenta Next.js 14 + Supabase Auth + Google OAuth + Token persistence (create_user_tokens)
+
+- Prossimo obiettivo: Daily Briefing + pianificazione incarichi (input libero → Claude API → Notion + Calendar) + lista incarichi. Prima integrazione Anthropic API streaming.
+
+## Stack
+
+- Next.js 14 App Router + TypeScript
+
+- Supabase (Auth + DB + Realtime) con RLS su tutto
+
+- Google OAuth (Drive + Gmail + Calendar)
+
+- Anthropic API claude-sonnet-4-20250514 con streaming SSE
+
+- Integrazioni: Notion API, Canva API, Figma API, n8n, Vercel
+
+## Schema Supabase (aggiornare ad ogni migration)
+
+- clients: id, name, vault_path, created_at
+
+- tasks: id, client_id, title, type, deadline, status
+
+- ideas: id, client_id, text, created_at, assigned
+
+- context_instructions: id, user_id, file_path, instructions
+
+- user_tokens: id, user_id, provider_token, refresh_token
+
+## Design System (DUX v1.2) - Source of Truth
+
+- Token CSS: `--cos-primary` #1A1A2E | `--cos-accent` #7C3AED | `--cos-surface` #F8F7FF | `--cos-border` #C4B5FD
+- Font: Inter unico. Icone: Lucide outline stroke 1.5px. Griglia: 8pt.
+- Bottoni: Primary (accent filled), Secondary (accent outline), Ghost (transparent), Danger (red).
+- Ogni componente ha 4 stati: default, hover, loading, error.
+- Accessibilità WCAG 2.1 AA. Target minimo 40px. Focus ring 2px violet.
+
+## Decisioni architetturali (con data)
+
+- [2026-03-08] Claude API vs claude.ai: Claude API nel portale risponde agli input utente, claude.ai è per progettazione (ARD v2.4).
+- [2026-03-07] Token Google: in user_tokens con RLS, non in cookie.
+- [2026-03-07] Streaming AI: SSE via route /api/ai/.
+- [2026-03-07] Auth estensione: postMessage + chrome.storage.local.
+
+## NON fare
+
+- Non usare localStorage nell'estensione
+- Non chiamare Google API dal client
+- Non modificare vault.md di un cliente autonomamente
+- Non aggiungere dipendenze senza motivazione
