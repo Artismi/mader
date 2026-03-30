@@ -16,6 +16,7 @@ interface CalendarEvent {
   type: 'event' | 'task';
   category?: 'task' | 'engagement';
   color?: string;
+  durationMinutes?: number;
   rawTask?: {
     id: string; title: string; type: string;
     category: 'task' | 'engagement'; deadline: string; client_id: string | null;
@@ -68,9 +69,10 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
         id: t.id,
         title: t.title,
         start: new Date(t.deadline),
-        end: new Date(new Date(t.deadline).getTime() + 3600000),
+        end: new Date(new Date(t.deadline).getTime() + (t.duration_minutes || 60) * 60000),
         type: 'task' as const,
         category: t.category as 'task' | 'engagement',
+        durationMinutes: t.duration_minutes || 60,
         color: t.category === 'engagement'
           ? 'bg-amber-500/10 border-amber-500/20 text-amber-200/90'
           : 'bg-white/10 border-white/20 text-white/90 shadow-lg',
@@ -333,16 +335,21 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
                       </div>
 
                       <div className="absolute inset-x-2 top-2 flex flex-col gap-2 z-10">
-                        {events.map((event) => (
+                        {events.map((event) => {
+                          const durationHours = (event.durationMinutes || 60) / 60;
+                          // 120px per ora = altezza di ogni slot; sottraiamo 8px di margine
+                          const blockHeight = durationHours > 1 ? durationHours * 120 - 8 : undefined;
+                          return (
                           <div
                             key={event.id}
                             draggable={event.type === 'task'}
                             onDragStart={e => handleDragStart(e, event.id, event.type)}
                             onDragEnd={handleDragEnd}
                             onClick={e => e.stopPropagation()}
+                            style={blockHeight ? { height: `${blockHeight}px` } : undefined}
                             className={clsx(
                               "group/card p-3 rounded-xl border text-[10px] font-bold leading-tight shadow-xl transition-all duration-300",
-                              "hover:scale-[1.02] hover:brightness-110",
+                              durationHours <= 1 && "hover:scale-[1.02] hover:brightness-110",
                               event.type === 'task' ? "cursor-grab active:cursor-grabbing" : "cursor-default opacity-60",
                               event.color
                             )}
@@ -371,8 +378,14 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: { initialEvents:
                               )}
                             </div>
                             <span className="block truncate text-white/90">{event.title}</span>
+                            {durationHours > 1 && (
+                              <span className="block text-[9px] opacity-60 mt-1">
+                                {event.start.getHours().toString().padStart(2,'0')}:00 – {event.end.getHours().toString().padStart(2,'0')}:00
+                              </span>
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );

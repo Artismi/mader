@@ -16,6 +16,25 @@ const taskSchema = z.object({
     deadlinePattern: z.string().describe('Data in formato YYYY-MM-DD, es. "2026-03-10"')
 });
 
+const DAY_MAP: Record<string, number> = {
+    lunedi: 1, lun: 1, monday: 1,
+    martedi: 2, mar: 2, tuesday: 2,
+    mercoledi: 3, mer: 3, wednesday: 3,
+    giovedi: 4, gio: 4, thursday: 4,
+    venerdi: 5, ven: 5, friday: 5,
+    sabato: 6, sab: 6, saturday: 6,
+    domenica: 0, dom: 0, sunday: 0,
+};
+
+const recurringEngagementSchema = z.object({
+    title: z.string().describe("Nome dell'impegno, es. 'Servizio Civile'"),
+    days: z.array(z.string()).describe("Giorni della settimana in italiano o inglese, es. ['lunedi','martedi','mercoledi','giovedi','venerdi']"),
+    startHour: z.number().int().min(0).max(23).describe("Ora di inizio (0-23), es. 14"),
+    endHour: z.number().int().min(1).max(24).describe("Ora di fine (1-24), es. 19"),
+    startDate: z.string().describe("Data inizio in formato YYYY-MM-DD"),
+    endDate: z.string().describe("Data fine in formato YYYY-MM-DD"),
+});
+
 export async function POST(req: Request) {
     try {
         const { messages } = await req.json();
@@ -104,6 +123,58 @@ Non usare mai le parole "sono un'intelligenza artificiale". Quando crei un task,
                             success: true,
                             taskCreated: { title, type: category, deadline: shortDate },
                             message: `Incarico "${title}" creato nel database${notionSuccess ? ' e sincronizzato su Notion' : ''}.`
+                        };
+                    },
+                }),
+
+                createRecurringEngagement: tool({
+                    description: 'Crea slot ricorrenti per impegni fissi settimanali (es. servizio civile, palestra, lavoro part-time). NON usare per progetti o task con deliverable.',
+                    inputSchema: recurringEngagementSchema,
+                    execute: async ({ title, days, startHour, endHour, startDate, endDate }: z.infer<typeof recurringEngagementSchema>) => {
+                        const supabase = await createClient();
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user) return { success: false, message: 'Non autenticato' };
+
+                        const targetDays = days
+                            .map(d => DAY_MAP[d.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')])
+                            .filter(d => d !== undefined);
+
+                        if (targetDays.length === 0) {
+                            return { success: false, message: 'Giorni non riconosciuti' };
+                        }
+
+                        const durationMinutes = (endHour - startHour) * 60;
+                        const start = new Date(startDate);
+                        const end = new Date(endDate);
+                        const slots: object[] = [];
+
+                        for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                            if (targetDays.includes(d.getDay())) {
+                                const deadline = new Date(d);
+                                deadline.setHours(startHour, 0, 0, 0);
+                                slots.push({
+                                    user_id: user.id,
+                                    title,
+                                    type: 'general',
+                                    category: 'engagement',
+                                    status: 'todo',
+                                    deadline: deadline.toISOString(),
+                                    duration_minutes: durationMinutes,
+                                });
+                            }
+                        }
+
+                        if (slots.length === 0) {
+                            return { success: false, message: 'Nessun slot generato nel periodo specificato' };
+                        }
+
+                        const { error } = await supabase.from('tasks').insert(slots);
+                        if (error) return { success: false, message: error.message };
+
+                        return {
+                            success: true,
+                            slotsCreated: slots.length,
+                            message: `Creati ${slots.length} slot "${title}" (${startHour}:00–${endHour}:00) dal ${startDate} al ${endDate}. Visibili nel calendario come impegni, senza creare pressione sui progetti.`
                         };
                     },
                 })
