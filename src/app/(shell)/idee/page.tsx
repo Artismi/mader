@@ -14,7 +14,7 @@ export default async function IdeePage() {
             .from('ideas')
             .select('id, text, title, assigned, created_at, idea_status, platforms, clients(name)')
             .order('created_at', { ascending: false });
-        ideas = (data as typeof ideas) || [];
+        ideas = (data as unknown as typeof ideas) || [];
     }
 
     return (

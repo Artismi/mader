@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 interface ActiveContext {
     clientId?: string
     clientName?: string
-    files: { path: string; label: string; instructions: string }[]
+    files: { id: string; name: string; webViewLink: string; instructions: string; source?: string }[]
 }
 
 export function AIChatWidget() {
@@ -33,10 +33,16 @@ export function AIChatWidget() {
         e.preventDefault();
         if (!input.trim()) return;
 
-        // Inietta il contesto attivo nel messaggio come metadata
         let textToSend = input;
-        if (context.clientName) {
-            textToSend = `[Soggetto attivo: ${context.clientName}]\n${input}`;
+        const contextParts: string[] = [];
+        if (context.clientName) contextParts.push(`[Soggetto: ${context.clientName}]`);
+        if (context.files.length > 0) {
+            contextParts.push(`[File attivi: ${context.files.map(f =>
+                f.instructions ? `${f.name} (${f.instructions})` : f.name
+            ).join(', ')}]`);
+        }
+        if (contextParts.length > 0) {
+            textToSend = `${contextParts.join(' ')}\n${input}`;
         }
 
         setInput('');
@@ -81,7 +87,7 @@ export function AIChatWidget() {
                         if (!text) return null;
                         // Non mostrare il prefisso [Soggetto attivo:] all'utente
                         const displayText = m.role === 'user'
-                            ? text.replace(/^\[Soggetto attivo: .+?\]\n/, '')
+                            ? text.replace(/^\[Soggetto: .+?\]( \[File attivi: .+?\])?\n/, '')
                             : text;
                         return (
                             <div key={m.id} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
