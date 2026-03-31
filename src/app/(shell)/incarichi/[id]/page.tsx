@@ -5,16 +5,24 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { AggiornaStatoTask } from "@/components/ui/aggiorna-stato-task";
 import { DriveFiles } from "@/components/ui/drive-files";
+import { SubtaskList } from "@/components/ui/subtask-list";
 
 export default async function IncaricoDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const supabase = await createClient();
 
-    const { data: task } = await supabase
-        .from('tasks')
-        .select('*, clients(name, vault_path, drive_folder_id)')
-        .eq('id', id)
-        .single();
+    const [{ data: task }, { data: subtasks }] = await Promise.all([
+        supabase
+            .from('tasks')
+            .select('*, clients(name, vault_path, drive_folder_id)')
+            .eq('id', id)
+            .single(),
+        supabase
+            .from('subtasks')
+            .select('*')
+            .eq('task_id', id)
+            .order('sort_order', { ascending: true }),
+    ]);
 
     if (!task) notFound();
 
@@ -92,13 +100,19 @@ export default async function IncaricoDetailPage({ params }: { params: Promise<{
                         </div>
                     </div>
 
-                    {/* Note */}
+                    {/* Subtask */}
                     <div className="bg-white rounded-xl border border-border p-6">
-                        <h2 className="text-sm font-semibold text-primary/50 uppercase tracking-wider mb-3">Note</h2>
-                        <p className="text-sm text-primary/50 italic">
-                            Nessuna nota ancora. Puoi chiedere al Co-Pilot di aggiungere dettagli.
-                        </p>
+                        <h2 className="text-sm font-semibold text-primary/50 uppercase tracking-wider mb-4">Subtask</h2>
+                        <SubtaskList taskId={task.id} initialSubtasks={subtasks || []} />
                     </div>
+
+                    {/* Note */}
+                    {task.notes && (
+                        <div className="bg-white rounded-xl border border-border p-6">
+                            <h2 className="text-sm font-semibold text-primary/50 uppercase tracking-wider mb-3">Note</h2>
+                            <p className="text-sm text-primary/70 whitespace-pre-wrap">{task.notes}</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Sidebar */}

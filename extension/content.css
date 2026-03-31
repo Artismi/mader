@@ -1,0 +1,274 @@
+/* Creative OS Extension — Content Script Styles */
+
+#cos-panel {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    z-index: 2147483647;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#cos-panel * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* Toggle tab */
+#cos-toggle {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 72px;
+    background: linear-gradient(180deg, #7C3AED, #5B21B6);
+    border-radius: 8px 0 0 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: -2px 0 12px rgba(124, 58, 237, 0.4);
+    transition: width 0.15s ease;
+}
+
+#cos-toggle:hover {
+    width: 32px;
+}
+
+#cos-toggle svg {
+    width: 14px;
+    height: 14px;
+    fill: white;
+}
+
+/* Main panel */
+#cos-drawer {
+    position: absolute;
+    right: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 280px;
+    background: #0F0F1A;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px 0 0 12px;
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+#cos-drawer.cos-hidden {
+    transform: translateY(-50%) translateX(20px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Header */
+.cos-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(124, 58, 237, 0.15);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cos-logo {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #a78bfa;
+}
+
+.cos-context-badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* Body */
+.cos-body {
+    padding: 12px 14px;
+    max-height: 320px;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.cos-body::-webkit-scrollbar {
+    display: none;
+}
+
+/* Section title */
+.cos-section-title {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.25);
+    margin-bottom: 8px;
+}
+
+/* Task item */
+.cos-task {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cos-task:last-child {
+    border-bottom: none;
+}
+
+.cos-task-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7C3AED;
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.cos-task-dot.overdue {
+    background: #ef4444;
+}
+
+.cos-task-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    flex: 1;
+    line-height: 1.3;
+}
+
+.cos-task-meta {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.3);
+    margin-top: 2px;
+}
+
+.cos-task-meta.overdue {
+    color: #ef4444;
+}
+
+/* Quick add */
+.cos-quick-add {
+    padding: 10px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    gap: 6px;
+}
+
+.cos-quick-add input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    outline: none;
+    font-family: inherit;
+}
+
+.cos-quick-add input::placeholder {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.cos-quick-add input:focus {
+    border-color: rgba(124, 58, 237, 0.5);
+}
+
+.cos-quick-add button {
+    background: #7C3AED;
+    border: none;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+    line-height: 1;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+
+.cos-quick-add button:hover {
+    background: #6D28D9;
+}
+
+/* Auth prompt */
+.cos-auth-prompt {
+    padding: 16px 14px;
+    text-align: center;
+}
+
+.cos-auth-text {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 10px;
+}
+
+.cos-auth-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #7C3AED;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+
+.cos-auth-btn:hover {
+    background: #6D28D9;
+}
+
+/* Empty state */
+.cos-empty {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.25);
+    text-align: center;
+    padding: 16px 0;
+    font-style: italic;
+}
+
+/* Open COS link */
+.cos-footer {
+    padding: 8px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: right;
+}
+
+.cos-footer a {
+    font-size: 9px;
+    color: rgba(124, 58, 237, 0.7);
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.cos-footer a:hover {
+    color: #a78bfa;
+}

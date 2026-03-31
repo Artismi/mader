@@ -1,14 +1,15 @@
 'use client'
 
 import React from 'react'
-import { 
-  LayoutDashboard, 
-  Briefcase, 
-  Lightbulb, 
-  Users, 
-  Library, 
-  FileText, 
-  Settings 
+import {
+  LayoutDashboard,
+  Briefcase,
+  Lightbulb,
+  Users,
+  Library,
+  FileText,
+  Settings,
+  PenTool
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -20,8 +21,9 @@ const dockItems = [
   { icon: Lightbulb, label: 'Idee', href: '/idee' },
   { icon: Users, label: 'Clienti', href: '/clienti' },
   { icon: Library, label: 'Assets', href: '/assets' },
-  { icon: FileText, label: 'Documenti', href: '/docs' },
-  { icon: Settings, label: 'Impostazioni', href: '/settings' },
+  { icon: PenTool, label: 'Progettaz.', href: '/progettazione' },
+  { icon: FileText, label: 'Finanze', href: '/finanze' },
+  { icon: Settings, label: 'Settings', href: '/settings' },
 ]
 
 export function DeskDock() {

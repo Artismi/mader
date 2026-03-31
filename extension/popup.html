@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creative OS</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            width: 320px;
+            min-height: 200px;
+            background: #0F0F1A;
+            color: #F8F7FF;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+            font-size: 13px;
+        }
+
+        /* Header */
+        .header {
+            padding: 14px 16px 12px;
+            background: rgba(124, 58, 237, 0.12);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #a78bfa;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 6px #22c55e;
+        }
+
+        .status-dot.offline {
+            background: #6b7280;
+            box-shadow: none;
+        }
+
+        /* Auth section */
+        .auth-section {
+            padding: 24px 16px;
+            text-align: center;
+        }
+
+        .auth-text {
+            font-size: 12px;
+            color: rgba(255,255,255,0.45);
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #7C3AED;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            font-family: inherit;
+            transition: background 0.15s;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .btn-primary:hover { background: #6D28D9; }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            color: rgba(255,255,255,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 7px 16px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
+            width: 100%;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.7);
+        }
+
+        /* Tasks section */
+        .tasks-section {
+            padding: 12px 0;
+        }
+
+        .section-title {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.25);
+            padding: 0 16px 8px;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.1s;
+            cursor: default;
+        }
+
+        .task-item:last-child { border-bottom: none; }
+        .task-item:hover { background: rgba(255,255,255,0.03); }
+
+        .task-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #7C3AED;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        .task-dot.overdue { background: #ef4444; }
+
+        .task-info { flex: 1; min-width: 0; }
+
+        .task-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.8);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .task-meta {
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            margin-top: 1px;
+        }
+
+        .task-meta.overdue { color: #f87171; }
+
+        /* Quick add */
+        .quick-add {
+            padding: 10px 16px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            gap: 6px;
+        }
+
+        .quick-add input {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px;
+            padding: 6px 10px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.8);
+            outline: none;
+            font-family: inherit;
+        }
+
+        .quick-add input::placeholder { color: rgba(255,255,255,0.25); }
+        .quick-add input:focus { border-color: rgba(124,58,237,0.5); }
+
+        .quick-add button {
+            background: #7C3AED;
+            border: none;
+            border-radius: 7px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            color: white;
+            font-size: 18px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-family: inherit;
+            transition: background 0.15s;
+        }
+
+        .quick-add button:hover { background: #6D28D9; }
+
+        /* Footer */
+        .footer {
+            padding: 8px 16px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .footer a {
+            font-size: 9px;
+            color: rgba(124,58,237,0.6);
+            text-decoration: none;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .footer a:hover { color: #a78bfa; }
+
+        .user-email {
+            font-size: 9px;
+            color: rgba(255,255,255,0.2);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 160px;
+            white-space: nowrap;
+        }
+
+        /* Empty/loading */
+        .empty {
+            padding: 20px 16px;
+            text-align: center;
+            font-size: 11px;
+            color: rgba(255,255,255,0.25);
+            font-style: italic;
+        }
+
+        #loading {
+            padding: 24px 16px;
+            text-align: center;
+            font-size: 11px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(124,58,237,0.3);
+            border-top-color: #7C3AED;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="logo">Creative OS</span>
+        <div id="status-dot" class="status-dot offline"></div>
+    </div>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Connessione...</div>
+    </div>
+
+    <div id="auth-view" style="display:none">
+        <div class="auth-section">
+            <p class="auth-text">Accedi al tuo account Creative OS per vedere i task e usare l'estensione.</p>
+            <button class="btn-primary" id="btn-login">Accedi a Creative OS</button>
+            <button class="btn-secondary" id="btn-open-portal">Apri il portale</button>
+        </div>
+    </div>
+
+    <div id="tasks-view" style="display:none">
+        <div class="tasks-section">
+            <p class="section-title">Task in sospeso</p>
+            <div id="tasks-list"></div>
+        </div>
+        <div class="quick-add">
+            <input id="quick-input" type="text" placeholder="Aggiungi task rapido…" />
+            <button id="quick-submit">+</button>
+        </div>
+        <div class="footer">
+            <span id="user-email" class="user-email"></span>
+            <a href="http://localhost:3000" target="_blank">Apri COS →</a>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

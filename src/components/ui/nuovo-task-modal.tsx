@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 import { updateTask } from '@/app/actions'
+import { useRouter } from 'next/navigation'
 
 const CATEGORIE = [
     { value: 'social', label: 'Social' },
@@ -35,6 +36,7 @@ interface TaskFormModalProps {
 }
 
 export function TaskFormModal({ open, onClose, initialDate, initialTitle, initialClientId, editTask }: TaskFormModalProps) {
+    const router = useRouter()
     const [title, setTitle] = useState('')
     const [categoria, setCategoria] = useState('general')
     const [deadline, setDeadline] = useState('')
@@ -86,6 +88,7 @@ export function TaskFormModal({ open, onClose, initialDate, initialTitle, initia
                     deadline: new Date(deadline).toISOString(),
                     client_id: clientId || null,
                 })
+                router.refresh()
                 handleClose()
             } else {
                 const supabase = createClient()

@@ -5,6 +5,8 @@ import { NuovoTaskModal } from "@/components/ui/nuovo-task-modal";
 import { WeeklyCalendar } from "@/components/ui/weekly-calendar";
 import { FocusList } from "@/components/ui/focus-list";
 import { PlannerWidget } from "@/components/ui/planner-widget";
+import { GmailWidget } from "@/components/ui/gmail-widget";
+import { Mail } from "lucide-react";
 
 export default async function DailyBriefingPage() {
   const supabase = await createClient();
@@ -106,6 +108,15 @@ export default async function DailyBriefingPage() {
         {/* Sidebar sinistra — scrollabile indipendentemente */}
         <aside className="hidden lg:flex flex-col w-72 flex-shrink-0 border-r border-white/[0.05] overflow-y-auto scrollbar-hide px-5 py-5 gap-8">
           <FocusList urgentTasks={urgentTasks} suggestedTasks={suggestedTasks} />
+
+          {/* Gmail inbox */}
+          <div className="border-t border-white/5 pt-6 space-y-3">
+            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5" /> Inbox
+            </h2>
+            <GmailWidget />
+          </div>
+
           <div className="border-t border-white/5 pt-6">
             <PlannerWidget />
           </div>

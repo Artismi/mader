@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createNotionTask } from '@/lib/notion/client';
 import { UsageService } from '@/lib/api/usage';
+import { DEFAULT_ARCHITECTURE, DEFAULT_SKILLS } from '@/lib/ai/defaults';
 
 // Permettiamo streaming fino a 30s
 export const maxDuration = 30;
@@ -62,13 +63,30 @@ export async function POST(req: Request) {
             });
         }
 
+        const [{ data: archData }, { data: skillsData }] = await Promise.all([
+            supabase.from('system_config').select('value').eq('user_id', user.id).eq('key', 'architecture').maybeSingle(),
+            supabase.from('skills').select('name,content,triggers').eq('user_id', user.id).eq('active', true).order('sort_order'),
+        ]);
+
+        // Seed se non esistono
+        if (!archData) {
+            supabase.from('system_config').insert({ user_id: user.id, key: 'architecture', value: DEFAULT_ARCHITECTURE }).then(() => {});
+        }
+        if (!skillsData || skillsData.length === 0) {
+            supabase.from('skills').insert(DEFAULT_SKILLS.map(s => ({ ...s, user_id: user.id }))).then(() => {});
+        }
+
+        const architecture = archData?.value ?? DEFAULT_ARCHITECTURE;
+        const skills = (skillsData && skillsData.length > 0) ? skillsData : DEFAULT_SKILLS;
+        const skillsBlock = skills.map((s: any) => s.content).join('\n\n---\n\n');
+
+        const SYSTEM_PROMPT = `${architecture}\n\n---\n\n${skillsBlock}`;
+
         const modelMessages = await convertToModelMessages(messages);
 
         const result = streamText({
             model: anthropic('claude-opus-4-6'),
-            system: `Sei Creative OS. Il tuo obiettivo è interfacciarti con l'utente come se fossi il suo fidato Chief Operating Officer.
-Rispondi in modo conciso, professionale e rassicurante in lingua italiana. Puoi eseguire azioni per conto suo.
-Non usare mai le parole "sono un'intelligenza artificiale". Quando crei un task, passa la data estraendola in formato YYYY-MM-DD.`,
+            system: SYSTEM_PROMPT,
             messages: modelMessages,
             tools: {
                 createTask: tool({

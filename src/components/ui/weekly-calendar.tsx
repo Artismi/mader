@@ -90,6 +90,14 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: {
   const [hoveredCell, setHoveredCell] = useState<{ day: Date; hour: number } | null>(null);
   const [preview,     setPreview]     = useState<CalendarEvent | null>(null);
 
+  const [resizing, setResizing] = useState<{
+    eventId: string;
+    startY: number;
+    originalDuration: number;
+    slotHeight: number;
+  } | null>(null);
+  const [resizeDurations, setResizeDurations] = useState<Record<string, number>>({});
+
   const days = useMemo(() => {
     const s = new Date(viewDate);
     const d = s.getDay();
@@ -149,6 +157,31 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [hoveredEv, clipboard, hoveredCell, visible, tx, router]);
 
+  // Resize useEffect
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - resizing.startY;
+      const deltaMin = (deltaY / resizing.slotHeight) * 60;
+      const snapped = Math.max(15, Math.round((resizing.originalDuration + deltaMin) / 15) * 15);
+      setResizeDurations(prev => ({ ...prev, [resizing.eventId]: snapped }));
+    };
+    const onUp = () => {
+      const newDur = resizeDurations[resizing.eventId];
+      if (newDur && newDur !== resizing.originalDuration) {
+        tx(async () => {
+          const { createClient } = await import('@/lib/supabase/client');
+          await createClient().from('tasks').update({ duration_minutes: newDur }).eq('id', resizing.eventId);
+          router.refresh();
+        });
+      }
+      setResizing(null);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  }, [resizing, resizeDurations, tx, router]);
+
   // Handlers
   const openNew = (day: Date) => { setSelDate(day.toISOString().split('T')[0]); setTaskModal(true); };
   const drop = (e: React.DragEvent, day: Date, hour: number) => {
@@ -165,6 +198,12 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: {
   const done = (id: string) => tx(async () => { await markTaskDone(id); router.refresh(); });
   const del  = (id: string) => tx(async () => { await deleteTask(id);   router.refresh(); });
   const copy = (ev: CalendarEvent) => { setClipboard(ev); setCopyFb(true); setTimeout(() => setCopyFb(false), 1600); };
+  const startResize = (e: React.MouseEvent, ev: CalendarEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const cell = (e.currentTarget as HTMLElement).closest('[data-slot]') as HTMLElement;
+    const slotH = cell ? cell.clientHeight : 56;
+    setResizing({ eventId: ev.id, startY: e.clientY, originalDuration: ev.durationMinutes || 60, slotHeight: slotH });
+  };
 
   const submitGoogle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -394,13 +433,14 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: {
             return (
               <div
                 key={`sc-${hour}-${di}`}
+                data-slot="true"
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => drop(e, day, hour)}
                 onClick={() => openNew(day)}
                 onMouseEnter={() => setHoveredCell({ day, hour })}
                 onMouseLeave={() => setHoveredCell(null)}
                 className={clsx(
-                  'relative border-b border-l border-white/[0.04] cursor-crosshair overflow-hidden transition-colors group/cell',
+                  'relative border-b border-l border-white/[0.04] cursor-crosshair transition-colors group/cell',
                   paste ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]',
                   day.toDateString() === new Date().toDateString() && 'bg-white/[0.01]'
                 )}
@@ -414,34 +454,56 @@ export function WeeklyCalendar({ initialEvents, initialTasks }: {
                 </div>
 
                 {/* Events */}
-                <div className="absolute inset-x-0.5 inset-y-0.5 flex flex-col gap-0.5 overflow-hidden z-10">
-                  {evs.map(ev => (
-                    <div
-                      key={ev.id}
-                      draggable={ev.type === 'task'}
-                      onDragStart={e => { e.dataTransfer.setData('text/plain', ev.id); (e.currentTarget as HTMLElement).style.opacity = '0.4'; }}
-                      onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                      onMouseEnter={e => { e.stopPropagation(); setHoveredEv(ev.id); }}
-                      onMouseLeave={() => setHoveredEv(null)}
-                      onClick={e => { e.stopPropagation(); if (ev.type === 'task') setPreview(ev); }}
-                      className={clsx(
-                        'group/ev flex items-center justify-between gap-0.5 px-1.5 rounded border text-[8px] font-semibold leading-none cursor-pointer overflow-hidden transition-all hover:brightness-125',
-                        'min-h-[18px]',
-                        clipboard?.id === ev.id && 'ring-1 ring-white/20',
-                        ev.color,
-                      )}
-                    >
-                      <span className="truncate flex-1">{ev.title}</span>
-                      {ev.type === 'task' && (
-                        <div className="flex items-center gap-px opacity-0 group-hover/ev:opacity-100 transition-opacity flex-shrink-0">
-                          <button onClick={e=>{e.stopPropagation();copy(ev)}} className="p-0.5 hover:bg-white/10 rounded"><Copy className="w-2 h-2 opacity-50"/></button>
-                          <button onClick={e=>{e.stopPropagation();done(ev.id)}} className="p-0.5 hover:bg-green-500/20 rounded"><Check className="w-2 h-2 text-green-400"/></button>
-                          <button onClick={e=>{e.stopPropagation();ev.rawTask&&setEditing(ev.rawTask)}} className="p-0.5 hover:bg-white/10 rounded"><Pencil className="w-2 h-2 opacity-40"/></button>
-                          <button onClick={e=>{e.stopPropagation();del(ev.id)}} className="p-0.5 hover:bg-red-500/20 rounded"><X className="w-2 h-2 text-red-400"/></button>
+                <div className="absolute inset-x-0.5 inset-y-0.5 z-10">
+                  {evs.map(ev => {
+                    const effectiveDuration = resizeDurations[ev.id] ?? ev.durationMinutes ?? 60;
+                    const heightPct = Math.min((effectiveDuration / 60) * 100, 300);
+                    return (
+                      <div
+                        key={ev.id}
+                        draggable={ev.type === 'task'}
+                        onDragStart={e => { e.dataTransfer.setData('text/plain', ev.id); (e.currentTarget as HTMLElement).style.opacity = '0.4'; }}
+                        onDragEnd={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                        onMouseEnter={e => { e.stopPropagation(); setHoveredEv(ev.id); }}
+                        onMouseLeave={() => setHoveredEv(null)}
+                        onClick={e => { e.stopPropagation(); if (ev.type === 'task') setPreview(ev); }}
+                        style={{ height: `${heightPct}%`, minHeight: '18px', maxHeight: `${heightPct}%` }}
+                        className={clsx(
+                          'absolute left-0.5 right-0.5 top-0.5 group/ev flex flex-col border rounded text-[8px] font-semibold cursor-pointer overflow-hidden transition-all hover:brightness-125 z-20',
+                          resizing?.eventId === ev.id && 'ring-1 ring-white/40',
+                          clipboard?.id === ev.id && 'ring-1 ring-white/20',
+                          ev.color,
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-0.5 px-1.5 pt-1 flex-shrink-0">
+                          <span className="truncate flex-1">{ev.title}</span>
+                          {ev.type === 'task' && (
+                            <div className="flex items-center gap-px opacity-0 group-hover/ev:opacity-100 transition-opacity flex-shrink-0">
+                              <button onClick={e=>{e.stopPropagation();copy(ev)}} className="p-0.5 hover:bg-white/10 rounded"><Copy className="w-2 h-2 opacity-50"/></button>
+                              <button onClick={e=>{e.stopPropagation();done(ev.id)}} className="p-0.5 hover:bg-green-500/20 rounded"><Check className="w-2 h-2 text-green-400"/></button>
+                              <button onClick={e=>{e.stopPropagation();ev.rawTask&&setEditing(ev.rawTask)}} className="p-0.5 hover:bg-white/10 rounded"><Pencil className="w-2 h-2 opacity-40"/></button>
+                              <button onClick={e=>{e.stopPropagation();del(ev.id)}} className="p-0.5 hover:bg-red-500/20 rounded"><X className="w-2 h-2 text-red-400"/></button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {ev.rawTask?.client_name && (
+                          <span className="block text-[7px] opacity-40 truncate px-1.5">{ev.rawTask.client_name}</span>
+                        )}
+                        {effectiveDuration > 60 && (
+                          <span className="block text-[7px] opacity-50 px-1.5">{Math.round(effectiveDuration/60*10)/10}h</span>
+                        )}
+                        {ev.type === 'task' && (
+                          <div
+                            className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center opacity-0 group-hover/ev:opacity-100 transition-opacity"
+                            onMouseDown={e => startResize(e, ev)}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div className="w-6 h-0.5 rounded-full bg-white/40" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
