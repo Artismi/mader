@@ -9,7 +9,8 @@ import {
   Library,
   FileText,
   Settings,
-  PenTool
+  PenTool,
+  Send
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -19,6 +20,7 @@ const dockItems = [
   { icon: LayoutDashboard, label: 'Briefing', href: '/' },
   { icon: Briefcase, label: 'Incarichi', href: '/incarichi' },
   { icon: Lightbulb, label: 'Idee', href: '/idee' },
+  { icon: Send, label: 'Pubblica', href: '/pubblica' },
   { icon: Users, label: 'Clienti', href: '/clienti' },
   { icon: Library, label: 'Assets', href: '/assets' },
   { icon: PenTool, label: 'Progettaz.', href: '/progettazione' },
