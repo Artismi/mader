@@ -1,19 +1,12 @@
-import { FileText } from "lucide-react";
+import { quotes, clients } from '@/lib/db'
+import { QuotesBoard } from '@/components/ui/quotes-board'
 
 export default function FinanzePage() {
-    return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-primary">Documenti Finanziari</h1>
-                <p className="mt-2 text-sm text-primary/70">Preventivi, fatture e documenti fiscali.</p>
-            </div>
-            <div className="flex flex-col items-center justify-center py-24 text-primary/30">
-                <FileText className="w-16 h-16 mb-6 opacity-20" />
-                <p className="text-base font-semibold">In arrivo — Fase F8</p>
-                <p className="text-sm mt-2 text-primary/40 max-w-sm text-center">
-                    Preventivi automatici via Canva Doc → PDF → Drive → Gmail draft. Prossima versione.
-                </p>
-            </div>
-        </div>
-    );
+  const allQuotes = quotes.getAll()
+  const allClients = clients.getAll()
+  return (
+    <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 py-2 sm:px-4">
+      <QuotesBoard initialQuotes={allQuotes} clients={allClients} />
+    </div>
+  )
 }

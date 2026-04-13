@@ -5,17 +5,27 @@ import { createClient } from '@/lib/supabase/client'
 export default function LoginPage() {
     const handleGoogleLogin = async () => {
         const supabase = createClient()
-        await supabase.auth.signInWithOAuth({
+        const { data } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo: `${window.location.origin}/auth/callback`,
                 scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly',
                 queryParams: {
                     access_type: 'offline',
-                    prompt: 'consent',
                 },
+                skipBrowserRedirect: true,
             }
         })
+
+        if (!data?.url) return
+
+        // In Electron: apri il login in una finestra separata
+        const w = window as unknown as { electronAPI?: { openOAuthWindow: (url: string) => Promise<void> } }
+        if (w.electronAPI?.openOAuthWindow) {
+            await w.electronAPI.openOAuthWindow(data.url)
+        } else {
+            window.location.href = data.url
+        }
     }
 
     return (

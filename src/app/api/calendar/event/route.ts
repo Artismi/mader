@@ -1,14 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
 import { google } from 'googleapis'
+import { tokens } from '@/lib/db'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: Request) {
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return Response.json({ error: 'Non autenticato' }, { status: 401 })
-        }
-
         const body = await req.json()
         const { title, date, startHour, endHour } = body as {
             title: string
@@ -21,19 +16,19 @@ export async function POST(req: Request) {
             return Response.json({ error: 'Titolo e data obbligatori' }, { status: 400 })
         }
 
-        const { data: tokenData } = await supabase
-            .from('user_tokens')
-            .select('provider_token')
-            .eq('user_id', user.id)
-            .eq('provider', 'google')
-            .single()
+        let accessToken = tokens.get('google')?.provider_token
+        if (!accessToken) {
+            const supabase = await createClient()
+            const { data: { session } } = await supabase.auth.getSession()
+            accessToken = session?.provider_token ?? undefined
+        }
 
-        if (!tokenData?.provider_token) {
+        if (!accessToken) {
             return Response.json({ error: 'Google Calendar non collegato' }, { status: 403 })
         }
 
         const oauth2Client = new google.auth.OAuth2()
-        oauth2Client.setCredentials({ access_token: tokenData.provider_token })
+        oauth2Client.setCredentials({ access_token: accessToken })
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
         const startDateTime = new Date(`${date}T${String(startHour).padStart(2, '0')}:00:00`)

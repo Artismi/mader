@@ -1,38 +1,69 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server'
+import { tasks } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
-    try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+  try {
+    const { searchParams } = new URL(req.url)
+    const status = searchParams.get('status') || 'todo'
+    const category = searchParams.get('category') || undefined
+    const limit = parseInt(searchParams.get('limit') || '20')
 
-        if (!user) {
-            return NextResponse.json({ error: 'Non autenticato' }, { status: 401 });
-        }
+    const result = tasks.getAll({ status, category, limit })
 
-        const { searchParams } = new URL(req.url);
-        const status = searchParams.get('status') || 'todo';
-        const limit = parseInt(searchParams.get('limit') || '20');
+    return NextResponse.json({ tasks: result })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
 
-        const query = supabase
-            .from('tasks')
-            .select('id, title, type, category, status, deadline, clients(name)')
-            .eq('user_id', user.id)
-            .order('deadline', { ascending: true })
-            .limit(limit);
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { title, type, category, deadline, client_id, status } = body
 
-        if (status !== 'all') {
-            query.eq('status', status);
-        }
-
-        const { data: tasks, error } = await query;
-
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-        return NextResponse.json({ tasks: tasks || [] });
-
-    } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return NextResponse.json({ error: msg }, { status: 500 });
+    if (!title || !type) {
+      return NextResponse.json({ error: 'title e type sono obbligatori' }, { status: 400 })
     }
+
+    const task = tasks.create({
+      title,
+      type,
+      category: category || 'task',
+      deadline,
+      client_id,
+      status: status || 'todo',
+    })
+
+    return NextResponse.json({ task }, { status: 201 })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, ...data } = body
+    if (!id) return NextResponse.json({ error: 'id obbligatorio' }, { status: 400 })
+    tasks.update(id, data)
+    return NextResponse.json({ ok: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id obbligatorio' }, { status: 400 })
+    tasks.delete(id)
+    return NextResponse.json({ ok: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

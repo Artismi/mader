@@ -2,113 +2,237 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Menu, X, LayoutDashboard, Briefcase, Lightbulb, Users, Library, FileText, Settings } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Menu,
+  X,
+  LogOut,
+  Home,
+  Inbox,
+  Send,
+  Calendar,
+  Brain,
+  Briefcase,
+  Lightbulb,
+  Users,
+  LayoutGrid,
+  Palette,
+  FileText,
+  Globe,
+  Library,
+  Settings,
+  FolderOpen,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import { useSidebar } from "@/components/layout/SidebarContext";
 
-const navigation = [
-    { name: "Daily Briefing", href: "/", icon: LayoutDashboard },
-    { name: "Incarichi", href: "/incarichi", icon: Briefcase },
-    { name: "Idee", href: "/idee", icon: Lightbulb },
-    { name: "Clienti", href: "/clienti", icon: Users },
-    { name: "Asset Library", href: "/assets", icon: Library },
-    { name: "Documenti Finanziari", href: "/finanze", icon: FileText },
-    { name: "Impostazioni", href: "/settings", icon: Settings },
+const sections = [
+  {
+    label: "Comunicazione",
+    items: [
+      { name: "Daily Briefing", href: "/", icon: Home },
+      { name: "Inbox", href: "/inbox", icon: Inbox },
+      { name: "Lancio", href: "/lancio", icon: Send },
+      { name: "Calendario", href: "/calendario", icon: Calendar },
+    ],
+  },
+  {
+    label: "Contenuti",
+    items: [
+      { name: "Cervello", href: "/cervello", icon: Brain },
+      { name: "Idee", href: "/idee", icon: Lightbulb },
+      { name: "Editoriale", href: "/editoriale", icon: LayoutGrid },
+      { name: "Progettazione", href: "/progettazione", icon: Palette },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { name: "Clienti", href: "/clienti", icon: Users },
+      { name: "Incarichi", href: "/incarichi", icon: Briefcase },
+      { name: "Finanze", href: "/finanze", icon: FileText },
+      { name: "Web & Domini", href: "/domini", icon: Globe },
+    ],
+  },
+  {
+    label: "Strumenti",
+    items: [
+      { name: "Asset Library", href: "/assets", icon: Library },
+      { name: "Impostazioni", href: "/settings", icon: Settings },
+    ],
+  },
 ];
 
 export function Header() {
-    const pathname = usePathname();
-    const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { isVaultOpen, isCoPilotOpen, toggleVault, toggleCoPilot } = useSidebar();
 
-    // Close drawer on route change
-    useEffect(() => {
-        setMobileOpen(false);
-    }, [pathname]);
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
-    // Prevent body scroll when drawer is open
-    useEffect(() => {
-        if (mobileOpen) {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = '';
-        }
-        return () => { document.body.style.overflow = ''; };
-    }, [mobileOpen]);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
-    return (
-        <>
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-5xl">
-                <div className="glass-card flex h-12 items-center gap-x-4 px-4 sm:px-6 rounded-full">
-                    {/* Hamburger — mobile only */}
-                    <button
-                        className="lg:hidden flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-                        onClick={() => setMobileOpen(true)}
-                        aria-label="Menu"
-                    >
-                        <Menu className="w-4 h-4" />
-                    </button>
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
 
-                    <div className="flex flex-1 items-center">
-                        <div className="flex w-full items-center text-xs tracking-wider uppercase text-white/50">
-                            <span className="font-bold text-white mr-3 hidden sm:block">Creative OS</span>
-                            <span className="font-bold text-white mr-3 sm:hidden">COS</span>
-                            <span className="h-3 w-px bg-white/20 mx-3 hidden sm:block" />
-                            <span className="hidden sm:block">Contesto: <span className="ml-2 font-medium text-white/80">Progetto Attivo</span></span>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-x-4">
-                        <div className="h-6 w-6 rounded-full bg-white/10 border border-white/20" />
-                    </div>
-                </div>
-            </div>
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-            {/* Mobile drawer overlay */}
-            {mobileOpen && (
-                <div
-                    className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm lg:hidden"
-                    onClick={() => setMobileOpen(false)}
-                />
+  return (
+    <>
+      <header
+        className="shrink-0 z-30 flex h-11 items-center gap-2 border-b border-white/[0.08] bg-[#070708]/95 px-2 backdrop-blur-md sm:gap-3 sm:px-4"
+        role="banner"
+      >
+        <button
+          type="button"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Apri menu navigazione"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-bold tracking-tight text-white/90">
+            Creative OS
+          </p>
+          <p className="hidden truncate text-[10px] font-medium uppercase tracking-widest text-white/35 sm:block">
+            {pathname === "/" ? "Oggi" : pathname.replace(/^\//, "") || "—"}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            title="Vault asset"
+            aria-pressed={isVaultOpen}
+            onClick={toggleVault}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              isVaultOpen
+                ? "bg-accent/20 text-accent"
+                : "text-white/45 hover:bg-white/10 hover:text-white",
             )}
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Co-Pilot AI"
+            aria-pressed={isCoPilotOpen}
+            onClick={toggleCoPilot}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              isCoPilotOpen
+                ? "bg-accent/20 text-accent"
+                : "text-white/45 hover:bg-white/10 hover:text-white",
+            )}
+          >
+            <Sparkles className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Esci"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </header>
 
-            {/* Mobile drawer */}
-            <div className={cn(
-                "fixed inset-y-0 left-0 z-[201] w-72 bg-[#0F0F1A] border-r border-white/10 flex flex-col transform transition-transform duration-300 ease-in-out lg:hidden",
-                mobileOpen ? "translate-x-0" : "-translate-x-full"
-            )}>
-                <div className="flex items-center justify-between px-5 h-16 border-b border-white/10">
-                    <span className="text-lg font-bold text-white">Creative OS</span>
-                    <button
-                        onClick={() => setMobileOpen(false)}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
 
-                <nav className="flex-1 overflow-y-auto px-3 py-4">
-                    <ul className="space-y-1">
-                        {navigation.map(item => {
-                            const isActive = pathname === item.href;
-                            return (
-                                <li key={item.name}>
-                                    <Link
-                                        href={item.href}
-                                        className={cn(
-                                            "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                                            isActive
-                                                ? "bg-accent/15 text-white"
-                                                : "text-white/50 hover:text-white hover:bg-white/5"
-                                        )}
-                                    >
-                                        <item.icon className={cn("w-5 h-5 shrink-0", isActive ? "text-accent" : "")} />
-                                        {item.name}
-                                    </Link>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </nav>
-            </div>
-        </>
-    );
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-[201] flex w-[min(20rem,100vw)] max-w-full flex-col border-r border-white/10 bg-[#0c0c0f] transition-transform duration-300 ease-in-out",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
+          <span className="text-base font-bold text-white">Menu</span>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Chiudi menu"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <nav
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3"
+          aria-label="Sezioni app"
+        >
+          <div className="space-y-5">
+            {sections.map((section) => (
+              <div key={section.label}>
+                <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-widest text-white/25">
+                  {section.label}
+                </p>
+                <ul className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const active = isActive(item.href);
+                    return (
+                      <li key={item.name}>
+                        <Link
+                          href={item.href}
+                          className={cn(
+                            "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                            active
+                              ? "bg-accent/15 text-white"
+                              : "text-white/50 hover:bg-white/5 hover:text-white",
+                          )}
+                        >
+                          <item.icon
+                            className={cn(
+                              "h-4 w-4 shrink-0",
+                              active ? "text-accent" : "",
+                            )}
+                          />
+                          <span className="min-w-0 truncate">{item.name}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </nav>
+
+        <div className="shrink-0 border-t border-white/10 px-3 py-3">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/40 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span className="truncate">Esci</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
 }

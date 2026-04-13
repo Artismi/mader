@@ -5,94 +5,80 @@ import { NuovoTaskModal } from "@/components/ui/nuovo-task-modal";
 import { WeeklyCalendar } from "@/components/ui/weekly-calendar";
 import { FocusList } from "@/components/ui/focus-list";
 import { PlannerWidget } from "@/components/ui/planner-widget";
-import { GmailWidget } from "@/components/ui/gmail-widget";
-import { Mail } from "lucide-react";
+import { AvailabilityPanel } from "@/components/ui/availability-panel";
+import { tasks, tokens, bookings, availabilitySlots } from "@/lib/db";
 
 export default async function DailyBriefingPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  let urgentTasks: any[] = [];
-  let suggestedTasks: any[] = [];
+  const toComponentTask = (t: ReturnType<typeof tasks.getOverdue>[0]) => ({
+    ...t,
+    clients: t.client_name ? { name: t.client_name } : null,
+    category: t.category as 'task' | 'engagement',
+  })
+
+  // Increased limits for a more comprehensive briefing
+  const urgentTasks = tasks.getOverdue(10).map(toComponentTask) as any[];
+  const suggestedTasks = tasks.getUpcoming(10).map(toComponentTask) as any[];
+  const allTasksForCalendar = tasks.getAll({ status: 'todo' }).map(toComponentTask) as any[];
+
+  // Token Google & Events
   let calendarEvents: any[] = [];
-  let allTasksForCalendar: any[] = [];
+  const tokenData = tokens.get('google');
 
-  if (user) {
-    const todayStr = new Date().toISOString();
+  if (tokenData?.provider_token) {
+    try {
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+      );
+      oauth2Client.setCredentials({
+        access_token: tokenData.provider_token,
+        refresh_token: tokenData.provider_refresh_token,
+      });
 
-    const { data: overdue } = await supabase
-      .from('tasks')
-      .select(`*, clients(name)`)
-      .eq('status', 'todo')
-      .eq('category', 'task')
-      .lt('deadline', todayStr)
-      .order('deadline', { ascending: true })
-      .limit(5);
-
-    urgentTasks = overdue || [];
-
-    const { data: upcoming } = await supabase
-      .from('tasks')
-      .select(`*, clients(name)`)
-      .eq('status', 'todo')
-      .eq('category', 'task')
-      .gte('deadline', todayStr)
-      .order('deadline', { ascending: true })
-      .limit(5);
-
-    suggestedTasks = upcoming || [];
-
-    const { data: allTasks } = await supabase
-      .from('tasks')
-      .select('*, clients(name)')
-      .eq('status', 'todo')
-      .gte('deadline', todayStr)
-      .order('deadline', { ascending: true });
-
-    allTasksForCalendar = allTasks || [];
-
-    const { data: tokenData } = await supabase
-      .from('user_tokens')
-      .select('provider_token')
-      .eq('user_id', user.id)
-      .eq('provider', 'google')
-      .single();
-
-    if (tokenData?.provider_token) {
-      const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: tokenData.provider_token });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-      try {
-        const timeMax = new Date();
-        timeMax.setDate(timeMax.getDate() + 14);
-        const res = await calendar.events.list({
-          calendarId: 'primary',
-          timeMin: new Date().toISOString(),
-          timeMax: timeMax.toISOString(),
-          maxResults: 100,
-          singleEvents: true,
-          orderBy: 'startTime',
-        });
-        calendarEvents = res.data.items || [];
-      } catch (e) {
-        console.error("Calendar fetch error", e);
-      }
+      const timeMax = new Date();
+      timeMax.setDate(timeMax.getDate() + 28); // 4 weeks lookahead (Agenda unified)
+      const res = await calendar.events.list({
+        calendarId: 'primary',
+        timeMin: new Date().toISOString(),
+        timeMax: timeMax.toISOString(),
+        maxResults: 150,
+        singleEvents: true,
+        orderBy: 'startTime',
+      });
+      calendarEvents = res.data.items || [];
+    } catch (e: any) {
+      console.warn("Google Calendar sync error (ignoring):", e.message || "Invalid credentials");
     }
   }
+
+  // Bookings (Calendly) -> Eventi shape
+  const upcomingBookings = bookings.getUpcoming();
+  const bookingEvents = upcomingBookings.map(b => ({
+    id: `booking-${b.id}`,
+    summary: `📅 ${b.title || 'App.'} — ${b.attendee_name}`,
+    start: { dateTime: b.start_time },
+    end: { dateTime: b.end_time },
+    _isBooking: true,
+  }));
+
+  const allEventsCombined = [...calendarEvents, ...bookingEvents];
+  const slots = availabilitySlots.getAll();
 
   const dateLabel = new Date().toLocaleDateString('it-IT', {
     weekday: 'long', day: 'numeric', month: 'long'
   });
 
   return (
-    // Full-viewport layout — no page scroll
-    <div className="h-screen overflow-hidden flex flex-col pt-16">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
 
-      {/* Top bar — compatto */}
-      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-white/[0.06]">
+      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-white/[0.06] bg-[#090909]">
         <div className="flex items-baseline gap-4">
-          <h1 className="text-xl font-black tracking-tight text-white/90">Buongiorno.</h1>
-          <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/20 hidden sm:block">
+          <h1 className="text-xl font-black tracking-tight text-white/90 underline decoration-violet-500/50 decoration-2 underline-offset-4">Oggi.</h1>
+          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/20 hidden sm:block">
             {dateLabel}
           </span>
         </div>
@@ -102,29 +88,26 @@ export default async function DailyBriefingPage() {
         </div>
       </div>
 
-      {/* Main area — due colonne indipendenti */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden relative">
+        
+        {/* Availability Panel integrated in the home context */}
+        <AvailabilityPanel initialSlots={slots} />
 
-        {/* Sidebar sinistra — scrollabile indipendentemente */}
-        <aside className="hidden lg:flex flex-col w-72 flex-shrink-0 border-r border-white/[0.05] overflow-y-auto scrollbar-hide px-5 py-5 gap-8">
+        <aside className="hidden lg:flex flex-col w-72 flex-shrink-0 border-r border-white/5 overflow-y-auto scrollbar-hide px-5 py-5 gap-8 bg-[#090909]/40 backdrop-blur-sm">
           <FocusList urgentTasks={urgentTasks} suggestedTasks={suggestedTasks} />
-
-          {/* Gmail inbox */}
-          <div className="border-t border-white/5 pt-6 space-y-3">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 flex items-center gap-2">
-              <Mail className="w-3.5 h-3.5" /> Inbox
-            </h2>
-            <GmailWidget />
-          </div>
-
           <div className="border-t border-white/5 pt-6">
             <PlannerWidget />
           </div>
         </aside>
 
-        {/* Calendario — occupa tutto lo spazio restante */}
-        <main className="flex-1 min-w-0 overflow-hidden p-4">
-          <WeeklyCalendar initialEvents={calendarEvents} initialTasks={allTasksForCalendar} />
+        <main className="flex-1 min-w-0 overflow-hidden">
+          <div className="h-full w-full p-4 relative">
+             <WeeklyCalendar 
+               initialEvents={allEventsCombined} 
+               initialTasks={allTasksForCalendar} 
+               initialAvailability={slots}
+             />
+          </div>
         </main>
 
       </div>

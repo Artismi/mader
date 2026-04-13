@@ -1,98 +1,119 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Save, Loader2, Edit3, Check } from 'lucide-react'
-import { updateClient } from '@/app/actions'
+import { useState, useEffect } from 'react'
+import { Save, Loader2, FileText, ChevronLeft, ShieldCheck, Info, AlertCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
-interface Props {
-    clientId: string
-    initialContent: string | null
+interface VaultEditorProps {
+  path: string
+  onClose: () => void
 }
 
-export function VaultEditor({ clientId, initialContent }: Props) {
-    const [content, setContent] = useState(initialContent || '')
-    const [editing, setEditing] = useState(false)
-    const [saved, setSaved] = useState(false)
-    const [isPending, startTransition] = useTransition()
+export function VaultEditor({ path, onClose }: VaultEditorProps) {
+  const [content, setContent] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-    const handleSave = () => {
-        startTransition(async () => {
-            await updateClient(clientId, { vault_md_content: content })
-            setSaved(true)
-            setEditing(false)
-            setTimeout(() => setSaved(false), 2000)
-        })
+  const fetchFile = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/vault/file?path=${encodeURIComponent(path)}`)
+      if (!res.ok) throw new Error('Impossibile caricare il file')
+      const text = await res.text()
+      setContent(text)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
+  }
 
-    if (!editing) {
-        return (
-            <div className="space-y-3">
-                {content ? (
-                    <div className="bg-gray-50 rounded-xl p-4 text-xs text-primary/70 font-mono whitespace-pre-wrap max-h-64 overflow-y-auto border border-border">
-                        {content}
-                    </div>
-                ) : (
-                    <p className="text-sm text-primary/40 italic">Nessun vault ancora. Clicca Modifica per creare il profilo del cliente.</p>
-                )}
-                <button
-                    onClick={() => setEditing(true)}
-                    className="flex items-center gap-2 text-xs text-accent hover:text-accent/80 transition-colors font-semibold"
-                >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    {content ? 'Modifica vault' : 'Crea vault'}
-                </button>
-                {saved && (
-                    <span className="flex items-center gap-1 text-xs text-green-600">
-                        <Check className="w-3 h-3" /> Salvato
-                    </span>
-                )}
-            </div>
-        )
+  useEffect(() => {
+    fetchFile()
+  }, [path])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/vault/file?path=${encodeURIComponent(path)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      if (!res.ok) throw new Error('Salvataggio fallito')
+      // Success feedback
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
     }
+  }
 
-    return (
-        <div className="space-y-3">
-            <textarea
-                value={content}
-                onChange={e => setContent(e.target.value)}
-                rows={14}
-                placeholder={`# Vault — [Nome Cliente]
-
-## Identità visiva
-- Colori: #hex1, #hex2
-- Font: ...
-- Note logo: ...
-
-## Tone of voice
-- Aggettivi: ...
-- Esempi copy: ...
-- Da evitare: ...
-
-## Profilo
-Chi è, missione, dati chiave.
-
-## Deep link
-- Canva brand kit: ...
-- FigJam board: ...`}
-                autoFocus
-                className="w-full border border-border rounded-xl p-4 text-xs font-mono text-primary focus:outline-none focus:ring-2 focus:ring-accent/20 resize-none bg-gray-50"
-            />
+  return (
+    <div className="flex flex-col h-full bg-black/40 border-l border-white/[0.06] backdrop-blur-3xl animate-in slide-in-from-right duration-300">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.03]">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-white/5 rounded-xl text-white/40 hover:text-white transition-all"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div>
             <div className="flex items-center gap-2">
-                <button
-                    onClick={handleSave}
-                    disabled={isPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors disabled:opacity-50"
-                >
-                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Salva vault
-                </button>
-                <button
-                    onClick={() => { setEditing(false); setContent(initialContent || '') }}
-                    className="text-sm text-primary/50 hover:text-primary transition-colors"
-                >
-                    Annulla
-                </button>
+              <FileText className="w-4 h-4 text-sky-400" />
+              <h3 className="text-xs font-black uppercase tracking-widest text-white/80">{path.split('/').pop()}</h3>
             </div>
+            <p className="text-[10px] text-white/20 mt-0.5 truncate max-w-[300px]">{path}</p>
+          </div>
         </div>
-    )
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSave}
+            disabled={saving || loading}
+            className="flex items-center gap-2 px-6 py-2 rounded-xl bg-sky-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-sky-400 transition-all shadow-[0_0_15px_rgba(14,165,233,0.3)] disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Salva Conoscenza
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 relative flex flex-col p-4">
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-white/5" />
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-red-400">
+            <AlertCircle className="w-12 h-12 opacity-20" />
+            <p className="text-xs font-black uppercase tracking-widest">{error}</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 px-4 py-2 mb-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400/60" />
+              <p className="text-[9px] text-emerald-400/60 font-black uppercase tracking-widest">
+                Editing sicuro: il salvataggio sincronizza automaticamente il database vettoriale dell&apos;IA.
+              </p>
+            </div>
+            <textarea 
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              className="flex-1 w-full bg-black/20 border border-white/[0.04] rounded-3xl p-8 text-[13px] font-mono leading-relaxed text-slate-300 focus:outline-none focus:border-sky-500/30 transition-all resize-none scrollbar-hide selection:bg-sky-500/20"
+              placeholder="Inizia a scrivere la conoscenza del brand..."
+            />
+          </>
+        )}
+      </div>
+
+      <div className="px-6 py-3 border-t border-white/[0.06] bg-white/[0.01] flex items-center gap-2">
+        <Info className="w-3 h-3 text-white/10" />
+        <p className="text-[9px] text-white/10 italic">Ogni modifica qui è definitiva e viene indicizzata come RAG Chunk.</p>
+      </div>
+    </div>
+  )
 }

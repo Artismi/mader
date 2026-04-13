@@ -48,8 +48,23 @@ Portale Next.js 14 + Estensione Chrome, stesso repo.
 - Ogni componente ha 4 stati: default, hover, loading, error.
 - Accessibilità WCAG 2.1 AA. Target minimo 40px. Focus ring 2px violet.
 
+## Cervello AI — Architettura (aggiornato 2026-04)
+
+- **Context Assembler**: `buildContext()` in `/lib/ai/context.ts` assembla lo snapshot operativo.
+- **Memoria Persistente**: `saveMemory()` e `searchMemories()` in `/lib/vault/index.ts` gestiscono fatti semanticamente rilevanti.
+- **RAG Logic**: `searchVault()` recupera chunks da Obsidian con soglia > 0.45.
+- **Tools AI**: `createTask`, `createRecurringEngagement`, `readTasks`, `updateTaskStatus`, `createIdea`, `searchClient`, `saveMemory`.
+- **System Prompt**: Struttura **CO-STAR** (Context, Objective, Style, Tone, Audience, Response).
+- **Client Vault (§20.11)**: Se userQuery menziona il nome di un cliente, `buildContext()` carica `vault_md_content` dal DB (o `vault_path` come fallback) e inietta come `## Vault Cliente: [Nome]` nel system prompt. Rispetta Zero-Fluff.
+- **File Attivati (§20.12)**: `contextInstructions` in `/lib/db/index.ts` — l'utente attiva file (PDF, brief, linee guida) dalla UI /cervello; vengono iniettati sempre in ogni chiamata come `## File Attivato: [label]`. Max 5 file, max 2.000 token/file.
+- **Ordine iniezione system prompt**: Architecture → Snapshot → Skills → Vault Cliente → File Attivati → RAG chunks → Memorie.
+
 ## Decisioni architetturali (con data)
 
+- [2026-04-05] Client Vault Auto-Loading (§20.11): match nomi clienti in query → inject vault_md_content. Fallback readFileSync da vault_path.
+- [2026-04-05] File Attivati nel Contesto (§20.12): contextInstructions in DB, iniettati sempre in buildContext. Route API + UI /cervello da implementare.
+- [2026-04-03] Cervello v1.0: Integrazione Context Assembler e Tools CRUD task/idee.
+- [2026-04-03] Zero-Fluff Prompting: rimozione sezioni vuote dal system prompt.
 - [2026-03-08] Claude API vs claude.ai: Claude API nel portale risponde agli input utente, claude.ai è per progettazione (ARD v2.4).
 - [2026-03-07] Token Google: in user_tokens con RLS, non in cookie.
 - [2026-03-07] Streaming AI: SSE via route /api/ai/.
@@ -57,7 +72,9 @@ Portale Next.js 14 + Estensione Chrome, stesso repo.
 
 ## NON fare
 
-- Non usare localStorage nell'estensione
-- Non chiamare Google API dal client
-- Non modificare vault.md di un cliente autonomamente
-- Non aggiungere dipendenze senza motivazione
+- Non iniettare sezioni di contesto vuote (Zero-Fluff).
+- Non usare localStorage nell'estensione.
+- Non chiamare Google API dal client.
+- Non modificare vault.md di un cliente autonomamente.
+- Non aggiungere dipendenze senza motivazione esplicita.
+- Non superare i 4 chunks RAG per chiamata per preservare il focus.

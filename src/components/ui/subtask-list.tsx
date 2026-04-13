@@ -4,13 +4,7 @@ import { useState, useTransition } from 'react'
 import { Plus, Trash2, CheckSquare, Square, Loader2 } from 'lucide-react'
 import { addSubtask, toggleSubtask, deleteSubtask } from '@/app/actions'
 
-interface Subtask {
-    id: string
-    title: string
-    done: boolean
-    fase: string | null
-    sort_order: number
-}
+import { Subtask } from '@/lib/db'
 
 interface Props {
     taskId: string
@@ -31,7 +25,15 @@ export function SubtaskList({ taskId, initialSubtasks }: Props) {
 
         // Ottimistico
         const tempId = `temp-${Date.now()}`
-        setSubtasks(prev => [...prev, { id: tempId, title, done: false, fase: null, sort_order: prev.length }])
+        setSubtasks(prev => [...prev, { 
+            id: tempId, 
+            task_id: taskId, 
+            title, 
+            done: false, 
+            fase: undefined, 
+            sort_order: prev.length,
+            created_at: new Date().toISOString()
+        }])
 
         startTransition(async () => {
             await addSubtask(taskId, title)
