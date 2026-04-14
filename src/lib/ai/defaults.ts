@@ -222,7 +222,7 @@ Devi attingere ESCLUSIVAMENTE alle librerie tipografiche e cromatiche del sistem
 3. **Livelli & Metodi di Fusione**: Usa la fusione ('multiply', 'screen', 'exclusion') e filtri materici ('grain', 'halftone', 'clay', 'glass') per dare profondità.
 
 ### ⚡ RISOLUZIONE
-Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL Checkpoint** per valutare col l'utente se i pesi visivi sono corretti.\`
+Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL Checkpoint** per valutare col l'utente se i pesi visivi sono corretti.`
   },
   { 
     slug: 'design-luxury', 
@@ -231,14 +231,14 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 9, 
     active: true, 
     triggers: ['luxury', 'lusso', 'premium', 'elegante', 'gold', 'minimalista'], 
-    content: \`### 💎 HANDBOOK: LUXURY & HAUTE COUTURE
+    content: `### 💎 HANDBOOK: LUXURY & HAUTE COUTURE
 1. **Spazio e Griglia**: Il 60-70% della tavola deve essere Negative Space. Layout asimmetrici o perfettamente centrati, ma ariosi.
 2. **Tipografia (FONT_PAIRS.luxury)**: 
    - Heading: fontFamily "Cormorant Garamond", fontWeight 700, letterSpacing 0.08, Uppercase.
    - Subheading: fontFamily "Cinzel", fontWeight 400, letterSpacing 0.2.
    - Label: fontFamily "Julius Sans One", letterSpacing 0.35 (estremo).
 3. **Cromatismo**: Usa "Midnight Gold" (Bg: #0D0D0D, Primary: #C9A84C), "Ivory & Noir" o "Deep Navy".
-4. **Trattamento Foto**: Applica FX key "vignette" o "grain" leggero. Niente bordi netti, sfuma i soggetti nello sfondo nero o avorio.\` 
+4. **Trattamento Foto**: Applica FX key "vignette" o "grain" leggero. Niente bordi netti, sfuma i soggetti nello sfondo nero o avorio.` 
   },
   { 
     slug: 'design-editorial', 
@@ -247,14 +247,14 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 10, 
     active: true, 
     triggers: ['editorial', 'rivista', 'magazine', 'giornalistico', 'stampa'], 
-    content: \`### 🏛️ HANDBOOK: EDITORIAL & MAGAZINE
+    content: `### 🏛️ HANDBOOK: EDITORIAL & MAGAZINE
 1. **La Gabbia Matematica (Grid)**: Allinea testi in blocchi perfetti (giustificati). Inserisci linee divisorie sottili (strokeWidth 1) per separare i contenuti.
 2. **Tipografia (FONT_PAIRS.editorial)**:
    - Heading: fontFamily "Playfair Display SC", fontWeight 700, letterSpacing 0.04. Sovrapponi in parte questo testo alle immagini (zIndex alto).
    - Subheading: fontFamily "Lora", fontWeight 600, fontStyle "italic".
    - Label: fontFamily "Oswald", letterSpacing 0.15.
 3. **Cromatismo**: Palette "Inchiostro" (Bg #FAFAF8, Accent #C0392B) o "Terracotta" (Bg #F4EDE4, Accent #C45B3A).
-4. **Effetti di Stampa**: Applica TASSATIVAMENTE FX key "halftone" (light) per imitare la stampa su carta patinata.\` 
+4. **Effetti di Stampa**: Applica TASSATIVAMENTE FX key "halftone" (light) per imitare la stampa su carta patinata.` 
   },
   { 
     slug: 'design-brutalist', 
@@ -263,11 +263,11 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 11, 
     active: true, 
     triggers: ['brutalist', 'bold', 'impatto', 'street', 'raw', 'urban'], 
-    content: \`### ⚡ HANDBOOK: BRUTALIST & STREET
+    content: `### ⚡ HANDBOOK: BRUTALIST & STREET
 1. **Typography Heavy**: Il testo è l'immagine visiva dominante. Usa fontFamily "Archivo Black" o "Bebas Neue". fontWeight 900, fontSize estremi (150+), letterSpacing schiacciato o negativo (-0.02).
 2. **Distruzione della Griglia**: Inclina i testi ('angle: -5' o '15'). Taglia i bordi del canvas. Usa Label in "Archivo Narrow" (letterSpacing 0.08).
 3. **Contrasti Estremi**: Palette "Nero & Giallo" (Bg #0A0A0A, Primary #FFD600) o "OG Orange" (#FF6B00 e Nero).
-4. **Effetti Destrutturanti**: Usa FX key "riso", "ascii" o "glitch". Metodo di fusione "difference" o "exclusion" obbligatorio sui testi giganti sovrapposti agli sfondi.\` 
+4. **Effetti Destrutturanti**: Usa FX key "riso", "ascii" o "glitch". Metodo di fusione "difference" o "exclusion" obbligatorio sui testi giganti sovrapposti agli sfondi.` 
   },
   { 
     slug: 'design-tech', 
@@ -276,14 +276,14 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 12, 
     active: true, 
     triggers: ['tech', 'cyber', 'startup', 'innovazione', 'hacker', 'digitale corrotto'], 
-    content: \`### 🦾 HANDBOOK: TECH & CYBER
+    content: `### 🦾 HANDBOOK: TECH & CYBER
 1. **Interfaccia Matematica**: Disegna griglie o mirini sovrapponendo 'line' con strokeWidth 1 e opacity bassa.
 2. **Tipografia (FONT_PAIRS.tech / cyber)**:
    - Heading: fontFamily "Syncopate" (letterSpacing 0.1) o "Orbitron" (700).
    - Subheading/Code: fontFamily "Chakra Petch" o "Share Tech Mono".
    - Label: fontFamily "Geist Mono" o "VT323".
 3. **Colorimetria Neon**: Palette "Cibernetico" (Bg #050D1A, Ciano #00D4FF) o "Glitch Pink" (Bg #0A0010, Magenta #FF00FF, Ciano #00FFFF).
-4. **Luce e Corruzione**: Usa i tool FX nativi: applica FX key "neon" a linee o forme. Applica FX key "matrix" o "glitch" sulle fotografie.\` 
+4. **Luce e Corruzione**: Usa i tool FX nativi: applica FX key "neon" a linee o forme. Applica FX key "matrix" o "glitch" sulle fotografie.` 
   },
   { 
     slug: 'design-fashion', 
@@ -292,14 +292,14 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 13, 
     active: true, 
     triggers: ['fashion', 'moda', 'runway', 'couture', 'verticale'], 
-    content: \`### 🕴️ HANDBOOK: FASHION & ELONGATED
+    content: `### 🕴️ HANDBOOK: FASHION & ELONGATED
 1. **Verticalità**: Sfrutta le dimensioni allungate. Poggia i testi sui lati ruotandoli ('angle: -90' o '90').
 2. **Tipografia Allungata (FONT_PAIRS.fashion)**:
    - Heading: fontFamily "Six Caps", fontSize gigante, letterSpacing 0.15.
    - Subheading: fontFamily "Alumni Sans Pinstripe", letterSpacing 0.3.
    - Logo: fontFamily "Italiana", letterSpacing 0.25, style 'italic'.
 3. **Cromatismo Muto**: Usa la palette "Nude & Black" (Bg #F2ECE4, Primary #0D0D0D, Accent #BFA98C) o "Polvere". 
-4. **Texturizzazione**: Lo sfondo non deve mai essere liscio. Usa un rect con FX key "grain" o "halftone" per simulare la carta di un catalogo di moda.\` 
+4. **Texturizzazione**: Lo sfondo deve mai essere liscio. Usa un rect con FX key "grain" o "halftone" per simulare la carta di un catalogo di moda.` 
   },
   { 
     slug: 'design-minimal', 
@@ -308,13 +308,13 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 14, 
     active: true, 
     triggers: ['minimal', 'swiss', 'pulito', 'razionale', 'bento', 'corporate'], 
-    content: \`### 📐 HANDBOOK: MINIMAL & SWISS
+    content: `### 📐 HANDBOOK: MINIMAL & SWISS
 1. **La Griglia Modulare**: Allineamento di precisione assoluta. Nessuna sovrapposizione casuale. Costruisci box (rect) incastrati (Bento Box UI) con 'rx: 24' e 'ry: 24' per angoli smussati, se richiesto.
 2. **Tipografia Funzionale (FONT_PAIRS.minimal)**:
    - Usa unicamente fontFamily "Inter Tight". Usa fontWeight 700 e letterSpacing -0.03 per i titoli, 300 per il body.
    - Label tecniche: fontFamily "Geist Mono", Uppercase, letterSpacing 0.05.
 3. **Color-Blocking Puro**: Palette "Bianco" o "Grigio Freddo". Sfrutta enormi blocchi di colore a tinta unita (bianco/nero/blu elettrico). Nessun gradiente o sfumatura.
-4. **Depth (Opzionale)**: Se usi card sovrapposte in stile UI, usa FX key "glass" (opacità, border e sfocatura posteriore).\` 
+4. **Depth (Opzionale)**: Se usi card sovrapposte in stile UI, usa FX key "glass" (opacità, border e sfocatura posteriore).` 
   },
   { 
     slug: 'design-elastic-chaos', 
@@ -323,12 +323,12 @@ Esegui la tool di disegno/canvas, imposta gli ID Univoci, quindi usa un **HitL C
     sort_order: 15, 
     active: true, 
     triggers: ['post-design', 'caos', 'cyber', 'alien', 'entropia', 'ribelle', 'distrutto', 'elastico'], 
-    content: \`### 🌪️ HANDBOOK: POST-DESIGN & ELASTIC CHAOS
+    content: `### 🌪️ HANDBOOK: POST-DESIGN & ELASTIC CHAOS
 Ispirato alle correnti "Elastic" e "Cyber". L'obiettivo è il sovraccarico visivo e il caos controllato.
 1. **Margini Distrutti**: Margini minuscoli o inesistenti. Elementi testuali e forme devono "uscire" brutalmente dai confini della tavola.
 2. **Mutant Typography**: Attingi dalla categoria "UFO & ALIEN EXPERIMENTAL" (es. fontFamily "Rubik Glitch Pop", "Danfo" o "Megrim"). Ruota i testi in angoli non convenzionali.
 3. **Barre Fantasma (Ghosting)**: Invece di usare sfondi pieni per il testo, usa "ghosted bars" (rect vettoriali con opacity 0.15) e applica 'blendMode: exclusion' per farle scontrare con le immagini sottostanti.
-4. **Distorsione FX**: Nessuna immagine deve essere pulita. Usa FX key "glitch" o "vhs" su tutto. Aggiungi FX key "skew" alle immagini fotografiche.\` 
+4. **Distorsione FX**: Nessuna immagine deve essere pulita. Usa FX key "glitch" o "vhs" su tutto. Aggiungi FX key "skew" alle immagini fotografiche.` 
   },
   { 
     slug: 'design-typo-arch', 
@@ -337,12 +337,12 @@ Ispirato alle correnti "Elastic" e "Cyber". L'obiettivo è il sovraccarico visiv
     sort_order: 16, 
     active: true, 
     triggers: ['tipografia gigante', 'type-heavy', 'struttura testuale', 'lettering', 'architettura'], 
-    content: \`### 🏗️ HANDBOOK: TYPOGRAPHIC ARCHITECTURE
+    content: `### 🏗️ HANDBOOK: TYPOGRAPHIC ARCHITECTURE
 La tipografia forma la griglia. Non ci sono contenitori: le parole giganti sono l'impalcatura fisica del design.
 1. **Lettere come Colonne**: Usa font Brutalisti (es. fontFamily "Archivo Black", "Big Shoulders Display"). Imposta fontSize enormi (es. 400px) e ruotali di 90 o -90 gradi per formare muri visivi sui bordi.
 2. **Wireframe Mode**: Anziché riempire il testo, svuotalo. Usa 'fill: transparent' e unisci uno 'stroke' spesso (es. strokeWidth: 2, colore banco).
 3. **Intersezione Immagini**: Le fotografie vivono *dentro* o *dietro* lo scheletro tipografico. Usa 'blendMode: difference' sui testi.
-4. **Nessuna Decorazione**: Banditi grafiche, cerchi o orpelli. Solo lettere e fotografie.\` 
+4. **Nessuna Decorazione**: Banditi grafiche, cerchi o orpelli. Solo lettere e fotografie.` 
   },
   { 
     slug: 'design-horizontal-data', 
@@ -351,12 +351,12 @@ La tipografia forma la griglia. Non ci sono contenitori: le parole giganti sono 
     sort_order: 17, 
     active: true, 
     triggers: ['report', 'dashboard', 'dati', 'orizzontale', 'infografica', 'corporate rigoroso'], 
-    content: \`### 📊 HANDBOOK: HORIZONTAL HIERARCHY
+    content: `### 📊 HANDBOOK: HORIZONTAL HIERARCHY
 Ispirato al design infografico. La gerarchia orizzontale separa ogni parte in zone inflessibili.
 1. **Divisione a Bande**: Usa 'rect' per creare bande orizzontali nette che attraversano il 100% della larghezza del canvas. Lavora "sopra/sotto" per dividere i concetti.
 2. **Ancoraggio a Terra**: Contieni i titoli o le liste chiudendole con linee sottili ('line' strokeWidth 1) e ancora il design mettendo border basali.
 3. **Tipografia di Precisione**: Usa "Geist Mono" o "Inter Tight". Il testo deve sembrare un terminale finanziario.
-4. **Depth Elegante**: Sulle bande in sovrapposizione, usa FX key "glass" o ombre leggerissime per staccare i livelli di lettura.\` 
+4. **Depth Elegante**: Sulle bande in sovrapposizione, usa FX key "glass" o ombre leggerissime per staccare i livelli di lettura.` 
   },
   { 
     slug: 'design-new-wave-riso', 
@@ -365,12 +365,12 @@ Ispirato al design infografico. La gerarchia orizzontale separa ogni parte in zo
     sort_order: 18, 
     active: true, 
     triggers: ['risograph', 'stampa', 'fanzine', 'indie', 'poster art', 'sovrapposizione', 'inchiostro'], 
-    content: \`### 🖨️ HANDBOOK: NEW WAVE RISOGRAPH
+    content: `### 🖨️ HANDBOOK: NEW WAVE RISOGRAPH
 Ispirato alla stampa offset indipendente. Gioca sull'errore di registro e sovrastampe.
 1. **La Ricetta Risograph (FX)**: Applica a OGNI immagine l'FX key "riso". Colori vibranti e opposti.
 2. **Inchiostro Moltiplicato**: Quando sovrapponi vettori o testi spessi, DEVI usare 'mixBlendMode: multiply' e 'opacity: 0.8'. L'incrocio tra forme genererà illusioni cromatiche.
 3. **Texture Porosa**: Lo sfondo vettoriale deve avere obbligatoriamente FX key "grain" (intensity: 60).
-4. **Tipografia Urbana**: Usa font "Permanent Marker" o "Shrikhand". Impagina in modo asimmetrico.\` 
+4. **Tipografia Urbana**: Usa font "Permanent Marker" o "Shrikhand". Impagina in modo asimmetrico.` 
   },
   { 
     slug: 'design-hyper-tactile', 
@@ -379,12 +379,12 @@ Ispirato alla stampa offset indipendente. Gioca sull'errore di registro e sovras
     sort_order: 19, 
     active: true, 
     triggers: ['pittura', 'materia', 'arte', 'museo', 'organico', 'fluido', 'tattile'], 
-    content: \`### 🎨 HANDBOOK: HYPER-TACTILE FINE ART
+    content: `### 🎨 HANDBOOK: HYPER-TACTILE FINE ART
 Distrugge l'idea di "vettoriale liscio" e trasforma l'output in pittura artigianale.
 1. **L'Effetto Tela (FX)**: Le immagini passano attraverso FX key "oil" (radius: 50) o "thermal" per dare densità.
 2. **Fluidità dei Vettori**: Banditi scatolotti perfetti. Usa forme morbide, applica l'FX key "wavy" o "liquid" sui background per muoverli.
 3. **Luce Focalizzata**: Crea l'effetto vignetta museale: livello superiore 'blendMode: overlay' sfumato.
-4. **Tipografia Romantica**: Usa "Gwendolyn" o "Cormorant Garamond". 'mixBlendMode: soft-light' sui testi morbidi.\` 
+4. **Tipografia Romantica**: Usa "Gwendolyn" o "Cormorant Garamond". 'mixBlendMode: soft-light' sui testi morbidi.` 
   },
   { 
     slug: 'design-acid-rave', 
@@ -393,12 +393,12 @@ Distrugge l'idea di "vettoriale liscio" e trasforma l'output in pittura artigian
     sort_order: 20, 
     active: true, 
     triggers: ['acid', 'rave', '90s', 'flyer', 'underground', 'liquido', 'psichedelico', 'club', 'acid brutalism'], 
-    content: \`### 💊 HANDBOOK: 90s RAVE & ACID TYPOGRAPHY
+    content: `### 💊 HANDBOOK: 90s RAVE & ACID TYPOGRAPHY
 Estetica flyer acid house anni 90. Ignora i margini sicuri.
 1. **Acid Brutalism**: Affianca font giganti (es. "Archivo Black") a font fluidi "alieni" ("Rubik Glitch Pop"). Distorci, forza, spezza.
 2. **Vibrazione Cromatica**: Usa accoppiamenti di colori acidi per vibrare (es. Neon Green vs Hot Pink su Sfondo Nero).
 3. **Metalli Liquidi**: Sulle forme vettoriali, invoca TASSATIVAMENTE pattern \`procedural: wave_lines\` o l'FX key "liquid". Sul testo applica l'FX key "chrome".
 4. **Blend Acidi**: Applica 'blendMode: color-dodge' o 'exclusion' per "bruciare" visivamente le aree incrociate.
-5. **Sporcizia Offset**: FX key "vhs" e "glitch" sparsi sul canvas o applicati globalmente.\` 
+5. **Sporcizia Offset**: FX key "vhs" e "glitch" sparsi sul canvas o applicati globalmente.` 
   }
 ];

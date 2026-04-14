@@ -1,8 +1,10 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { google } from '@ai-sdk/google'
-import { streamText, convertToModelMessages, stepCountIs } from 'ai'
+import * as aiSdk from 'ai'
+import { convertToModelMessages, stepCountIs } from 'ai'
 import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
+import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
@@ -201,11 +203,23 @@ export async function POST(req: Request) {
       ? google('gemini-2.5-flash')
       : anthropic('claude-3-5-sonnet-latest')
 
-    const result = streamText({
+    // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
+    const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
+
+    const result = tracedStreamText({
       model,
       system: SYSTEM_PROMPT,
       messages: modelMessages,
       stopWhen: stepCountIs(10),
+      // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: 'canvas-ai-agent',
+        metadata: {
+          modelId: modelId ?? 'anthropic',
+          hasCanvas: !!canvasSnapshot,
+        },
+      },
       tools: {
         createTask: tool({
           description: 'Crea un nuovo incarico nel sistema.',
