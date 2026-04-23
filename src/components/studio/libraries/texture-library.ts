@@ -3,6 +3,7 @@ export interface TextureItem {
   url: string;
   type: 'materic' | 'geometric' | 'overlay';
   filterType?: string; // Mappa ai filtri shader in creative-studio
+  folder?: string;     // Percorso cartella opzionale
 }
 
 export const TEXTURE_LIBRARY: Record<string, TextureItem[]> = {
@@ -54,6 +55,26 @@ export const TEXTURE_LIBRARY: Record<string, TextureItem[]> = {
       type: 'overlay',
       url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiPjxmaWx0ZXIgaWQ9Im4iPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjkiIG51bU9jdGF2ZXM9IjQiIHN0aXRjaFRpbGVzPSic3RpdGNoJy8+PGZlQ29sb3JNYXRyaXggdHlwZT0ibWF0cml4IiB2YWx1ZXM9IjAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDAgMCAwIDEwMDAgLTUwMCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNuKSIgb3BhY2l0eT0iMC4xNSIvPjwvc3ZnPg==' 
     }
+  ],
+  'DESIGN SYNDROME (Exclusive)': [
+    // Papers
+    { name: 'DS Fine Paper 01', url: '/assets/textures/ds-paper/design syndrome paper texture free1 .png', type: 'materic' },
+    { name: 'DS Craft Paper 02', url: '/assets/textures/ds-paper/design syndrome paper texture free2 .png', type: 'materic' },
+    { name: 'DS Fiber Paper 03', url: '/assets/textures/ds-paper/design syndrome paper texture free3 .png', type: 'materic' },
+    
+    // Noise & Glitch
+    { name: 'DS Digital Noise', url: '/assets/textures/ds-noise/design syndrome noise texture 2 .png', type: 'materic' },
+    { name: 'DS Deep Grain', url: '/assets/textures/ds-noise/design syndrome noise texture 3 .png', type: 'materic' },
+    { name: 'DS Wave Glitch', url: '/assets/textures/ds-noise/design syndrome wave noise texture.png', type: 'materic' },
+    { name: 'DS Kinetic Noise', url: '/assets/textures/ds-noise/design syndrome wave noise texture 5  .png', type: 'materic' },
+    { name: 'DS Static Wash', url: '/assets/textures/ds-noise/design syndrome wave noise texture4 .png', type: 'materic' },
+
+    // Overlays (Plastic)
+    { name: 'DS Plastic Bag 01', url: '/assets/overlays/ds-plastic/Plastic-bags1.png', type: 'overlay' },
+    { name: 'DS Plastic Bag 02', url: '/assets/overlays/ds-plastic/Plastic-bags2.png', type: 'overlay' },
+    { name: 'DS Shrink Wrap 03', url: '/assets/overlays/ds-plastic/Plastic-bags3.png', type: 'overlay' },
+    { name: 'DS Liquid Plastic 04', url: '/assets/overlays/ds-plastic/Plastic-bags4.png', type: 'overlay' },
+    { name: 'DS Vacuum Seal 05', url: '/assets/overlays/ds-plastic/Plastic-bags5.png', type: 'overlay' },
   ]
 };
 

@@ -12,6 +12,15 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react'
 import * as fabric from 'fabric'
+const getObjId = (obj: any): string => {
+  if (!obj) return ''
+  if (!obj.objId) {
+    obj.objId = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) 
+      ? (crypto as any).randomUUID() 
+      : 'obj_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now()
+  }
+  return obj.objId
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -255,9 +264,7 @@ export function useAnimationEngine(fabricRef: React.RefObject<fabric.Canvas | nu
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  const getObjId = (obj: fabric.FabricObject): string =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((obj as any).objId || (obj as any).name || obj.type || 'obj') as string
+
 
   const getOrCreateTrack = useCallback((obj: fabric.FabricObject): AnimTrack => {
     const id = getObjId(obj)

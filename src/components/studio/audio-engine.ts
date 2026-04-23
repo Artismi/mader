@@ -1,4 +1,5 @@
 import { type AudioTrack } from './audio-timeline'
+import { extractBPM } from '@/lib/audio/beat-detection'
 
 export class AudioEngine {
   private ctx: AudioContext | null = null
@@ -114,6 +115,12 @@ export class AudioEngine {
     const buffer = await this.ctx!.decodeAudioData(arrayBuffer)
     this.buffers.set(id, buffer)
     return buffer
+  }
+
+  async getBPM(id: string): Promise<number | null> {
+    const buffer = this.buffers.get(id)
+    if (!buffer) return null
+    return extractBPM(buffer)
   }
 
   // Creates an audio-only track (not video)

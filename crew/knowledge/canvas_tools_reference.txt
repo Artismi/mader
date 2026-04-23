@@ -1,0 +1,912 @@
+================================================================================
+CREATIVE OS — CANVAS TOOLS REFERENCE (v2.0)
+Guida completa per il Canvas Board Generator Agent
+Tutti gli effetti, font, forme, procedurali e proprietà disponibili nel canvas Fabric.js
+================================================================================
+
+REGOLA D'ORO: usa solo ciò che è documentato qui. Se un effetto, font o tipo non è
+in questa lista, NON ESISTE nel sistema e genererà un errore silenzioso.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 1 — TIPI DI ELEMENTI (type)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ogni elemento nel board JSON ha queste proprietà di base:
+  type       → (obbligatorio) uno dei tipi qui sotto
+  x, y       → posizione top-left in pixel (0 = angolo top-left del canvas)
+  w, h       → larghezza e altezza in pixel
+  angle      → rotazione in gradi (-180 a 180), default 0
+  opacity    → 0.0–1.0, default 1.0
+  effects    → array di stringhe (vedi Sezione 3), default []
+  effectProps→ oggetto con parametri per ogni effetto (vedi Sezione 3)
+
+TIPI DISPONIBILI:
+
+──────────────────────────────────────
+"rect"
+  Rettangolo riempito. Il tipo più versatile — sfondi, blocchi, barre, divisori.
+  Proprietà extra:
+    fill        → colore OKLCH, hex, rgba, o gradient object
+    stroke      → colore bordo (stringa colore)
+    strokeWidth → spessore bordo in pixel (0 = nessun bordo)
+    borderRadius→ raggio angoli in pixel (0 = angoli vivi)
+
+──────────────────────────────────────
+"circle"
+  Ellisse/cerchio. Usa w e h per controllare proporzioni.
+  Proprietà extra:
+    fill, stroke, strokeWidth (come rect)
+
+──────────────────────────────────────
+"triangle"
+  Triangolo equilatero.
+  Proprietà extra:
+    fill, stroke, strokeWidth
+
+──────────────────────────────────────
+"text"
+  Testo statico. Usare per headline, body, annotazioni, label.
+  Proprietà extra:
+    text         → stringa contenuto (obbligatorio)
+    fontFamily   → nome font (vedi Sezione 6 — FONT)
+    fontSize     → dimensione in px (default 24)
+    fontWeight   → "100"|"200"|"300"|"400"|"500"|"600"|"700"|"800"|"900"|"bold"|"normal"
+    fontStyle    → "normal"|"italic"
+    textAlign    → "left"|"center"|"right"|"justify"
+    fill         → colore del testo
+    letterSpacing→ tracking in px (0 = normale; positivo = dilata; negativo = comprime)
+    lineHeight   → interlinea come moltiplicatore (1.2 = normale, 1.8 = ampia)
+    textTransform→ "none"|"uppercase"|"lowercase" (applicato visivamente)
+    underline    → boolean
+    stroke       → colore contorno testo
+    strokeWidth  → spessore contorno testo in pixel
+
+──────────────────────────────────────
+"image"
+  Immagine da URL o asset cliente.
+  Proprietà extra:
+    src           → URL immagine (usare asset del cliente da list_client_assets)
+    removeBackground → boolean — se true, rimuove bg prima di applicare
+    cropX, cropY  → offset ritaglio (0–1)
+    cropW, cropH  → dimensione ritaglio (0–1)
+
+──────────────────────────────────────
+"path"
+  Forma SVG custom da path string. Per forme dalla shape library o path disegnati.
+  Proprietà extra:
+    path         → stringa SVG path (vedi Sezione 7 — FORME)
+    fill, stroke, strokeWidth
+
+──────────────────────────────────────
+"line"
+  Linea retta da punto A a punto B.
+  Proprietà extra:
+    x2, y2       → endpoint della linea (x,y sono l'endpoint iniziale)
+    stroke       → colore linea
+    strokeWidth  → spessore in pixel
+    strokeDashArray → array per linee tratteggiate [lunghezza, spazio], es. [10, 5]
+
+──────────────────────────────────────
+"procedural"
+  Pattern generativo algoritmico. Crea texture di sfondo e pattern ripetuti.
+  Proprietà extra:
+    proceduralType → tipo del pattern (vedi Sezione 5 — PROCEDURALI)
+    color          → colore del pattern
+    density        → densità 0.1–1.0
+    radius         → dimensione unità base
+    spacing        → spaziatura tra elementi (per tipi che lo supportano)
+    amplitude      → ampiezza ondulazione (per wave_lines, zigzag)
+    angle          → angolo del pattern in gradi (per stripe_diagonal)
+    weight         → spessore linea (per tipi line-based)
+
+──────────────────────────────────────
+"group"
+  Raggruppa più elementi. Usato internamente — preferire elementi singoli nel JSON.
+
+──────────────────────────────────────
+"textbox"
+  Testo multiriga con word-wrap automatico. Per paragrafi di testo lungo.
+  Proprietà extra: tutte quelle di "text" +
+    width → larghezza fissa del box (il testo va a capo automaticamente)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 2 — SISTEMA COLORE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FORMATO PREFERITO: OKLCH
+  Usare SEMPRE OKLCH per i colori nella palette del design. È perceptually uniform —
+  i salti di L si percepiscono come uguali su tutta la gamma cromatica.
+
+  Sintassi: "oklch(L C H)"
+    L = lightness 0–1   (0 = nero, 1 = bianco)
+    C = chroma 0–0.4    (0 = grigio, 0.4 = massima saturazione)
+    H = hue 0–360       (0/360=rosso, 120=verde, 240=blu, 300=viola)
+
+  Esempi pratici:
+    "oklch(0.97 0.015 70)"   → bianco-crema caldo (sfondo carta)
+    "oklch(0.14 0.03 250)"   → quasi-nero blu (inchiostro)
+    "oklch(0.50 0.28 260)"   → blu elettrico saturo
+    "oklch(0.55 0.28 25)"    → rosso vermiglio
+    "oklch(0.70 0.22 140)"   → verde acido
+    "oklch(0.65 0.30 300)"   → magenta pop
+    "oklch(0.82 0.18 90)"    → giallo caldo
+    "oklch(0.18 0.02 0)"     → grigio scuro neutro
+
+FORMATI ALTERNATIVI SUPPORTATI:
+  "#rrggbb"   → hex standard
+  "rgba(r,g,b,a)" → rgba con alpha
+  "transparent"   → trasparente (per sfondi)
+
+GRADIENTE (fill con oggetto gradient):
+  {
+    "type": "linear",
+    "coords": { "x1": 0, "y1": 0, "x2": 1, "y2": 0 },
+    "colorStops": [
+      { "offset": 0, "color": "oklch(0.55 0.30 260)" },
+      { "offset": 1, "color": "oklch(0.55 0.30 300)" }
+    ]
+  }
+
+  Per gradiente radiale:
+  {
+    "type": "radial",
+    "coords": { "x1": 0.5, "y1": 0.5, "r1": 0, "x2": 0.5, "y2": 0.5, "r2": 0.5 },
+    "colorStops": [
+      { "offset": 0, "color": "oklch(0.60 0.25 260)" },
+      { "offset": 1, "color": "oklch(0.20 0.05 260)" }
+    ]
+  }
+
+  Direzioni lineare comuni (coords da 0 a 1 = relativo all'oggetto):
+    Orizzontale sx→dx:  { "x1": 0, "y1": 0, "x2": 1, "y2": 0 }
+    Verticale top→bot:  { "x1": 0, "y1": 0, "x2": 0, "y2": 1 }
+    Diagonale:          { "x1": 0, "y1": 0, "x2": 1, "y2": 1 }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 3 — EFFETTI CUSTOM (effects array)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Gli effetti vengono applicati tramite:
+  "effects": ["nome_effetto"],
+  "effectProps": { "nome_effetto": { "parametro": valore } }
+
+Gli effetti si SOMMANO — puoi combinare più effetti sulla stessa tavola.
+Ordine consigliato: effetti stilistici prima, animati dopo.
+
+━━━ EFFETTI DI STILE (non animati) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"3d"
+  Effetto tridimensionalità volumetrica con ombra prospettica.
+  Params: depth (5–30, default 10), angle (0–360, default 45), color (hex)
+  Uso: elementi hero, testo display, forme architettoniche
+  Esempio: "effectProps": { "3d": { "depth": 15, "angle": 45 } }
+
+"glass"
+  Effetto vetro/glassmorphism — sfondo semi-trasparente con bordo luminoso.
+  Params: opacity (1–30, default 10), border (1–30), color (hex, default "#ffffff")
+  Uso: card overlay, panel premium, UI moderna
+  Esempio: "effectProps": { "glass": { "opacity": 15, "border": 8 } }
+
+"clay"
+  Effetto plastilina/3D morbido — volume gonfiato con ombra morbida.
+  Params: softness (10–60, default 30), volume (20–80, default 50),
+          gloss (10–60, default 30), matte (0–40, default 20), color (hex)
+  Uso: UI friendly, stile kawaii, brand giocoso
+  Esempio: "effectProps": { "clay": { "softness": 35, "volume": 60, "gloss": 40 } }
+
+"riso"
+  Effetto risograph — duplicazione cromatica con offset colori (print aesthetic).
+  Params: color1 (hex, default #f72585), color2 (hex, default #4cc9f0),
+          intensity (10–100, default 50)
+  Uso: poster indipendente, zine aesthetic, stampa artigianale
+  Esempio: "effectProps": { "riso": { "color1": "#ff6b00", "color2": "#0055ff", "intensity": 60 } }
+
+"thermal"
+  Effetto termocamera — rimappa i colori su scala termica (rosso-giallo-blu).
+  Params: intensity (50–100, default 100), shift (0–100, default 0)
+  Uso: surveillance aesthetic, tech-distopian, visualizzazioni dati
+  Esempio: "effectProps": { "thermal": { "intensity": 90 } }
+
+"bloom"
+  Bagliore luminoso intorno alle zone chiare — effetto cinema dreamy.
+  Params: threshold (20–80, default 55), intensity (20–80, default 50),
+          radius (10–80, default 50)
+  Uso: vaporwave, dreamcore, luci notturne, atmosfera onirica
+  Esempio: "effectProps": { "bloom": { "threshold": 40, "intensity": 60, "radius": 30 } }
+
+"outline"
+  Contorno netto di colore solido intorno all'oggetto.
+  Params: thickness (1–50, default 20), color (hex, default "#ffffff")
+  Uso: pop art, fumetto, street art, separazione elementi
+  Esempio: "effectProps": { "outline": { "thickness": 30, "color": "#000000" } }
+
+"prism"
+  Aberrazione cromatica prismatica — spostamento RGB come vetro difrangente.
+  Params: amount (5–50, default 20)
+  Uso: vaporwave, glam, Y2K, effetto lente ottica vintage
+  Esempio: "effectProps": { "prism": { "amount": 25 } }
+
+"halftone"
+  Pattern a punti retinati come stampa tipografica vintage.
+  Params: size (4–20, default 10), intensity (30–80, default 50)
+  Uso: pop art, risograph, editorial vintage, stampa artigianale
+  Esempio: "effectProps": { "halftone": { "size": 8, "intensity": 60 } }
+
+"pixelate"
+  Pixelazione — riduce la risoluzione visiva in blocchi quadrati.
+  Params: size (4–24, default 8)
+  Uso: pixel art, 8-bit, censura artistica, glitch
+  Esempio: "effectProps": { "pixelate": { "size": 12 } }
+
+"oil"
+  Pittura a olio — smeared texture organica.
+  Params: radius (20–80, default 50), intensity (50–100, default 80)
+  Uso: arte classica, texture pittorica, editorial lusso
+  Esempio: "effectProps": { "oil": { "radius": 40, "intensity": 85 } }
+
+"skew"
+  Deformazione prospettica — inclina l'oggetto orizzontalmente o verticalmente.
+  Params: x (gradi skew X, default 10), y (gradi skew Y, default 0)
+  Uso: headline dinamiche, poster sport, effetti di moto
+  Esempio: "effectProps": { "skew": { "x": 15, "y": 0 } }
+
+━━━ EFFETTI ANIMATI (RAF — si muovono in loop automatico) ━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANTE: gli effetti animati si aggiornano a ogni frame. Usare con parsimonia
+(max 2-3 su tutto il canvas) per non sovraccaricare il rendering.
+
+"glitch"
+  Glitch digitale — spostamento RGB con scan lines intermittenti.
+  Params: amount (5–30, default 10)
+  Uso: hacker, cyber, distopico, lo-fi tech
+  Esempio: "effectProps": { "glitch": { "amount": 15 } }
+  ANIMATO: disturbo si muove in loop
+
+"wavy"
+  Distorsione sinusoidale ondulante.
+  Params: intensity (20–80, default 50), frequency (5–20, default 10)
+  Uso: psichedelico, liquido, acqua, organic digital
+  Esempio: "effectProps": { "wavy": { "intensity": 40, "frequency": 8 } }
+  ANIMATO: onda in moto continuo
+
+"liquid"
+  Fluido lava lamp — distorsione liquida lenta.
+  Params: intensity (30–70, default 50), scale (15–50, default 30)
+  Uso: organic, sensuale, brand fluid, vaporwave soft
+  Esempio: "effectProps": { "liquid": { "intensity": 55, "scale": 25 } }
+  ANIMATO: movimento fluido perpetuo
+
+"vhs"
+  Effetto VHS — scan lines, noise, color bleed come cassetta consumata.
+  Params: intensity (30–80, default 60)
+  Uso: Y2K, nostalgia '90s, lo-fi, found footage
+  Esempio: "effectProps": { "vhs": { "intensity": 55 } }
+  ANIMATO: noise si aggiorna continuamente
+
+"matrix"
+  Pioggia di codice verde — effetto Matrix/hacker.
+  Params: intensity (50–90, default 70)
+  Uso: cyber, hacker, tech noir, terminal aesthetic
+  Esempio: "effectProps": { "matrix": { "intensity": 75 } }
+  ANIMATO: caratteri in caduta perpetua
+
+"chrome"  [ALIAS: LiquidMetalFilter]
+  Superficie metallica liquida — riflessi cromati in movimento.
+  Params: intensity (30–70, default 50)
+  Uso: Y2K, chrome, lusso metallico, car aesthetic
+  Esempio: "effectProps": { "chrome": { "intensity": 60 } }
+  ANIMATO: riflessi in movimento
+
+"holo"
+  Effetto olografico — variazione iridescente di colori come carta olografica.
+  Params: intensity (30–70, default 50), speed (20–80, default 50)
+  Uso: Y2K, crypto, premium tech, carte collezionabili
+  Esempio: "effectProps": { "holo": { "intensity": 55, "speed": 40 } }
+  ANIMATO: colori mutano in loop
+
+"neon"
+  Bagliore neon — testo/forma che brilla come tubo al neon.
+  Params: color (hex), blur (10–60, default 30), intensity (3–10, default 5)
+  Uso: nightlife, cyberpunk, insegna luminosa, darkmode
+  Esempio: "effectProps": { "neon": { "color": "#ff00ff", "blur": 40, "intensity": 6 } }
+  ANIMATO: pulsazione lenta
+
+"grain"
+  Grana pellicola — rumore analogico come film 35mm.
+  Params: (nessuno — intensità built-in)
+  Uso: fotografia analogica, editorial, nostalgia
+  ANIMATO: grain si aggiorna a ogni frame
+
+━━━ EFFETTI STILE AVANZATO (appena cablati v2) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+"duotone"
+  Color grading 3-way professionale — shadows/midtones/highlights su tre colori separati.
+  Params: shadow ([R,G,B] default [0,10,60]), mid ([R,G,B] default [120,150,180]),
+          highlight ([R,G,B] default [255,230,200]), contrast (50–150, default 100),
+          intensity (50–100, default 100)
+  Uso: poster fotografico, editorial B&W colorizzato, moodboard
+  Esempio: "effectProps": { "duotone": { "shadow": [10,0,50], "highlight": [255,220,180], "contrast": 110 } }
+
+"vignette"
+  Vignettatura fotografica con aberrazione cromatica radiale.
+  Params: strength (30–90, default 70), radius (20–80, default 50),
+          aberration (0–60, default 30), saturation (30–80, default 60)
+  Uso: fotografia analogica, portrait premium, editorial atmosferico
+  Esempio: "effectProps": { "vignette": { "strength": 60, "radius": 45 } }
+
+"posterize"
+  Posterizzazione — riduce i livelli di colore come serigrafia silk-screen.
+  Params: steps (2–8, default 4), dither (20–80, default 50), vibrance (20–60, default 40)
+  Uso: pop art, stampa serigrafica, poster artistico
+  Esempio: "effectProps": { "posterize": { "steps": 3, "dither": 60, "vibrance": 50 } }
+
+"ascii"
+  ASCII art — converte pixel in caratteri di densità (effetto terminale).
+  Params: size (4–16, default 8), intensity (50–100, default 100)
+  Uso: cyber, hacker terminal, retro computing, glitch art
+  Esempio: "effectProps": { "ascii": { "size": 6, "intensity": 90 } }
+
+"fiber"
+  Texture carta/fibra — grana anisotropica come carta handmade o cartone.
+  Params: intensity (20–60, default 40), roughness (30–70, default 50), scale (50–150, default 100)
+  Uso: carta artigianale, packaging premium, mincho washi texture
+  Esempio: "effectProps": { "fiber": { "intensity": 35, "roughness": 60 } }
+
+━━━ FILTRI STANDARD FABRIC.JS (usare per immagini e aggiustamenti) ━━━━━━━━━━━
+
+"Brightness"
+  Params: value (-100 a 100, default 0)
+
+"Contrast"
+  Params: value (-100 a 100, default 0)
+
+"Saturation"
+  Params: value (-100 a 100, default 0)
+
+"Blur"
+  Params: value (0 a 100, default 0) — 100 = blur massimo
+
+"Noise"
+  Params: value (0 a 100, default 0) — aggiunge grana random
+
+"HueRotation"
+  Params: value (0 a 360, default 0) — ruota hue in gradi
+
+"Grayscale"
+  Params: nessuno — converte in bianco e nero
+
+"Sepia"
+  Params: nessuno — tono seppia vintage
+
+"Invert"
+  Params: nessuno — inverte tutti i colori
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 4 — COMBINAZIONI EFFETTI RACCOMANDATE PER MOVIMENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ANTI-GRAVITY MINIMAL:
+  → Nessun effetto custom. Solo Brightness/Contrast leggeri sulle immagini.
+  → Al massimo: 1 elemento con "bloom" a intensità bassa (20)
+
+DIGITAL BRUTALISM:
+  → "glitch" su elementi headline (amount 10–15)
+  → "outline" su forme primarie (color: "#000000", thickness 20–30)
+  → "vhs" su immagini background (intensity 40)
+
+VAPORWAVE:
+  → "holo" su elementi hero (intensity 60)
+  → "bloom" su tutto (threshold 35, intensity 50)
+  → "prism" su testo display (amount 15–20)
+  → "chrome" su elementi metallici
+
+Y2K / ACID GRAPHICS:
+  → "chrome" su forme primarie
+  → "prism" su testo (amount 20–30)
+  → "holo" su elementi secondari
+
+SWISS MINIMAL:
+  → Nessun effetto. Purezza tipografica totale.
+
+ART NOUVEAU:
+  → "oil" su elementi decorativi (radius 30, intensity 70)
+  → "bloom" su elementi floreali (threshold 50, intensity 30)
+
+POP ART:
+  → "halftone" su immagini (size 8, intensity 65)
+  → "outline" su oggetti (color: "#000000", thickness 25)
+
+CONSTRUCTIVISM:
+  → "3d" su forme geometriche (depth 12, angle 315)
+  → "outline" su testo (color: "#000000", thickness 15)
+
+GLITCH / HACKER:
+  → "glitch" su testo headline (amount 15–20)
+  → "matrix" su background rect (intensity 70)
+  → "vhs" su immagini (intensity 60)
+  → "pixelate" su zone specifiche (size 8–12)
+
+MINCHO × HANDWRITTEN:
+  → Nessun effetto su tipografia
+  → "fiber" su sfondo carta (intensity 30, roughness 65) — simula washi texture
+  → Solo "grain" come alternativa
+
+WATERCOLOR EDITORIAL:
+  → "oil" su wash di colore (radius 25, intensity 65)
+  → "Blur" su bordi dei wash (value 15–25)
+  → "vignette" su immagini (strength 40, radius 60)
+
+FUMETTO / MANGA:
+  → "halftone" su figure (size 6, intensity 55)
+  → "outline" su personaggi (color "#000000", thickness 25)
+  → "posterize" su zone di colore (steps 3, vibrance 50)
+
+STUDIO PREMIUM (Apple-style):
+  → "vignette" su immagini prodotto (strength 30, radius 70, aberration 15)
+  → "Brightness" +5, "Contrast" +8 su immagini
+
+DUOTONE USE CASES (qualsiasi movimento):
+  → "duotone" trasforma qualsiasi immagine in bicromia di movimento
+  → Swiss: shadow [20,20,20], highlight [240,240,240]
+  → Luxury: shadow [10,0,40], highlight [255,240,210]
+  → Surveillance: shadow [0,30,0], highlight [180,255,180]
+  → Vaporwave: shadow [40,0,80], highlight [255,180,255]
+
+LUXURY FASHION:
+  → "chrome" su elementi metallici
+  → "bloom" su oggetti hero (threshold 60, intensity 25)
+
+PIXEL RETRO 8-BIT:
+  → "pixelate" su immagini (size 8–16)
+  → Nessun altro effetto — la flat-ness è assoluta
+
+MEMPHIS / 80s:
+  → "riso" su forme colorate (intensity 40–60)
+  → "halftone" su pattern (size 6, intensity 50)
+
+SURVEILLANCE:
+  → "thermal" su soggetti (intensity 90)
+  → "vhs" su background (intensity 50)
+  → "glitch" su UI elements (amount 8)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 5 — PATTERN PROCEDURALI (proceduralType)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+I pattern procedurali creano texture algoritmiche come sfondi o overlay.
+Usare type: "procedural" con le proprietà:
+  proceduralType → stringa tipo (obbligatorio)
+  color          → colore degli elementi del pattern
+  density        → 0.1–1.0 (quanto è denso il pattern)
+  radius         → dimensione base degli elementi
+  opacity        → 0.0–1.0 sull'intero gruppo
+  w, h           → dimensioni dello strato procedural (di solito = dimensioni canvas)
+
+TIPI DISPONIBILI:
+
+"halftone"
+  Griglia di cerchi di dimensione variabile — simula retino tipografico.
+  Effetto: cerchi più grandi nelle zone di picco sinusoidale.
+  Best for: pop art, editorial vintage, risograph aesthetic
+  Params consigliati: density 0.4–0.7, radius 4–8
+
+"dot_grid"
+  Griglia ortogonale di punti uguali — carta millimetrata da laboratorio.
+  Effetto: punti uniformi a spaziatura regolare.
+  Best for: tech blueprint, pixel retro, grid paper aesthetic
+  Params consigliati: density 0.3–0.6, radius 2–4
+
+"wave_lines"
+  Linee orizzontali ondulate — topografia o segnale audio.
+  Effetto: linee continue con ondulazione sinusoidale sovrapposta.
+  Best for: psichedelico, organic, topographic map, vaporwave
+  Params consigliati: density 0.4–0.8, radius 3–6
+
+"zigzag_fill"  [NUOVO v2]
+  Riempimento a zig-zag — pattern angolare alternato.
+  Effetto: linee spezzate diagonali che riempiono la superficie.
+  Best for: sport energy, constructivism, brutalist pattern
+  Params consigliati: density 0.4–0.7, amplitude 20–40
+
+"stripe_diagonal"  [NUOVO v2]
+  Strisce diagonali uniformi — barberpole o awning.
+  Effetto: bande parallele a angolo fisso.
+  Best for: sport, fashion, editorial, pop art
+  Params consigliati: density 0.3–0.6, angle 45 (default), weight 2–8
+
+"star_scatter"  [NUOVO v2]
+  Costellazione di stelle a caso distribuite sulla superficie.
+  Effetto: stelle a 4-6 punte di dimensioni variabili distribuite random.
+  Best for: memphis, vaporwave, kawaii, celebrativo
+  Params consigliati: density 0.2–0.5, radius 4–12
+
+"crosshatch"  [NUOVO v2]
+  Tratteggio incrociato a mano come disegno tecnico o incisione.
+  Effetto: griglia di linee diagonali incrociate (hatching).
+  Best for: etching aesthetic, editorial, technical illustration
+  Params consigliati: density 0.3–0.7, weight 0.5–2
+
+"honeycomb"  [NUOVO v2]
+  Griglia esagonale — alveare o materiale tecnico.
+  Effetto: esagoni regolari con bordo visibile.
+  Best for: tech, biomimetica, industrial, futuristic
+  Params consigliati: density 0.3–0.5, radius 12–20
+
+"organic_noise"  [NUOVO v2]
+  Rumore organico continuo — texture naturale irregolare.
+  Effetto: blob soft sovrapposti in pattern non ripetuto.
+  Best for: art nouveau, watercolor, organic minimal
+  Params consigliati: density 0.2–0.5, radius 20–50
+
+"perspective_grid"  [NUOVO v2]
+  Griglia prospettica convergente verso un punto fuga centrale.
+  Effetto: linee che convergono simulando profondità spaziale.
+  Best for: retro futurism, vaporwave, 80s synthwave
+  Params consigliati: density 0.4–0.7
+
+"circuit_board"  [NUOVO v2]
+  Tracce circuito stampato — linee ortogonali con nodi.
+  Effetto: rete di connessioni geometriche come PCB.
+  Best for: cyber, hacker, tech blueprint, surveillance
+  Params consigliati: density 0.3–0.5
+
+"memphis_mix"  [NUOVO v2]
+  Mix di forme Memphis — triangoli, cerchi, linee e zig-zag come Memphis Group.
+  Effetto: elementi geometrici vari distribuiti su superficie.
+  Best for: Memphis 80s, pop design, colorful editorial
+  Params consigliati: density 0.3–0.5
+
+ESEMPIO COMPLETO:
+{
+  "type": "procedural",
+  "proceduralType": "dot_grid",
+  "x": 0, "y": 0, "w": 800, "h": 600,
+  "color": "oklch(0.75 0.06 210)",
+  "density": 0.4,
+  "radius": 3,
+  "opacity": 0.35
+}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 6 — FONT LIBRARY (fontFamily)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Usa il nome esatto del font come stringa in "fontFamily". Tutti i font sono
+Google Fonts caricati automaticamente. Non inventare nomi di font.
+
+━━━ CATEGORIA: NOUVELLE VAGUE (Luxury, Fashion, Editorial Premium)
+  Bodoni Moda, Cormorant Garamond, Tenor Sans, Prata, Italiana,
+  Cinzel Decorative, Playfair Display SC, Castoro Titling, Forum,
+  Marcellus, Marcellus SC, Antic Didone, Spectral, EB Garamond,
+  Cinzel, Julius Sans One, Poiret One, Playfair Display, Lora,
+  Baskervville, Bellefair, Gilda Display
+  → Movimenti: Luxury Fashion, Anti-Gravity Minimal, Watercolor Editorial, Mincho×Handwritten
+
+━━━ CATEGORIA: ELONGATED (Fashion Condensed)
+  Alumni Sans Pinstripe, Tulpen One, Six Caps, Pathway Gothic One,
+  League Gothic, Nova Slim, Antonio, Saira Extra Condensed,
+  Big Shoulders Display, Bebas Neue, Oswald, Inter Tight,
+  Belleza, Julius Sans One, Dorsa
+  → Movimenti: Yellow×Black Fashion, Agency Black+Orange, fashion editorial
+
+━━━ CATEGORIA: AVANT-GARDE ARCHITECTURAL (Structured Display)
+  Staatliches, Archivo Black, Anton, Bebas Neue, Teko, Squada One,
+  Titan One, Alfa Slab One, Passion One, Russo One, Wallpoet, Goldman,
+  Audiowide, Syncopate, Chakra Petch, Krona One, Michroma, Zen Dots,
+  Bruno Ace, Orbitron, Exo 2, Rajdhani, Saira Condensed
+  → Movimenti: Constructivism, Swiss Minimal, Digital Brutalism, Sports Energy
+
+━━━ CATEGORIA: POST-DESIGN BRUTALISM
+  Dela Gothic One, Oi, Slackey, Modak, Bagel Fat One, Archivo Black,
+  Anton, Staatliches, Teko, Russo One, Stalinist One, Wallpoet,
+  Black Han Sans, Squada One, Titan One, Alfa Slab One, Passion One
+  → Movimenti: Digital Brutalism, Constructivism, Magazine Cutout
+
+━━━ CATEGORIA: CYBER-HACKER & GLITCH
+  Redacted Script, Pixelify Sans, VT323, Silkscreen, Rubik Glitch Pop,
+  Rubik Scribble, Share Tech Mono, DotGothic16, Major Mono Display,
+  Nova Mono, JetBrains Mono, Fira Code, Press Start 2P, Special Elite,
+  Azeret Mono, IBM Plex Mono
+  → Movimenti: Surveillance, Digital Brutalism, Tech-Mono, Matrix/Hacker
+
+━━━ CATEGORIA: MANGA & ANIME ART
+  Zen Tokyo Zoo, Reggae One, Potta One, Stick, DotGothic16,
+  Hachi Maru Pop, RocknRoll One, Mochiy Pop One, Yuji Syuku,
+  Yuji Boku, Kaisei Decol, Kaisei Opti
+  → Movimenti: Manga Screen-tone, Anime visual
+
+━━━ CATEGORIA: ORGANIC & LIQUID (Melted)
+  Lacquer, Rubik Puddles, Rubik Bubbles, Molle, Zeyada, Gochi Hand,
+  Water Brush, Satisfy, Vibur, Platypi, Danfo, Matemasie, Piedra,
+  Ephesis, Explora, Gwendolyn
+  → Movimenti: Art Nouveau, Acid Graphics, Vaporwave soft
+
+━━━ CATEGORIA: 70s RETRO & BLOBBY (Funky)
+  Alfa Slab One, Titan One, Fredoka One, Passion One, Luckiest Guy,
+  Bangers, Shrikhand, Ultra, Bubblegum Sans, Pacifico, Lobster,
+  Grand Hotel, Yellowtail, Chonburi, Cherry Bomb One, Coiny
+  → Movimenti: Memphis 80s, Kawaii Street Pink, Deformed Flat Persona
+
+━━━ CATEGORIA: UFO & ALIEN EXPERIMENTAL
+  Megrim, Plaster, Kenia, Warnes, Geostar, Nova Slim, Nova Mono,
+  Quantico, Electrolize, Michroma, Syncopate, Syne, Unbounded
+  → Movimenti: Frutiger Aero, Tech-Mono, experimental
+
+━━━ CATEGORIA: DYNAMIC SCRIPTS (Fast & Flowing)
+  Birthstone, Dancing Script, Pacifico, Yellowtail, Satisfy, Vibur,
+  Ephesis, Explora, Allison, Fasthand, Style Script, Love Light,
+  Imperial Script
+  → Movimenti: Mincho×Handwritten (layer handwriting), Watercolor Editorial annotation
+
+━━━ CATEGORIA: LIQUID SERIF (Artistic)
+  Chonburi, Abril Fatface, Prata, Cormorant Infant, Cormorant Garamond,
+  Bodoni Moda, Playfair Display SC, Castoro Titling, EB Garamond,
+  Fraunces, Crimson Text, Old Standard TT, Cardo
+  → Movimenti: Art Nouveau, Luxury, Watercolor Editorial display
+
+━━━ CATEGORIA: CONCEPTUAL & ABSURD (Lettering Assurdo)
+  Bakbak One, Gajraj One, Rubik Glitch Pop, Climate Crisis, Nablas,
+  Honk, Bungee Spice, Matemasie, Danfo, Rubik Vinyl, Foldit,
+  Vast Shadow, Bungee Shade, Dela Gothic One, Modak, Bagel Fat One
+  → Movimenti: Pop Art, Acid Graphics, Memento Extremo
+
+━━━ CATEGORIA: Y2K & VAPORWAVE
+  (Vedere UFO + Cyber + 70s Retro per font Y2K)
+  → Movimenti: Vaporwave, Y2K Acid Graphics, Street Pink
+
+━━━ CATEGORIA: URBAN & GRAFFITI (Street)
+  Sedgwick Ave Display, Sedgwick Ave, Rock Salt, Permanent Marker,
+  Gloria Hallelujah, Covered By Your Grace, Handlee, Nanum Pen Script,
+  Patrick Hand, Kalam, Architects Daughter, Zeyada
+  → Movimenti: Street Pink Kawaii, Fumetto, Pop Art
+
+FONT RACCOMANDATI PER MOVIMENTO:
+  Swiss Minimal:     "Helvetica Neue" → fallback "Inter", "Archivo"
+  Constructivism:    "Staatliches", "Anton", "Bebas Neue"
+  Art Nouveau:       "Cormorant Garamond", "EB Garamond", "Forum"
+  Digital Brutalism: "Dela Gothic One", "Archivo Black", "Press Start 2P"
+  Pop Art:           "Bangers", "Fredoka One", "Luckiest Guy"
+  Acid Graphics:     "Lacquer", "Rubik Puddles", "Molle"
+  Memphis 80s:       "Alfa Slab One", "Titan One", "Cherry Bomb One"
+  Frutiger Aero:     "Orbitron", "Exo 2", "Syncopate"
+  Luxury Fashion:    "Bodoni Moda", "Cormorant Garamond", "Prata"
+  Tech Mono:         "JetBrains Mono", "Fira Code", "IBM Plex Mono"
+  Surveillance:      "Share Tech Mono", "DotGothic16", "Major Mono Display"
+  Fumetto:           "Bangers", "Boogaloo", "Permanent Marker"
+  Pixel Retro:       "Press Start 2P", "VT323", "Silkscreen", "Pixelify Sans"
+  Anti-Gravity:      "Cormorant Garamond" weight 300, "Playfair Display" light
+  Watercolor:        "EB Garamond", "Playfair Display", "Caveat"
+  Deformed Flat:     "Fredoka One", "Bubblegum Sans", "Coiny"
+  Mincho:            "Noto Serif JP", "Shippori Mincho" (display) + "Caveat" (handwriting)
+  Yellow×Black:      "Staatliches", "Bebas Neue", "Alumni Sans Pinstripe"
+  Black+Orange:      "Archivo Black", "Anton", "Squada One"
+  Manga:             "Zen Tokyo Zoo", "RocknRoll One", "DotGothic16"
+  Kawaii Street:     "Hachi Maru Pop", "Cherry Bomb One", "Coiny"
+  Vaporwave:         "Orbitron", "Syncopate" + font corsivo script
+  Studio Premium:    "SF Pro" → fallback "Inter", "Helvetica Neue"
+  Sports Energy:     "Anton", "Teko", "Oswald", "Big Shoulders Display"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 7 — FORME (path da Shape Library)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Usare type: "path" con la path SVG. Le path sono normalizzate su viewport 100×100.
+Scalare con w/h dell'elemento.
+
+━━━ STILE BRUTALIST / ACID THORNS
+  Thorn A:     "M 50 0 L 53 47 L 100 50 L 53 53 L 50 100 L 47 53 L 0 50 L 47 47 Z"
+  Acid Sun:    "M 50 0 L 55 35 L 85 15 L 65 45 L 100 50 L 65 55 L 85 85 L 55 65 L 50 100 L 45 65 L 15 85 L 35 55 L 0 50 L 35 45 L 15 15 L 45 35 Z"
+  Sharp Spike: "M 50 0 L 52 48 H 100 V 52 H 52 V 100 H 48 V 52 H 0 V 48 H 48 Z"
+
+━━━ STILE ORGANIC / BLOBS
+  Opple Liquid:  "M 50 10 C 80 10 95 35 95 60 C 95 85 75 95 50 95 C 25 95 5 80 5 50 C 5 20 20 10 50 10 Z"
+  Amoeba:        "M 45 15 C 70 5 95 25 90 55 C 85 85 65 95 40 90 C 15 85 5 65 10 35 C 15 5 20 25 45 15 Z"
+  Fluid Wave:    "M 0 50 C 20 20 40 80 60 50 C 80 20 100 80 100 50 L 100 100 L 0 100 Z"
+  Soft Portal:   "M 50 20 C 70 20 80 40 80 60 C 80 80 60 90 50 90 C 40 90 20 80 20 60 C 20 40 30 20 50 20 Z M 50 35 C 40 35 35 45 35 55 C 35 65 40 75 50 75 C 60 75 65 65 65 55 C 65 45 60 35 50 35 Z"
+
+━━━ STILE GEOMETRIC / 3D
+  Iso Cube:    "M 50 0 L 95 25 L 95 75 L 50 100 L 5 75 L 5 25 Z M 50 0 V 50 M 50 50 L 5 25 M 50 50 L 95 25"
+  Planet Ring: "M 50 20 A 30 30 0 1 1 50 80 A 30 30 0 1 1 50 20 Z M 10 50 Q 50 90 90 50 Q 50 10 10 50"
+  Diamond Geo: "M 50 5 L 85 35 L 50 95 L 15 35 Z M 15 35 H 85 M 50 5 V 95 M 50 35 L 15 35 M 50 35 L 85 35"
+
+━━━ STILE EDITORIAL (High-End)
+  Swiss Cross:  "M 40 10 H 60 V 40 H 90 V 60 H 60 V 90 H 40 V 60 H 10 V 40 H 40 Z"
+  Focus Mark:   "M 10 30 V 10 H 30 M 70 10 H 90 V 30 M 90 70 V 90 H 70 M 30 90 H 10 V 70"
+  Rule Bold:    "M 0 45 H 100 V 55 H 0 Z"
+  Crosshair:    "M 50 0 V 100 M 0 50 H 100 M 50 50 m -10 0 a 10 10 0 1 0 20 0 a 10 10 0 1 0 -20 0"
+  L-Corner:     "M 10 50 V 10 H 50"
+  Brackets:     "M 20 10 H 10 V 90 H 20 M 80 10 H 90 V 90 H 80"
+
+━━━ BASIC
+  Rect:     "M 0 0 L 100 0 L 100 100 L 0 100 Z"
+  Triangle: "M 50 5 L 95 90 L 5 90 Z"
+  Hexagon:  "M 50 0 L 93 25 L 93 75 L 50 100 L 7 75 L 7 25 Z"
+  Star:     "M 50 5 L 61 35 L 95 35 L 70 55 L 80 90 L 50 70 L 20 90 L 30 55 L 5 35 L 39 35 Z"
+  Heart:    "M 50 80 C 35 68 10 58 10 38 C 10 20 28 15 50 35 C 72 15 90 20 90 38 C 90 58 65 68 50 80 Z"
+
+━━━ TECH-DISTOPIAN
+  Mirino:    "M 50 0 L 50 100 M 0 50 L 100 50 M 50 50 m -10 0 a 10 10 0 1 0 20 0 a 10 10 0 1 0 -20 0 M 50 50 m -30 0 a 30 30 0 1 0 60 0 a 30 30 0 1 0 -60 0"
+  Grid Mini: "M 10 10 L 90 10 M 10 30 L 90 30 M 10 50 L 90 50 M 10 70 L 90 70 M 10 90 L 90 90 M 10 10 L 10 90 M 30 10 L 30 90 M 50 10 L 50 90 M 70 10 L 70 90 M 90 10 L 90 90"
+
+━━━ Y2K & ACID GRAPHICS
+  Y2K Starburst: "M 50 0 L 55 35 L 85 15 L 65 45 L 100 50 L 65 55 L 85 85 L 55 65 L 50 100 L 45 65 L 15 85 L 35 55 L 0 50 L 35 45 L 15 15 L 45 35 Z"
+  Acid Smiley:   "M 50 5 C 75 5 95 25 95 50 C 95 75 75 95 50 95 C 25 95 5 75 5 50 C 5 25 25 5 50 5 Z M 35 35 A 5 5 0 1 1 35 45 A 5 5 0 1 1 35 35 Z M 65 35 A 5 5 0 1 1 65 45 A 5 5 0 1 1 65 35 Z M 30 65 Q 50 85 70 65 Q 50 75 30 65 Z"
+  Y2K Sparkle:   "M 50 10 Q 50 50 90 50 Q 50 50 50 90 Q 50 50 10 50 Q 50 50 50 10 Z"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 8 — PROPRIETÀ CANVAS E COMPOSIZIONE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DIMENSIONI STANDARD DEL CANVAS:
+  800 × 600 px  — landscape standard (default)
+  600 × 800 px  — portrait (poster, mobile)
+  800 × 800 px  — square (social, instagram)
+  1200 × 630 px — OG banner (social sharing)
+
+L'origine (0,0) è l'angolo TOP-LEFT del canvas.
+x aumenta verso destra, y aumenta verso il basso.
+
+REGOLA DI LAYERING (z-order):
+  Gli elementi nel JSON array sono renderizzati dal PRIMO (bottom) all'ULTIMO (top).
+  Quindi: sfondo (index 0) → layers intermedi → elementi in primo piano (index n).
+
+  Struttura tipica:
+    [0] → rect sfondo (colore base o gradiente)
+    [1] → procedural pattern overlay (opacity 0.2–0.5)
+    [2..n-3] → elementi compositivi principali
+    [n-2] → testo headline/display
+    [n-1] → micro-testo, firma, data
+
+NEGATIVE SPACE:
+  Lasciare sempre il % di spazio vuoto indicato dalla ricetta del movimento.
+  NON riempire tutto il canvas. Il vuoto è un elemento compositivo.
+
+COORDINATE SICURE:
+  Ogni elemento deve stare DENTRO i confini del canvas.
+  x: 0 a (canvas_width - element_width)
+  y: 0 a (canvas_height - element_height)
+
+ANGOLAZIONI:
+  Usare angoli leggeri per annotazioni e elementi secondari: -8° a +8°
+  Per effetti di impatto: -15° a +15°
+  Non usare angoli > 45° salvo design estremamente specifici
+
+OPACITÀ:
+  Sfondi procedurali overlay: 0.1–0.4
+  Elementi decorativi secondari: 0.3–0.7
+  Elementi principali: 0.85–1.0
+  Texture carta/grain overlay: 0.03–0.08
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 9 — SCHEMA JSON COMPLETO ESEMPIO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Esempio di board Swiss Minimal con 8 elementi:
+
+{
+  "boards": [
+    {
+      "id": "board_001",
+      "name": "Swiss Minimal Hero",
+      "width": 800,
+      "height": 600,
+      "backgroundColor": "oklch(0.98 0.005 80)",
+      "elements": [
+        {
+          "type": "rect",
+          "x": 0, "y": 0, "w": 800, "h": 600,
+          "fill": "oklch(0.98 0.005 80)",
+          "effects": []
+        },
+        {
+          "type": "rect",
+          "x": 60, "y": 60, "w": 680, "h": 3,
+          "fill": "oklch(0.15 0.01 240)",
+          "opacity": 0.8
+        },
+        {
+          "type": "text",
+          "x": 60, "y": 100, "w": 600, "h": 120,
+          "text": "HELVETICA RULES",
+          "fontFamily": "Archivo Black",
+          "fontSize": 80,
+          "fontWeight": "900",
+          "fill": "oklch(0.12 0.01 240)",
+          "letterSpacing": -1,
+          "effects": []
+        },
+        {
+          "type": "text",
+          "x": 60, "y": 240, "w": 400, "h": 30,
+          "text": "Griglia. Funzione. Ordine.",
+          "fontFamily": "Inter",
+          "fontSize": 16,
+          "fontWeight": "400",
+          "fill": "oklch(0.35 0.02 240)",
+          "letterSpacing": 3,
+          "textTransform": "uppercase"
+        },
+        {
+          "type": "rect",
+          "x": 60, "y": 300, "w": 200, "h": 3,
+          "fill": "oklch(0.50 0.28 25)",
+          "opacity": 1.0
+        },
+        {
+          "type": "text",
+          "x": 60, "y": 330, "w": 500, "h": 80,
+          "text": "Design is the silent ambassador of your brand. Every pixel carries intention.",
+          "fontFamily": "Inter",
+          "fontSize": 13,
+          "fontWeight": "300",
+          "fill": "oklch(0.40 0.01 240)",
+          "lineHeight": 1.7,
+          "letterSpacing": 0.5
+        },
+        {
+          "type": "rect",
+          "x": 60, "y": 530, "w": 680, "h": 1,
+          "fill": "oklch(0.15 0.01 240)",
+          "opacity": 0.3
+        },
+        {
+          "type": "text",
+          "x": 60, "y": 548, "w": 200, "h": 20,
+          "text": "© 2025 Studio",
+          "fontFamily": "Inter",
+          "fontSize": 10,
+          "fontWeight": "300",
+          "fill": "oklch(0.55 0.01 240)",
+          "letterSpacing": 2,
+          "textTransform": "uppercase"
+        }
+      ]
+    }
+  ]
+}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEZIONE 10 — ERRORI COMUNI DA EVITARE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ EFFETTI NON ESISTENTI — questi effetti NON esistono nel sistema:
+   "glow" (usa "bloom" o "neon"), "shadow" (usa effectProps), "blur_soft" (usa "Blur"),
+   "watercolor_texture" (usa "oil"), "wet_edge_blur" (usa "Blur" + "oil"),
+   "paper_texture" (usa overlay procedurale con opacity bassa),
+   "grain_high" (usa "grain"), "radial_gradient_breath" (usa gradiente radiale),
+   "geometric_pattern" (usa "procedural"), "hard_shadow" (non supportato),
+   "clean_digital", "texture_visible", "gradient_colorful" — NIENTE DI TUTTO CIÒ ESISTE
+
+❌ FONT INVENTATI — non usare "Helvetica Neue", "SF Pro", "Arial", "Times New Roman"
+   direttamente — questi potrebbero non essere disponibili. Usa i font Google elencati.
+
+❌ COLORI INVALIDI — non usare nomi CSS come "cornflowerblue" o "lightgray".
+   Usare SEMPRE oklch(), hex #rrggbb, o rgba().
+
+❌ PIÙ DI 1 BOARD — il JSON deve sempre contenere "boards": [ { ...una sola board... } ]
+   Generare 2+ boards è un errore fatale.
+
+❌ COORDINATE FUORI CANVAS — verificare che x+w <= canvas_width e y+h <= canvas_height.
+
+❌ TESTO SENZA FONTFAMILY — specificare sempre il fontFamily esatto.
+
+❌ EFFETTI INCOMPATIBILI PER MOVIMENTO:
+   Anti-Gravity: mai "glitch", "neon", "vhs", "matrix", "riso"
+   Swiss Minimal: mai NESSUN effetto custom (zero effects)
+   Mincho×Handwritten: mai "glitch", "vhs", "neon", "prism"
+   Pixel Retro: mai "bloom", "oil", "wavy" — solo "pixelate" e "glitch" se necessario
+   Luxury Fashion: mai "riso", "glitch", "vhs", "matrix"
+
+================================================================================
+FINE CANVAS TOOLS REFERENCE v2.0
+================================================================================

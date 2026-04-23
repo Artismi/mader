@@ -1,7 +1,6 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { createClient } from "@/lib/supabase/client"
 
 interface Client {
   id: string
@@ -30,21 +29,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function init() {
-      try {
-        const res = await fetch('/api/clients')
-        const data = await res.json()
+    fetch('/api/clients')
+      .then(r => r.json())
+      .then(data => {
         setClients(data)
-        if (data.length > 0) {
-          setSelectedClientId(data[0].id)
-        }
-      } catch (err) {
-        console.error('Failed to fetch clients in AppContext:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    init()
+        if (data.length > 0) setSelectedClientId(data[0].id)
+      })
+      .catch(err => console.error('AppContext clients fetch:', err))
+      .finally(() => setLoading(false))
   }, [])
 
   return (

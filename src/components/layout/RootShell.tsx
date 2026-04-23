@@ -101,7 +101,7 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
         
         {/* LEFT DOCK: VAULT */}
         <div className={cn(
-          "h-full transition-all duration-500 ease-in-out border-r border-white/5 bg-[#090909] overflow-hidden",
+          "h-full transition-all duration-200 ease-in-out border-r border-white/5 bg-[#090909] overflow-hidden",
           isVaultOpen ? "w-64" : "w-0"
         )}>
           <div className="w-64 h-full"> {/* Inner wrapper to prevent squishing during trans */}
@@ -126,7 +126,7 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
 
         {/* RIGHT DOCK: CO-PILOT */}
         <div className={cn(
-          "h-full transition-all duration-500 ease-in-out border-l border-white/5 bg-[#090909] overflow-hidden",
+          "h-full transition-all duration-200 ease-in-out border-l border-white/5 bg-[#090909] overflow-hidden",
           isCoPilotOpen ? "w-[400px]" : "w-0"
         )}>
           <div className="flex h-full w-[400px] flex-col">

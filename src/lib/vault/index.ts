@@ -2,6 +2,7 @@
  * Vault — chokidar watcher + Gemini embeddings + JS cosine similarity RAG
  * Non usa sqlite-vec (prebuilt non disponibile per Node 24).
  * Funziona perfettamente per vault personali < 10.000 chunks.
+ * Supporta: .md .txt .pdf .docx .png .jpg .jpeg .webp
  */
 
 import path from 'path'
@@ -10,7 +11,11 @@ import { randomUUID } from 'crypto'
 import { db } from '@/lib/db/client'
 import { config } from '@/lib/db'
 import { google } from '@ai-sdk/google'
-import { embed } from 'ai'
+import { anthropic } from '@ai-sdk/anthropic'
+import { embed, generateText } from 'ai'
+
+const SUPPORTED_EXTS = new Set(['.md', '.txt', '.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'])
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
 
 // ─── Globals ──────────────────────────────────────────────────────────────────
 
@@ -18,31 +23,62 @@ declare global {
   var __vault_watcher: ReturnType<typeof import('chokidar').watch> | undefined
 }
 
-// ─── Chunker ──────────────────────────────────────────────────────────────────
+// ─── Chunker — Parent-Document RAG ───────────────────────────────────────────
+//
+// Strategia: ogni sezione H1/H2 diventa un "parent chunk" (contesto esteso).
+// Il parent viene suddiviso in "child chunks" (~200 parole) per la ricerca vettoriale.
+// La ricerca trova i child più simili → restituisce il parent completo → contesto ricco.
 
-function chunkMarkdown(content: string, filePath: string): { heading: string; text: string }[] {
-  const fileName = path.basename(filePath, '.md')
+interface ParentChunk { heading: string; text: string }
+interface ChildChunk  { heading: string; text: string; parentIdx: number }
+
+function chunkMarkdownParents(content: string, filePath: string): ParentChunk[] {
+  const fileName = path.basename(filePath, path.extname(filePath))
   const lines = content.split('\n')
-  const chunks: { heading: string; text: string }[] = []
+  const parents: ParentChunk[] = []
   let heading = fileName
   let buf: string[] = []
 
   const flush = () => {
     const text = buf.join('\n').trim()
-    if (text.length > 40) chunks.push({ heading, text })
+    if (text.length > 60) parents.push({ heading, text })
     buf = []
   }
 
   for (const line of lines) {
-    if (/^#{1,3} /.test(line)) {
+    if (/^#{1,2} /.test(line)) {
       flush()
-      heading = line.replace(/^#{1,3} /, '')
+      heading = line.replace(/^#{1,2} /, '').trim()
     } else {
       buf.push(line)
     }
   }
   flush()
-  return chunks
+  return parents
+}
+
+function splitParentIntoChildren(parent: ParentChunk, parentIdx: number, wordsPerChild = 180): ChildChunk[] {
+  const words = parent.text.split(/\s+/).filter(Boolean)
+  const children: ChildChunk[] = []
+  const overlap = 30
+
+  for (let i = 0; i < words.length; i += wordsPerChild - overlap) {
+    const slice = words.slice(i, i + wordsPerChild).join(' ')
+    if (slice.trim().length > 80) {
+      children.push({ heading: parent.heading, text: slice, parentIdx })
+    }
+    if (i + wordsPerChild >= words.length) break
+  }
+  // Se il parent è corto, un solo child
+  if (children.length === 0 && parent.text.length > 60) {
+    children.push({ heading: parent.heading, text: parent.text, parentIdx })
+  }
+  return children
+}
+
+// Compat: usato da chunkText (PDF/DOCX/TXT)
+function chunkMarkdown(content: string, filePath: string): { heading: string; text: string }[] {
+  return chunkMarkdownParents(content, filePath)
 }
 
 // ─── Embeddings ───────────────────────────────────────────────────────────────
@@ -73,32 +109,161 @@ function cosine(a: Float32Array, b: Float32Array): number {
   return denom === 0 ? 0 : dot / denom
 }
 
+// ─── Memory Files helpers ──────────────────────────────────────────────────────
+
+function getFileType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.md' || ext === '.txt') return 'md'
+  if (ext === '.pdf') return 'pdf'
+  if (ext === '.docx') return 'docx'
+  if (IMAGE_EXTS.has(ext)) return 'image'
+  return 'other'
+}
+
+function upsertMemoryFile(filePath: string, status: string, chunkCount = 0, errorMsg?: string) {
+  const existing = db.prepare('SELECT id FROM memory_files WHERE source_path = ?').get(filePath) as { id: string } | undefined
+  const now = new Date().toISOString()
+  if (existing) {
+    db.prepare(`UPDATE memory_files SET index_status = ?, error_msg = ?, chunk_count = ?, indexed_at = ?, size_bytes = ? WHERE source_path = ?`)
+      .run(status, errorMsg ?? null, chunkCount, status === 'indexed' ? now : null, fs.existsSync(filePath) ? fs.statSync(filePath).size : null, filePath)
+  } else {
+    db.prepare(`INSERT INTO memory_files (id, source_path, file_name, file_type, index_status, error_msg, chunk_count, size_bytes, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), filePath, path.basename(filePath), getFileType(filePath), status, errorMsg ?? null, chunkCount, fs.existsSync(filePath) ? fs.statSync(filePath).size : null, status === 'indexed' ? now : null)
+  }
+}
+
+// ─── Text extractors ──────────────────────────────────────────────────────────
+
+async function extractPdf(filePath: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require('pdf-parse')
+  const buffer = fs.readFileSync(filePath)
+  const data = await pdfParse(buffer)
+  return data.text
+}
+
+async function extractDocx(filePath: string): Promise<string> {
+  const mammoth = await import('mammoth')
+  const result = await mammoth.extractRawText({ path: filePath })
+  return result.value
+}
+
+async function describeImage(filePath: string): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) return ''
+  const ext = path.extname(filePath).slice(1).toLowerCase()
+  const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }
+  const mime = mimeMap[ext] || 'image/png'
+  const imageData = fs.readFileSync(filePath).toString('base64')
+  const { text } = await generateText({
+    model: anthropic('claude-haiku-4-5-20251001'),
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', image: imageData },
+        { type: 'text', text: 'Descrivi questa immagine in modo dettagliato per l\'indicizzazione AI: colori, soggetti, testo visibile, stile, uso probabile. Rispondi solo con la descrizione, senza preamboli.' }
+      ]
+    }]
+  })
+  return text
+}
+
+function chunkText(text: string, source: string, chunkSize = 1200, overlap = 150): { heading: string; text: string }[] {
+  const fileName = path.basename(source, path.extname(source))
+  const words = text.split(/\s+/).filter(Boolean)
+  const chunks: { heading: string; text: string }[] = []
+  let i = 0
+  let chunkIdx = 0
+  while (i < words.length) {
+    const slice = words.slice(i, i + chunkSize).join(' ')
+    if (slice.trim().length > 80) {
+      chunks.push({ heading: `${fileName} — parte ${chunkIdx + 1}`, text: slice })
+      chunkIdx++
+    }
+    i += chunkSize - overlap
+  }
+  return chunks
+}
+
 // ─── Indexer ──────────────────────────────────────────────────────────────────
 
 export async function indexFile(filePath: string): Promise<void> {
   if (!process.env.GEMINI_API_KEY) return
-  if (!filePath.endsWith('.md')) return
+  const ext = path.extname(filePath).toLowerCase()
+  if (!SUPPORTED_EXTS.has(ext)) return
+
+  upsertMemoryFile(filePath, 'indexing')
 
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
     db.prepare("DELETE FROM memories WHERE context_type = 'vault' AND context_id = ?").run(filePath)
 
-    const chunks = chunkMarkdown(content, filePath)
-    for (const chunk of chunks) {
-      const fullText = `${chunk.heading}\n${chunk.text}`
-      const embedding = await getEmbedding(fullText)
-      db.prepare(`
-        INSERT INTO memories (id, content, context_type, context_id, embedding)
-        VALUES (?, ?, 'vault', ?, ?)
-      `).run(randomUUID(), fullText, filePath, toBuffer(embedding))
+    let totalChunks = 0
+
+    if (ext === '.md' || ext === '.txt') {
+      // Parent-Document RAG: indicizza sia parent (contesto) che child (ricerca)
+      const content = fs.readFileSync(filePath, 'utf-8')
+      const parents = chunkMarkdownParents(content, filePath)
+
+      for (let pi = 0; pi < parents.length; pi++) {
+        const parent = parents[pi]
+        const parentId = randomUUID()
+        const parentText = `${parent.heading}\n${parent.text}`
+
+        // Salva parent (no embedding — usato solo come contesto esteso)
+        db.prepare(`INSERT INTO memories (id, content, context_type, context_id, tier, parent_id)
+          VALUES (?, ?, 'vault', ?, 'vault_parent', NULL)`)
+          .run(parentId, parentText, filePath)
+
+        // Salva child chunks con embedding + riferimento al parent
+        const children = splitParentIntoChildren(parent, pi)
+        for (const child of children) {
+          const childText = `${child.heading}\n${child.text}`
+          const embedding = await getEmbedding(childText)
+          db.prepare(`INSERT INTO memories (id, content, context_type, context_id, embedding, parent_id)
+            VALUES (?, ?, 'vault', ?, ?, ?)`)
+            .run(randomUUID(), childText, filePath, toBuffer(embedding), parentId)
+          totalChunks++
+        }
+      }
+    } else if (ext === '.pdf') {
+      const text = await extractPdf(filePath)
+      const chunks = chunkText(text, filePath)
+      for (const chunk of chunks) {
+        const fullText = `${chunk.heading}\n${chunk.text}`
+        const embedding = await getEmbedding(fullText)
+        db.prepare(`INSERT INTO memories (id, content, context_type, context_id, embedding) VALUES (?, ?, 'vault', ?, ?)`)
+          .run(randomUUID(), fullText, filePath, toBuffer(embedding))
+        totalChunks++
+      }
+    } else if (ext === '.docx') {
+      const text = await extractDocx(filePath)
+      const chunks = chunkText(text, filePath)
+      for (const chunk of chunks) {
+        const fullText = `${chunk.heading}\n${chunk.text}`
+        const embedding = await getEmbedding(fullText)
+        db.prepare(`INSERT INTO memories (id, content, context_type, context_id, embedding) VALUES (?, ?, 'vault', ?, ?)`)
+          .run(randomUUID(), fullText, filePath, toBuffer(embedding))
+        totalChunks++
+      }
+    } else if (IMAGE_EXTS.has(ext)) {
+      const description = await describeImage(filePath)
+      if (description) {
+        const embedding = await getEmbedding(description)
+        db.prepare(`INSERT INTO memories (id, content, context_type, context_id, embedding) VALUES (?, ?, 'vault', ?, ?)`)
+          .run(randomUUID(), `${path.basename(filePath)}\n${description}`, filePath, toBuffer(embedding))
+        totalChunks++
+      }
     }
+
+    upsertMemoryFile(filePath, 'indexed', totalChunks)
   } catch (err) {
     console.error('[vault] indexFile error:', filePath, err)
+    upsertMemoryFile(filePath, 'error', 0, String(err))
   }
 }
 
 export async function deleteFileIndex(filePath: string): Promise<void> {
   db.prepare("DELETE FROM memories WHERE context_type = 'vault' AND context_id = ?").run(filePath)
+  db.prepare("DELETE FROM memory_files WHERE source_path = ?").run(filePath)
 }
 
 // ─── RAG Search ───────────────────────────────────────────────────────────────
@@ -106,20 +271,29 @@ export async function deleteFileIndex(filePath: string): Promise<void> {
 export async function searchVault(query: string, topK = 4): Promise<string[]> {
   if (!process.env.GEMINI_API_KEY) return []
 
+  // Cerca tra i child chunks (hanno embedding)
   const rows = db.prepare(
-    "SELECT content, embedding FROM memories WHERE context_type = 'vault' AND embedding IS NOT NULL"
-  ).all() as { content: string; embedding: Buffer }[]
+    "SELECT id, content, embedding, parent_id FROM memories WHERE context_type = 'vault' AND embedding IS NOT NULL AND (tier IS NULL OR tier != 'vault_parent')"
+  ).all() as { id: string; content: string; embedding: Buffer; parent_id: string | null }[]
 
   if (rows.length === 0) return []
 
   try {
     const queryEmb = await getEmbedding(query)
     const scored = rows
-      .map(r => ({ content: r.content, score: cosine(queryEmb, fromBuffer(r.embedding)) }))
+      .map(r => ({ id: r.id, content: r.content, parent_id: r.parent_id, score: cosine(queryEmb, fromBuffer(r.embedding)) }))
       .sort((a, b) => b.score - a.score)
       .filter(r => r.score > 0.45)
       .slice(0, topK)
-    return scored.map(r => r.content)
+
+    // Parent-Document RAG: se il child ha un parent, restituisci il contesto esteso del parent
+    return scored.map(r => {
+      if (r.parent_id) {
+        const parent = db.prepare("SELECT content FROM memories WHERE id = ?").get(r.parent_id) as { content: string } | undefined
+        if (parent) return parent.content
+      }
+      return r.content
+    })
   } catch (e) {
     console.warn('[vault] searchVault embedding fallito (quota?), skip RAG:', (e as Error).message)
     return []
@@ -296,8 +470,8 @@ export function startVaultWatcher(vaultPath: string): void {
 
   // Lazy import chokidar per evitare problemi SSR
   import('chokidar').then(({ default: chokidar }) => {
-    const pattern = path.join(vaultPath, '**', '*.md').replace(/\\/g, '/')
-    global.__vault_watcher = chokidar.watch(pattern, { persistent: true })
+    const pattern = path.join(vaultPath, '**', '*.{md,txt,pdf,docx,png,jpg,jpeg,webp}').replace(/\\/g, '/')
+    global.__vault_watcher = chokidar.watch(pattern, { persistent: true, ignoreInitial: false })
 
     global.__vault_watcher
       .on('add', indexFile)

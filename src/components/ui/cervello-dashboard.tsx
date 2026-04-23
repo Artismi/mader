@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { Brain, Database, Zap, Sparkles, History, Activity, FolderSearch, LayoutDashboard, Copy, Info, Search, Map, FileText, Settings, Shield, RefreshCw } from 'lucide-react'
+import { Brain, Database, Zap, Sparkles, History, Activity, FolderSearch, LayoutDashboard, Copy, Info, Search, Map, FileText, Settings, Shield, RefreshCw, X } from 'lucide-react'
 import { VaultBrowser } from '@/components/ui/vault-browser'
 import { ArchitectureEditor } from '@/components/ui/architecture-editor'
 import { MemoryManager } from '@/components/ui/memory-manager'
@@ -20,7 +20,7 @@ interface SnapshotData {
 
 type CervelloTab = 'nexus' | 'vault' | 'skills' | 'experience' | 'system'
 
-export function CervelloDashboard() {
+export function CervelloDashboard({ onClose }: { onClose?: () => void }) {
   const [data, setData] = useState<SnapshotData | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<CervelloTab>('nexus')
@@ -51,8 +51,19 @@ export function CervelloDashboard() {
     initVault()
     fetchContext()
     const interval = setInterval(fetchContext, 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onClose) {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-full gap-4 text-violet-400 bg-[#08080a]">
@@ -100,6 +111,19 @@ export function CervelloDashboard() {
                     <RefreshCw className="w-3 h-3 text-emerald-500/40 group-hover:rotate-180 transition-transform duration-500" />
                 </div>
             </button>
+
+            {onClose && (
+                <>
+                    <div className="h-8 w-px bg-white/5 mx-2" />
+                    <button 
+                        onClick={onClose}
+                        className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-accent hover:border-accent/30 hover:bg-accent/5 transition-all shadow-lg group/close"
+                        title="Chiudi Art Director [Esc]"
+                    >
+                        <X className="w-5 h-5 transition-transform group-hover/close:rotate-90" />
+                    </button>
+                </>
+            )}
         </div>
       </div>
 

@@ -7,6 +7,15 @@
  */
 
 import * as fabric from 'fabric'
+const getObjId = (obj: any): string => {
+  if (!obj) return ''
+  if (!obj.objId) {
+    obj.objId = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) 
+      ? (crypto as any).randomUUID() 
+      : 'obj_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now()
+  }
+  return obj.objId
+}
 
 // ─── ARROW LINE ───────────────────────────────────────────────────────────────
 
@@ -79,11 +88,7 @@ export function getEdgePoint(
 
 // ─── OBJECT ID ───────────────────────────────────────────────────────────────
 
-/** Returns (and lazily creates) a stable UUID for any Fabric object. */
-export function getObjId(obj: fabric.Object): string {
-  if (!(obj as any).objId) (obj as any).objId = crypto.randomUUID()
-  return (obj as any).objId
-}
+/** getObjId moved to ../utils/id-utils.ts */
 
 // ─── POLYLINE CONNECTIONS ────────────────────────────────────────────────────
 

@@ -52,7 +52,7 @@ export async function GET(req: Request) {
         : ''
     const memoriesPreview =
       ctx.memories.length > 0
-        ? `\n\n---\n## Memorie richiamate (anteprima)\n${ctx.memories.map(m => `- ${m.length > 400 ? `${m.slice(0, 400)}…` : m}`).join('\n')}`
+        ? `\n\n---\n## Memorie richiamate (anteprima)\n${ctx.memories.map(m => `- ${m.content.length > 400 ? `${m.content.slice(0, 400)}…` : m.content}`).join('\n')}`
         : ''
 
     const globalStats = getVaultStats()

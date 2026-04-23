@@ -1,0 +1,277 @@
+## Canvas Tools Reference — Creative OS
+Questa è la documentazione completa degli strumenti disponibili nel canvas Fabric.js.
+Il Canvas Board Generator DEVE usare queste risorse invece di limitarsi a rect+text+image.
+
+---
+
+## 1. ELEMENT TYPES
+
+### type: "rect"
+Rettangolo base. Supporta tutti gli effects.
+```json
+{"type":"rect","x":0,"y":0,"w":540,"h":1080,"color":"#1a1a2e","opacity":1,"zIndex":0,"borderRadius":0,
+ "stroke":"#ffffff","strokeWidth":0,"gradient":{"type":"linear","angle":135,"stops":[{"offset":0,"color":"#1a1a2e"},{"offset":1,"color":"#0d0d1a"}]}}
+```
+
+### type: "text"
+Testo editabile. fontFamily deve essere un font Google Fonts valido.
+```json
+{"type":"text","x":50,"y":150,"w":440,"h":300,"text":"HEADLINE REALE","fontFamily":"Bebas Neue",
+ "fontSize":140,"fontWeight":"900","letterSpacing":-0.02,"lineHeight":0.95,
+ "textTransform":"uppercase","textAlign":"left","color":"#ffffff","zIndex":9}
+```
+
+### type: "image"
+Immagine da URL. Preferire proxy `/api/proxy-image?url=...` per URL esterni.
+```json
+{"type":"image","x":540,"y":0,"w":540,"h":700,"url":"https://...","zIndex":4,"opacity":1}
+```
+
+### type: "line"
+Linea/divisore decorativo. Usa x1,y1,x2,y2.
+```json
+{"type":"line","x":0,"y":0,"w":0,"h":0,"x1":0,"y1":540,"x2":1080,"y2":540,
+ "stroke":"#e63946","strokeWidth":2,"opacity":0.6,"zIndex":2}
+```
+
+### type: "procedural" ← USALO PER TEXTURE DI SFONDO
+Pattern generativo che crea texture uniche. NON è un'immagine.
+```json
+{"type":"procedural","proceduralType":"halftone","x":0,"y":0,"w":1080,"h":1080,
+ "color":"#ffffff","opacity":0.08,"density":0.4,"procRadius":4,"zIndex":1}
+```
+**proceduralType disponibili:**
+- `"halftone"` — cerchi variabili a onde sinusoidali. Effetto pop-art/tipografia.
+- `"dot_grid"` — griglia precisa di punti equidistanti. Effetto blueprint/tech.
+- `"wave_lines"` — linee topografiche ondulate. Effetto contour map/organic.
+
+---
+
+## 2. EFFECTS — Lista completa
+
+Applica con: `"effects": ["neon"]` e opzionalmente `"effectProps": {"color":"#00ffff","blur":40}`
+
+### MOTION (animati — visibili in preview)
+| Key | Effetto visivo | effectProps chiave |
+|-----|----------------|--------------------|
+| `"glitch"` | Aberrazione cromatica, shift RGB | `amount` (0-100) |
+| `"wavy"` | Onda liquida ripple | `intensity`,`frequency` |
+| `"liquid"` | Flusso liquido organico | `intensity` |
+| `"vhs"` | Scanlines VHS, rumore analogico | `intensity` |
+| `"matrix"` | Digital rain verde | `intensity` |
+| `"chrome"` | Chrome metallico fluido | `intensity` |
+| `"holo"` | Shimmer olografico arcobaleno | `intensity`,`speed` |
+
+### OPTICAL (luce, lenti)
+| Key | Effetto visivo | effectProps chiave |
+|-----|----------------|--------------------|
+| `"neon"` | Alone neon colorato, glow | `color`(hex),`blur`,`intensity` |
+| `"bloom"` | Luce morbida, photographic flare | `threshold`,`intensity`,`radius` |
+| `"thermal"` | Mappa termica infrarossi | `intensity`,`shift` |
+
+### TEXTURE (superficie)
+| Key | Effetto visivo | effectProps chiave |
+|-----|----------------|--------------------|
+| `"grain"` | Grano cinematografico, pellicola | `intensity` |
+| `"halftone"` | Punti mezzatinta, stampa offset | `size`,`angle` |
+
+### STYLE (artistico)
+| Key | Effetto visivo | effectProps chiave |
+|-----|----------------|--------------------|
+| `"3d"` | Estrusione volumetrica 3D | `depth`,`angle`,`color` |
+| `"glass"` | Vetro frosted, UI glassmorphism | `opacity`,`color`,`border` |
+| `"clay"` | Plastica clay morbida, materica | `volume`,`gloss`,`matte`,`softness` |
+| `"riso"` | Stampa risograph duotone | `color1`,`color2`,`intensity` |
+| `"outline"` | Contorno/stroke premium | `color`,`thickness` |
+| `"skew"` | Prospettiva/inclinazione | `x`,`y` |
+
+### Combinazioni raccomandate per mood:
+- **luxury**: `["grain"]` su foto + `["3d"]` su titolo
+- **tech/cyber**: `["neon"]` su linee + `["glitch"]` su immagini + `["matrix"]` BG
+- **editorial**: `["halftone"]` su foto + grano leggero su BG
+- **brutalist**: `["riso"]` + `["skew"]` sul titolo principale
+- **fashion**: `["grain"]` intenso + `["bloom"]` su foto
+- **retro/70s**: `["riso"]` + grain pesante
+- **glassmorphism/UI**: `["glass"]` su card + blur BG
+
+---
+
+## 3. FONT LIBRARY — Categorie e font raccomandati
+
+### LUXURY / EDITORIAL
+- `Cormorant Garamond` — serif elegant, luxury fashion
+- `Playfair Display SC` — magazine heading
+- `Bodoni Moda` — high contrast didone
+- `Cinzel Decorative` — roman luxury
+- `EB Garamond` — classic editorial body
+- `Fraunces` — optical editorial serif
+
+### AVANT-GARDE / BRUTALIST
+- `Bebas Neue` — condensed impact, must-have
+- `Archivo Black` — gothic architectural
+- `Anton` — bold compressed
+- `Dela Gothic One` — ultra-bold japanese-style
+- `Staatliches` — extreme condensed display
+- `Big Shoulders Display` — industrial wide
+- `Teko` — condensed sans
+
+### TECH / CYBER
+- `Orbitron` — sci-fi geometric
+- `Syncopate` — spaced tech display
+- `Chakra Petch` — angular mechanical
+- `Michroma` — circuit-board monoline
+- `Audiowide` — automotive tech
+- `Share Tech Mono` — terminal code
+- `VT323` — pixel terminal
+
+### FASHION / ELONGATED
+- `Six Caps` — ultra-condensed vertical
+- `Alumni Sans Pinstripe` — extreme hairline fashion
+- `League Gothic` — condensed poster
+- `Pathway Gothic One` — fashion elongated
+- `Antonio` — fashion condensed
+
+### RETRO / FUNKY
+- `Alfa Slab One` — fat slab retro
+- `Fredoka One` — rounded bubbly
+- `Pacifico` — 60s script
+- `Luckiest Guy` — pop art display
+- `Bangers` — comic impact
+
+### EXPERIMENTAL / GRAPHIC
+- `Rubik Glitch` — glitch distortion
+- `Climate Crisis` — environmental display
+- `Nablas` — liquid variable
+- `Bungee Spice` — layered color
+- `Honk` — wavy variable
+
+### NEUTRAL / SYSTEM
+- `Inter Tight` — modern UI
+- `Geist Mono` — monospace label
+- `DM Sans` — clean modern
+- `Space Grotesk` — geometric neutral
+
+---
+
+## 4. SHAPE LIBRARY — Categorie e nomi
+
+Usa con `"type":"shape","shapeId":"Swiss Cross"` (supporto futuro) o incorpora come path SVG.
+
+### EDITORIAL (High-End)
+`Swiss Cross`, `Brackets duo`, `Focus Mark`, `Rule Bold`, `L - Corner`, `Crosshair`
+
+### Y2K & ACID GRAPHICS
+`Y2K Starburst`, `Acid Smiley`, `Chrome Tribal`, `Y2K Sparkle`, `Shattered Glass`
+
+### TECH-DISTOPIAN
+`Mirino Precisione`, `Circuito L`, `Glifo X`, `Grid Mini`, `Blueprint Box`, `Sfera Tecnica`
+
+### BRUTALIST GLYPHS
+`Spike`, `Orbit`, `Scanner`
+
+### ORGANIC / BLOB
+`Opple Liquid`, `Amoeba`, `Fluid Wave`, `Soft Portal`
+
+### GEOMETRIC 3D
+`Sphere Wire`, `Iso Cube`, `Planet Ring`, `Prism 3D`
+
+---
+
+## 5. GRADIENTS
+
+```json
+"gradient": {
+  "type": "linear",
+  "angle": 135,
+  "stops": [
+    {"offset": 0, "color": "#0d0d1a"},
+    {"offset": 0.5, "color": "#1a0a2e"},
+    {"offset": 1, "color": "#000000"}
+  ]
+}
+```
+- `type: "radial"` per gradienti circolari
+- Angoli comuni: 0=vert top-bottom, 90=orizz, 135=diag, 45=diag inv
+
+---
+
+## 6. RECIPES — Combinazioni collaudate
+
+### 🍽️ Editorial Magazine Dark
+```json
+{"type":"rect","color":"#0a0a0a","effects":["grain"],"effectProps":{"intensity":15}},
+{"type":"rect","color":"#1a0a0a","x":0,"y":800,"w":1080,"h":280},
+{"type":"line","x1":60,"y1":0,"x2":60,"y2":1080,"stroke":"#ff3333","strokeWidth":3},
+{"type":"text","fontFamily":"Playfair Display SC","fontSize":120,"color":"#f5f5f0","effects":["bloom"],"effectProps":{"intensity":0.3}},
+{"type":"procedural","proceduralType":"halftone","color":"#ff3333","opacity":0.06,"density":0.3}
+```
+
+### 🍽️ Cyber Dark Tech
+```json
+{"type":"rect","color":"#050d1a"},
+{"type":"procedural","proceduralType":"dot_grid","color":"#00d4ff","opacity":0.06,"density":0.7},
+{"type":"line","stroke":"#00d4ff","strokeWidth":1,"opacity":0.3},
+{"type":"text","fontFamily":"Orbitron","fontSize":96,"color":"#ffffff","effects":["neon"],"effectProps":{"color":"#00d4ff","blur":40}},
+{"type":"text","fontFamily":"Share Tech Mono","fontSize":14,"color":"#00d4ff","textTransform":"uppercase","letterSpacing":0.15}
+```
+
+### 🍽️ Luxury Centered Noir
+```json
+{"type":"rect","color":"#0d0d0d","w":1080,"h":1080},
+{"type":"rect","stroke":"#c9a84c","strokeWidth":1,"color":"transparent","x":30,"y":30,"w":1020,"h":1020},
+{"type":"procedural","proceduralType":"wave_lines","color":"#c9a84c","opacity":0.04,"density":0.3},
+{"type":"text","fontFamily":"Cormorant Garamond","fontSize":14,"color":"#c9a84c","textTransform":"uppercase","letterSpacing":0.35},
+{"type":"text","fontFamily":"Cormorant Garamond","fontSize":120,"color":"#f5f5f0","letterSpacing":0.08,"effects":["bloom"],"effectProps":{"intensity":0.2}},
+{"type":"image","effects":["grain","bloom"],"effectProps":{"intensity":15,"bloomIntensity":0.3}}
+```
+
+### 🍽️ Brutalist Poster
+```json
+{"type":"rect","color":"#0a0a0a","w":1080,"h":1080},
+{"type":"rect","color":"#ffd600","x":0,"y":540,"w":1080,"h":60},
+{"type":"text","fontFamily":"Archivo Black","fontSize":180,"color":"#ffffff","fontWeight":"900","letterSpacing":-0.04,"effects":["riso"],"effectProps":{"color1":"#ffffff","color2":"#ffd600","intensity":50}},
+{"type":"text","fontFamily":"Teko","fontSize":200,"color":"#ffd600","opacity":0.06,"zIndex":1},
+{"type":"image","effects":["glitch"],"effectProps":{"amount":15}}
+```
+
+### 🍽️ Y2K Acid Pop
+```json
+{"type":"rect","color":"#f5d0fe","gradient":{"type":"linear","angle":135,"stops":[{"offset":0,"color":"#f5d0fe"},{"offset":1,"color":"#c0f7fa"}]}},
+{"type":"text","fontFamily":"Climate Crisis","fontSize":140,"color":"#0a0a0a","effects":["3d"],"effectProps":{"depth":8,"color":"#ff006e"}},
+{"type":"procedural","proceduralType":"halftone","color":"#7c3aed","opacity":0.12,"density":0.6,"procRadius":3},
+{"type":"image","effects":["holo"],"effectProps":{"intensity":60}}
+```
+
+---
+
+## 7. REGOLE CONTESTUALI PER EFFETTI
+
+- **Su foto lifestyle**: prefer `bloom` + `grain` — morbidezza cinematografica
+- **Su foto prodotto**: `grain` leggero + `outline` per staccare dal BG
+- **Su headline dominante**: `3d` o `neon` (no entrambi)
+- **Su BG rect scuro**: `procedural` + `grain` per evitare flat look
+- **Su elementi tech**: `neon` + `matrix` o `glitch`
+- **Mai**: grain + riso + glitch sullo stesso oggetto (overloading)
+- **Mai**: effetti animati (liquid,wavy,vhs,matrix,holo) su tutti gli elementi contemporaneamente
+
+---
+
+## 8. EFFECTPROPS — Valori di riferimento
+
+```json
+{
+  "grain":    {"intensity": 0-100, default 20},
+  "neon":     {"color": "#hex", "blur": 10-80, "intensity": 1-20},
+  "glitch":   {"amount": 5-50},
+  "3d":       {"depth": 5-30, "angle": 0-360, "color": "#hex"},
+  "glass":    {"opacity": 5-30, "color": "#ffffff", "border": 5-20},
+  "clay":     {"volume": 30-80, "gloss": 20-60, "matte": 10-40, "softness": 20-50},
+  "bloom":    {"threshold": 40-80, "intensity": 0.1-1.0, "radius": 3-15},
+  "riso":     {"color1": "#hex", "color2": "#hex", "intensity": 30-80},
+  "wavy":     {"intensity": 20-80, "frequency": 5-20},
+  "thermal":  {"intensity": 60-100, "shift": 0-50},
+  "holo":     {"intensity": 30-80, "speed": 20-80},
+  "halftone": {"size": 3-12, "angle": 0-90},
+  "skew":     {"x": -20 to 20, "y": -10 to 10}
+}
+```

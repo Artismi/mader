@@ -41,7 +41,7 @@ const sections = [
   {
     label: "Contenuti",
     items: [
-      { name: "Cervello", href: "/cervello", icon: Brain },
+      { name: "Memoria", href: "/memoria", icon: Brain },
       { name: "Idee", href: "/idee", icon: Lightbulb },
       { name: "Editoriale", href: "/editoriale", icon: LayoutGrid },
       { name: "Progettazione", href: "/progettazione", icon: Palette },

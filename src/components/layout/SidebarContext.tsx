@@ -32,8 +32,6 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 
   const pushAiCommand = (command: any) => {
     setAiCommands(prev => [...prev, command])
-    // Backward compatibility: also set the single command to trigger legacy effects
-    setAiCommand(command)
   }
 
   const clearAiCommands = () => setAiCommands([])

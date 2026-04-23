@@ -36,6 +36,7 @@ export function useProjectSync(
     setShowProjectList: (v: boolean) => void
     setActiveArtboardId: (id: string | null) => void
     getManifest?: () => string
+    onAfterLoad?: (canvas: fabric.Canvas) => void
   },
 ) {
   const [saving, setSaving]                         = useState(false)
@@ -65,6 +66,7 @@ export function useProjectSync(
     return JSON.stringify((canvas as any).toJSON([
       'objId', 'name', 'hasStartArrow', 'hasEndArrow', 'isConnector',
       'startObjId', 'endObjId', 'vertexConnections', 'artboardExportType', 'isArtboard',
+      'parentBoard',
     ]))
   }
 
@@ -172,6 +174,7 @@ export function useProjectSync(
           .forEach(o => canvas.remove(o))
         canvas.renderAll()
         callbacks.syncActiveArtboardAfterLoad(canvas)
+        callbacks.onAfterLoad?.(canvas)
       } catch (err) {
         console.warn('[loadProject] Error:', err)
       }

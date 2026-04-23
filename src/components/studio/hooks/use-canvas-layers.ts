@@ -1,6 +1,14 @@
-import { useState, useRef } from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 import * as fabric from 'fabric'
-import { getObjId } from '../extensions/arrow-line'
+const getObjId = (obj: any): string => {
+  if (!obj) return ''
+  if (!obj.objId) {
+    obj.objId = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) 
+      ? (crypto as any).randomUUID() 
+      : 'obj_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now()
+  }
+  return obj.objId
+}
 
 export interface LayerEntry {
   id: string
@@ -66,22 +74,66 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
     canvas.requestRenderAll(); refreshLayers()
   }
 
-  function layerMoveUp(id: string) {
+  const layerMoveUp = useCallback((id?: string) => {
     const canvas = fabricRef.current; if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).objId === id); if (!obj) return
-    canvas.bringObjectForward(obj); canvas.requestRenderAll(); refreshLayers()
-  }
+    if (id) {
+      const obj = canvas.getObjects().find(o => (o as any).objId === id || (o as any).id === id)
+      if (obj) canvas.setActiveObject(obj)
+    }
+    const sel = canvas.getActiveObject()
+    if (!sel) return
+    const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
+    objs.forEach((o: any) => canvas.bringForward(o))
+    canvas.requestRenderAll()
+    refreshLayers()
+  }, [refreshLayers, fabricRef])
 
-  function layerMoveDown(id: string) {
+  const layerMoveDown = useCallback((id?: string) => {
     const canvas = fabricRef.current; if (!canvas) return
-    const obj = canvas.getObjects().find(o => (o as any).objId === id); if (!obj) return
-    canvas.sendObjectBackwards(obj); canvas.requestRenderAll(); refreshLayers()
-  }
+    if (id) {
+      const obj = canvas.getObjects().find(o => (o as any).objId === id || (o as any).id === id)
+      if (obj) canvas.setActiveObject(obj)
+    }
+    const sel = canvas.getActiveObject()
+    if (!sel) return
+    const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
+    objs.forEach((o: any) => canvas.sendBackwards(o))
+    canvas.requestRenderAll()
+    refreshLayers()
+  }, [refreshLayers, fabricRef])
+
+  const layerBringToFront = useCallback((id?: string) => {
+    const canvas = fabricRef.current; if (!canvas) return
+    if (id) {
+      const obj = canvas.getObjects().find(o => (o as any).objId === id || (o as any).id === id)
+      if (obj) canvas.setActiveObject(obj)
+    }
+    const sel = canvas.getActiveObject()
+    if (!sel) return
+    const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
+    objs.forEach((o: any) => canvas.bringToFront(o))
+    canvas.requestRenderAll()
+    refreshLayers()
+  }, [refreshLayers, fabricRef])
+
+  const layerSendToBack = useCallback((id?: string) => {
+    const canvas = fabricRef.current; if (!canvas) return
+    if (id) {
+      const obj = canvas.getObjects().find(o => (o as any).objId === id || (o as any).id === id)
+      if (obj) canvas.setActiveObject(obj)
+    }
+    const sel = canvas.getActiveObject()
+    if (!sel) return
+    const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
+    objs.forEach((o: any) => canvas.sendToBack(o))
+    canvas.requestRenderAll()
+    refreshLayers()
+  }, [refreshLayers, fabricRef])
 
   function layerDelete(id: string) {
     const canvas = fabricRef.current; if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).objId === id); if (!obj) return
-    canvas.remove(obj); canvas.requestRenderAll()
+    canvas.remove(obj); canvas.requestRenderAll(); refreshLayers()
   }
 
   return {
@@ -92,6 +144,8 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
     layerToggleLock,
     layerMoveUp,
     layerMoveDown,
+    layerBringToFront,
+    layerSendToBack,
     layerDelete,
   }
 }

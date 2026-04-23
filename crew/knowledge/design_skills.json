@@ -1,0 +1,276 @@
+{
+  "design-luxury": {
+    "mood": "luxury",
+    "triggers": ["luxury", "lusso", "premium", "elegante", "gold", "minimalista"],
+    "rules": "1. SPAZIO: 60-70% Negative Space. Layout asimmetrici o centrati, ariosi.\n2. TIPOGRAFIA: Heading Cormorant Garamond 700 letterSpacing 0.08 uppercase. Subheading Cinzel 400 letterSpacing 0.2. Label Julius Sans One letterSpacing 0.35.\n3. CROMATISMO: Midnight Gold (bg #0D0D0D, primary #C9A84C), Ivory & Noir o Deep Navy.\n4. FOTO: FX vignette o grain leggero. Sfuma i soggetti nello sfondo.",
+    "oklch_palette": {
+      "bg":      "oklch(10.0% 0.005 60)  → #181409",
+      "primary": "oklch(72.0% 0.090 85)  → #c5a44a",
+      "accent":  "oklch(78.0% 0.110 82)  → #d4b454",
+      "text":    "oklch(93.0% 0.005 60)  → #ede8df",
+      "surface": "oklch(16.0% 0.007 60)  → #24201a",
+      "reasoning": "Hue 60-85 = oro caldo. Chroma 0.09-0.11 su primario/accento per saturazione preziosa ma non urlata. L molto bassa su bg (0.10) per nero elegante."
+    }
+  },
+  "design-editorial": {
+    "mood": "editorial",
+    "triggers": ["editorial", "rivista", "magazine", "giornalistico", "stampa"],
+    "rules": "1. GABBIA MATEMATICA: Allinea testi in blocchi perfetti giustificati. Linee divisorie sottili strokeWidth 1.\n2. TIPOGRAFIA: Heading Playfair Display SC 700 letterSpacing 0.04. Sovrapponi testo alle immagini (zIndex alto). Subheading Lora 600 italic. Label Oswald letterSpacing 0.15.\n3. CROMATISMO: Inchiostro (bg #FAFAF8, accent #C0392B) o Terracotta.\n4. EFFETTI: FX halftone leggero per imitare stampa su carta patinata.",
+    "oklch_palette": {
+      "bg":      "oklch(97.0% 0.003 90)  → #f8f7f2",
+      "primary": "oklch(12.0% 0.005 0)   → #1e1a1a",
+      "accent":  "oklch(48.0% 0.220 25)  → #c0271c",
+      "text":    "oklch(15.0% 0.005 0)   → #241f1f",
+      "surface": "oklch(93.0% 0.003 60)  → #ede9e3",
+      "reasoning": "H 90 su bg = bianco carta leggermente caldo. H 25 su accent = rosso editoriale. Chroma 0.22 per rosso vivido ma non digitale. Bg e surface quasi acromatici (C ≤ 0.005)."
+    }
+  },
+  "design-brutalist": {
+    "mood": "brutalist",
+    "triggers": ["brutalist", "bold", "impatto", "street", "raw", "urban"],
+    "rules": "1. TYPOGRAPHY HEAVY: Testo è l'immagine dominante. Archivo Black o Bebas Neue. fontWeight 900, fontSize 150+, letterSpacing schiacciato o negativo (-0.02).\n2. GRIGLIA DISTRUTTA: Inclina testi (angle -5 o 15). Taglia bordi canvas.\n3. CONTRASTI ESTREMI: Nero & Giallo (bg #0A0A0A, primary #FFD600) o OG Orange.\n4. EFFETTI: FX riso, ascii o glitch. mixBlendMode difference o exclusion su testi giganti.",
+    "oklch_palette": {
+      "bg":      "oklch(8.0%  0.000 0)   → #141414",
+      "primary": "oklch(95.0% 0.000 0)   → #f0f0f0",
+      "accent":  "oklch(88.0% 0.200 95)  → #f5d800",
+      "text":    "oklch(95.0% 0.000 0)   → #f0f0f0",
+      "surface": "oklch(14.0% 0.000 0)   → #232323",
+      "reasoning": "Contrasto massimo: bg quasi-nero (L=0.08, C=0), testo quasi-bianco. Accent H=95 (giallo puro) con C=0.20 per giallo brillante ma non abbagliante. Tutto acromatico tranne l'accent."
+    }
+  },
+  "design-minimal": {
+    "mood": "minimal",
+    "triggers": ["minimal", "swiss", "pulito", "razionale", "bento", "corporate"],
+    "rules": "1. GRIGLIA MODULARE: Allineamento di precisione assoluta. Box incastrati (Bento Box UI) con rx: 24 ry: 24.\n2. TIPOGRAFIA: Solo Inter Tight. fontWeight 700 letterSpacing -0.03 per titoli, 300 per body. Label Geist Mono uppercase letterSpacing 0.05.\n3. COLOR-BLOCKING: Palette Bianco o Grigio Freddo. Enormi blocchi a tinta unita. Nessun gradiente.\n4. DEPTH (opzionale): FX glass su card sovrapposte in stile UI.",
+    "oklch_palette": {
+      "bg":      "oklch(99.0% 0.000 0)   → #fcfcfc",
+      "primary": "oklch(15.0% 0.000 0)   → #262626",
+      "accent":  "oklch(55.0% 0.000 0)   → #7a7a7a",
+      "text":    "oklch(12.0% 0.000 0)   → #1f1f1f",
+      "surface": "oklch(95.0% 0.000 0)   → #f0f0f0",
+      "reasoning": "Completamente acromatico (C=0 ovunque). Gerarchia costruita solo con L: bg=0.99, surface=0.95, accent=0.55, primary=0.15, text=0.12. Zero hue — massima neutralità Swiss."
+    }
+  },
+  "design-tech": {
+    "mood": "tech",
+    "triggers": ["tech", "cyber", "startup", "innovazione", "hacker", "digitale"],
+    "rules": "1. INTERFACCIA MATEMATICA: Disegna griglie o mirini con line strokeWidth 1 opacity bassa.\n2. TIPOGRAFIA: Heading Syncopate letterSpacing 0.1 o Orbitron 700. Subheading Chakra Petch o Share Tech Mono. Label Geist Mono o VT323.\n3. COLORIMETRIA NEON: Cibernetico (bg #050D1A, ciano #00D4FF) o Glitch Pink.\n4. LUCE E CORRUZIONE: FX neon su linee. FX matrix o glitch sulle fotografie.",
+    "oklch_palette": {
+      "bg":      "oklch(8.0%  0.020 240) → #060d1a",
+      "primary": "oklch(75.0% 0.180 200) → #00c8e8",
+      "accent":  "oklch(80.0% 0.220 195) → #00d4f5",
+      "text":    "oklch(92.0% 0.010 200) → #daf0f5",
+      "surface": "oklch(14.0% 0.030 240) → #0d1a2e",
+      "reasoning": "H 200-240 = ciano/blu cibernetico. bg con C=0.02 h=240 per nero con hint blu. Primary/accent C alto (0.18-0.22) per neon vivido. Testo con C=0.01 per bianco freddo. L'OKLCH garantisce che i ciani siano percettivamente luminosi come il giallo brutalist."
+    }
+  },
+  "design-fashion": {
+    "mood": "fashion",
+    "triggers": ["fashion", "moda", "runway", "couture", "verticale"],
+    "rules": "1. VERTICALITÀ: Sfrutta dimensioni allungate. Testi sui lati ruotati (angle -90 o 90).\n2. TIPOGRAFIA: Six Caps fontSize gigante letterSpacing 0.15. Alumni Sans Pinstripe letterSpacing 0.3. Logo Italiana letterSpacing 0.25 italic.\n3. CROMATISMO MUTO: Nude & Black (bg #F2ECE4, primary #0D0D0D, accent #BFA98C) o Polvere.\n4. TEXTURE: Sfondo mai liscio. rect con FX grain o halftone per simulare carta catalogo.",
+    "oklch_palette": {
+      "bg":      "oklch(95.0% 0.008 55)  → #f0e8dc",
+      "primary": "oklch(10.0% 0.000 0)   → #1a1a1a",
+      "accent":  "oklch(72.0% 0.060 55)  → #b8a07c",
+      "text":    "oklch(12.0% 0.000 0)   → #1f1f1f",
+      "surface": "oklch(88.0% 0.010 55)  → #e0d4c4",
+      "reasoning": "H 55 = nude/sabbia su bg e accent. C molto bassa (0.006-0.008) per toni morbidi e desaturati. Primary e text acromatici neri per contrasto netto. Accent con C=0.06 per oro opaco."
+    }
+  },
+  "design-retro": {
+    "mood": "retro",
+    "triggers": ["retro", "vintage", "70s", "nostalgia", "caldo", "organico"],
+    "rules": "1. FORME ORGANICHE: Blob, curve morbide, forme irregolari. Evita spigoli netti.\n2. TIPOGRAFIA: Alfa Slab One per heading. Fredoka One subheading. Pacifico per label. Nunito per body.\n3. CROMATISMO: Burnt Sienna (bg #F2E8D5, primary #8B2E16) o Avocado o Terracotta.\n4. TEXTURE: FX grain intenso. Carta invecchiata. Saturazione ridotta delle foto.",
+    "oklch_palette": {
+      "bg":      "oklch(94.0% 0.040 75)  → #f2e5c8",
+      "primary": "oklch(38.0% 0.160 30)  → #8b2e16",
+      "accent":  "oklch(55.0% 0.140 140) → #5a8a54",
+      "text":    "oklch(22.0% 0.050 40)  → #3d2510",
+      "surface": "oklch(87.0% 0.050 75)  → #e4d0a8",
+      "reasoning": "H 75 su bg/surface = crema calda. H 30 su primary = terracotta. H 140 su accent = verde salvia (complementare). C 0.14-0.16 su primary/accent per saturazione vintage (non fluorescente). Text con H 40 per marrone organico."
+    }
+  },
+
+  "design-art-nouveau": {
+    "mood": "art-nouveau",
+    "triggers": ["art nouveau", "botanico", "organico", "ornamentale", "mucha", "liberty", "floreale", "lusso botanico", "profumo"],
+    "rules": "1. CURVA WHIPLASH: Nessuna linea retta dominante. Tutto fluisce in spirali e rampicanti. Path curves con tension 0.8.\n2. TIPOGRAFIA: Serif iper-decorato o script con legature botaniche. Capolettera Drop Cap fusa con illustrazioni. Tracking espanso +0.04.\n3. CROMATISMO: Pergamena (bg #ede4cc), Verde edera (primary #4a7a4a), Oro antico (accent #c8a052). Mai bianco ottico.\n4. ASIMMETRIA ORGANICA: Il peso compositivo scivola dall'alto-sx verso il basso-dx. 40% negative space 'vitale'.",
+    "oklch_palette": {
+      "bg":      "oklch(90.0% 0.035 80)  → #ede4cc",
+      "primary": "oklch(50.0% 0.125 140) → #4a7848",
+      "accent":  "oklch(75.0% 0.175 52)  → #c8a050",
+      "text":    "oklch(25.0% 0.075 45)  → #4a3018",
+      "surface": "oklch(83.0% 0.040 78)  → #d8ca9e",
+      "reasoning": "H 80 su bg = pergamena tattile, mai bianco. H 140 su primary = verde edera organico. H 52 su accent = oro opaco antico. C bassi (0.035-0.04) su bg/surface per toni terrosi smorzati. Text con H 45 per marrone terra bruciata, evitare nero puro."
+    }
+  },
+
+  "design-constructivist": {
+    "mood": "constructivist",
+    "triggers": ["costruttivismo", "constructivism", "propaganda", "industriale", "rodchenko", "diagonale", "lissitzky", "rivoluzionario", "urto visivo"],
+    "rules": "1. DIAGONALE A 45°: L'asse strutturale principale è sempre obliquo. Testi ruotati -45 o 45, fontWeight 900.\n2. FOTOMONTAGGIO: Immagini B&N con filters grayscale+contrast_boost, ritagliate bruscamente, scalate in modo sproporzionato.\n3. CROMATISMO: Carta grezza (bg #f0ece0), Rosso rivoluzionario (primary #c42020), Nero fuliggine (text #1a1a1a). Solo 2-3 colori.\n4. TIPOGRAFIA MASTODONTICA: 200pt+ uppercase, leading negativo o zero, incastrato senza aria.",
+    "oklch_palette": {
+      "bg":      "oklch(94.0% 0.010 62)  → #eeead8",
+      "primary": "oklch(50.0% 0.225 27)  → #c41c1c",
+      "accent":  "oklch(60.0% 0.200 25)  → #d83010",
+      "text":    "oklch(10.0% 0.000 0)   → #1a1a1a",
+      "surface": "oklch(88.0% 0.015 60)  → #e0d8c0",
+      "reasoning": "H 62 su bg = carta industriale non sbiancata. H 25-27 su primary/accent = rosso aggressivo rivoluzionario, C 0.20-0.23 per massimo impatto. Text acromatico per nero fuliggine puro. L'assenza di sfumature è ideologica."
+    }
+  },
+
+  "design-swiss-minimal": {
+    "mood": "swiss-minimal",
+    "triggers": ["swiss", "helvetica", "griglia matematica", "müller-brockmann", "vignelli", "istituzionale", "museo", "architettura", "razionale"],
+    "rules": "1. GRIGLIA 5×7 INVIOLABILE: Tutto scatta sulle linee strutturali. Snap obbligatorio. Mai centrare il titolo.\n2. FLUSH LEFT ASSOLUTO: Allineamento a bandiera sinistra su tutto. Il centro matematico è bandito.\n3. CONTRASTO DI SCALA BRUTALE: Titoli 120-150pt contro body 9-11pt negli angoli opposti.\n4. FONT UNICO Neo-Grotesque: Helvetica, Aktiv Grotesk, Inter Tight. Zero decorazioni, zero gradienti, zero texture.",
+    "oklch_palette": {
+      "bg":      "oklch(99.0% 0.000 0)   → #fcfcfc",
+      "primary": "oklch(55.0% 0.225 27)  → #d03020",
+      "text":    "oklch(10.0% 0.000 0)   → #1a1a1a",
+      "surface": "oklch(94.0% 0.000 0)   → #efefef",
+      "reasoning": "Bianco ottico puro (L=0.99, C=0) come laboratorio. Un singolo rosso elvetico saturo (H=27, C=0.225) come unico accento cromatico chirurgico. Tutto il resto acromatico. Il colore non decora — dichiara."
+    }
+  },
+
+  "design-pop-art": {
+    "mood": "pop-art",
+    "triggers": ["pop art", "warhol", "lichtenstein", "benday", "serialità", "americana", "consumer", "ironia", "flat", "serigrafia"],
+    "rules": "1. BEN-DAY DOTS: Pattern di puntini regolari visibili (2-5mm) come texture di campiture. Effetto retino offset.\n2. CONTORNI NERI NETTI: Stroke 3-5px nero su tutti gli elementi. Il mondo Pop ha sempre il bordo.\n3. COLORI PRIMARI PURI: Rosso, Ciano, Giallo a saturazione massima. Zero sfumature, zero ombre morbide.\n4. SERIALITÀ: Ripetizione quasi ossessiva di elementi identici in griglia regolare.",
+    "oklch_palette": {
+      "bg":      "oklch(98.0% 0.000 0)   → #fafafa",
+      "primary": "oklch(58.0% 0.320 28)  → #e01808",
+      "secondary":"oklch(80.0% 0.270 200) → #00c8d8",
+      "accent":  "oklch(90.0% 0.290 100) → #e8e000",
+      "text":    "oklch(8.0%  0.000 0)   → #141414",
+      "reasoning": "Saturazione massima su tutti i colori di accento (C 0.27-0.32). H 28 = rosso Pop puro. H 200 = ciano offset. H 100 = giallo limone serigrafia. Bg bianco puro come carta patinata. Il testo è nero assoluto come inchiostro da rotativa."
+    }
+  },
+
+  "design-comic-action": {
+    "mood": "comic-action",
+    "triggers": ["fumetto", "comic", "manga", "action", "speed lines", "onomatopea", "gaming", "esplosivo", "kinetic", "balloon"],
+    "rules": "1. SPEED LINES: Linee radiali convergenti verso punto focale, 40+ linee, opacity 0.8. L'occhio viene trascinato.\n2. ONOMATOPEE: 'BOOM' 'CRASH' 'ZAP' come elementi grafici primari — skewX -10, stroke nero 5px, 200pt+.\n3. SFONDAMENTO VIGNETTE: Personaggi/elementi che escono dalla cornice nera. Z-index sopra il bordo.\n4. LAYOUT ANGOLATO: Mai griglie statiche. Ogni pannello con angolazione diversa, composizione instabile.",
+    "oklch_palette": {
+      "bg":      "oklch(97.0% 0.000 0)   → #f8f8f8",
+      "primary": "oklch(52.0% 0.290 26)  → #d81808",
+      "secondary":"oklch(68.0% 0.270 92)  → #d8c000",
+      "accent":  "oklch(47.0% 0.230 252) → #2030a0",
+      "text":    "oklch(6.0%  0.000 0)   → #0f0f0f",
+      "reasoning": "Saturazione molto alta (C 0.23-0.29) per energia cinetica massima. H 26 = rosso azione. H 92 = giallo esplosione. H 252 = blu notte per ombre piatte. Tutto il resto è contrasto netto bianco/nero da newsprint."
+    }
+  },
+
+  "design-digital-brutalism": {
+    "mood": "digital-brutalism",
+    "triggers": ["brutalism digitale", "béton brut", "web brutalist", "raw", "struttura esposta", "overflow", "non ottimizzato", "gallery avantgarde"],
+    "rules": "1. OVERFLOW INTENZIONALE: Titoli 150-220pt che escono dai margini senza pudore. clipPath: none.\n2. BORDI NETTI 2-4px: Zero border-radius, zero morbidezza su qualsiasi elemento.\n3. FONT DEFAULT: Arial, Times New Roman, Courier, Impact come scelta artistica deliberata — non per mancanza.\n4. BLOCCHI MONOLITICI: Grandi aree colore piatto senza transizioni. Il colore si scontra senza armonia.",
+    "oklch_palette": {
+      "bg":      "oklch(90.0% 0.000 0)   → #e0e0e0",
+      "primary": "oklch(42.0% 0.320 252) → #1840e0",
+      "accent":  "oklch(88.0% 0.190 96)  → #e0d800",
+      "text":    "oklch(8.0%  0.000 0)   → #141414",
+      "surface": "oklch(80.0% 0.000 0)   → #cccccc",
+      "reasoning": "Bg grigio cemento (L=0.90, C=0) — il béton brut digitale. H 252 su primary = blu hyperlink non stilizzato, C=0.32 per massimo impatto non armonioso. H 96 su accent = giallo allarme. Il clash cromatico è intenzionale e necessario."
+    }
+  },
+
+  "design-acid-graphics": {
+    "mood": "acid-graphics",
+    "triggers": ["acid", "psichedelico", "rave", "neon acido", "vibrazione cromatica", "techno", "underground", "mutazione", "smiley"],
+    "rules": "1. VIBRAZIONE CROMATICA: Accostare complementari ipersaturi che l'occhio non riesce a 'fermare'. Verde acido vs Magenta.\n2. TESTO LIQUEFATTO: Lettere che si fondono, si stirano, si trasformano. Effetti warp_wave + chromatic_aberration.\n3. DARK BACKGROUND: Viola notte profondo come base. Il neon esplode solo sul dark.\n4. ICONOGRAFIA MUTANTE: Smiley acido, spirali, occhi, forme biologiche che perdono il contorno.",
+    "oklch_palette": {
+      "bg":      "oklch(20.0% 0.075 282) → #1a082a",
+      "primary": "oklch(80.0% 0.360 108) → #50f000",
+      "secondary":"oklch(75.0% 0.320 320) → #e020c0",
+      "accent":  "oklch(85.0% 0.310 68)  → #e8d800",
+      "text":    "oklch(92.0% 0.030 282) → #ddd0f0",
+      "reasoning": "H 282 su bg = viola notte, C=0.075 per oscurità con profondità cromatica. H 108 su primary = verde acido neon, C=0.36 per vibrazione massima. H 320 su secondary = magenta psichedelico — coppia complementare che causa vibrazione fisiologica. Tutto vive nel buio."
+    }
+  },
+
+  "design-memphis-80s": {
+    "mood": "memphis-80s",
+    "triggers": ["memphis", "sottsass", "anni 80", "post-moderno", "pattern clash", "zigzag", "geometrico playful", "colorato", "festivo", "lifestyle"],
+    "rules": "1. PATTERN CLASH: Almeno 3 pattern diversi (zigzag, dots, squiggles, stripes) in collisione diretta senza mediazione.\n2. FORME GEOMETRICHE DECORATIVE: Cerchi, triangoli, rettangoli come elementi autonomi non funzionali — la decorazione è il messaggio.\n3. PALETTE FESTIVA: Rosa bubble gum + Turchese + Arancio + Nero. Pastello acido su bianco.\n4. TESTO COME GRAFICA: Tipografia integrata come elemento visivo, angolata e colorata, non gerarchia separata.",
+    "oklch_palette": {
+      "bg":      "oklch(98.0% 0.000 0)   → #fafafa",
+      "primary": "oklch(75.0% 0.215 330) → #f060a0",
+      "secondary":"oklch(80.0% 0.200 192) → #30c8c0",
+      "accent":  "oklch(65.0% 0.270 33)  → #e06018",
+      "text":    "oklch(10.0% 0.000 0)   → #1a1a1a",
+      "surface": "oklch(92.0% 0.000 0)   → #ebebeb",
+      "reasoning": "H 330 = rosa bubble gum Memphis. H 192 = turchese plasticato. H 33 = arancio energetico caldo. C 0.20-0.27 per saturazione festiva ma non aggressiva. Bg bianco puro come laminato formica. Il clash cromatico è la regola, non l'eccezione."
+    }
+  },
+
+  "design-frutiger-aero": {
+    "mood": "frutiger-aero",
+    "triggers": ["frutiger aero", "y2k", "skeuomorphic", "glossy", "windows vista", "aqua", "bolla", "natura digitale", "ottimismo tech", "wellness", "nostalgia 2000"],
+    "rules": "1. GLOSSY SPHERE EFFECT: Ogni elemento UI ha highlight bianco in alto + riflesso in basso. L'effetto bolla è obbligatorio.\n2. NATURA TECNOLOGIZZATA: Foglie, acqua, nuvole amplificati digitalmente. Verde + Azzurro come coppia core.\n3. PROFONDITÀ LAYERED: Ombre morbide, trasparenze, elementi sovrapposti con gerarchia di profondità visibile.\n4. FONT ARROTONDATO: Mai aggressivo o edgy. Forme morbide e ottimiste in tutto.",
+    "oklch_palette": {
+      "bg":      "oklch(95.0% 0.045 207) → #ddf0f8",
+      "primary": "oklch(60.0% 0.220 207) → #2898d8",
+      "secondary":"oklch(62.0% 0.185 138) → #38a868",
+      "accent":  "oklch(98.0% 0.005 80)  → #fafaf2",
+      "text":    "oklch(25.0% 0.025 248) → #282e42",
+      "surface": "oklch(88.0% 0.035 207) → #c8e4f4",
+      "reasoning": "H 207 su bg/primary/surface = azzurro cielo luminoso, C 0.04-0.22 per gradazione dalla quasi-trasparenza al saturo. H 138 su secondary = verde foglia tecnologica. Accent quasi bianco (L=0.98) per highlights glossy. Text blu-grigio scuro per leggibilità non aggressiva."
+    }
+  },
+
+  "design-luxury-dark": {
+    "mood": "luxury-dark",
+    "triggers": ["luxury dark", "balenciaga", "rick owens", "margiela", "velluto nero", "dark luxury", "high fashion oscuro", "moda nera", "oud", "premium dark"],
+    "rules": "1. SFONDO SCURO come materia prima: L 5-12% con sfumatura viola fredda. Non nero puro — velluto digitale.\n2. SERIF LIGHT o THIN: Cormorant, Canela, Freight Display a peso 300. Tracking dilatato +0.15-0.30em uppercase.\n3. NEGATIVE SPACE 65-80%: Il silenzio è il prodotto. Ogni elemento aggiunto diminuisce il valore percepito.\n4. ACCENTO ORO OPACO: Un singolo tocco metallico discreto. Non oro brillante — oro antico desaturato.",
+    "oklch_palette": {
+      "bg":      "oklch(8.0%  0.020 265) → #0c0814",
+      "primary": "oklch(92.0% 0.015 70)  → #ede8dc",
+      "accent":  "oklch(50.0% 0.065 40)  → #8a7040",
+      "text":    "oklch(88.0% 0.010 70)  → #e0d8c8",
+      "surface": "oklch(14.0% 0.025 265) → #18121e",
+      "reasoning": "H 265 su bg/surface = nero con profondità viola fredda, non nero piatto. H 70 su primary/text = off-white caldo quasi crema — il contrasto con il buio è sufficiente senza bianco aggressivo. H 40 su accent = oro opaco desaturato (C=0.065), non brillante. Il lusso sussurra."
+    }
+  },
+
+  "design-tech-mono": {
+    "mood": "tech-mono",
+    "triggers": ["monospace", "terminale", "terminal", "cli", "developer", "startup ai", "dark mode", "codice", "credibilità tecnica", "hacker", "sistema"],
+    "rules": "1. MONOPOLIO MONOSPACE: JetBrains Mono, Geist Mono, Roboto Mono su TUTTO. Nessuna eccezione.\n2. ACCENTO UNICO ≤10% SUPERFICIE: Verde fosforo o Ciano elettrico. Mai due colori accento.\n3. DIVISORI 1px + ASCII: Separatori sezione sottilissimi o caratteri '---' '>>>' '[STATUS]' come ornamento funzionale.\n4. FLUSH-LEFT ASSOLUTO: Il testo parte sempre dal margine sinistro come un terminale. Zero centratura.",
+    "oklch_palette": {
+      "bg":      "oklch(17.0% 0.015 252) → #1a1e28",
+      "primary": "oklch(84.0% 0.175 140) → #70d888",
+      "accent":  "oklch(72.0% 0.205 200) → #20c8e0",
+      "text":    "oklch(88.0% 0.015 252) → #d8dce8",
+      "surface": "oklch(24.0% 0.018 252) → #262c3c",
+      "dim":     "oklch(50.0% 0.010 252) → #6870888",
+      "reasoning": "H 252 su bg/text/surface = grigio-lavagna con freddezza blu. Non nero puro — il terminale ha profondità. H 140 su primary = verde fosforo classico. H 200 su accent = ciano elettrico. C molto basso (0.01-0.02) su bg/text per dark mode a basso affaticamento visivo. Un solo accento saturo alla volta."
+    }
+  },
+
+  "design-typo-alchemy": {
+    "mood": "typo-alchemy",
+    "triggers": ["typografia", "typo alchemy", "lettera come immagine", "testo come scultura", "tipografia sperimentale", "weingart", "carson", "lubalin", "astrazione tipografica"],
+    "rules": "1. TESTO = IMMAGINE: Nessuna fotografia o illustrazione. La lettera è l'unico elemento visivo.\n2. SCALA ESTREMA: Da 9px a 400pt nella stessa composizione. Il contrasto di scala è il messaggio.\n3. FRAMMENTI TIPOGRAFICI: Parti di lettere usate come forme geometriche astratte. clipPath su glifi.\n4. LEGGIBILITÀ NEGOZIABILE: Se tutto è chiaro, non è Typo Alchemy. L'ambiguità lettera/forma è il fine.",
+    "oklch_palette": {
+      "bg":      "oklch(97.0% 0.000 0)   → #f8f8f8",
+      "primary": "oklch(8.0%  0.000 0)   → #141414",
+      "accent":  "oklch(52.0% 0.250 28)  → #c82808",
+      "mid":     "oklch(62.0% 0.000 0)   → #9a9a9a",
+      "reasoning": "Quasi monocromatico: bianco carta (L=0.97) + nero serigrafia (L=0.08) per massima definizione dei glifi. Un singolo accento rosso (H=28, C=0.25) usato su uno solo elemento per rottura gerarchica. Grigio medio per frammenti secondari. La purezza cromatica serve la purezza tipografica."
+    }
+  },
+
+  "design-surveillance": {
+    "mood": "surveillance-cctv",
+    "triggers": ["sorveglianza", "cctv", "panopticon", "distopia", "green phosphor", "timestamp", "night vision", "paranoia", "documentario", "critico"],
+    "rules": "1. GREEN PHOSPHOR MONOCROMATICO: Tutto nello stesso range tonale verde (H 135-145). Zero colori fuori tema.\n2. TIMESTAMP OBBLIGATORIO: '[CAM_XX] YYYY-MM-DD HH:MM:SS' in Courier monospace nell'angolo inferiore.\n3. EFFETTI CCTV: scanlines + noise leggero + vignette. Barrel distortion lieve per prospettiva telecamera.\n4. COMPOSIZIONE 'ACCIDENTALE': Layout leggermente decentrato, come una telecamera mal posizionata.",
+    "oklch_palette": {
+      "bg":      "oklch(12.0% 0.030 140) → #0a1a10",
+      "primary": "oklch(62.0% 0.215 140) → #28c048",
+      "secondary":"oklch(42.0% 0.100 140) → #1a6028",
+      "text":    "oklch(80.0% 0.140 140) → #80e898",
+      "alert":   "oklch(55.0% 0.260 28)  → #c82000",
+      "reasoning": "Monocromatismo verde assoluto: tutto tra H 135-145. bg L=0.12 per oscurità notturna. primary L=0.62 per verde fosforo visibile. text L=0.80 per leggibilità sul dark. Alert rosso (H=28) è l'unica eccezione cromatica — usata solo per segnalazioni critiche, rompe il codice colore per urgenza."
+    }
+  }
+}

@@ -1,6 +1,61 @@
 const { app, BrowserWindow, shell, globalShortcut, ipcMain, session, Menu } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
+const fs = require('fs')
+
+// ── Crew Service (Python FastAPI) ─────────────────────────────────────────────
+let crewProcess = null
+
+function startCrewService() {
+  // Cerca Python (python3 su Mac/Linux, python su Windows)
+  const pythonCmds = process.platform === 'win32'
+    ? ['python', 'python3']
+    : ['python3', 'python']
+
+  const crewMain = path.join(__dirname, '..', 'crew', 'main.py')
+
+  // Se il file non esiste (build senza crew) → skip silenzioso
+  if (!fs.existsSync(crewMain)) {
+    console.log('[crew] main.py non trovato, crew service disabilitato')
+    return
+  }
+
+  function trySpawn(cmds) {
+    if (cmds.length === 0) {
+      console.warn('[crew] Python non trovato — crew service disabilitato')
+      return
+    }
+    const cmd = cmds[0]
+    const proc = spawn(cmd, [crewMain], {
+      cwd: path.join(__dirname, '..', 'crew'),
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    proc.on('error', () => trySpawn(cmds.slice(1)))
+
+    proc.stdout.on('data', (d) => {
+      const line = d.toString().trim()
+      if (line) console.log('[crew]', line)
+    })
+    proc.stderr.on('data', (d) => {
+      const line = d.toString().trim()
+      if (line && !line.includes('INFO')) console.warn('[crew-err]', line)
+    })
+    proc.on('exit', (code, signal) => {
+      if (signal !== 'SIGTERM' && code !== 0) {
+        console.warn(`[crew] processo terminato (code=${code}) — riavvio tra 5s`)
+        setTimeout(() => startCrewService(), 5000)
+      }
+      crewProcess = null
+    })
+
+    crewProcess = proc
+    console.log(`[crew] avviato con ${cmd} su porta 8765`)
+  }
+
+  trySpawn(pythonCmds)
+}
 
 const isDev = process.env.NODE_ENV !== 'production'
 const PORT = 3000
@@ -179,7 +234,7 @@ app.whenReady().then(async () => {
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline'",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-          "connect-src 'self' blob: https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.openai.com",
+          "connect-src 'self' blob: http://127.0.0.1:8765 https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.openai.com",
           "img-src 'self' data: blob: https:",
           "media-src 'self' blob: data:",
           "font-src 'self' data: https://fonts.gstatic.com",
@@ -196,6 +251,7 @@ app.whenReady().then(async () => {
   })
 
   await startNextServer()
+  startCrewService()
   createMainWindow()
 
   // Menu dell'applicazione (abilita scorciatoie standard come Zoom, Copia/Incolla)
@@ -256,6 +312,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   globalShortcut.unregisterAll()
   if (nextServer) nextServer.kill()
+  if (crewProcess) crewProcess.kill('SIGTERM')
   if (process.platform !== 'darwin') app.quit()
 })
 

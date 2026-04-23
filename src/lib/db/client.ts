@@ -186,6 +186,48 @@ function runLiveMigrations(db: DatabaseSync) {
   try { db.exec("ALTER TABLE memories ADD COLUMN importance REAL DEFAULT 0.5") } catch { /* already exists */ }
   try { db.exec("ALTER TABLE memories ADD COLUMN last_accessed_at TEXT") } catch { /* already exists */ }
   try { db.exec("ALTER TABLE memories ADD COLUMN expires_at TEXT") } catch { /* already exists */ }
+
+  // Parent-Document RAG
+  try { db.exec("ALTER TABLE memories ADD COLUMN parent_id TEXT") } catch { /* already exists */ }
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_memories_parent ON memories(parent_id)") } catch { /* already exists */ }
+
+  // Memory files — traccia lo stato di indicizzazione per file
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS memory_files (
+      id           TEXT PRIMARY KEY,
+      source_path  TEXT NOT NULL UNIQUE,
+      file_name    TEXT NOT NULL,
+      file_type    TEXT NOT NULL,
+      index_status TEXT NOT NULL DEFAULT 'pending',
+      error_msg    TEXT,
+      chunk_count  INTEGER DEFAULT 0,
+      size_bytes   INTEGER,
+      indexed_at   TEXT,
+      created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    )`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_memory_files_path ON memory_files(source_path)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_memory_files_status ON memory_files(index_status)`)
+  } catch { /* already exists */ }
+
+  // Design Recipes — layout di successo riutilizzabili come few-shot
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS design_recipes (
+      id           TEXT PRIMARY KEY,
+      client_id    TEXT REFERENCES clients(id) ON DELETE SET NULL,
+      name         TEXT NOT NULL,
+      mood         TEXT NOT NULL DEFAULT 'minimal',
+      format       TEXT NOT NULL DEFAULT 'instagram_square',
+      description  TEXT,
+      canvas_state TEXT NOT NULL,
+      thumbnail    TEXT,
+      score        REAL DEFAULT 0,
+      tags         TEXT NOT NULL DEFAULT '[]',
+      created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    )`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_recipes_mood ON design_recipes(mood)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_recipes_format ON design_recipes(format)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_recipes_score ON design_recipes(score DESC)`)
+  } catch { /* already exists */ }
 }
 
 export function getDb(): DatabaseSync {

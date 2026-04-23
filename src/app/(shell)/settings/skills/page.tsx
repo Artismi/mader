@@ -1,25 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
 import { SkillsEditor } from "@/components/ui/skills-editor";
-import { DEFAULT_SKILLS, DEFAULT_ARCHITECTURE } from "@/lib/ai/defaults";
+import { DEFAULT_ARCHITECTURE } from "@/lib/ai/defaults";
+import { skills as skillsDb, config } from "@/lib/db";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export default async function SkillsPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const skillsData = skillsDb.getAll();
+    const archValue = config.get('architecture');
 
-    let skills = DEFAULT_SKILLS;
-    let architecture = DEFAULT_ARCHITECTURE;
-
-    if (user) {
-        const [{ data: skillsData }, { data: archData }] = await Promise.all([
-            supabase.from('skills').select('*').eq('user_id', user.id).order('sort_order'),
-            supabase.from('system_config').select('value').eq('user_id', user.id).eq('key', 'architecture').maybeSingle(),
-        ]);
-
-        if (skillsData && skillsData.length > 0) skills = skillsData;
-        if (archData?.value) architecture = archData.value;
-    }
+    const skills = skillsData.length > 0 ? skillsData : [];
+    const architecture = archValue ?? DEFAULT_ARCHITECTURE;
 
     return (
         <div className="space-y-6 max-w-4xl">

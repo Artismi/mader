@@ -70,12 +70,21 @@ function classify(t: any): Layer {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function WeeklyCalendar({ initialEvents = [], initialTasks = [], initialAvailability = [] }: {
-  initialEvents: any[]; initialTasks: any[]; initialAvailability?: any[];
+export function WeeklyCalendar({ initialEvents = [], initialTasks = [], initialAvailability = [], fetchEventsUrl }: {
+  initialEvents: any[]; initialTasks: any[]; initialAvailability?: any[]; fetchEventsUrl?: string;
 }) {
   const router = useRouter();
 
   const [active, setActive] = useState<Set<Layer>>(new Set(['impegni', 'editoriale', 'progetti']));
+  const [remoteEvents, setRemoteEvents] = useState<any[]>(initialEvents);
+
+  useEffect(() => {
+    if (!fetchEventsUrl) return;
+    fetch(fetchEventsUrl)
+      .then(r => r.json())
+      .then(d => { if (d.events) setRemoteEvents(d.events) })
+      .catch(() => {/* silenzioso */});
+  }, [fetchEventsUrl]);
   const toggle = (l: Layer) => setActive(p => { const s = new Set(p); s.has(l) ? s.delete(l) : s.add(l); return s; });
 
   const [viewDate, setViewDate]   = useState(new Date());
@@ -109,7 +118,7 @@ export function WeeklyCalendar({ initialEvents = [], initialTasks = [], initialA
   }, [viewDate]);
 
   const allEvents = useMemo<CalendarEvent[]>(() => [
-    ...(initialEvents || []).map(e => ({
+    ...(remoteEvents || []).map(e => ({
       id: e.id, 
       title: e.summary || '(Nessun titolo)',
       start: new Date(e.start?.dateTime || e.start?.date),
@@ -163,7 +172,7 @@ export function WeeklyCalendar({ initialEvents = [], initialTasks = [], initialA
         };
       });
     })
-  ], [initialEvents, initialTasks, initialAvailability, days]);
+  ], [remoteEvents, initialTasks, initialAvailability, days]);
 
   const visible = useMemo(() => allEvents.filter(e => active.has(e.calLayer)), [allEvents, active]);
 

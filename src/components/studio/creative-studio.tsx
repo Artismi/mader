@@ -13,7 +13,8 @@ import {
   LassoSelect, Zap, Star, Scissors, PenTool,
   Eye, EyeOff, Lock, Unlock, GripVertical, Sliders, X, Palette,
   Search, Cpu, Highlighter, Play, Merge, Ghost, Maximize2, Heart, Droplets,
-  Waves, Cloud, Triangle, LayoutList, LayoutGrid, Magnet
+  Waves, Cloud, Triangle, LayoutList, LayoutGrid, Magnet,
+  Settings2, Laptop, FlaskConical, Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -25,6 +26,7 @@ import polygonClipping from 'polygon-clipping'
 import ImageTracer from 'imagetracerjs'
 import rough from 'roughjs'
 import * as Matter from 'matter-js'
+import { SpringIntegrator } from '@/lib/motion/spring-physics'
 
 // Libraries
 import { ALL_FONTS, FONT_CATEGORIES, injectGoogleFont } from './libraries/font-library'
@@ -191,7 +193,19 @@ const ARTBOARDS: { label: string; w: number; h: number; exportType: ArtboardExpo
   { label: 'Business Card', w: 1050, h: 600, exportType: 'print' },
 ]
 
-import { ArrowLine, renderArrow, getEdgePoint, getObjId, updatePolylineConnections, findSnapPoint, SNAP_R, pointInPoly } from './extensions/arrow-line'
+import { ArrowLine, renderArrow, getEdgePoint, updatePolylineConnections, findSnapPoint, SNAP_R, pointInPoly } from './extensions/arrow-line'
+/** Local stable ID helper to bypass module resolution issues */
+const getObjId = (obj: any): string => {
+  if (!obj) return ''
+  if (!obj.objId) {
+    if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) {
+      obj.objId = (crypto as any).randomUUID()
+    } else {
+      obj.objId = 'obj_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now()
+    }
+  }
+  return obj.objId
+}
 import { type SelState, D } from './extensions/canvas-types'
 import { useCanvasHistory } from './hooks/use-canvas-history'
 import { useCanvasLayers } from './hooks/use-canvas-layers'
@@ -202,6 +216,11 @@ import { VideoModeModal } from './video-mode-modal'
 import { AudioTimeline } from './audio-timeline'
 import { useAnimationEngine } from './hooks/use-animation-engine'
 import { AnimationTimeline } from './animation-timeline'
+
+import { WebGPULabEngine } from './lab/WebGPULabEngine'
+import { LabPanel } from './lab/LabPanel'
+import { useLabStore } from './hooks/use-lab-store'
+import { useSidebar } from '../layout/SidebarContext'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
@@ -275,6 +294,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const [sel, setSel] = useState<SelState>(D)
   // clientId managed via currentClientId (project-based)
   const [showFX, setShowFX] = useState(false)
+  const [canvasReady, setCanvasReady] = useState(false)
   const [showAB, setShowAB] = useState(false)
   const [showFP, setShowFP] = useState(false)
   const [showLib, setShowLib] = useState(false)
@@ -332,6 +352,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
   const activeArtboardIdRef = useRef<string | null>(null)
   const physicsRef = useRef<{ engine: any; runner: any; bodies: Map<string, any> } | null>(null)
+  const springIntegratorRef = useRef(new SpringIntegrator())
 
   // Stable refs for animation recording (used inside canvas event listeners)
   const animIsRecordingRef = useRef(false)
@@ -417,11 +438,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory } =
     useCanvasHistory(fabricRef, activeArtboardIdRef, setActiveArtboardId)
 
-  const { layers, refreshLayers, layerSelect, layerToggleVisible, layerToggleLock, layerMoveUp, layerMoveDown, layerDelete } =
+  const { layers, refreshLayers, layerSelect, layerToggleVisible, layerToggleLock, layerMoveUp, layerMoveDown, layerBringToFront, layerSendToBack, layerDelete } =
     useCanvasLayers(fabricRef)
 
   const anim = useAnimationEngine(fabricRef)
+  const store = useLabStore()
 
+  const { setCanvasSnapshot } = useSidebar()
   const {
     saving, isDirty,
     currentProjectId, currentProjectName, currentClientId, currentUserDescription,
@@ -499,8 +522,20 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         canvas.add(img); canvas.setActiveObject(img); canvas.requestRenderAll()
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrlQueue])
+
+  // ── Vanguard V6: Automatic BPM Detection ──────────────────────────────
+  useEffect(() => {
+    if (audioTracks.length > 0 && store.bpmSource === 'auto' && !store.bpmActive) {
+      const audio = audioTracks[0]
+      audioEngine.getBPM(audio.id).then(bpm => {
+        if (bpm) {
+          store.set({ bpmValue: bpm, bpmActive: true })
+          console.log('[Vanguard] Auto-BPM Detected:', bpm)
+        }
+      })
+    }
+  }, [audioTracks, store.bpmSource, store.bpmActive])
 
   // ── Canvas init ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -520,6 +555,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       selection: true,
     })
     fabricRef.current = canvas
+    ;(canvas as any)._springIntegrator = springIntegratorRef.current
+    ;(canvasRef.current as any)._fabric = canvas
 
     // Listen for artboard selection change to sync navigator
     canvas.on('selection:created', (e) => {
@@ -535,6 +572,21 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       }
     })
 
+    // ── AI Sync (Canvas Awareness) ──────────────────────────
+    const syncManifest = () => {
+      const manifest = buildSemanticManifest()
+      setCanvasSnapshot(manifest)
+    }
+
+    canvas.on('object:added', () => syncManifest())
+    canvas.on('object:modified', () => syncManifest())
+    canvas.on('object:removed', () => syncManifest())
+    canvas.on('path:created', () => syncManifest())
+    
+    // Initial sync
+    syncManifest()
+    setCanvasReady(true)
+
     // Resize Observer for robust sizing
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries[0] || !canvas) return
@@ -546,36 +598,64 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     })
     resizeObserver.observe(canvasContainerRef.current || containerRef.current)
 
-    // History + layer list + auto-save + Registry
-    canvas.on('object:added', e => { 
-      const obj = e.target!; getObjId(obj); pushHistory(); refreshLayers(); scheduleAutoSave()
-      updateRegistry(obj) 
-    })
-    canvas.on('object:modified', (e: any) => {
-      pushHistory(); refreshLayers(); scheduleAutoSave()
-      if (e.target) updateRegistry(e.target)
-      // Animation recording: capture keyframe when recording is active
-      if (animIsRecordingRef.current && e.target) {
-        animRecordRef.current?.(e.target, animCurrentTimeRef.current)
+    // ── Lab Selection Sync ──────────────────────────────────
+    const syncLabSelection = () => {
+      const objects = canvas.getActiveObjects()
+      if (objects.length === 0) {
+        store.set({ selectionActive: false, selectionRect: [0, 0, 1, 1] })
+        return
       }
-      // POSITION SYNC: If artboard moved/scaled, ensure label follows
-      if (e.target && (e.target as any).isArtboard) {
-        const name = e.target.get('name')
-        if (name) {
-          const labelName = name.replace('artboard_', 'label_')
-          const label = canvas.getObjects().find(o => o.get('name') === labelName)
-          if (label) {
-            label.set({ left: e.target.left, top: (e.target.top || 0) - 25 })
-            label.setCoords()
-          }
-        }
-      }
-    })
 
-    // Artboard removal cleanup: handled by main object management
-    canvas.on('object:removed', (e: any) => {
-      pushHistory(); refreshLayers(); scheduleAutoSave()
-      if (e.target) updateRegistry(e.target, true)
+      const primary = objects[0] as any
+      const cw = canvas.getWidth(), ch = canvas.getHeight()
+      const rect = primary.getBoundingRect(true, true)
+      const normalizedRect: [number, number, number, number] = [rect.left/cw, rect.top/ch, rect.width/cw, rect.height/ch]
+
+      // Deep Sync: Push current store params into the object immediately
+      const { set: _set, labActive, selectionActive, selectionRect: _sr, ...params } = store
+      objects.forEach(obj => {
+        (obj as any).labParams = { ...((obj as any).labParams || {}), ...params }
+      })
+
+      store.set({ selectionActive: true, selectionRect: normalizedRect })
+    }
+
+    canvas.on('selection:created', syncLabSelection)
+    canvas.on('selection:updated', syncLabSelection)
+    canvas.on('selection:cleared', syncLabSelection)
+    canvas.on('object:moving', (e) => {
+      const obj = e.target as any
+      if (obj) {
+        obj._targetLeft = obj.left
+        obj._targetTop = obj.top
+        // If spring is enabled, we prevent the 'snapping' by restoring current spring pos if needed?
+        // Actually, the fxTick will overwrite visual left/top, so we just set the target here.
+      }
+      syncLabSelection()
+    })
+    canvas.on('object:scaling', syncLabSelection)
+
+    // Bi-directional Sync: Lab UI -> Active Objects
+    const labSubscription = useLabStore.subscribe((state) => {
+      if (!canvas || !state.labActive) return
+      
+      const activeObjects = canvas.getActiveObjects()
+      if (activeObjects.length === 0) return
+
+      const { set: _set, labActive, selectionActive, selectionRect, ...params } = state
+      
+      activeObjects.forEach(obj => {
+        getObjId(obj as any);
+        const oldParams = JSON.stringify((obj as any).labParams)
+        const newParams = { ...((obj as any).labParams || {}), ...params }
+        
+        if (oldParams !== JSON.stringify(newParams)) {
+          console.info(`[LabBridge] Syncing params to ${obj.type}`)
+          ;(obj as any).labParams = newParams
+          obj.set('dirty', true) // Mark for engine refresh
+        }
+      })
+      canvas.requestRenderAll()
     })
 
     // Video DOM cleanup: rimuove il <video> nascosto quando l'oggetto viene cancellato dal canvas
@@ -905,8 +985,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (objs.length) { objs.forEach(o => canvas.remove(o)); canvas.discardActiveObject(); canvas.requestRenderAll() }
         return
       }
-      if (e.key === '[') { const o = canvas.getActiveObject(); if (o) canvas.sendObjectBackwards(o); canvas.requestRenderAll(); return }
-      if (e.key === ']') { const o = canvas.getActiveObject(); if (o) canvas.bringObjectForward(o); canvas.requestRenderAll(); return }
+      if (e.key === '[' && (e.ctrlKey || e.metaKey)) { layerSendToBack(); e.preventDefault(); return }
+      if (e.key === ']' && (e.ctrlKey || e.metaKey)) { layerBringToFront(); e.preventDefault(); return }
+      if (e.key === '[') { layerMoveDown(); e.preventDefault(); return }
+      if (e.key === ']') { layerMoveUp(); e.preventDefault(); return }
       if (e.key === 'Escape') {
         if (activePoly.current) { canvas.remove(activePoly.current); activePoly.current = null; penPointsAbs.current = [] }
         canvas.discardActiveObject(); canvas.requestRenderAll(); return
@@ -1004,7 +1086,50 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         })
       }
 
-      // 2. Handle Filter Animations (via registry)
+      // 3. Vanguard V6: Spring Physics & Kinetic Motion
+      if (store.springEnabled) {
+        const spring = springIntegratorRef.current
+        const springConfig = { 
+          stiffness: store.springStiffness, 
+          damping: store.springDamping, 
+          mass: store.springMass 
+        }
+
+        c.getObjects().forEach(obj => {
+          if ((obj as any).isArtboard || !obj.selectable) return
+          const id = (obj as any).objId || getObjId(obj)
+          
+          // Target handling
+          // If being dragged, the 'target' is where the mouse wants it to be.
+          // Fabric updates left/top during drag. We use those as targets.
+          const targetX = (obj as any)._targetLeft ?? obj.left ?? 0
+          const targetY = (obj as any)._targetTop ?? obj.top ?? 0
+
+          const currentX = spring.update(`${id}_x`, targetX, springConfig)
+          const currentY = spring.update(`${id}_y`, targetY, springConfig)
+
+          // Update object visual state
+          if (!(obj as any).isEditing) {
+             const velX = spring.getVelocity(`${id}_x`)
+             const velY = spring.getVelocity(`${id}_y`)
+             const speed = Math.sqrt(velX * velX + velY * velY)
+
+             // Reactive Typography: Weight ~ Speed
+             if (store.reactiveTypography && (obj.type === 'i-text' || obj.type === 'textbox')) {
+                const baseWeight = 400
+                const maxWeight = 900
+                const targetWeight = Math.min(maxWeight, baseWeight + speed * 0.5)
+                obj.set('fontWeight', Math.round(targetWeight))
+             }
+
+             obj.set({ left: currentX, top: currentY })
+             obj.setCoords()
+             dirty = true
+          }
+        })
+      }
+
+      // 4. Handle Filter Animations (via registry)
       animFilterObjsRef.current.forEach(obj => {
         const o = obj as any
         if (!o._appliedFX) return
@@ -1018,6 +1143,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           dirty = true
         }
       })
+
       if (dirty) c.requestRenderAll()
       fxAnimRafRef.current = requestAnimationFrame(fxTick)
     }
@@ -1028,6 +1154,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
       if (fxAnimRafRef.current) cancelAnimationFrame(fxAnimRafRef.current)
+      labSubscription() // Correctly unsubscribe from Lab Store
       canvas.dispose()
       fabricRef.current = null
     }
@@ -1871,8 +1998,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const latestProps = JSON.parse(JSON.stringify(fxObj.fxProps))
 
         reapplyAllEffects(obj, latestProps)
-        setSel(prev => ({ ...prev, fxProps: latestProps }))
+        obj.set('dirty', true)
+        canvas.requestRenderAll()
 
+        setSel(prev => ({ ...prev, fxProps: latestProps }))
         effectRafRef.current = null
       })
     }
@@ -3608,6 +3737,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onContextMenu={e => e.preventDefault()}>
           <canvas ref={canvasRef} className="w-full h-full" />
 
+          {/* WebGPU Lab Engine Overlay */}
+          {canvasReady && <WebGPULabEngine fabricCanvas={fabricRef.current} className="pointer-events-none" />}
+
+
           {/* Grid overlay */}
           {showGrid && (
             <div className="absolute inset-0 z-[5] pointer-events-none" style={{
@@ -3768,6 +3901,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onLayerToggleLock={layerToggleLock}
           onLayerMoveUp={layerMoveUp}
           onLayerMoveDown={layerMoveDown}
+          onLayerBringToFront={layerBringToFront}
+          onLayerSendToBack={layerSendToBack}
           onLayerDelete={layerDelete}
           onRefreshLayers={refreshLayers}
           onApplyPencil={(p) => setSel(prev => ({ ...prev, ...p }))}
@@ -3834,7 +3969,20 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {/* Animation mode toggle */}
           <div className="w-px h-4 bg-white/[0.06] mx-1" />
           <button
-            onClick={() => setShowAnimMode(p => !p)}
+            onClick={() => {
+              const newState = !showAnimMode
+              setShowAnimMode(newState)
+              store.set({ springEnabled: newState })
+              
+              // Reset targets for all objects to prevent initial jumps
+              const canvas = fabricRef.current
+              if (canvas && newState) {
+                canvas.getObjects().forEach((obj: any) => {
+                  obj._targetLeft = obj.left
+                  obj._targetTop = obj.top
+                })
+              }
+            }}
             className={cn(
               'h-6 px-2 rounded-md text-[8px] font-black uppercase tracking-widest transition-all flex items-center gap-1',
               showAnimMode
@@ -3920,6 +4068,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         />
       )}
 
+      {/* --- SHADER LAB OVERLAY --- */}
+      {showFX && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-8 bg-black/40 backdrop-blur-sm">
+          <div className="relative w-full max-w-5xl h-full max-h-[85vh] animate-in fade-in zoom-in duration-300">
+            <UnifiedFXPanel 
+              sel={sel}
+              onShadow={applyShadow}
+              onGrad={applyGradient}
+              onPreset={applyPreset}
+              onUpdate={updateEffectProp}
+              onClose={() => setShowFX(false)} 
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── PORTALS (fuori dal layout, sempre su document.body) ─────────────── */}
       {showSaveDialog && typeof document !== 'undefined' && createPortal(
         <SaveDialog
@@ -3940,8 +4104,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             setCtxMenu(null)
           }}
           onDelete={() => { const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return; canvas!.remove(obj); setCtxMenu(null) }}
-          onBringForward={() => { const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return; canvas!.bringObjectForward(obj); canvas!.requestRenderAll(); setCtxMenu(null) }}
-          onSendBackward={() => { const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return; canvas!.sendObjectBackwards(obj); canvas!.requestRenderAll(); setCtxMenu(null) }}
+          onBringForward={() => { layerMoveUp(); setCtxMenu(null) }}
+          onSendBackward={() => { layerMoveDown(); setCtxMenu(null) }}
+          onBringToFront={() => { layerBringToFront(); setCtxMenu(null) }}
+          onSendToBack={() => { layerSendToBack(); setCtxMenu(null) }}
           onGroup={() => {
             const canvas = fabricRef.current, objs = canvas?.getActiveObjects(); if (!objs?.length) return
             const a = canvas!.getActiveObject() as any
@@ -4165,6 +4331,8 @@ interface PanelProps {
   onLayerToggleLock: (id: string) => void
   onLayerMoveUp: (id: string) => void
   onLayerMoveDown: (id: string) => void
+  onLayerBringToFront: (id: string) => void
+  onLayerSendToBack: (id: string) => void
   onLayerDelete: (id: string) => void
   onRefreshLayers: () => void
   onApplyPencil: (p: Partial<SelState>) => void
@@ -4177,11 +4345,15 @@ interface PanelProps {
   setShowFP: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-type PanelTab = 'prop' | 'layers' | 'lib'
-type PropSubTab = 'fill' | 'text' | 'shape' | 'fx' | 'img' | 'line' | 'pencil' | 'group'
+type PanelTab = 'prop' | 'layers' | 'lib' | 'lab'
+type PropSubTab = 'fill' | 'text' | 'shape' | 'fx' | 'img' | 'line' | 'pencil' | 'group' | 'lab'
 
 function PropertiesPanel(props: PanelProps) {
-  const { sel, insp, tool, layers, fabricRef, setInsp } = props
+  const store = useLabStore()
+  const { 
+    sel, insp, tool, layers, fabricRef, setInsp, 
+    showFX, setShowFX, showFP, setShowFP 
+  } = props
   const [tab, setTab] = React.useState<PanelTab>('prop')
   const [propTab, setPropTab] = React.useState<PropSubTab>('fill')
   const hasSelection = sel.type !== 'none'
@@ -4202,7 +4374,7 @@ function PropertiesPanel(props: PanelProps) {
     if (sel.type === 'line') tabs.push({ id: 'line', icon: <Minus className="w-3.5 h-3.5" />, label: 'Linea' })
     if (sel.type === 'image') tabs.push({ id: 'img', icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'Immagine' })
     if (sel.type === 'group') tabs.push({ id: 'group', icon: <Layers className="w-3.5 h-3.5" />, label: 'Gruppo' })
-    if (hasSelection) tabs.push({ id: 'fx', icon: <Sparkles className="w-3.5 h-3.5" />, label: 'Effetti' })
+    tabs.push({ id: 'lab', icon: <FlaskConical className={cn("w-3.5 h-3.5", store.labActive ? "text-accent" : "text-white/20")} />, label: 'Studio Lab' })
     return tabs
   }, [sel.type, isPencil, hasSelection])
 
@@ -4330,7 +4502,7 @@ function PropertiesPanel(props: PanelProps) {
               {propTab === 'text' && sel.type === 'text' && (
                 <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink}
                   showFP={props.showFP} setShowFP={props.setShowFP}
-                  showFX={props.showFX} setShowFX={props.setShowFX}
+                  showFX={false} setShowFX={() => { setPropTab('lab'); if (!store.labActive) store.set({ labActive: true }) }}
                   onShadow={props.onApplyShadow} onPreset={props.onApplyPreset} onUpdate={props.onUpdateFx}
                 />
               )}
@@ -4338,7 +4510,7 @@ function PropertiesPanel(props: PanelProps) {
               {/* Forma */}
               {propTab === 'shape' && sel.type === 'shape' && (
                 <ShapeBar sel={sel} onApply={props.onApplyShape} onShadow={props.onApplyShadow}
-                  onGrad={props.onApplyGradient} showFX={props.showFX} setShowFX={props.setShowFX}
+                  onGrad={props.onApplyGradient} showFX={false} setShowFX={() => setPropTab('lab')}
                   onBoolean={props.onDoBoolean} onBindTextToPath={() => { }} onPreset={props.onApplyPreset}
                   onUpdate={props.onUpdateFx}
                 />
@@ -4353,7 +4525,7 @@ function PropertiesPanel(props: PanelProps) {
               {/* Immagine */}
               {propTab === 'img' && sel.type === 'image' && (
                 <ImageBar sel={sel} onApply={props.onApplyShape} onRemoveBg={props.onRemoveBg}
-                  loading={props.bgRemoving} showFx={props.showImgFx} setShowFx={props.setShowImgFx}
+                  loading={props.bgRemoving} showFx={false} setShowFx={() => setPropTab('lab')}
                   onTraceImage={props.onTraceImage} onApplyAnimation={props.onApplyAnimation}
                 />
               )}
@@ -4367,7 +4539,12 @@ function PropertiesPanel(props: PanelProps) {
               {propTab === 'fx' && (
                 <div className="space-y-4">
                   <div>
-                    <p className="text-[7px] font-black uppercase tracking-widest text-white/20 mb-2">Effetti</p>
+                    <button onClick={() => setShowFX(true)}
+                      className="w-full mb-4 py-2 bg-accent/80 hover:bg-accent text-black text-[8px] font-black uppercase tracking-widest rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-accent/10">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Apri Shader Lab
+                    </button>
+                    <p className="text-[7px] font-black uppercase tracking-widest text-white/20 mb-2">Effetti Rapidi</p>
                     <div className="space-y-1">
                       {UNIFIED_FX_LIST.map(fx => (
                         <FXRow key={fx.key} fx={fx} active={sel.appliedFX.includes(fx.key)} fxProps={sel.fxProps}
@@ -4387,6 +4564,9 @@ function PropertiesPanel(props: PanelProps) {
                 </div>
               )}
 
+              {/* Shader Lab Custom Panel */}
+              {propTab === 'lab' && <LabPanel />}
+
             </div>
           )}
         </div>
@@ -4402,6 +4582,8 @@ function PropertiesPanel(props: PanelProps) {
             onToggleLock={props.onLayerToggleLock}
             onMoveUp={props.onLayerMoveUp}
             onMoveDown={props.onLayerMoveDown}
+            onBringToFront={props.onLayerBringToFront}
+            onSendToBack={props.onLayerSendToBack}
             onDelete={props.onLayerDelete}
             onClose={() => setTab('prop')}
             inline
@@ -5207,9 +5389,10 @@ function SR({ label, value, min, max, onChange }: { label: string; value: number
 // ─── LAYER PANEL ─────────────────────────────────────────────────────────────
 
 type LayerEntry = { id: string; label: string; type: string; visible: boolean; locked: boolean }
-function LayerPanel({ layers, onSelect, onToggleVisible, onToggleLock, onMoveUp, onMoveDown, onDelete, onClose, inline = false }: {
+function LayerPanel({ layers, onSelect, onToggleVisible, onToggleLock, onMoveUp, onMoveDown, onBringToFront, onSendToBack, onDelete, onClose, inline = false }: {
   layers: LayerEntry[]; onSelect: (id: string) => void; onToggleVisible: (id: string) => void
   onToggleLock: (id: string) => void; onMoveUp: (id: string) => void; onMoveDown: (id: string) => void
+  onBringToFront: (id: string) => void; onSendToBack: (id: string) => void
   onDelete: (id: string) => void; onClose: () => void; inline?: boolean
 }) {
   const typeIcon = (t: string) => {
@@ -5239,6 +5422,8 @@ function LayerPanel({ layers, onSelect, onToggleVisible, onToggleLock, onMoveUp,
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button onClick={() => onMoveUp(l.id)} title="Porta avanti" className="text-white/30 hover:text-white"><ChevronDown className="w-3 h-3 rotate-180" /></button>
               <button onClick={() => onMoveDown(l.id)} title="Porta indietro" className="text-white/30 hover:text-white"><ChevronDown className="w-3 h-3" /></button>
+              <button onClick={() => onBringToFront(l.id)} title="Primo piano" className="text-white/30 hover:text-white flex items-center justify-center w-3 h-3"><ArrowRight className="w-2.5 h-2.5 -rotate-90" /></button>
+              <button onClick={() => onSendToBack(l.id)} title="Sfondo" className="text-white/30 hover:text-white flex items-center justify-center w-3 h-3"><ArrowRight className="w-2.5 h-2.5 rotate-90" /></button>
             </div>
             <button onClick={() => onToggleVisible(l.id)} className="text-white/30 hover:text-white flex-shrink-0">
               {l.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -5490,14 +5675,18 @@ function SaveDialog({
 
 // ─── CONTEXT MENU ─────────────────────────────────────────────────────────────
 
-function ContextMenu({ x, y, onDuplicate, onDelete, onBringForward, onSendBackward, onGroup, onClose }: {
+function ContextMenu({ x, y, onDuplicate, onDelete, onBringForward, onSendBackward, onBringToFront, onSendToBack, onGroup, onClose }: {
   x: number; y: number; onDuplicate: () => void; onDelete: () => void
-  onBringForward: () => void; onSendBackward: () => void; onGroup: () => void; onClose: () => void
+  onBringForward: () => void; onSendBackward: () => void
+  onBringToFront: () => void; onSendToBack: () => void
+  onGroup: () => void; onClose: () => void
 }) {
   const items: [string, (() => void) | null, string, boolean?][] = [
     ['Duplica', onDuplicate, 'Ctrl+D'],
     ['Porta avanti', onBringForward, ']'],
     ['Porta indietro', onSendBackward, '['],
+    ['Primo piano', onBringToFront, 'Ctrl+]'],
+    ['Sfondo (Sotto)', onSendToBack, 'Ctrl+['],
     ['Raggruppa', onGroup, 'Ctrl+G'],
     ['──────────', null, ''],
     ['Elimina', onDelete, 'Del', true],
@@ -5719,5 +5908,6 @@ function BzEditorOverlay({ anchors, zoom, canvas, onAnchorMove, onHandleMove, on
     </svg>
   )
 }
+
 
 

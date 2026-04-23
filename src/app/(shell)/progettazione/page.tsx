@@ -8,7 +8,7 @@ export default async function ProgettazionePage() {
   const allProjects   = designProjects.getAll()
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="absolute inset-0 flex flex-col">
       <DesignWindow clients={allClients} designProjects={allProjects} />
     </div>
   )

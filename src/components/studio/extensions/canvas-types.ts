@@ -2,10 +2,74 @@
  * Shared types and default state for the Creative Studio canvas.
  */
 
+import type * as fabric from 'fabric'
+
+// ─── EXTENDED FABRIC OBJECT ──────────────────────────────────────────────────
+// Intersection type that augments FabricObject with all custom runtime properties.
+// Cast to this type instead of `as any` when accessing custom fields.
+
+export type ExtendedFabricObject = fabric.FabricObject & {
+  // Identity
+  name: string
+  id: string
+
+  // Artboard
+  isArtboard: boolean
+  artboardColor: string
+
+  // Video / media
+  isVideo: boolean
+  videoElement: HTMLVideoElement
+  startTime: number
+  endTime: number
+
+  // Subtitle overlay
+  isSubtitle: boolean
+
+  // Physics (Matter.js body reference)
+  matterBody: unknown
+
+  // FX pipeline ─ maintained by reapplyAllEffects()
+  _baseProps: {
+    fill: unknown
+    stroke: unknown
+    strokeWidth: number
+    shadow: fabric.Shadow | null
+    skewX: number
+    skewY: number
+    fontWeight: string
+    opacity: number
+    [key: string]: unknown
+  } | null
+  _appliedFX: string[]
+  _filterDirty: boolean
+  fxProps: Record<string, Record<string, number>>
+
+  // Image filters (fabric.Image has these, FabricObject base does not)
+  filters: unknown[]
+  applyFilters: () => void
+
+  // Drawing / brushes
+  isHandDrawn: boolean
+  brushType: string
+
+  // Arrow / connector (ArrowLine subclass)
+  hasStartArrow: boolean
+  hasEndArrow: boolean
+  isConnector: boolean
+  startObjId: string | null
+  endObjId: string | null
+
+  // Raster pixel layer
+  isRasterLayer: boolean
+  offscreenCanvas: OffscreenCanvas | null
+}
+
 // ─── SELECTION STATE ─────────────────────────────────────────────────────────
 
 export interface SelState {
-  type: 'text' | 'shape' | 'line' | 'image' | 'group' | 'none'
+  type: 'text' | 'shape' | 'line' | 'image' | 'group' | 'artboard' | 'none'
+  artboardName: string
   fontFamily: string
   fontSize: number
   bold: boolean
@@ -44,11 +108,13 @@ export interface SelState {
   blendMode: string
   appliedFX: string[]
   fxProps: Record<string, Record<string, number>>
+  cornerRadii: [number, number, number, number]
 }
 
 /** Default SelState — no object selected. */
 export const D: SelState = {
   type: 'none',
+  artboardName: '',
   fontFamily: 'Inter',
   fontSize: 24,
   bold: false,
@@ -87,4 +153,5 @@ export const D: SelState = {
   blendMode: 'source-over',
   appliedFX: [],
   fxProps: {},
+  cornerRadii: [0, 0, 0, 0],
 }

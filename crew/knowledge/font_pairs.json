@@ -1,0 +1,142 @@
+{
+  "luxury": {
+    "label": "Luxury & Haute Couture",
+    "mood": "Elegante, esclusivo, minimalista, alto-di-gamma",
+    "heading":    { "family": "Cormorant Garamond", "weight": "700", "letterSpacing": 0.08, "textTransform": "uppercase" },
+    "subheading": { "family": "Cinzel",             "weight": "400", "letterSpacing": 0.2 },
+    "body":       { "family": "Montserrat",         "weight": "300", "letterSpacing": 0.01 },
+    "labelRole":  { "family": "Julius Sans One",    "weight": "400", "letterSpacing": 0.35, "textTransform": "uppercase" },
+    "logo":       { "family": "Bodoni Moda",        "weight": "400", "letterSpacing": 0.12, "style": "italic" },
+    "suggestedPalettes": [
+      { "name": "Midnight Gold",  "bg": "#0D0D0D", "primary": "#C9A84C", "accent": "#E8D5A3", "text": "#F5F0E8" },
+      { "name": "Ivory & Noir",   "bg": "#1A1A1A", "primary": "#F5F0E8", "accent": "#C9A84C", "text": "#FFFFFF" },
+      { "name": "Deep Navy",      "bg": "#0A1628", "primary": "#B8C9E1", "accent": "#D4AF37", "text": "#EEF2F7" }
+    ]
+  },
+  "editorial": {
+    "label": "Editorial & Magazine",
+    "mood": "Editoriale, giornalistico, cultura visiva, stampa di qualità",
+    "heading":    { "family": "Playfair Display SC", "weight": "700", "letterSpacing": 0.04 },
+    "subheading": { "family": "Lora",                "weight": "600", "letterSpacing": 0.01, "style": "italic" },
+    "body":       { "family": "Lato",                "weight": "300", "letterSpacing": 0.005 },
+    "labelRole":  { "family": "Oswald",              "weight": "400", "letterSpacing": 0.15, "textTransform": "uppercase" },
+    "logo":       { "family": "Playfair Display",    "weight": "700", "letterSpacing": 0.06 },
+    "suggestedPalettes": [
+      { "name": "Inchiostro",    "bg": "#FAFAF8", "primary": "#1C1C1C", "accent": "#C0392B", "text": "#2C2C2C" },
+      { "name": "Black & Ivory", "bg": "#0F0F0F", "primary": "#F0EBE1", "accent": "#D4A853", "text": "#E8E0D5" },
+      { "name": "Terracotta",    "bg": "#F4EDE4", "primary": "#2C1810", "accent": "#C45B3A", "text": "#1A0F0A" }
+    ]
+  },
+  "brutalist": {
+    "label": "Brutalist & Bold",
+    "mood": "Diretto, senza fronzoli, forte, impatto visivo immediato",
+    "heading":    { "family": "Archivo Black",    "weight": "900", "letterSpacing": -0.02, "textTransform": "uppercase" },
+    "subheading": { "family": "Barlow Condensed", "weight": "700", "letterSpacing": 0.05,  "textTransform": "uppercase" },
+    "body":       { "family": "DM Sans",          "weight": "400", "letterSpacing": 0 },
+    "labelRole":  { "family": "Archivo Narrow",   "weight": "700", "letterSpacing": 0.08,  "textTransform": "uppercase" },
+    "logo":       { "family": "Bebas Neue",       "weight": "400", "letterSpacing": 0.1 },
+    "suggestedPalettes": [
+      { "name": "Nero & Giallo",  "bg": "#0A0A0A", "primary": "#FFD600", "accent": "#FF3B30", "text": "#FFFFFF" },
+      { "name": "Bianco Sporco",  "bg": "#F0EDE8", "primary": "#1A1A1A", "accent": "#FF3B30", "text": "#0A0A0A" },
+      { "name": "Construction",   "bg": "#FF6B00", "primary": "#000000", "accent": "#FFFFFF", "text": "#000000" }
+    ]
+  },
+  "minimal": {
+    "label": "Minimal & Swiss",
+    "mood": "Pulito, razionale, funzionale, stile internazionale",
+    "heading":    { "family": "Inter Tight", "weight": "700", "letterSpacing": -0.03 },
+    "subheading": { "family": "Inter Tight", "weight": "400", "letterSpacing": -0.01 },
+    "body":       { "family": "Inter Tight", "weight": "300", "letterSpacing": 0.005 },
+    "labelRole":  { "family": "Geist Mono",  "weight": "400", "letterSpacing": 0.05, "textTransform": "uppercase" },
+    "logo":       { "family": "Bebas Neue",  "weight": "400", "letterSpacing": 0.08 },
+    "suggestedPalettes": [
+      { "name": "Bianco",        "bg": "#FFFFFF", "primary": "#0A0A0A", "accent": "#0066FF", "text": "#1A1A1A" },
+      { "name": "Grigio Freddo", "bg": "#F2F2F2", "primary": "#1C1C1C", "accent": "#5E5E5E", "text": "#111111" },
+      { "name": "Notte",         "bg": "#121212", "primary": "#E8E8E8", "accent": "#6C63FF", "text": "#F5F5F5" }
+    ]
+  },
+  "fashion": {
+    "label": "Fashion & Elongated",
+    "mood": "Moda, runway, couture, verticale, aspirazionale",
+    "heading":    { "family": "Six Caps",              "weight": "400", "letterSpacing": 0.15, "textTransform": "uppercase" },
+    "subheading": { "family": "Alumni Sans Pinstripe", "weight": "400", "letterSpacing": 0.3,  "textTransform": "uppercase" },
+    "body":       { "family": "Raleway",               "weight": "300", "letterSpacing": 0.04 },
+    "labelRole":  { "family": "Belleza",               "weight": "400", "letterSpacing": 0.2,  "textTransform": "uppercase" },
+    "logo":       { "family": "Italiana",              "weight": "400", "letterSpacing": 0.25, "style": "italic" },
+    "suggestedPalettes": [
+      { "name": "Nude & Black", "bg": "#F2ECE4", "primary": "#0D0D0D", "accent": "#BFA98C", "text": "#1A1208" },
+      { "name": "Polvere",      "bg": "#E8E0D8", "primary": "#2C2420", "accent": "#8B6F5E", "text": "#1A1208" },
+      { "name": "All Black",    "bg": "#050505", "primary": "#EBEBEB", "accent": "#C4A882", "text": "#F5F0EA" }
+    ]
+  },
+  "tech": {
+    "label": "Tech & Futuristic",
+    "mood": "Digitale, AI, startup, futuro, innovazione",
+    "heading":    { "family": "Orbitron",      "weight": "700", "letterSpacing": 0.05, "textTransform": "uppercase" },
+    "subheading": { "family": "Chakra Petch",  "weight": "500", "letterSpacing": 0.08 },
+    "body":       { "family": "IBM Plex Sans", "weight": "400", "letterSpacing": 0.01 },
+    "labelRole":  { "family": "Geist Mono",    "weight": "400", "letterSpacing": 0.1,  "textTransform": "uppercase" },
+    "logo":       { "family": "Syncopate",     "weight": "700", "letterSpacing": 0.12 },
+    "suggestedPalettes": [
+      { "name": "Cibernetico", "bg": "#050D1A", "primary": "#00D4FF", "accent": "#7B2FFF", "text": "#E8F4FF" },
+      { "name": "Matrix",      "bg": "#000800", "primary": "#00FF41", "accent": "#008F11", "text": "#CCFFCC" },
+      { "name": "Viola Deep",  "bg": "#0D0019", "primary": "#C084FC", "accent": "#7C3AED", "text": "#F3E8FF" }
+    ]
+  },
+  "street": {
+    "label": "Urban & Streetwear",
+    "mood": "Strada, hype, cultura urban, drop culture, skate",
+    "heading":    { "family": "Bebas Neue",       "weight": "400", "letterSpacing": 0.06, "textTransform": "uppercase" },
+    "subheading": { "family": "Barlow Condensed", "weight": "800", "letterSpacing": 0.02, "textTransform": "uppercase" },
+    "body":       { "family": "Barlow",           "weight": "400", "letterSpacing": 0 },
+    "labelRole":  { "family": "Permanent Marker", "weight": "400", "letterSpacing": 0.02 },
+    "logo":       { "family": "Anton",            "weight": "400", "letterSpacing": 0.04, "textTransform": "uppercase" },
+    "suggestedPalettes": [
+      { "name": "Drop Nero", "bg": "#0A0A0A", "primary": "#FFFFFF", "accent": "#FF3B30", "text": "#F5F5F5" },
+      { "name": "OG Orange", "bg": "#FF6B00", "primary": "#000000", "accent": "#FFFFFF", "text": "#000000" },
+      { "name": "Camo",      "bg": "#2D3A1E", "primary": "#C8D5B1", "accent": "#8B9E6E", "text": "#E8F0D8" }
+    ]
+  },
+  "retro": {
+    "label": "Retro & 70s",
+    "mood": "Nostalgia, vintage, caldo, organico, fatto a mano",
+    "heading":    { "family": "Alfa Slab One", "weight": "400", "letterSpacing": 0.02 },
+    "subheading": { "family": "Fredoka One",   "weight": "400", "letterSpacing": 0.01 },
+    "body":       { "family": "Nunito",        "weight": "400", "letterSpacing": 0.005 },
+    "labelRole":  { "family": "Pacifico",      "weight": "400", "letterSpacing": 0.01 },
+    "logo":       { "family": "Lobster",       "weight": "400", "letterSpacing": 0.02 },
+    "suggestedPalettes": [
+      { "name": "Burnt Sienna", "bg": "#F2E8D5", "primary": "#8B2E16", "accent": "#E8A244", "text": "#2C1A0A" },
+      { "name": "Avocado",      "bg": "#D4CF7A", "primary": "#2D4A1E", "accent": "#8B6914", "text": "#1A2C0E" },
+      { "name": "Terracotta",   "bg": "#E8C4A0", "primary": "#5C2E0E", "accent": "#C45B3A", "text": "#2C0E06" }
+    ]
+  },
+  "cyber": {
+    "label": "Cyber & Glitch",
+    "mood": "Distorto, anarchico, hacker, underground, digitale corrotto",
+    "heading":    { "family": "Syncopate",          "weight": "700", "letterSpacing": 0.1, "textTransform": "uppercase" },
+    "subheading": { "family": "Share Tech Mono",    "weight": "400", "letterSpacing": 0.08 },
+    "body":       { "family": "IBM Plex Mono",      "weight": "400", "letterSpacing": 0.02 },
+    "labelRole":  { "family": "VT323",              "weight": "400", "letterSpacing": 0.05 },
+    "logo":       { "family": "Major Mono Display", "weight": "400", "letterSpacing": 0.06 },
+    "suggestedPalettes": [
+      { "name": "Glitch Pink", "bg": "#0A0010", "primary": "#FF00FF", "accent": "#00FFFF", "text": "#FF99FF" },
+      { "name": "Acid Green",  "bg": "#000A00", "primary": "#00FF41", "accent": "#FFFF00", "text": "#CCFFCC" },
+      { "name": "Cyber Red",   "bg": "#0A0000", "primary": "#FF0040", "accent": "#FF8800", "text": "#FFB3C6" }
+    ]
+  },
+  "calligraphy": {
+    "label": "Calligraphy & Handcraft",
+    "mood": "Artigianale, romantico, wedding, botanico, fatto a mano",
+    "heading":    { "family": "Cormorant Garamond", "weight": "300", "letterSpacing": 0.04, "style": "italic" },
+    "subheading": { "family": "Cinzel",             "weight": "400", "letterSpacing": 0.15 },
+    "body":       { "family": "Spectral",           "weight": "300", "letterSpacing": 0.005 },
+    "labelRole":  { "family": "Montserrat",         "weight": "300", "letterSpacing": 0.2, "textTransform": "uppercase" },
+    "logo":       { "family": "Great Vibes",        "weight": "400", "letterSpacing": 0.02 },
+    "suggestedPalettes": [
+      { "name": "Botanico",  "bg": "#F5F0E8", "primary": "#2D4A2D", "accent": "#8B7355", "text": "#1A2C1A" },
+      { "name": "Blush",     "bg": "#FDF0F0", "primary": "#5C1A2E", "accent": "#E8A0B4", "text": "#2C0A14" },
+      { "name": "Oro Antico","bg": "#FAF5E4", "primary": "#4A3728", "accent": "#C9A84C", "text": "#2C1A0A" }
+    ]
+  }
+}

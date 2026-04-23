@@ -1254,6 +1254,83 @@ export const deliverables = {
   },
 }
 
+// ─── DESIGN RECIPES ──────────────────────────────────────────────────────────
+
+export interface DesignRecipe {
+  id: string
+  client_id: string | null
+  name: string
+  mood: string
+  format: string
+  description: string | null
+  canvas_state: string
+  thumbnail: string | null
+  score: number
+  tags: string[]
+  created_at: string
+}
+
+function parseRecipe(r: any): DesignRecipe {
+  return {
+    ...r,
+    tags: parseJSON<string[]>(r.tags, []),
+  }
+}
+
+export const designRecipes = {
+  getAll: (opts: { mood?: string; format?: string; limit?: number } = {}): DesignRecipe[] => {
+    const conditions: string[] = []
+    const params: (string | number)[] = []
+    if (opts.mood) { conditions.push('mood = ?'); params.push(opts.mood) }
+    if (opts.format) { conditions.push('format = ?'); params.push(opts.format) }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+    const lim = opts.limit ?? 20
+    params.push(lim)
+    return (db.prepare(`SELECT * FROM design_recipes ${where} ORDER BY score DESC, created_at DESC LIMIT ?`).all(...params) as any[]).map(parseRecipe)
+  },
+
+  getById: (id: string): DesignRecipe | undefined => {
+    const r = db.prepare('SELECT * FROM design_recipes WHERE id = ?').get(id) as any
+    return r ? parseRecipe(r) : undefined
+  },
+
+  getFewShot: (mood: string, format: string, limit = 3): DesignRecipe[] => {
+    return (db.prepare(`
+      SELECT id, name, mood, format, description, thumbnail, score, tags, canvas_state, created_at
+      FROM design_recipes
+      WHERE (mood = ? OR format = ?)
+      ORDER BY score DESC, created_at DESC
+      LIMIT ?
+    `).all(mood, format, limit) as any[]).map(parseRecipe)
+  },
+
+  create: (data: Omit<DesignRecipe, 'id' | 'created_at'>): DesignRecipe => {
+    const id = randomUUID()
+    const now = new Date().toISOString()
+    db.prepare(`
+      INSERT INTO design_recipes (id, client_id, name, mood, format, description, canvas_state, thumbnail, score, tags, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      n(data.client_id),
+      data.name,
+      data.mood,
+      data.format,
+      n(data.description),
+      data.canvas_state,
+      n(data.thumbnail),
+      data.score ?? 0,
+      JSON.stringify(data.tags ?? []),
+      now
+    )
+    return designRecipes.getById(id)!
+  },
+
+  delete: (id: string): void => {
+    db.prepare('DELETE FROM design_recipes WHERE id = ?').run(id)
+  },
+}
+
 // ─── UTILITY ──────────────────────────────────────────────────────────────────
 
 function parseJSON<T>(value: string, fallback: T): T {

@@ -44,12 +44,6 @@ function StudioContent() {
 
   const selectedClient = clients.find(c => c.id === selectedClientId)
 
-  if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-[#090909]">
-      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent"></div>
-    </div>
-  )
-
   return (
     <div className="h-full flex flex-col overflow-hidden bg-transparent">
       

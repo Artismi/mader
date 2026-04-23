@@ -21,7 +21,7 @@ const dockItems = [
   { icon: Palette, label: 'Design', href: '/progettazione' },
   { icon: Rocket, label: 'Lancio', href: '/lancio' },
   { icon: Users, label: 'Clienti', href: '/clienti' },
-  { icon: Brain, label: 'Cervello', href: '/cervello' },
+  { icon: Brain, label: 'Memoria', href: '/memoria' },
   { icon: FileText, label: 'Finanze', href: '/finanze' },
 ]
 

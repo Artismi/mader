@@ -51,10 +51,14 @@ export function BrainGraph() {
 
     // Color based on type
     let color = '#a1a1aa' // Default zinc
-    if (node.type === 'client') color = '#3b82f6' // Blue
-    if (node.type === 'skill') color = '#10b981' // Emerald
-    if (node.type === 'memory') color = '#d946ef' // Fuchsia
-    if (node.type === 'project') color = '#f59e0b' // Amber
+    if (node.type === 'client') color = '#3b82f6'    // Blue
+    if (node.type === 'skill') color = '#10b981'     // Emerald
+    if (node.type === 'memory') color = '#d946ef'    // Fuchsia
+    if (node.type === 'project') color = '#f59e0b'   // Amber
+    if (node.type === 'file_md') color = '#a3e635'   // Lime — note
+    if (node.type === 'file_pdf') color = '#f87171'  // Red — PDF
+    if (node.type === 'file_image') color = '#c084fc' // Purple — immagini
+    if (node.type === 'file_docx') color = '#60a5fa'  // Blue light — Word
 
     const radius = 4 + (node.importance || 0.5) * 8
 
@@ -117,11 +121,15 @@ export function BrainGraph() {
         <GraphToolBtn onClick={() => graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 400)} icon={<ZoomIn className="w-3.5 h-3.5" />} label="Zoom In" />
       </div>
 
-      <div className="absolute bottom-6 left-6 z-20 flex items-center gap-4 bg-black/60 px-4 py-2 rounded-xl border border-white/5 backdrop-blur-md">
-         <Legend color="bg-blue-500" label="Client" />
+      <div className="absolute bottom-6 left-6 z-20 flex items-center gap-3 flex-wrap bg-black/60 px-4 py-2 rounded-xl border border-white/5 backdrop-blur-md">
+         <Legend color="bg-blue-500" label="Cliente" />
          <Legend color="bg-fuchsia-500" label="Memoria" />
          <Legend color="bg-emerald-500" label="Skill" />
-         <Legend color="bg-amber-500" label="Project" />
+         <Legend color="bg-amber-500" label="Progetto" />
+         <Legend color="bg-lime-400" label="Nota" />
+         <Legend color="bg-red-400" label="PDF" />
+         <Legend color="bg-purple-400" label="Immagine" />
+         <Legend color="bg-blue-300" label="Word" />
       </div>
 
       <div className="absolute bottom-6 right-6 z-20 flex items-center gap-2 text-white/20 text-[9px] font-bold uppercase tracking-widest">

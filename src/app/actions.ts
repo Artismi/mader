@@ -18,7 +18,6 @@ export async function addIdea(text: string, clientId?: string, title?: string, p
     task_id: undefined,
     output_links: [],
   })
-  revalidatePath('/')
   revalidatePath('/idee')
 }
 
@@ -36,7 +35,6 @@ export async function addTask(data: {
     client_id: data.client_id || undefined,
     deadline: data.deadline ? new Date(data.deadline).toISOString() : undefined,
   })
-  revalidatePath('/')
   revalidatePath('/incarichi')
 }
 
@@ -67,13 +65,11 @@ export async function addClient(data: {
 export async function updateTaskStatus(taskId: string, status: string) {
   tasks.update(taskId, { status })
   revalidatePath('/incarichi')
-  revalidatePath('/')
 }
 
 export async function deleteTask(taskId: string) {
   tasks.delete(taskId)
   revalidatePath('/incarichi')
-  revalidatePath('/')
 }
 
 export async function updateTask(
@@ -88,7 +84,6 @@ export async function updateTask(
   }
 ) {
   tasks.update(taskId, data as Parameters<typeof tasks.update>[1])
-  revalidatePath('/')
   revalidatePath('/incarichi')
 }
 
@@ -113,7 +108,6 @@ export async function duplicateTask(data: {
     deadline: data.deadline,
     duration_minutes: data.duration_minutes || 60,
   })
-  revalidatePath('/')
   revalidatePath('/incarichi')
 }
 

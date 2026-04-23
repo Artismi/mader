@@ -1,5 +1,19 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { searchVault } from '@/lib/vault'
+
+// POST — ricerca semantica RAG (usata dal microservizio Python CrewAI)
+export async function POST(req: Request) {
+  try {
+    const body = await req.json() as { query?: string; topK?: number }
+    const query = body.query?.trim()
+    if (!query) return NextResponse.json({ chunks: [] })
+    const chunks = await searchVault(query, body.topK ?? 4)
+    return NextResponse.json({ chunks })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message, chunks: [] }, { status: 500 })
+  }
+}
 
 export async function GET(req: Request) {
   try {
