@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useSidebar } from '@/components/layout/SidebarContext';
 import { useApp } from '@/components/layout/AppContext';
 import { useChatStore, ChatSession, Message } from '../studio/hooks/use-chat-store';
+import { InspirationPortal } from './inspiration-portal';
 
 type ModelId = 'claude' | 'gemini';
 
@@ -429,6 +430,13 @@ export function AIChatWidget() {
     const [input, setInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     const [lastEngineReport, setLastEngineReport] = useState<{ id: string, items: string[] } | null>(null);
+    const [isInspirationOpen, setIsInspirationOpen] = useState(false);
+    const [inspirationQuery, setInspirationQuery] = useState('');
+
+    const handleInspirationComplete = (urls: string[]) => {
+        const refsString = urls.map(u => `[REFERENCE_URL: ${u}]`).join('\n');
+        sendMessage(`Analizza queste immagini selezionate e genera un Design Blueprint parametrico basato sulla loro struttura visiva (Visual Mimicry):\n${refsString}`);
+    };
 
     useEffect(() => {
         const handler = (e: Event) => {
@@ -1043,6 +1051,13 @@ export function AIChatWidget() {
                     )}
                 </form>
             </div>
+            
+            <InspirationPortal 
+                isOpen={isInspirationOpen}
+                onClose={() => setIsInspirationOpen(false)}
+                initialQuery={inspirationQuery}
+                onSelectionComplete={handleInspirationComplete}
+            />
             </div>
         </div>
     );
