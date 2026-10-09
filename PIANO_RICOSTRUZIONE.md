@@ -211,3 +211,22 @@ Ogni sezione ha la stessa **definizione di fatto**:
 2. **Identità visiva:** ✅ **brand artismi**, con il logo che ruota in alto nella shell (titlebar o sidebar). Rotazione lenta e continua, che accelera durante il lavoro dell'AI e si ferma con `prefers-reduced-motion`. *Manca il file del logo (SVG preferito).*
 3. **Priorità:** quali 3 sezioni usi davvero ogni giorno?
 4. **Integrazioni da tagliare:** Notion, n8n, LangSmith/Phoenix, Meta servono ancora?
+
+---
+
+## Stato al 2026-10-10: guscio circolare (sostituisce le Fasi 1–3 originali)
+La direzione approvata è il **guscio circolare e intelligente** (`docs/ux/PROGETTAZIONE.md`, prototipo `public/cerchi.html`), implementato su **`/os`**. Electron si apre lì; l'interfaccia precedente resta su `/`.
+
+| Area | Stato |
+|---|---|
+| Ghiera, catena con memoria, blocco che si trasforma, petali, satelliti, `Ctrl+K` | ✅ |
+| Oggi (anello del giorno con impegni, "Inizia da qui" con motivo) | ✅ |
+| Messaggi: ordinamento per importanza, richieste evidenziate, risposta, bozza AI su richiesta | ✅ (l'invio richiede Google collegato) |
+| Clienti, Archivio (idee), Lavori (agenda 7 giorni + task), Studio (design + contenuti social) | ✅ |
+| Creare task e preventivi dal guscio con traccia "nato da" (`memory_links`, relation `origin`) | ✅ |
+| Calendario: orari proposti solo se liberi | ✅ (serve Google collegato) |
+| Studio: canvas a tutto schermo dentro il guscio (`/os/studio/[id]`) | ✅ (canvas ancora con lo stile vecchio) |
+| Google: refresh token, permesso di invio, rinnovo automatico (`lib/google/auth.ts`) | ✅ codice · ⏳ **l'utente deve rifare il login** |
+| Funzioni non ancora rifatte | raggiungibili da "vista completa ↗" e da `Ctrl+K` |
+
+**Prossimi passi:** login Google dell'utente → sincronizzazione mail; Finanze (preventivo → PDF → Gmail) nel guscio; restyle e divisione del canvas (Fase 5); installer (Fase 6).
