@@ -20,6 +20,8 @@ export function VaultEditor({ path, onClose }: VaultEditorProps) {
     setError(null)
     try {
       const res = await fetch(`/api/vault/file?path=${encodeURIComponent(path)}`)
+      // 404 = file non ancora creato: si parte vuoti, il salvataggio lo crea
+      if (res.status === 404) { setContent(''); return }
       if (!res.ok) throw new Error('Impossibile caricare il file')
       const text = await res.text()
       setContent(text)
