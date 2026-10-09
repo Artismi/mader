@@ -58,7 +58,7 @@ RICHIESTA UTENTE: ${prompt || 'Analizza la mia settimana e dimmi su cosa concent
         if (process.env.ANTHROPIC_API_KEY) {
             console.warn('[Planner] Gemini fallito, uso Claude:', msg)
             const { anthropic } = await import('@ai-sdk/anthropic')
-            const result = await generateText({ model: anthropic('claude-3-5-sonnet-20241022'), ...genArgs });
+            const result = await generateText({ model: anthropic('claude-sonnet-5-5'), ...genArgs });
             text = result.text;
         } else {
             console.error("AI Planner Error:", err);
