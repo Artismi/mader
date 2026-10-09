@@ -41,7 +41,7 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
   const [aiState, setAiState] = useState<0 | 1>(0)
   const [zoomFeedback, setZoomFeedback] = useState<number | null>(null)
   // Rotte che non usano la shell legacy: overlay Electron e vetrina del design system
-  const isOverlay = pathname === '/overlay' || pathname?.startsWith('/design')
+  const isOverlay = pathname === '/overlay' || pathname?.startsWith('/design') || pathname?.startsWith('/os')
 
   // Global UI Zoom control using IPC (Ctrl++ / Ctrl-- / Ctrl-0)
   useEffect(() => {

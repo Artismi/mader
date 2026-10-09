@@ -1,0 +1,61 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import './os.css'
+import { useOs } from './store'
+import { I, Sprite, Toast } from './parts'
+import { Block } from './Block'
+import { Accessories, Chain, Dial, Orbit } from './Around'
+import { Ask } from './Ask'
+
+// Lo streaming di Next può lasciare montata una seconda copia nascosta (#S:0):
+// solo un guscio alla volta ascolta la tastiera, altrimenti Ctrl+K scatterebbe due volte.
+let owner = 0, seq = 0
+
+/** Guscio circolare: ghiera + catena a sinistra, un blocco al centro, satelliti e accessori a destra */
+export function Shell() {
+  const [asking, setAsking] = useState(false)
+  const hydrate = useOs(s => s.hydrate)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { hydrate() }, [hydrate])
+
+  useEffect(() => {
+    if (owner || !rootRef.current?.offsetWidth) return   // solo la copia visibile
+    const me = owner = ++seq
+    // il punto del clic serve alla trasformazione "a cerchio"
+    const onDown = (e: PointerEvent) => useOs.getState().setOrigin({ x: e.clientX, y: e.clientY })
+    const onKey = (e: KeyboardEvent) => {
+      const s = useOs.getState()
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setAsking(v => !v); return }
+      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); s.back(); return }
+      if (e.key === 'Escape' && !document.querySelector('.os .k')) {
+        if (s.petals) s.setPetals(false)
+        else if (s.accs.length) s.closeAcc(s.accs[0].key)
+        else if (!(e.target as HTMLElement).closest('textarea')) s.back()
+      }
+    }
+    addEventListener('pointerdown', onDown)
+    addEventListener('keydown', onKey)
+    return () => { removeEventListener('pointerdown', onDown); removeEventListener('keydown', onKey); if (owner === me) owner = 0 }
+  }, [])
+
+  return (
+    <div className="os" ref={rootRef}>
+      <Sprite />
+      <aside className="left">
+        <Dial />
+        <Chain />
+        <button className="ask" onClick={() => setAsking(true)}><span className="o"><I n="spark" /></span>Chiedi o cerca<kbd>Ctrl K</kbd></button>
+        <a className="legacy" href="/" title="L'interfaccia precedente resta disponibile durante il passaggio">interfaccia precedente</a>
+      </aside>
+      <div className="stage">
+        <Block />
+        <Orbit />
+      </div>
+      <Accessories />
+      {asking && <Ask onClose={() => setAsking(false)} />}
+      <Toast />
+    </div>
+  )
+}
