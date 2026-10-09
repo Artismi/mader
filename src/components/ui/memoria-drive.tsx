@@ -7,7 +7,9 @@ import {
   Network, HardDrive, Loader2, AlertCircle, X, Check, FolderPlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { BrainGraph } from '@/components/ui/brain-graph'
+import dynamic from 'next/dynamic'
+// react-force-graph-2d tocca window al caricamento: solo client
+const BrainGraph = dynamic(() => import('@/components/ui/brain-graph').then(m => m.BrainGraph), { ssr: false })
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
