@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
-import { messages, quotes, tasks } from '@/lib/db'
+import { editorialPosts, messages, quotes, tasks } from '@/lib/db'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 import { googleStatus } from '@/lib/google/auth'
+import { upcomingEvents } from '@/lib/google/calendar'
 
 /**
  * API unica dello spazio di lavoro circolare.
@@ -14,9 +15,14 @@ import { googleStatus } from '@/lib/google/auth'
 export async function GET(req: Request) {
   const u = new URL(req.url)
   try {
-    if (u.searchParams.has('list')) return NextResponse.json(getList(u.searchParams.get('list')!))
+    if (u.searchParams.has('list')) return NextResponse.json(await getList(u.searchParams.get('list')!))
+    if (u.searchParams.has('busy')) {
+      // intervalli occupati nei prossimi giorni: il calendario propone solo orari liberi
+      const evs = await upcomingEvents(10)
+      return NextResponse.json(evs.filter(e => !e.allDay).map(e => ({ start: e.start, end: e.end })))
+    }
     if (u.searchParams.has('ref')) {
-      const n = getNode(u.searchParams.get('ref')!)
+      const n = await getNode(u.searchParams.get('ref')!)
       return n ? NextResponse.json(n) : NextResponse.json({ error: 'Non trovato' }, { status: 404 })
     }
     if (u.searchParams.has('q')) return NextResponse.json(search(u.searchParams.get('q')!))
@@ -88,6 +94,16 @@ export async function POST(req: Request) {
     const id = String(body.ref ?? '').replace(/^task:/, '')
     if (!tasks.getById(id)) return NextResponse.json({ error: 'Task non trovato' }, { status: 404 })
     tasks.update(id, { status: 'done' })
+    return NextResponse.json({ ok: true })
+  }
+
+  // Un contenuto social avanza di un passo (idea → bozza → approvato → programmato → pubblicato)
+  if (body.action === 'post-status') {
+    const id = String(body.ref ?? '').replace(/^post:/, '')
+    const allowed = ['bozza', 'approvato', 'programmato', 'pubblicato']
+    if (!allowed.includes(body.status)) return NextResponse.json({ error: 'Stato non valido' }, { status: 400 })
+    if (!editorialPosts.getAll().some(p => p.id === id)) return NextResponse.json({ error: 'Contenuto non trovato' }, { status: 404 })
+    editorialPosts.updateStatus(id, body.status, body.status === 'pubblicato' ? { published_at: new Date().toISOString() } : undefined)
     return NextResponse.json({ ok: true })
   }
 

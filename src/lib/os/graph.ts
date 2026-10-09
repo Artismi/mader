@@ -3,9 +3,10 @@
  * circolare sa mostrare. Ogni suggerimento porta il suo perché (intelligenza visibile).
  * Solo lato server.
  */
-import { clients, designProjects, ideas, memoryLinks, messages, quotes, tasks, type Client, type Message } from '@/lib/db'
+import { clients, designProjects, editorialPosts, ideas, memoryLinks, messages, quotes, tasks, type Client, type EditorialPost, type Message } from '@/lib/db'
+import { upcomingEvents, type CalEvent } from '@/lib/google/calendar'
 
-export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea'
+export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea' | 'event' | 'post'
 
 export interface Sat { kind: 'client' | 'calendar' | 'quote' | 'task'; ref?: string; tip: string; smart?: boolean }
 export interface Petal { label: string; icon: string; kind: 'quote' | 'calendar' | 'task'; why?: string }
@@ -38,6 +39,8 @@ export interface NodeDetail extends NodeSummary {
   legacy?: string        // vista completa precedente, finché la sezione non è rifatta del tutto
   origin?: NodeSummary   // traccia: da cosa è nato questo nodo
   done?: boolean
+  events?: { ref: string; title: string; start: string; end: string; allDay: boolean }[]   // per l'anello del giorno
+  next?: { label: string; status: string }   // prossimo passo di stato (post editoriali)
 }
 
 // ───────── utilità ─────────
@@ -139,18 +142,42 @@ function designSummary(d: ReturnType<typeof designProjects.getAll>[number], cm: 
 const openTasks = () => tasks.getAll().filter(t => !/^(done|completat|fatt|chius)/i.test(t.status))
 const rankedMails = (cm: Map<string, Client>) => messages.getAll({ limit: 200 }).map(m => mailSummary(m, cm)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
 
+// ───────── eventi e contenuti social ─────────
+const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+const hm = (iso: string) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+function eventSummary(e: CalEvent): NodeSummary {
+  const d = new Date(e.start), today = new Date(), tomorrow = new Date(Date.now() + 86400000)
+  const day = sameDay(d, today) ? 'oggi' : sameDay(d, tomorrow) ? 'domani' : d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric' })
+  return { ref: `event:${e.id}`, kind: 'event', title: e.title, sub: [day, e.allDay ? 'tutto il giorno' : `${hm(e.start)}–${hm(e.end)}`, e.where].filter(Boolean).join(' · '), when: e.allDay ? day : `${day} ${hm(e.start)}` }
+}
+
+// il percorso di un contenuto: ogni stato ha un solo passo successivo
+const POST_FLOW: Record<EditorialPost['editorial_status'], { label: string; status: string } | undefined> = {
+  idea: { label: 'Inizia la bozza', status: 'bozza' }, bozza: { label: 'Approva', status: 'approvato' },
+  approvato: { label: 'Segna programmato', status: 'programmato' }, programmato: { label: 'Segna pubblicato', status: 'pubblicato' }, pubblicato: undefined,
+}
+function postSummary(p: EditorialPost): NodeSummary {
+  const when = p.scheduled_at ? relTime(p.scheduled_at).replace(/ \d\d:\d\d$/, '') : ''
+  const late = p.scheduled_at && p.editorial_status !== 'pubblicato' && Date.parse(p.scheduled_at) < Date.now()
+  return { ref: `post:${p.id}`, kind: 'post', title: p.title || (p.content ?? '').slice(0, 70) || 'Contenuto senza titolo',
+    sub: [p.client_name, p.editorial_status, p.channels.join(', ')].filter(Boolean).join(' · '), when, urgent: !!late, why: late ? 'doveva uscire' : undefined }
+}
+const activePosts = () => editorialPosts.getAll().filter(p => p.editorial_status !== 'pubblicato')
+
 // ───────── elenchi (le sezioni della ghiera) ─────────
-export function getList(id: string): NodeDetail {
+export async function getList(id: string): Promise<NodeDetail> {
   const cm = clientMap()
   const base = { ref: `list:${id}`, kind: 'list' as const, sats: [], petals: [] }
   switch (id) {
     case 'oggi': {
       const mails = rankedMails(cm)
       const pending = mails.filter(m => m.urgent)
-      const late = openTasks().map(taskSummary).filter(t => t.urgent)
+      const late = [...openTasks().map(taskSummary), ...activePosts().map(postSummary)].filter(t => t.urgent)
       const hero = pending[0] ?? late[0]
-      const rest = [...pending.slice(1, 4), ...late.slice(hero?.kind === 'task' ? 1 : 0, 3)]
+      const rest = [...pending.slice(1, 4), ...late.slice(hero && hero.kind !== 'mail' ? 1 : 0, 3)]
+      const today = (await upcomingEvents(1)).filter(e => sameDay(new Date(e.start), new Date()))
       return { ...base, title: pending.length || late.length ? 'Buongiorno' : 'Tutto in ordine', sub: '',
+        events: today.map(e => ({ ref: `event:${e.id}`, title: e.title, start: e.start, end: e.end, allDay: e.allDay })),
         lead: pending.length ? `${pending.length === 1 ? 'Una persona aspetta' : `${pending.length} persone aspettano`} una tua risposta.` : 'Nessuno aspetta risposte: puoi concentrarti sul lavoro creativo.',
         groups: [['__hero', hero ? [hero] : []], ['Poi', rest], ['Ripresi di recente', designProjects.getAll().slice(0, 2).map(d => designSummary(d, cm))]] }
     }
@@ -166,10 +193,15 @@ export function getList(id: string): NodeDetail {
     }
     case 'lavori': {
       const ts = openTasks().map(taskSummary)
-      return { ...base, title: 'Lavori', sub: '', lead: ts.length ? 'In ordine di scadenza.' : 'Nessun task aperto.', legacy: '/incarichi', groups: [['In corso', ts]] }
+      const evs = (await upcomingEvents(7)).map(eventSummary)
+      return { ...base, title: 'Lavori', sub: '', lead: 'Agenda della settimana e cose da fare.', legacy: '/incarichi',
+        groups: [['Agenda · 7 giorni', evs], ['Task', ts]] }
     }
-    case 'studio':
-      return { ...base, title: 'Studio', sub: '', lead: 'Riprendi da dove avevi lasciato.', legacy: '/progettazione', groups: [['Design', designProjects.getAll().map(d => designSummary(d, cm))]] }
+    case 'studio': {
+      const posts = activePosts().sort((a, b) => (a.scheduled_at ?? '9').localeCompare(b.scheduled_at ?? '9')).map(postSummary)
+      return { ...base, title: 'Studio', sub: '', lead: 'Design e contenuti: riprendi da dove avevi lasciato.', legacy: '/progettazione',
+        groups: [['Design', designProjects.getAll().map(d => designSummary(d, cm))], ['Contenuti social', posts]] }
+    }
     default: {
       const ids = ideas.getAll().slice(0, 30).map((i): NodeSummary => ({
         ref: `idea:${i.id}`, kind: 'idea', title: i.title || i.text.slice(0, 80), sub: [cm.get(i.client_id ?? '')?.name, i.idea_status].filter(Boolean).join(' · ') || 'idea',
@@ -180,10 +212,27 @@ export function getList(id: string): NodeDetail {
 }
 
 // ───────── dettaglio di un nodo ─────────
-export function getNode(ref: string): NodeDetail | null {
-  const [kind, id] = ref.split(':') as [Kind, string]
+export async function getNode(ref: string): Promise<NodeDetail | null> {
+  const [kind, ...rest] = ref.split(':') as [Kind, ...string[]]
+  const id = rest.join(':')          // gli id di Google possono contenere ':'
   const cm = clientMap()
   if (kind === 'list') return getList(id)
+
+  if (kind === 'event') {
+    const e = (await upcomingEvents(14)).find(x => x.id === id)
+    if (!e) return null
+    const s = eventSummary(e)
+    return { ...s, lead: s.sub, href: e.link, sats: [], petals: [], legacy: '/' }
+  }
+
+  if (kind === 'post') {
+    const p = editorialPosts.getAll().find(x => x.id === id)
+    if (!p) return null
+    const c = cm.get(p.client_id)
+    return { ...postSummary(p), lead: [p.channels.join(', '), p.scheduled_at ? `esce ${relTime(p.scheduled_at)}` : 'senza data'].filter(Boolean).join(' · '),
+      plain: p.content, clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name ?? p.client_name, next: POST_FLOW[p.editorial_status],
+      legacy: '/editoriale', sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [{ label: 'Task', icon: 'check', kind: 'task' }] }
+  }
 
   if (kind === 'mail') {
     const m = messages.getAll({ limit: 1000 }).find(x => x.id === id)
@@ -210,7 +259,7 @@ export function getNode(ref: string): NodeDetail | null {
     const ts = openTasks().filter(t => t.client_id === id).map(taskSummary)
     const ds = designProjects.getByClient(id).map(d => designSummary(d, cm))
     return { ...clientSummary(c, pending.length), lead: [c.email, c.sector].filter(Boolean).join(' · '),
-      groups: [['Prossima cosa', pending.slice(0, 3)], ['Lavori', ts], ['Design', ds]],
+      groups: [['Prossima cosa', pending.slice(0, 3)], ['Lavori', ts], ['Contenuti', activePosts().filter(p => p.client_id === id).map(postSummary)], ['Design', ds]],
       sats: [{ kind: 'quote', tip: 'Preventivi del cliente' }], petals: [{ label: 'Task', icon: 'check', kind: 'task' }, { label: 'Preventivo', icon: 'euro', kind: 'quote' }] }
   }
 

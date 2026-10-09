@@ -72,7 +72,7 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
       <>
         <Head kicker={date} title={node.title} lead={node.lead} />
         <div className="today">
-          <Clock />
+          <Clock events={node.events} />
           {hero ? (
             <button className="hero" onClick={() => go(hero.ref)}>
               <span className="lbl">Inizia da qui</span>
@@ -123,6 +123,16 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
     </>
   )
 
+  if (kind === 'event') return (
+    <>
+      <Head kicker="evento" title={node.title} lead={node.lead}
+        action={node.href && <a className="primary" href={node.href} target="_blank" rel="noreferrer"><span className="dot"><I n="out" /></span>Apri</a>} />
+      <p className="why">l&apos;evento è nel tuo calendario: si modifica lì, qui lo vedi nel contesto della giornata</p>
+    </>
+  )
+
+  if (kind === 'post') return <PostView node={node} />
+
   if (kind === 'idea') return (
     <>
       <Head kicker={`idea${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} action={<PlusButton node={node} />} />
@@ -155,6 +165,28 @@ function TaskView({ node }: { node: NodeDetail }) {
         </>
       )}
       {node.done && <p className="why">già fatto</p>}
+    </>
+  )
+}
+
+/* Contenuto social: un solo passo avanti alla volta */
+function PostView({ node }: { node: NodeDetail }) {
+  const { say, invalidate } = useOs.getState()
+  const [busy, setBusy] = useState(false)
+  const advance = async () => {
+    if (!node.next) return
+    setBusy(true)
+    const r = await fetch('/api/os', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'post-status', ref: node.ref, status: node.next.status }) })
+    setBusy(false)
+    if (!r.ok) return say('Non sono riuscito ad aggiornarlo', true)
+    invalidate(); say(`Ora è “${node.next.status}”`)
+  }
+  return (
+    <>
+      <Head kicker={`contenuto${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} lead={node.lead}
+        action={<><PlusButton node={node} />{node.next && <button className="primary" onClick={advance} disabled={busy}><span className="dot"><I n="arrow" /></span>{node.next.label}</button>}</>} />
+      {node.plain ? <div className="letter"><p style={{ whiteSpace: 'pre-line' }}>{node.plain}</p></div> : <p className="empty">Ancora nessun testo.</p>}
+      {node.legacy && <p style={{ marginTop: 28 }}><a className="legacy" href={node.legacy}>modifica nell&apos;Editoriale ↗</a></p>}
     </>
   )
 }

@@ -206,22 +206,29 @@ function NodeCard({ a, onPromote }: { a: Acc; onPromote: () => void }) {
 }
 
 function CalendarCard({ a, forTitle, onInsert }: { a: Acc; forTitle?: string; onInsert: (t: string) => void }) {
-  // prossimi 3 giorni lavorativi, due fasce ciascuno; il primo è il consigliato
+  // orari occupati dal calendario: si propongono solo fasce libere
+  const [busy, setBusy] = useState<{ start: string; end: string }[] | null>(null)
+  useEffect(() => { fetch('/api/os?busy').then(r => r.json()).then(setBusy).catch(() => setBusy([])) }, [])
+  const free = (from: Date) => { const to = from.getTime() + 3600_000; return !(busy ?? []).some(b => Date.parse(b.start) < to && Date.parse(b.end) > from.getTime()) }
+
   const slots: { label: string; text: string }[] = []
   const d = new Date()
-  while (slots.length < 6) {
+  for (let guard = 0; slots.length < 6 && guard < 21; guard++) {
     d.setDate(d.getDate() + 1)
     if (d.getDay() === 0 || d.getDay() === 6) continue
-    for (const h of ['10:00', '15:00']) {
-      const day = d.toLocaleDateString('it-IT', { weekday: 'short' }).replace('.', '')
-      slots.push({ label: `${day}\n${h}`, text: `${d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })} alle ${h}` })
+    for (const h of [10, 15]) {
+      const at = new Date(d); at.setHours(h, 0, 0, 0)
+      if (!free(at) || slots.length >= 6) continue
+      const day = at.toLocaleDateString('it-IT', { weekday: 'short' }).replace('.', '')
+      slots.push({ label: `${day}\n${h}:00`, text: `${at.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })} alle ${h}:00` })
     }
   }
   const [pick, setPick] = useState(0)
   return (
     <Card a={a} k={`per · ${forTitle ?? ''}`} title="Proponi un orario">
-      <div className="slots">{slots.map((s, i) => <button key={i} aria-pressed={pick === i} className={i === 0 ? 'best' : ''} onClick={() => setPick(i)} style={{ whiteSpace: 'pre-line' }}>{s.label}</button>)}</div>
-      <p className="why">il primo orario libero nei prossimi giorni lavorativi</p>
+      {busy === null ? <p className="empty">guardo il calendario…</p> :
+        <div className="slots">{slots.map((s, i) => <button key={i} aria-pressed={pick === i} className={i === 0 ? 'best' : ''} onClick={() => setPick(i)} style={{ whiteSpace: 'pre-line' }}>{s.label}</button>)}</div>}
+      <p className="why">{busy?.length ? 'solo orari liberi nel tuo calendario' : 'primi orari nei giorni lavorativi · collega Google per vedere gli impegni'}</p>
       <button className="accbtn" onClick={() => onInsert(`Ti andrebbe bene ${slots[pick].text}?`)}>Inserisci nella risposta</button>
     </Card>
   )

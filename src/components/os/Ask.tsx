@@ -8,7 +8,7 @@ import { SECTIONS } from './Around'
 
 interface Item { t: string; m: string; icon: string; sug?: boolean; run: () => void }
 
-const SECTION_OF: Record<string, string> = { mail: 'messaggi', client: 'clienti', task: 'lavori', design: 'studio', idea: 'archivio' }
+const SECTION_OF: Record<string, string> = { mail: 'messaggi', client: 'clienti', task: 'lavori', event: 'lavori', design: 'studio', post: 'studio', idea: 'archivio' }
 
 // [nome, indirizzo, parole che lo trovano, icona]
 const LEGACY: [string, string, string, string][] = [

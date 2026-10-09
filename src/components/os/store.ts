@@ -16,7 +16,7 @@ export interface Acc { key: string; kind: AccKind; ref?: string; forRef: string 
 export type Anim = 'fwd' | 'bwd' | 'fade' | 'morph'
 
 const HUB = new Set(['list', 'client'])
-const FAMILY: Record<string, string> = { mail: 'comm', task: 'work', client: 'people', design: 'studio', quote: 'tools' }
+const FAMILY: Record<string, string> = { mail: 'comm', task: 'work', event: 'work', client: 'people', design: 'studio', post: 'studio', quote: 'tools' }
 export const kindOf = (ref: string) => ref.split(':')[0]
 
 const DRAFTS_KEY = 'os-drafts'
