@@ -86,6 +86,28 @@ Da ~20 voci a **6 + 2**.
 
 - **Tastiera:** `Alt+←` torna indietro; `Esc` chiude prima l'accessorio, poi torna indietro.
 
+### Linguaggio "circolare e intelligente" (prototipo `public/cerchi.html`)
+Il cerchio è il linguaggio dell'interfaccia: ogni forma circolare *fa* qualcosa.
+
+| Elemento | Forma | Cosa fa |
+|---|---|---|
+| **Ghiera** | anello di sezioni | navigazione; la sezione attiva ruota in alto, i badge contano ciò che aspetta |
+| **Catena** | cerchi su un filo | il percorso; clic su un cerchio = torni lì con memoria |
+| **Anello del giorno** | orologio 8–20 | eventi come archi, punto "ora", al centro la prossima cosa |
+| **Azione principale** | pillola nera con cerchio vermiglio | una sola per blocco |
+| **Petali** | si aprono a ventaglio dal `+` | i rami possibili; quello consigliato è cerchiato e il resto si attenua |
+| **Satelliti** | cerchi in orbita sul bordo del blocco | gli accessori utili per *quel* nodo; il più utile pulsa e dice il perché |
+| **Orari, avatar, progresso** | cerchi | slot del calendario, persone, avanzamento a anello |
+
+Intelligenza visibile (sempre con un **perché**, mai magia muta):
+- "Inizia da qui" con il motivo ("chiede preventivo e appuntamento: bastano 20 min").
+- Le richieste evidenziate nella mail.
+- Il satellite consigliato e l'orario libero per entrambi.
+- La bozza suggerita, da rileggere prima di inviare.
+- Gli elenchi ordinati per importanza, non per data.
+
+Palette: carta calda `#efece6`, inchiostro `#17150f`, **un solo colore vivo** (vermiglio `#ff4f1f`), riservato a due cose: dove l'app "pensa" e dove agisci. Testo leggibile in Segoe UI, numeri e etichette in Space Mono.
+
 **Domande aperte:**
 1. Il design (Studio) si trasforma nel blocco principale a tutto schermo, o resta un accessorio?
 2. Gli accessori stanno a destra in colonna (come nel prototipo) o sotto?
