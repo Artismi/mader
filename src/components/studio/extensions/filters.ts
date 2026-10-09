@@ -26,9 +26,10 @@ import {
   ThermalFilter, PrismFilter, NeonGlowFilter, 
   HolographicFilter, BloomFilter, PixelateFilter 
 } from './filters/optical-filters'
-import { 
+import {
   GrainFilter, FiberFilter, EliteHalftone, ASCIIFilter,
-  DitheringFilter
+  DitheringFilter, ThresholdFilter, SharpenFilter,
+  GradientMapFilter, TextureOverlayFilter
 } from './filters/texture-filters'
 import { 
   Risograph, EliteClay, OilPaintFilter, OutlineFilter, 
@@ -67,8 +68,8 @@ fabric.Object.prototype.applyFilters = function() {
       if (type === 'AdvancedCRT' || type === 'AdvancedCRTFilter') maxMargin = Math.max(maxMargin, (f.uDistortion || 0) * 30.0 + (f.uConvergence || 0) * 5.0)
     })
     this.padding = Math.ceil(maxMargin)
-    // Ensure text objects are cached so WebGL filters can be applied
-    if (['text', 'i-text', 'textbox'].includes(this.type)) {
+    // Ensure all objects (text, shape, image) use objectCaching so WebGL filters can be applied
+    if (!this.isVideo) {
       this.set('objectCaching', true);
       (this as any)._filterDirty = true;
       this.dirty = true;

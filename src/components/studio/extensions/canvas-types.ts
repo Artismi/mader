@@ -42,6 +42,7 @@ export type ExtendedFabricObject = fabric.FabricObject & {
     [key: string]: unknown
   } | null
   _appliedFX: string[]
+  _fxMeta: Record<string, { opacity: number; enabled: boolean }>
   _filterDirty: boolean
   fxProps: Record<string, Record<string, number>>
 
@@ -108,6 +109,7 @@ export interface SelState {
   blendMode: string
   appliedFX: string[]
   fxProps: Record<string, Record<string, number>>
+  fxMeta: Record<string, { opacity: number; enabled: boolean }>
   cornerRadii: [number, number, number, number]
 }
 
@@ -153,5 +155,6 @@ export const D: SelState = {
   blendMode: 'source-over',
   appliedFX: [],
   fxProps: {},
+  fxMeta: {},
   cornerRadii: [0, 0, 0, 0],
 }

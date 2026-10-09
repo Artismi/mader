@@ -553,20 +553,27 @@ export class VignetteFilter extends fabric.filters.BaseFilter<'VignetteFilter'> 
 fabric.classRegistry.setClass(VignetteFilter, 'VignetteFilter')
 
 /**
- * VolumetricDepthFilter — Real WebGL 3D extrusion.
+ * VolumetricDepthFilter — Multi-layer fake-3D extrusion with light shading.
+ * 16 sampling layers, light direction independent from extrusion angle, side-color tint.
  */
 export class VolumetricDepthFilter extends fabric.filters.BaseFilter<'VolumetricDepthFilter'> {
   static type = 'VolumetricDepthFilter'
-  static uniformLocations = ['uDepth', 'uOpacity', 'uAngle']
-  uDepth   = 0.3
-  uOpacity = 0.72
-  uAngle   = 2.356
+  static uniformLocations = ['uDepth', 'uOpacity', 'uAngle', 'uLightAngle', 'uSideColor', 'uShadingStrength']
+  uDepth           = 0.3
+  uOpacity         = 0.85
+  uAngle           = 2.356           // extrusion direction (radians)
+  uLightAngle      = 0.785           // light direction (radians) — independent
+  uSideColor       = [40, 40, 60]    // tint of the extruded sides
+  uShadingStrength = 0.55            // 0 = flat, 1 = strong falloff
 
   constructor(opts?: any) {
     super()
-    if (opts?.uDepth   !== undefined) this.uDepth   = opts.uDepth
-    if (opts?.uOpacity !== undefined) this.uOpacity = opts.uOpacity
-    if (opts?.uAngle   !== undefined) this.uAngle   = opts.uAngle
+    if (opts?.uDepth           !== undefined) this.uDepth           = opts.uDepth
+    if (opts?.uOpacity         !== undefined) this.uOpacity         = opts.uOpacity
+    if (opts?.uAngle           !== undefined) this.uAngle           = opts.uAngle
+    if (opts?.uLightAngle      !== undefined) this.uLightAngle      = opts.uLightAngle
+    if (opts?.uSideColor       !== undefined) this.uSideColor       = opts.uSideColor
+    if (opts?.uShadingStrength !== undefined) this.uShadingStrength = opts.uShadingStrength
   }
 
   getFragmentSource(): string {
@@ -574,19 +581,37 @@ export class VolumetricDepthFilter extends fabric.filters.BaseFilter<'Volumetric
       precision highp float;
       varying vec2 vTexCoord;
       uniform sampler2D uTexture;
-      uniform float uDepth, uOpacity, uAngle;
+      uniform float uDepth, uOpacity, uAngle, uLightAngle, uShadingStrength;
+      uniform vec3 uSideColor;
 
       void main() {
         vec2 dir = vec2(cos(uAngle), sin(uAngle));
-        float maxOff = uDepth * 0.06;
+        vec2 lightDir = vec2(cos(uLightAngle), sin(uLightAngle));
+        float maxOff = uDepth * 0.10;
+
+        // Light influence on side darkness: surfaces facing away from the light go darker
+        float facing = dot(normalize(dir), normalize(lightDir));
+        float sideShade = mix(1.0, 0.35, uShadingStrength * (1.0 - facing) * 0.5);
+
+        vec3 sideTint = uSideColor / 255.0;
         vec4 stack = vec4(0.0);
-        for (int i = 8; i >= 1; i--) {
-          float t = float(i) / 8.0;
-          vec4 c = texture2D(uTexture, vTexCoord - dir * t * maxOff);
+
+        // 16 layers for smooth extrusion
+        for (int i = 16; i >= 1; i--) {
+          float t = float(i) / 16.0;
+          vec2 sampleUV = vTexCoord - dir * t * maxOff;
+          vec4 c = texture2D(uTexture, sampleUV);
           if (c.a < 0.01) continue;
-          vec4 depthPx = vec4(c.rgb * (1.0 - t * 0.72), c.a * uOpacity * (0.20 + (1.0 - t) * 0.45));
+
+          // Mix layer color with side tint, darken with depth + light shading
+          vec3 layerCol = mix(c.rgb, sideTint, t * 0.55);
+          layerCol *= mix(1.0, sideShade, t);
+
+          float layerA = c.a * uOpacity * (0.18 + (1.0 - t) * 0.50);
+          vec4 depthPx = vec4(layerCol, layerA);
           stack = depthPx + stack * (1.0 - depthPx.a);
         }
+
         vec4 front = texture2D(uTexture, vTexCoord);
         gl_FragColor = front + stack * (1.0 - front.a);
       }
@@ -594,9 +619,12 @@ export class VolumetricDepthFilter extends fabric.filters.BaseFilter<'Volumetric
   }
 
   sendUniformData(gl: WebGLRenderingContext, u: Record<string, WebGLUniformLocation>) {
-    gl.uniform1f(u.uDepth,   this.uDepth)
-    gl.uniform1f(u.uOpacity, this.uOpacity)
-    gl.uniform1f(u.uAngle,   this.uAngle)
+    gl.uniform1f(u.uDepth,           this.uDepth)
+    gl.uniform1f(u.uOpacity,         this.uOpacity)
+    gl.uniform1f(u.uAngle,           this.uAngle)
+    gl.uniform1f(u.uLightAngle,      this.uLightAngle)
+    gl.uniform1f(u.uShadingStrength, this.uShadingStrength)
+    gl.uniform3fv(u.uSideColor, new Float32Array(this.uSideColor.map(c => c / 255)))
   }
 
   applyTo2d({ imageData }: any) {

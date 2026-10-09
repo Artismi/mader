@@ -56,6 +56,7 @@ import {
   ThermalFilter, PrismFilter, NeonGlowFilter, HolographicFilter, BloomFilter, PixelateFilter,
   // Texture
   GrainFilter, FiberFilter, EliteHalftone, ASCIIFilter,
+  ThresholdFilter, SharpenFilter, GradientMapFilter, TextureOverlayFilter,
   // Style
   Risograph, EliteClay, OilPaintFilter, OutlineFilter,
   DuotoneFilter, VignetteFilter, PosterizeFilter, VolumetricDepthFilter,
@@ -698,6 +699,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         blendMode: obj.globalCompositeOperation || 'source-over',
         appliedFX: (obj as any)._appliedFX || [],
         fxProps: (obj as any).fxProps || {},
+        fxMeta: (obj as any)._fxMeta || {},
       }
       if (obj.shadow) {
         const sh = obj.shadow as fabric.Shadow
@@ -1679,7 +1681,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const canvas = fabricRef.current
     if (!obj || !canvas) return
     const fxObj = obj as any
-    const fxProps = overrideProps || sel.fxProps || {}
+    const fxProps = overrideProps || fxObj.fxProps || {}
 
     // 1. Ensure Base State is captured
     if (!fxObj._baseProps) {
@@ -1702,7 +1704,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     // 2. Start with a clean slate from baseProps
     const base = fxObj._baseProps
-    const activeFX = fxObj._appliedFX || []
+    // _fxMeta: { [key]: { opacity: number, enabled: boolean } } — additive metadata, never replaces _appliedFX
+    const fxMeta: Record<string, { opacity: number; enabled: boolean }> = fxObj._fxMeta || {}
+    const activeFX = (fxObj._appliedFX || []).filter((k: string) => fxMeta[k]?.enabled !== false)
 
     // We start with base properties and will accumulate changes
     const workingProps = { ...base }
@@ -1872,8 +1876,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
         case 'halftone':
           workingFilters.push(new EliteHalftone({
-            uSize: fp.size ?? 10,
-            uIntensity: (fp.intensity ?? 50) / 100
+            uSize:      fp.size ?? 10,
+            uIntensity: (fp.intensity ?? 85) / 100,
+            uAngle:     ((fp.angleDeg ?? 45) * Math.PI) / 180,
+            uOpacity:   (fp.opacity ?? 100) / 100,
           }))
           break
 
@@ -1898,6 +1904,37 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         case 'Grayscale': workingFilters.push(new fabric.filters.Grayscale()); break
         case 'Sepia': workingFilters.push(new fabric.filters.Sepia()); break
         case 'Invert': workingFilters.push(new fabric.filters.Invert()); break
+
+        case 'threshold':
+          workingFilters.push(new ThresholdFilter({
+            uThreshold: (fp.threshold ?? 50) / 100,
+            uSoftness: (fp.softness ?? 2) / 100,
+            uOpacity: (fp.opacity ?? 100) / 100,
+          }))
+          break
+
+        case 'sharpen':
+          workingFilters.push(new SharpenFilter({
+            uAmount: (fp.amount ?? 50) / 25,
+            uOpacity: (fp.opacity ?? 100) / 100,
+          }))
+          break
+
+        case 'gradientmap':
+          workingFilters.push(new GradientMapFilter({
+            uOpacity: (fp.opacity ?? 100) / 100,
+          }))
+          break
+
+        case 'textureoverlay':
+          workingFilters.push(new TextureOverlayFilter({
+            uPattern: fp.pattern ?? 0,
+            uScale: (fp.scale ?? 100) / 100,
+            uIntensity: (fp.intensity ?? 50) / 100,
+            uBlendMode: fp.blendMode ?? 0,
+            uOpacity: (fp.opacity ?? 60) / 100,
+          }))
+          break
 
         default: break
       }
@@ -1965,10 +2002,14 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const prev: string[] = fxObj._appliedFX || []
     const isOn = prev.includes(key)
 
+    if (!fxObj._fxMeta) fxObj._fxMeta = {}
+
     if (isOn) {
       fxObj._appliedFX = prev.filter((k: string) => k !== key)
+      delete fxObj._fxMeta[key]
     } else {
       fxObj._appliedFX = [...prev, key]
+      fxObj._fxMeta[key] = { opacity: 1.0, enabled: true }
     }
 
     reapplyAllEffects(obj)
@@ -1976,9 +2017,41 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     setSel(p => ({
       ...p,
       appliedFX: [...fxObj._appliedFX],
+      fxMeta: { ...(fxObj._fxMeta || {}) },
       shadowEnabled: !!obj.shadow,
       fillColor: (obj.fill && typeof obj.fill === 'string' ? obj.fill : p.fillColor)
     }))
+  }
+
+  function toggleFxEnabled(key: string) {
+    const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return
+    const fxObj = obj as any
+    if (!fxObj._fxMeta) fxObj._fxMeta = {}
+    const cur = fxObj._fxMeta[key] || { opacity: 1.0, enabled: true }
+    fxObj._fxMeta[key] = { ...cur, enabled: !cur.enabled }
+    reapplyAllEffects(obj)
+    setSel(p => ({ ...p, fxMeta: { ...(fxObj._fxMeta || {}) } }))
+  }
+
+  function setFxLayerOpacity(key: string, opacity: number) {
+    const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return
+    const fxObj = obj as any
+    if (!fxObj._fxMeta) fxObj._fxMeta = {}
+    fxObj._fxMeta[key] = { ...(fxObj._fxMeta[key] || { enabled: true }), opacity }
+    reapplyAllEffects(obj)
+    setSel(p => ({ ...p, fxMeta: { ...(fxObj._fxMeta || {}) } }))
+  }
+
+  function reorderFx(fromIdx: number, toIdx: number) {
+    const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return
+    const fxObj = obj as any
+    const arr: string[] = [...(fxObj._appliedFX || [])]
+    const [moved] = arr.splice(fromIdx, 1)
+    arr.splice(toIdx, 0, moved)
+    fxObj._appliedFX = arr
+    reapplyAllEffects(obj)
+    pushHistory()
+    setSel(p => ({ ...p, appliedFX: [...arr] }))
   }
 
   function updateEffectProp(key: string, prop: string, val: number) {
@@ -4072,13 +4145,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       {showFX && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-8 bg-black/40 backdrop-blur-sm">
           <div className="relative w-full max-w-5xl h-full max-h-[85vh] animate-in fade-in zoom-in duration-300">
-            <UnifiedFXPanel 
+            <UnifiedFXPanel
               sel={sel}
               onShadow={applyShadow}
               onGrad={applyGradient}
               onPreset={applyPreset}
               onUpdate={updateEffectProp}
-              onClose={() => setShowFX(false)} 
+              onToggleEnabled={toggleFxEnabled}
+              onSetOpacity={setFxLayerOpacity}
+              onReorder={reorderFx}
+              onClose={() => setShowFX(false)}
             />
           </div>
         </div>
@@ -4374,6 +4450,7 @@ function PropertiesPanel(props: PanelProps) {
     if (sel.type === 'line') tabs.push({ id: 'line', icon: <Minus className="w-3.5 h-3.5" />, label: 'Linea' })
     if (sel.type === 'image') tabs.push({ id: 'img', icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'Immagine' })
     if (sel.type === 'group') tabs.push({ id: 'group', icon: <Layers className="w-3.5 h-3.5" />, label: 'Gruppo' })
+    if (sel.type !== 'none' && sel.type !== 'line') tabs.push({ id: 'fx', icon: <Sparkles className="w-3.5 h-3.5" />, label: 'FX' })
     tabs.push({ id: 'lab', icon: <FlaskConical className={cn("w-3.5 h-3.5", store.labActive ? "text-accent" : "text-white/20")} />, label: 'Studio Lab' })
     return tabs
   }, [sel.type, isPencil, hasSelection])
@@ -4742,10 +4819,11 @@ function FontDrop({ value, onChange, onClose }: { value: string; onChange: (f: s
 
 // ─── TEXT BAR ────────────────────────────────────────────────────────────────
 
-function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, onShadow, onPreset, onUpdate }: {
+function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, onShadow, onPreset, onUpdate, onToggleEnabled, onSetOpacity, onReorder }: {
   sel: SelState; onApply: (p: Partial<fabric.Textbox>) => void; onLink: () => void
   showFP: boolean; setShowFP: (v: boolean) => void; showFX: boolean; setShowFX: (v: boolean) => void
   onShadow: (u: Partial<SelState>) => void; onPreset: (p: any) => void; onUpdate: (evt: string, p: string, v: any) => void
+  onToggleEnabled?: (key: string) => void; onSetOpacity?: (key: string, op: number) => void; onReorder?: (from: number, to: number) => void
 }) {
   const fontBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const fxBtnRef = React.useRef<HTMLButtonElement | null>(null)
@@ -4803,7 +4881,7 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
           {(sel.appliedFX?.length || 0) > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-accent text-black text-[7px] font-black flex items-center justify-center">{sel.appliedFX.length}</span>}
         </button>
         {showFX && typeof document !== 'undefined' && <DropdownPortal triggerRef={fxBtnRef} alignRight>
-          <TextFXPanel sel={sel} onShadow={onShadow} onPreset={onPreset} onUpdate={onUpdate} onClose={() => setShowFX(false)} />
+          <TextFXPanel sel={sel} onShadow={onShadow} onPreset={onPreset} onUpdate={onUpdate} onToggleEnabled={onToggleEnabled} onSetOpacity={onSetOpacity} onReorder={onReorder} onClose={() => setShowFX(false)} />
         </DropdownPortal>}
       </div>
       <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-xl border border-white/5 flex-shrink-0">
@@ -4817,10 +4895,11 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
 
 // ─── SHAPE BAR ───────────────────────────────────────────────────────────────
 
-function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, setShowFX, onBoolean, onBindTextToPath }: {
+function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, setShowFX, onBoolean, onBindTextToPath, onToggleEnabled, onSetOpacity, onReorder }: {
   sel: SelState; onApply: (p: Partial<fabric.Object>) => void; onShadow: (u: Partial<SelState>) => void
   onGrad: (c: string[], a?: number) => void; onPreset: (p: any) => void; onUpdate: (evt: string, p: string, v: any) => void; showFX: boolean; setShowFX: (v: boolean) => void
   onBoolean: (op: 'union' | 'subtract' | 'intersect') => void; onBindTextToPath: void
+  onToggleEnabled?: (key: string) => void; onSetOpacity?: (key: string, op: number) => void; onReorder?: (from: number, to: number) => void
 }) {
   const fxBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const bmBtnRef = React.useRef<HTMLButtonElement | null>(null)
@@ -4844,7 +4923,7 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
           {(sel.appliedFX?.length || 0) > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-accent text-black text-[7px] font-black flex items-center justify-center">{sel.appliedFX.length}</span>}
         </button>
         {showFX && typeof document !== 'undefined' && <DropdownPortal triggerRef={fxBtnRef} alignRight>
-          <ShapeFXPanel sel={sel} onShadow={onShadow} onGrad={onGrad} onPreset={onPreset} onUpdate={onUpdate} onClose={() => setShowFX(false)} />
+          <ShapeFXPanel sel={sel} onShadow={onShadow} onGrad={onGrad} onPreset={onPreset} onUpdate={onUpdate} onToggleEnabled={onToggleEnabled} onSetOpacity={onSetOpacity} onReorder={onReorder} onClose={() => setShowFX(false)} />
         </DropdownPortal>}
       </div>
       <div className="w-px h-6 bg-white/10" />
@@ -5038,7 +5117,12 @@ const UNIFIED_FX_LIST = [
   },
   {
     cat: 'Texture', key: 'halftone', label: 'Halftone', color: '#ffb142', animated: false, icon: <div className="w-4 h-4 rounded-full border border-current flex items-center justify-center"><div className="w-1 h-1 bg-current rounded-full" /></div>,
-    sliders: [{ label: 'Grana', prop: 'size', min: 1, max: 50, def: 10 }, { label: 'Densità', prop: 'intensity', min: 0, max: 100, def: 50 }]
+    sliders: [
+      { label: 'Grana', prop: 'size', min: 1, max: 50, def: 10 },
+      { label: 'Densità', prop: 'intensity', min: 0, max: 100, def: 85 },
+      { label: 'Rotaz.°', prop: 'angleDeg', min: 0, max: 90, def: 45 },
+      { label: 'Opacità', prop: 'opacity', min: 0, max: 100, def: 100 },
+    ]
   },
   {
     cat: 'Texture', key: 'riso', label: 'Riso', color: '#f72585', animated: false, icon: <Palette className="w-3 h-3" />,
@@ -5052,6 +5136,33 @@ const UNIFIED_FX_LIST = [
   {
     cat: 'Texture', key: 'ascii', label: 'ASCII', color: '#ffffff', animated: false, icon: <span className="text-[8px] font-black">@#</span>,
     sliders: [{ label: 'Grana', prop: 'size', min: 4, max: 20, def: 8 }, { label: 'Intensità', prop: 'intensity', min: 0, max: 100, def: 100 }]
+  },
+  {
+    cat: 'Texture', key: 'threshold', label: 'Threshold', color: '#e2e8f0', animated: false, icon: <span className="text-[8px] font-black">B/W</span>,
+    sliders: [
+      { label: 'Soglia', prop: 'threshold', min: 0, max: 100, def: 50 },
+      { label: 'Morbidezza', prop: 'softness', min: 0, max: 20, def: 2 },
+      { label: 'Opacità', prop: 'opacity', min: 0, max: 100, def: 100 },
+    ]
+  },
+  {
+    cat: 'Texture', key: 'sharpen', label: 'Sharpen', color: '#7dd3fc', animated: false, icon: <span className="text-[8px] font-black">USM</span>,
+    sliders: [
+      { label: 'Quantità', prop: 'amount', min: 0, max: 100, def: 50 },
+      { label: 'Opacità', prop: 'opacity', min: 0, max: 100, def: 100 },
+    ]
+  },
+  {
+    cat: 'Texture', key: 'gradientmap', label: 'Grad Map', color: '#a78bfa', animated: false, icon: <span className="text-[8px] font-black">GM</span>,
+    sliders: [{ label: 'Opacità', prop: 'opacity', min: 0, max: 100, def: 100 }]
+  },
+  {
+    cat: 'Texture', key: 'textureoverlay', label: 'Texture', color: '#d4c5a9', animated: false, icon: <span className="text-[8px] font-black">TX</span>,
+    sliders: [
+      { label: 'Scala', prop: 'scale', min: 10, max: 300, def: 100 },
+      { label: 'Intensità', prop: 'intensity', min: 0, max: 100, def: 50 },
+      { label: 'Opacità', prop: 'opacity', min: 0, max: 100, def: 60 },
+    ]
   },
   // ── STYLE ───────────────────────────────────────────────────────────────────
   {
@@ -5147,15 +5258,21 @@ function FXRow({ fx, active, fxProps, onToggle, onUpdate }: {
 }
 
 // Single unified FX panel — used for text, shapes, images, and connectors.
-function UnifiedFXPanel({ sel, onShadow, onGrad, onPreset, onUpdate, onClose }: {
+function UnifiedFXPanel({ sel, onShadow, onGrad, onPreset, onUpdate, onToggleEnabled, onSetOpacity, onReorder, onClose }: {
   sel: SelState; onShadow: (u: Partial<SelState>) => void; onGrad?: (c: string[], a?: number) => void
   onPreset: (p: string) => void; onUpdate: (k: string, p: string, v: any) => void; onClose: () => void
+  onToggleEnabled?: (key: string) => void
+  onSetOpacity?: (key: string, opacity: number) => void
+  onReorder?: (from: number, to: number) => void
 }) {
   const active = sel.appliedFX || []
+  const fxMeta = sel.fxMeta || {}
   const cats = ['Motion', 'Optical', 'Texture', 'Style'] as const
   const catColors: Record<string, string> = {
     Motion: 'text-cyan-400', Optical: 'text-violet-400', Texture: 'text-amber-400', Style: 'text-pink-400'
   }
+  const dragIdxRef = React.useRef<number | null>(null)
+
   return (
     <div className="bg-[#111] border border-white/10 rounded-2xl shadow-2xl p-3 w-[17rem] animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto scrollbar-hide">
       <div className="flex items-center justify-between mb-3 px-1">
@@ -5170,6 +5287,46 @@ function UnifiedFXPanel({ sel, onShadow, onGrad, onPreset, onUpdate, onClose }: 
           <X className="w-3 h-3" />
         </button>
       </div>
+
+      {/* ── Active effect stack ── */}
+      {active.length > 0 && (
+        <div className="mb-3 border border-white/8 rounded-xl overflow-hidden">
+          <p className="text-[8px] font-black uppercase tracking-widest px-3 py-1.5 text-white/30 border-b border-white/5">Stack</p>
+          {active.map((key, idx) => {
+            const meta = fxMeta[key] || { opacity: 1.0, enabled: true }
+            const fxItem = UNIFIED_FX_LIST.find(f => f.key === key)
+            return (
+              <div key={key}
+                draggable
+                onDragStart={() => { dragIdxRef.current = idx }}
+                onDragOver={e => e.preventDefault()}
+                onDrop={() => {
+                  if (dragIdxRef.current !== null && dragIdxRef.current !== idx) {
+                    onReorder?.(dragIdxRef.current, idx)
+                  }
+                  dragIdxRef.current = null
+                }}
+                className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 group border-b border-white/[0.04] last:border-0"
+              >
+                <GripVertical className="w-3 h-3 text-white/15 cursor-grab shrink-0" />
+                <button onClick={() => onToggleEnabled?.(key)} className="shrink-0 text-white/40 hover:text-white transition-colors">
+                  {meta.enabled !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3 text-white/20" />}
+                </button>
+                <span className={cn('flex-1 text-[10px] font-bold truncate', meta.enabled !== false ? 'text-white/80' : 'text-white/25 line-through')}>
+                  {fxItem?.label || key}
+                </span>
+                <input
+                  type="range" min={0} max={100}
+                  value={Math.round((meta.opacity ?? 1.0) * 100)}
+                  onChange={e => onSetOpacity?.(key, Number(e.target.value) / 100)}
+                  className="w-14 h-0.5 accent-white/60 cursor-pointer"
+                />
+                <span className="text-[8px] text-white/25 w-5 text-right shrink-0">{Math.round((meta.opacity ?? 1.0) * 100)}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {cats.map(cat => {
         const items = UNIFIED_FX_LIST.filter(f => f.cat === cat)
