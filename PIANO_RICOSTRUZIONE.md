@@ -63,11 +63,11 @@ Il resto (griglie, righelli, snap, export) va in un solo menu Vista e in `Ctrl+K
 
 **Errori TS: 114 → ~45.** Quelli rimasti sono quasi tutti nel canvas (35 in `creative-studio.tsx`) e vengono rimandati alla Fase 5, perché quel file va diviso.
 
-**Rotte:** tutte e 17 rispondono 200 lato server.
+**Rotte:** tutte e 17 rispondono 200 lato server. `/calendario` non è mai esistita (il calendario sta nella dashboard), quindi ora reindirizza a `/`.
 
 **Da fare in Fase 0:**
-- [ ] Controllo lato client (console del browser) per ogni sezione
-- [ ] Avvio con Electron (`dev:electron`)
+- [x] Controllo lato client: nessuna eccezione JS in 17 sezioni. Restano solo dei 404 sugli handbook dei clienti non ancora creati, che sono attesi
+- [x] Avvio con Electron: finestra OK e servizio crew Python attivo (`/health` 200). Il binario di Electron mancava ed è stato reinstallato con `node node_modules/electron/install.js`
 - [ ] Token Google scaduto: va rifatto il login (azione dell'utente)
 - [ ] Chiamata AI reale per verificare il nuovo modello
 - [ ] Controllo di `.env.local` (necessarie / opzionali / da eliminare)
