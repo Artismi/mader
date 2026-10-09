@@ -111,6 +111,8 @@ Button, IconButton, Input, Textarea, Select, Checkbox/Toggle, Badge, Avatar, Car
 
 **Fatto quando:** la pagina `/design` è completa e non restano colori o pixel scritti a mano nei componenti nuovi.
 
+**Stato al 2026-10-09:** ✅ token in `src/styles/tokens.css` (cipria/prugna, SILENZIO, font locali, niente più Google Fonts) · ✅ componenti in `src/components/ds/` (Button, IconButton, Field, Input, Textarea, Select, Toggle, Badge, Kbd, Skeleton, EmptyState, Tooltip, Module, Disclosure, NodeChip, Tabs, Dialog, ThemeSwitch, QuietSwitch) · ✅ vetrina `/design` · ⏳ da fare: Toast, Table, Popover/Menu, Drawer, rimozione delle librerie di icone extra (insieme al rifacimento dei moduli)
+
 ---
 
 ## Fase 2 — Una sola schermata modulare, tracciata ad albero

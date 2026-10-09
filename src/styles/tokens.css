@@ -1,0 +1,165 @@
+/* ─────────────────────────────────────────────────────────────
+   Creative OS — design tokens (direzione visiva artismi)
+   Formula: luce pastello + tipografia gridata + bordi neri netti.
+   Tutti i nomi sono prefissati ds- per convivere con il vecchio tema.
+   ───────────────────────────────────────────────────────────── */
+
+@import "fontsource-syne/700.css";
+@import "fontsource-syne/800.css";
+@import "fontsource-space-mono/400.css";
+
+/* Tema chiaro "cipria" (default) */
+:root,
+:root[data-theme="light"] {
+  --ds-bg: #f3e3ea;
+  --ds-surface: #fbf5f7;
+  --ds-surface-2: #f0d6e2;
+  --ds-ink: #1a1220;          /* bordi netti, testo forte */
+  --ds-text: #2a1e2e;
+  --ds-text-muted: #6b5868;
+  --ds-line: rgba(26, 18, 32, 0.14);
+  --ds-accent: #b23a6f;       /* rosa artismi leggibile come testo */
+  --ds-accent-soft: #e8b4c8;
+  --ds-primary: #c8860a;      /* ocra: UNA azione principale per schermata */
+  --ds-on-primary: #1a1220;
+  --ds-ok: #2e7d4f;
+  --ds-warn: #9a5b00;
+  --ds-danger: #b3261e;
+  --ds-info: #3b5ba9;
+  --ds-focus: #b23a6f;
+  --ds-shadow-1: 0 1px 2px rgba(26, 18, 32, 0.08);
+  --ds-shadow-2: 0 6px 20px -8px rgba(26, 18, 32, 0.22);
+  --ds-shadow-3: 0 24px 60px -20px rgba(26, 18, 32, 0.35);
+}
+/* color-scheme solo se il tema è esplicito: la shell legacy resta scura */
+:root[data-theme="light"] { color-scheme: light; }
+
+/* Tema scuro "prugna" */
+:root[data-theme="dark"] {
+  --ds-bg: #1e1421;
+  --ds-surface: #2a1e2e;
+  --ds-surface-2: #3d2b40;
+  --ds-ink: #f5efe6;
+  --ds-text: #f5efe6;
+  --ds-text-muted: #b9a9b6;
+  --ds-line: rgba(245, 239, 230, 0.14);
+  --ds-accent: #f0a6c4;
+  --ds-accent-soft: #5a3a52;
+  --ds-primary: #e0a030;
+  --ds-on-primary: #1a1220;
+  --ds-ok: #6fcf97;
+  --ds-warn: #f2b04a;
+  --ds-danger: #ff8a80;
+  --ds-info: #8fb0ff;
+  --ds-focus: #f0a6c4;
+  --ds-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ds-shadow-2: 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+  --ds-shadow-3: 0 24px 60px -20px rgba(0, 0, 0, 0.75);
+  color-scheme: dark;
+}
+
+:root {
+  /* Tipografia: display gridato, testo leggibile di sistema, mono per numeri */
+  --ds-font-display: "Syne", "Segoe UI Variable Display", system-ui, sans-serif;
+  --ds-font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --ds-font-mono: "Space Mono", ui-monospace, Consolas, monospace;
+
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 10px;
+  --ds-radius-lg: 16px;
+
+  --ds-dur-fast: 120ms;
+  --ds-dur-base: 220ms;
+  --ds-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* SILENZIO: spegne animazioni e shader. Si attiva anche con reduced-motion. */
+:root[data-quiet="true"] {
+  --ds-dur-fast: 0ms;
+  --ds-dur-base: 0ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-dur-fast: 0ms;
+    --ds-dur-base: 0ms;
+  }
+}
+
+@theme inline {
+  --color-ds-bg: var(--ds-bg);
+  --color-ds-surface: var(--ds-surface);
+  --color-ds-surface-2: var(--ds-surface-2);
+  --color-ds-ink: var(--ds-ink);
+  --color-ds-text: var(--ds-text);
+  --color-ds-muted: var(--ds-text-muted);
+  --color-ds-line: var(--ds-line);
+  --color-ds-accent: var(--ds-accent);
+  --color-ds-accent-soft: var(--ds-accent-soft);
+  --color-ds-primary: var(--ds-primary);
+  --color-ds-on-primary: var(--ds-on-primary);
+  --color-ds-ok: var(--ds-ok);
+  --color-ds-warn: var(--ds-warn);
+  --color-ds-danger: var(--ds-danger);
+  --color-ds-info: var(--ds-info);
+  --color-ds-focus: var(--ds-focus);
+
+  --font-display: var(--ds-font-display);
+  --font-text: var(--ds-font-text);
+  --font-ds-mono: var(--ds-font-mono);
+
+  /* Scala tipografica: 12 · 13 · 15 · 18 · 24 · 32 · 48 */
+  --text-ds-xs: 12px;
+  --text-ds-sm: 13px;
+  --text-ds-base: 15px;
+  --text-ds-lg: 18px;
+  --text-ds-xl: 24px;
+  --text-ds-2xl: 32px;
+  --text-ds-display: 48px;
+
+  --radius-ds-sm: var(--ds-radius-sm);
+  --radius-ds-md: var(--ds-radius-md);
+  --radius-ds-lg: var(--ds-radius-lg);
+
+  --shadow-ds-1: var(--ds-shadow-1);
+  --shadow-ds-2: var(--ds-shadow-2);
+  --shadow-ds-3: var(--ds-shadow-3);
+}
+
+/* Base per le superfici del nuovo sistema */
+.ds-root {
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font-family: var(--ds-font-text);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Focus sempre visibile, mai solo colore */
+.ds-root :focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
+}
+
+/* Titoli gridati: maiuscolo largo */
+.ds-shout {
+  font-family: var(--ds-font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+}
+
+/* Etichette spaziate stile nav del sito */
+.ds-label {
+  font-family: var(--ds-font-text);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ds-text-muted);
+}
+
+.ds-anim {
+  transition-duration: var(--ds-dur-base);
+  transition-timing-function: var(--ds-ease);
+}
