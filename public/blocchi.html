@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocco che si trasforma</title>
+<style>
+  /* Wireframe grigio: si giudica il comportamento, non lo stile */
+  :root { --t1:#111; --t2:#444; --t3:#888; --line:#e3e3e3; --side:#f6f6f6; --fill:#ececec; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 15px/1.5 system-ui, "Segoe UI", sans-serif; color: var(--t2); height: 100vh; display: flex; overflow: hidden; }
+  button { font: inherit; cursor: pointer; }
+
+  nav { width: 200px; flex: none; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 16px 10px; gap: 2px; }
+  nav .brand { font-weight: 600; color: var(--t1); padding: 4px 10px 18px; }
+  nav button { display: flex; gap: 10px; align-items: center; padding: 7px 10px; border-radius: 6px; background: none; border: 0; color: var(--t2); text-align: left; }
+  nav button:hover { background: var(--fill); }
+  nav button[aria-current] { background: #fff; color: var(--t1); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+  nav .ico { width: 16px; height: 16px; border-radius: 4px; background: #cfcfcf; }
+
+  #desk { flex: 1; display: flex; gap: 16px; padding: 16px; background: #f4f4f4; overflow: hidden; }
+
+  /* Blocco principale: uno solo, si trasforma */
+  .main { flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+  .main .inner { display: flex; flex-direction: column; flex: 1; min-height: 0; animation: morph .26s cubic-bezier(.2,.8,.2,1); }
+  @keyframes morph { from { opacity: 0; transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { .main .inner, .acc { animation: none !important; } }
+
+  .bar { display: flex; align-items: center; gap: 10px; padding: 14px 20px 0; }
+  .backbtn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-size: 18px; color: var(--t1); }
+  .backbtn:disabled { opacity: .3; cursor: default; }
+  .chain { font-size: 13px; color: var(--t3); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chain b { color: var(--t2); font-weight: 500; }
+
+  .head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 20px 4px; }
+  .head .tt { flex: 1; min-width: 0; }
+  .state { display: inline-block; font-size: 12px; color: var(--t3); }
+  .state em { font-style: normal; color: #fff; background: #111; border-radius: 4px; padding: 0 6px; margin-left: 6px; }
+  h1 { font-size: 26px; line-height: 1.2; color: var(--t1); font-weight: 650; }
+  .sub { padding: 0 20px 12px; color: var(--t3); font-size: 14px; }
+  .primary { background: #111; color: #fff; border: 0; border-radius: 6px; height: 34px; padding: 0 14px; font-weight: 600; white-space: nowrap; }
+  .ghost { background: none; border: 1px solid var(--line); border-radius: 6px; height: 32px; padding: 0 12px; color: var(--t2); white-space: nowrap; }
+  .ghost.acc-open::before { content: "↗ "; color: var(--t3); }
+  .body { flex: 1; overflow: auto; padding: 0 20px 32px; }
+
+  h2 { font-size: 13px; font-weight: 600; color: var(--t3); margin: 20px 0 6px; }
+  .row { display: flex; gap: 12px; align-items: center; padding: 10px 6px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 4px; }
+  .row:hover { background: #fafafa; }
+  .row.was { background: #efefef; box-shadow: inset 3px 0 0 #111; }   /* memoria: da qui eri entrato */
+  .row .mn { flex: 1; min-width: 0; }
+  .row .t { color: var(--t1); }
+  .row .m { font-size: 13px; color: var(--t3); }
+  .row .w { font-size: 13px; color: var(--t3); }
+  .urgent { font-size: 12px; font-weight: 600; color: #111; border: 1px solid #111; border-radius: 4px; padding: 0 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #111; flex: none; }
+  .dot.off { background: none; border: 1px solid #bbb; }
+
+  .mail { color: var(--t1); font-size: 16px; line-height: 1.65; max-width: 62ch; }
+  .quoted { border-left: 3px solid var(--line); padding: 6px 12px; color: var(--t3); font-size: 14px; margin-bottom: 16px; max-width: 62ch; }
+  textarea { width: 100%; min-height: 180px; border: 1px solid #bbb; border-radius: 8px; padding: 12px 14px; font: inherit; resize: vertical; outline: none; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .check { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+
+  /* Blocchi accessori: funzione diversa, si affiancano */
+  #accs { display: flex; flex-direction: column; gap: 12px; width: 300px; flex: none; overflow: auto; }
+  #accs:empty { display: none; }
+  .acc { background: #fff; border: 1px solid #cfcfcf; border-radius: 10px; animation: slide .26s cubic-bezier(.2,.8,.2,1); }
+  @keyframes slide { from { opacity: 0; transform: translateX(16px); } }
+  .acc .ah { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .acc .ah .k { font-size: 12px; color: var(--t3); }
+  .acc .ah h3 { font-size: 15px; color: var(--t1); font-weight: 600; flex: 1; }
+  .acc .ab { padding: 10px 12px; font-size: 14px; }
+  .x { border: 0; background: none; color: var(--t3); width: 26px; height: 26px; border-radius: 6px; }
+  .x:hover { background: var(--fill); }
+  .slots { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .slots button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 6px; font-size: 13px; }
+  .slots button.sel { background: #111; color: #fff; border-color: #111; }
+  .note { position: fixed; left: 216px; bottom: 14px; background: #fff; border: 1px solid #bbb; border-radius: 8px; padding: 10px 12px; font-size: 13px; max-width: 420px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+
+<nav aria-label="Navigazione principale">
+  <div class="brand">Creative OS</div>
+  <button data-root="oggi"><span class="ico"></span>Oggi</button>
+  <button data-root="messaggi"><span class="ico"></span>Messaggi</button>
+  <button data-root="clienti"><span class="ico"></span>Clienti</button>
+  <button data-root="lavori"><span class="ico"></span>Lavori</button>
+  <button data-root="studio"><span class="ico"></span>Studio</button>
+  <button data-root="archivio"><span class="ico"></span>Archivio</button>
+</nav>
+
+<div id="desk">
+  <section class="main" id="main" aria-live="polite"></section>
+  <aside id="accs" aria-label="Blocchi accessori"></aside>
+</div>
+
+<div class="note"><b>Prova:</b> Oggi → mail di Rossi → <i>Rispondi</i> (stesso blocco, cambia funzione) → scrivi qualcosa → <i>Proponi appuntamento</i> (si apre un accessorio) → <b>←</b> e poi di nuovo avanti: la bozza è ancora lì.</div>
+
+<script>
+/*
+  REGOLA
+  - Stessa famiglia  → il blocco principale si TRASFORMA (morph) e la catena si allunga.
+  - Famiglia diversa → si apre un BLOCCO ACCESSORIO accanto, il principale resta.
+  - ← risale la catena: ogni passo conserva la sua memoria (scroll, bozza, selezione).
+*/
+const HUB = new Set(['list', 'client', 'project'])
+const FAMILY = { list: 'flow', mail: 'comm', reply: 'comm', project: 'work', task: 'work', client: 'people', design: 'studio' }
+
+const D = {
+  oggi:     { kind: 'list', title: 'Oggi', sub: '3 da rispondere · 2 scadenze', groups: [['Da fare adesso', ['m1', 't1', 'm2']], ['Ripresi di recente', ['p1']]] },
+  messaggi: { kind: 'list', title: 'Messaggi', sub: '3 da rispondere', groups: [['Da rispondere', ['m1', 'm2']]] },
+  clienti:  { kind: 'list', title: 'Clienti', sub: '3 attivi', groups: [['Attivi', ['c1', 'c2']]] },
+  lavori:   { kind: 'list', title: 'Lavori', sub: 'Questa settimana', groups: [['Task', ['t1', 't2']], ['Progetti', ['p1']]] },
+  studio:   { kind: 'list', title: 'Studio', sub: 'Design recenti', groups: [['Recenti', ['g1']]] },
+  archivio: { kind: 'list', title: 'Archivio', sub: 'Note e file', groups: [] },
+  m1: { kind: 'mail', title: 'Preventivo logo', who: 'Mario Rossi', client: 'c1', urgent: 'da rispondere', meta: 'ieri 18:42',
+        text: 'Ciao! Avremmo bisogno di un preventivo per il restyling del logo e delle grafiche social entro fine mese. Possiamo sentirci la prossima settimana?' },
+  m2: { kind: 'mail', title: 'Foto collezione', who: 'Luca · Bicicleria', client: 'c2', urgent: 'da rispondere', meta: 'oggi 9:10', text: 'Ti mando le foto per i post di novembre.' },
+  c1: { kind: 'client', title: 'Rossi Srl', meta: 'Mario Rossi · 2 progetti attivi · ultimo contatto ieri', items: ['p1', 'm1'] },
+  c2: { kind: 'client', title: 'Bicicleria', meta: 'Luca · 1 progetto', items: ['t2', 'm2'] },
+  p1: { kind: 'project', title: 'Restyling logo', meta: 'Rossi Srl · scade fine mese', client: 'c1', items: ['t1', 't3'] },
+  t1: { kind: 'task', title: 'Consegnare moodboard', meta: 'Restyling logo · oggi', parent: 'p1', client: 'c1', w: 'oggi' },
+  t2: { kind: 'task', title: 'Post novembre', meta: 'Bicicleria · venerdì', client: 'c2', w: 'venerdì' },
+  t3: { kind: 'task', title: 'Varianti colore', meta: 'Restyling logo · lunedì', parent: 'p1', client: 'c1', w: 'lunedì' },
+  g1: { kind: 'design', title: 'Logo — variante B', meta: 'Restyling logo · ieri', client: 'c1', w: 'ieri' },
+}
+const LABEL = { list: 'Elenco', mail: 'Mail', reply: 'Risposta', client: 'Cliente', project: 'Progetto', task: 'Task', design: 'Design' }
+
+let chain = []                 // passi del blocco principale: { id, kind, mem }
+let accs = []                  // blocchi accessori aperti: { id, kind }
+const drafts = {}              // memoria delle bozze per mail
+
+const cur = () => chain[chain.length - 1]
+
+/* Ricorda lo stato del passo corrente prima di lasciarlo */
+function remember() {
+  const c = cur(); if (!c) return
+  const b = document.querySelector('#main .body'); if (b) c.mem.scroll = b.scrollTop
+  const ta = document.querySelector('#main textarea'); if (ta) drafts[c.id] = ta.value
+}
+
+/* Il cuore: trasformare o aprire accessorio? */
+function go(id, kind = D[id].kind) {
+  const here = cur()
+  // I contenitori (elenco, cliente, progetto) si trasformano sempre nei loro elementi
+  const same = !here || FAMILY[here.kind] === FAMILY[kind] || HUB.has(here.kind)
+  if (same) { remember(); chain.push({ id, kind, mem: { scroll: 0, from: null } }); if (here) here.mem.from = id; render() }
+  else openAcc(id, kind)
+}
+function openAcc(id, kind) {
+  if (!accs.some(a => a.id === id && a.kind === kind)) accs.unshift({ id, kind })
+  accs = accs.slice(0, 2)      // mai più di due accessori: niente rumore
+  renderAccs()
+}
+/* Un accessorio può diventare il principale: la catena continua da lì */
+function promote(i) { const a = accs.splice(i, 1)[0]; remember(); chain.push({ id: a.id, kind: a.kind, mem: { scroll: 0 } }); render(); renderAccs() }
+function back() { if (chain.length < 2) return; remember(); chain.pop(); render() }
+
+function row(id) {
+  const n = D[id], was = cur().mem.from === id ? ' was' : ''
+  const right = n.urgent ? `<span class="urgent">${n.urgent}</span>` : `<span class="w">${n.w ?? ''}</span>`
+  return `<div class="row${was}" data-go="${id}"><span class="dot${n.urgent ? '' : ' off'}"></span><div class="mn"><div class="t">${n.title}</div><div class="m">${LABEL[n.kind]}${n.meta ? ' · ' + n.meta : ''}</div></div>${right}</div>`
+}
+
+function view(c) {
+  const n = D[c.id]
+  switch (c.kind) {
+    case 'list': return { title: n.title, sub: n.sub, body: n.groups.map(([l, ids]) => `<h2>${l}</h2>` + ids.map(row).join('')).join('') }
+    case 'mail': return {
+      title: n.title, sub: `${n.who} · ${n.meta}`, state: drafts[c.id] ? 'bozza salvata' : '',
+      action: `<button class="primary" data-morph="reply">Rispondi</button>`,
+      body: `<p class="mail">${n.text}</p><h2>Accanto</h2><div class="tools">
+        <button class="ghost acc-open" data-acc="${n.client}">${D[n.client].title}</button>
+        <button class="ghost acc-open" data-acck="calendar">Proponi appuntamento</button>
+        <button class="ghost acc-open" data-acck="quote">Prepara preventivo</button></div>` }
+    case 'reply': return {
+      title: 'Risposta a ' + n.who.split(' ·')[0], sub: n.title, state: 'stessa mail, funzione diversa',
+      action: `<button class="primary">Invia</button>`,
+      body: `<div class="quoted">${n.text}</div><textarea placeholder="Scrivi…">${drafts[c.id] ?? ''}</textarea>
+        <div class="tools"><button class="ghost">Allega</button>
+        <button class="ghost acc-open" data-acck="calendar">Proponi appuntamento</button>
+        <button class="ghost acc-open" data-acck="quote">Prepara preventivo</button></div>` }
+    case 'client': return { title: n.title, sub: n.meta, action: `<button class="primary">Nuovo…</button>`, body: `<h2>In corso</h2>` + n.items.map(row).join('') }
+    case 'project': return { title: n.title, sub: n.meta, action: `<button class="primary">Nuovo task</button>`,
+      body: `<h2>Task</h2>` + n.items.map(row).join('') + `<h2>Accanto</h2><div class="tools"><button class="ghost acc-open" data-acc="${n.client}">${D[n.client].title}</button><button class="ghost acc-open" data-acc="g1">Design</button></div>` }
+    case 'task': return { title: n.title, sub: n.meta, action: `<button class="primary">Fatto</button>`,
+      body: `<h2>Checklist</h2><div class="check">☐ Raccogliere riferimenti</div><div class="check">☐ Impaginare</div>
+        <h2>Accanto</h2><div class="tools">${n.parent ? `<button class="ghost" data-go="${n.parent}">Progetto</button>` : ''}<button class="ghost acc-open" data-acc="${n.client}">${D[n.client].title}</button></div>` }
+    case 'design': return { title: n.title, sub: n.meta, action: `<button class="primary">Esporta</button>`, body: `<div style="aspect-ratio:4/3;background:#f1f1f1;border-radius:6px;display:grid;place-items:center;color:#aaa">disegno</div>` }
+  }
+}
+
+function render() {
+  const c = cur(), v = view(c)
+  const names = chain.map((s, i) => (i === chain.length - 1 ? `<b>${stepName(s)}</b>` : stepName(s))).join(' › ')
+  document.getElementById('main').innerHTML = `<div class="inner">
+    <div class="bar"><button class="backbtn" aria-label="Indietro" ${chain.length < 2 ? 'disabled' : ''} data-back>←</button><div class="chain">${names}</div></div>
+    <div class="head"><div class="tt"><span class="state">${LABEL[c.kind]}${v.state ? `<em>${v.state}</em>` : ''}</span><h1>${v.title}</h1></div>${v.action ?? ''}</div>
+    <div class="sub">${v.sub ?? ''}</div><div class="body">${v.body}</div></div>`
+  const b = document.querySelector('#main .body'); b.scrollTop = c.mem.scroll ?? 0
+  const ta = document.querySelector('#main textarea'); if (ta) ta.focus()
+  document.querySelectorAll('nav button').forEach(x => x.toggleAttribute('aria-current', x.dataset.root === chain[0].id))
+}
+const stepName = s => s.kind === 'reply' ? 'Risposta' : D[s.id].title
+
+function renderAccs() {
+  const html = accs.map((a, i) => {
+    if (a.kind === 'calendar') return acc(i, 'Calendario', 'Proponi un orario', `Liberi la prossima settimana:<div class="slots">${['Lun 10:00', 'Lun 15:00', 'Mar 11:00', 'Mer 9:30'].map((s, k) => `<button class="${k === 1 ? 'sel' : ''}">${s}</button>`).join('')}</div><button class="ghost" style="margin-top:10px">Inserisci nella risposta</button>`, false)
+    if (a.kind === 'quote') return acc(i, 'Preventivo', 'Restyling logo — bozza', 'Logo · 3 varianti — € 900<br>Grafiche social × 6 — € 340<br><b>Totale € 1.240</b>', true)
+    const n = D[a.id]
+    return acc(i, LABEL[a.kind], n.title, `<div style="color:#888">${n.meta ?? ''}</div>`, true)
+  }).join('')
+  document.getElementById('accs').innerHTML = html
+}
+function acc(i, k, title, body, canPromote) {
+  return `<section class="acc" aria-label="${title}"><div class="ah"><div style="flex:1"><div class="k">${k}</div><h3>${title}</h3></div>
+    ${canPromote ? `<button class="x" title="Apri al centro" data-promote="${i}">⤢</button>` : ''}<button class="x" title="Chiudi" data-close="${i}">✕</button></div>
+    <div class="ab">${body}</div></section>`
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-go],[data-morph],[data-acc],[data-acck],[data-back],[data-root],[data-close],[data-promote]')
+  if (!t) return
+  const d = t.dataset
+  if ('root' in d) { remember(); chain = [{ id: d.root, kind: 'list', mem: {} }]; accs = []; render(); renderAccs() }
+  else if ('back' in d) back()
+  else if ('morph' in d) go(cur().id, d.morph)
+  else if ('go' in d) go(d.go)
+  else if ('acc' in d) openAcc(d.acc, D[d.acc].kind)
+  else if ('acck' in d) openAcc(cur().id, d.acck)
+  else if ('close' in d) { accs.splice(+d.close, 1); renderAccs() }
+  else if ('promote' in d) promote(+d.promote)
+})
+addEventListener('keydown', e => { if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Escape' && !accs.length)) back(); else if (e.key === 'Escape') { accs.shift(); renderAccs() } })
+
+chain = [{ id: 'oggi', kind: 'list', mem: {} }]; render()
+</script>
+</body>
+</html>

@@ -60,6 +60,39 @@ Da ~20 voci a **6 + 2**.
 
 ---
 
+## 2b. Il blocco che si trasforma (decisione dell'utente, 2026-10-09)
+> Prototipo: `public/blocchi.html`. Superati `wireframe.html` (pagine) e `pannelli.html` (fila di pannelli).
+
+- **Un solo blocco principale.** Quando vai avanti, il contenuto precedente sparisce: niente file, niente strisce.
+- **← indietro** risale la *catena logica* (`Oggi › Preventivo logo › Risposta`). Ogni passo **conserva la memoria**: posizione di scroll, bozza, riga da cui eri entrato (evidenziata al ritorno).
+- **Passo simile → il blocco si trasforma.** Cambia stato e funzione, ma resta lo stesso blocco:
+  - elenco → elemento;
+  - mail → risposta (la mail resta citata in alto);
+  - cliente → progetto → task.
+
+  I *contenitori* (elenchi, cliente, progetto) si trasformano sempre nei loro elementi.
+- **Passo diverso → blocco accessorio accanto.** Esempi: dalla mail, *Proponi appuntamento* apre il calendario; *Prepara preventivo* apre il preventivo; il nome del cliente apre la sua scheda. Il principale non cambia.
+  - Al massimo **2 accessori** aperti insieme.
+  - Ogni accessorio ha due comandi: ✕ chiude, ⤢ lo **porta al centro**, e da lì la catena continua.
+- **Famiglie** (in base alla famiglia si decide "simile" o "diverso"):
+
+  | Famiglia | Contenuto |
+  |---|---|
+  | comunicazione | mail, risposta, messaggi |
+  | lavoro | progetto, task |
+  | persone | clienti |
+  | studio | design |
+  | strumenti | calendario, preventivo |
+
+- **Tastiera:** `Alt+←` torna indietro; `Esc` chiude prima l'accessorio, poi torna indietro.
+
+**Domande aperte:**
+1. Il design (Studio) si trasforma nel blocco principale a tutto schermo, o resta un accessorio?
+2. Gli accessori stanno a destra in colonna (come nel prototipo) o sotto?
+3. La barra laterale resta, o diventa anche lei un punto di partenza dentro "Oggi"?
+
+---
+
 ## 3. Lo scheletro di ogni pagina (sempre identico)
 
 ```
