@@ -276,7 +276,7 @@ export async function getNode(ref: string): Promise<NodeDetail | null> {
     if (!d) return null
     const c = d.client_id ? cm.get(d.client_id) : undefined
     return { ...designSummary(d, cm), lead: c ? `Per ${c.name}` : undefined, clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name,
-      href: `/progettazione?project=${d.id}`, sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [] }
+      href: `/os/studio/${d.id}`, sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [] }
   }
 
   if (kind === 'idea') {

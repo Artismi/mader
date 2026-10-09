@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import Link from 'next/link'   // navigazione interna: la catena resta in memoria
 import type { NodeDetail } from '@/lib/os/graph'
 import { useOs, current, kindOf } from './store'
 import { Clock, Group, I, KIND_LABEL, useNode } from './parts'
@@ -118,7 +119,7 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
   if (kind === 'design') return (
     <>
       <Head kicker={`design${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} lead={node.sub}
-        action={node.href && <a className="primary" href={node.href}><span className="dot"><I n="pen" /></span>Apri nello Studio</a>} />
+        action={node.href && <Link className="primary" href={node.href}><span className="dot"><I n="pen" /></span>Apri nello Studio</Link>} />
       <div className="preview-art">anteprima</div>
     </>
   )
