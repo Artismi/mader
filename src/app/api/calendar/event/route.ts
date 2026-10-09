@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { tokens } from '@/lib/db'
+import { googleAuth } from '@/lib/google/auth'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: Request) {
@@ -27,8 +28,7 @@ export async function POST(req: Request) {
             return Response.json({ error: 'Google Calendar non collegato' }, { status: 403 })
         }
 
-        const oauth2Client = new google.auth.OAuth2()
-        oauth2Client.setCredentials({ access_token: accessToken })
+        const oauth2Client = googleAuth(accessToken)!  // rinnovo automatico (lib/google/auth)
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
         const startDateTime = new Date(`${date}T${String(startHour).padStart(2, '0')}:00:00`)

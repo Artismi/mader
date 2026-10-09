@@ -3,6 +3,7 @@ import { generateText } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { messages, quotes, tasks } from '@/lib/db'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
+import { googleStatus } from '@/lib/google/auth'
 
 /**
  * API unica dello spazio di lavoro circolare.
@@ -19,6 +20,7 @@ export async function GET(req: Request) {
       return n ? NextResponse.json(n) : NextResponse.json({ error: 'Non trovato' }, { status: 404 })
     }
     if (u.searchParams.has('q')) return NextResponse.json(search(u.searchParams.get('q')!))
+    if (u.searchParams.has('google')) return NextResponse.json(googleStatus())
     if (u.searchParams.has('quote')) return NextResponse.json(quoteFor(u.searchParams.get('quote') || undefined, u.searchParams.get('from') || undefined))
     return NextResponse.json({ error: 'Parametro mancante' }, { status: 400 })
   } catch (e) {

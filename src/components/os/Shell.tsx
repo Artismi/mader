@@ -8,6 +8,19 @@ import { Block } from './Block'
 import { Accessories, Chain, Dial, Orbit } from './Around'
 import { Ask } from './Ask'
 
+/** Avviso solo quando serve: senza Google non si inviano risposte e le mail non si aggiornano */
+function GoogleLink() {
+  const [s, setS] = useState<{ connected: boolean } | null>(null)
+  useEffect(() => { fetch('/api/os?google').then(r => r.json()).then(setS).catch(() => setS(null)) }, [])
+  if (!s || s.connected) return null
+  return (
+    <a className="glink" href="/login">
+      <span className="o"><I n="inbox" /></span>
+      <span><b>Google scollegato</b><small>mail e invio fermi · ricollega</small></span>
+    </a>
+  )
+}
+
 // Lo streaming di Next può lasciare montata una seconda copia nascosta (#S:0):
 // solo un guscio alla volta ascolta la tastiera, altrimenti Ctrl+K scatterebbe due volte.
 let owner = 0, seq = 0
@@ -46,6 +59,7 @@ export function Shell() {
       <aside className="left">
         <Dial />
         <Chain />
+        <GoogleLink />
         <button className="ask" onClick={() => setAsking(true)}><span className="o"><I n="spark" /></span>Chiedi o cerca<kbd>Ctrl K</kbd></button>
         <a className="legacy" href="/" title="L'interfaccia precedente resta disponibile durante il passaggio">interfaccia precedente</a>
       </aside>

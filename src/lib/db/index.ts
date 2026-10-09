@@ -510,7 +510,8 @@ export const tokens = {
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(provider) DO UPDATE SET
         provider_token = excluded.provider_token,
-        provider_refresh_token = excluded.provider_refresh_token,
+        -- un login senza refresh token non deve cancellare quello buono già salvato
+        provider_refresh_token = COALESCE(excluded.provider_refresh_token, user_tokens.provider_refresh_token),
         expires_at = excluded.expires_at
     `).run(randomUUID(), data.provider, n(data.provider_token),
       n(data.provider_refresh_token), n(data.expires_at))
