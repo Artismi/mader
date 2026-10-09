@@ -3,9 +3,9 @@
  * circolare sa mostrare. Ogni suggerimento porta il suo perché (intelligenza visibile).
  * Solo lato server.
  */
-import { clients, designProjects, messages, quotes, tasks, type Client, type Message } from '@/lib/db'
+import { clients, designProjects, ideas, messages, quotes, tasks, type Client, type Message } from '@/lib/db'
 
-export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote'
+export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea'
 
 export interface Sat { kind: 'client' | 'calendar' | 'quote' | 'task'; ref?: string; tip: string; smart?: boolean }
 export interface Petal { label: string; icon: string; kind: 'quote' | 'calendar' | 'task'; why?: string }
@@ -35,6 +35,7 @@ export interface NodeDetail extends NodeSummary {
   sats: Sat[]
   petals: Petal[]
   href?: string          // per i nodi che si aprono in una vista legacy (es. canvas)
+  legacy?: string        // vista completa precedente, finché la sezione non è rifatta del tutto
 }
 
 // ───────── utilità ─────────
@@ -153,22 +154,26 @@ export function getList(id: string): NodeDetail {
     }
     case 'messaggi': {
       const mails = rankedMails(cm)
-      return { ...base, title: 'Messaggi', sub: '', lead: 'Ordinati per quanto contano, non per data.',
+      return { ...base, title: 'Messaggi', sub: '', lead: 'Ordinati per quanto contano, non per data.', legacy: '/inbox',
         groups: [['Da rispondere', mails.filter(m => m.urgent).slice(0, 30)], ['Il resto', mails.filter(m => !m.urgent).slice(0, 40)]] }
     }
     case 'clienti': {
       const all = messages.getAll({ limit: 500 }).filter(m => !m.replied)
       const list = [...cm.values()].map(c => clientSummary(c, all.filter(m => m.client_id === c.id).length)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-      return { ...base, title: 'Clienti', sub: '', lead: 'Prima chi aspetta una tua risposta.', groups: [['Attivi', list]] }
+      return { ...base, title: 'Clienti', sub: '', lead: 'Prima chi aspetta una tua risposta.', legacy: '/clienti', groups: [['Attivi', list]] }
     }
     case 'lavori': {
       const ts = openTasks().map(taskSummary)
-      return { ...base, title: 'Lavori', sub: '', lead: ts.length ? 'In ordine di scadenza.' : 'Nessun task aperto.', groups: [['In corso', ts]] }
+      return { ...base, title: 'Lavori', sub: '', lead: ts.length ? 'In ordine di scadenza.' : 'Nessun task aperto.', legacy: '/incarichi', groups: [['In corso', ts]] }
     }
     case 'studio':
-      return { ...base, title: 'Studio', sub: '', lead: 'Riprendi da dove avevi lasciato.', groups: [['Design', designProjects.getAll().map(d => designSummary(d, cm))]] }
-    default:
-      return { ...base, title: 'Archivio', sub: '', lead: 'Note, idee e file del vault.', groups: [['Recenti', []]] }
+      return { ...base, title: 'Studio', sub: '', lead: 'Riprendi da dove avevi lasciato.', legacy: '/progettazione', groups: [['Design', designProjects.getAll().map(d => designSummary(d, cm))]] }
+    default: {
+      const ids = ideas.getAll().slice(0, 30).map((i): NodeSummary => ({
+        ref: `idea:${i.id}`, kind: 'idea', title: i.title || i.text.slice(0, 80), sub: [cm.get(i.client_id ?? '')?.name, i.idea_status].filter(Boolean).join(' · ') || 'idea',
+      }))
+      return { ...base, title: 'Archivio', sub: '', lead: 'Idee, note e file del vault.', legacy: '/memoria', groups: [['Idee', ids]] }
+    }
   }
 }
 
@@ -221,6 +226,15 @@ export function getNode(ref: string): NodeDetail | null {
     const c = d.client_id ? cm.get(d.client_id) : undefined
     return { ...designSummary(d, cm), lead: c ? `Per ${c.name}` : undefined, clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name,
       href: `/progettazione?project=${d.id}`, sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [] }
+  }
+
+  if (kind === 'idea') {
+    const i = ideas.getAll().find(x => x.id === id)
+    if (!i) return null
+    const c = i.client_id ? cm.get(i.client_id) : undefined
+    return { ref, kind: 'idea', title: i.title || i.text.slice(0, 80), sub: i.idea_status, lead: i.description || i.text,
+      clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name, legacy: '/idee',
+      sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [{ label: 'Task', icon: 'check', kind: 'task' }] }
   }
   return null
 }

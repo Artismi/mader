@@ -8,7 +8,19 @@ import { SECTIONS } from './Around'
 
 interface Item { t: string; m: string; icon: string; sug?: boolean; run: () => void }
 
-const SECTION_OF: Record<string, string> = { mail: 'messaggi', client: 'clienti', task: 'lavori', design: 'studio' }
+const SECTION_OF: Record<string, string> = { mail: 'messaggi', client: 'clienti', task: 'lavori', design: 'studio', idea: 'archivio' }
+
+// [nome, indirizzo, parole che lo trovano, icona]
+const LEGACY: [string, string, string, string][] = [
+  ['Finanze', '/finanze', 'preventivi fatture soldi', 'euro'],
+  ['Domini', '/domini', 'siti scadenze rinnovo', 'archive'],
+  ['Calendario', '/', 'agenda appuntamenti eventi settimana', 'cal'],
+  ['Editoriale', '/editoriale', 'social post piano contenuti instagram', 'pen'],
+  ['Lancio', '/lancio', 'mail template html invio', 'send'],
+  ['Memoria', '/memoria', 'vault cervello note file grafo', 'archive'],
+  ['Assets', '/assets', 'immagini file risorse', 'file'],
+  ['Impostazioni', '/settings', 'skill account chiavi google', 'spark'],
+]
 
 /** Chiedi o cerca (Ctrl+K): in cima i suggerimenti per ciò che stai guardando, ognuno col suo perché */
 export function Ask({ onClose }: { onClose: () => void }) {
@@ -38,7 +50,12 @@ export function Ask({ onClose }: { onClose: () => void }) {
     const hero = s.nodes['list:oggi']?.groups?.find(g => g[0] === '__hero')?.[1]?.[0]
     if (hero && hero.ref !== here.ref) suggestions.push({ t: hero.kind === 'mail' ? `Rispondi a ${hero.sub.split(' · ')[0]}` : hero.title, m: hero.why ?? 'la cosa più importante adesso', icon: 'arrow', sug: true, run: () => open(hero.ref) })
   }
-  const sections: Item[] = SECTIONS.filter(([, l]) => q.trim() && l.toLowerCase().includes(q.trim().toLowerCase())).map(([id, l, icon]) => ({ t: l, m: 'sezione', icon, run: () => s.root(id) }))
+  const needle = q.trim().toLowerCase()
+  const sections: Item[] = [
+    ...SECTIONS.filter(([, l]) => needle && l.toLowerCase().includes(needle)).map(([id, l, icon]) => ({ t: l, m: 'sezione', icon, run: () => s.root(id) })),
+    // funzioni non ancora rifatte: restano raggiungibili nella vista precedente, nessuna si perde
+    ...LEGACY.filter(([l, , words]) => needle && (l + ' ' + words).toLowerCase().includes(needle)).map(([l, href, , icon]) => ({ t: l, m: 'vista completa ↗', icon, run: () => { location.href = href } })),
+  ]
   const found: Item[] = results.map(n => ({ t: n.title, m: [KIND_LABEL[n.kind], n.sub].filter(Boolean).join(' · '), icon: KIND_ICON[n.kind] ?? 'file', run: () => open(n.ref) }))
   const items = [...suggestions, ...sections, ...found]
 

@@ -30,8 +30,8 @@ export function Sprite() {
   )
 }
 export const I = ({ n }: { n: string }) => <svg className="i" aria-hidden="true"><use href={`#os-${n}`} /></svg>
-export const KIND_ICON: Record<string, string> = { mail: 'inbox', client: 'users', task: 'check', design: 'pen', quote: 'euro' }
-export const KIND_LABEL: Record<string, string> = { list: '', mail: 'mail', client: 'cliente', task: 'task', design: 'design', quote: 'preventivo' }
+export const KIND_ICON: Record<string, string> = { mail: 'inbox', client: 'users', task: 'check', design: 'pen', quote: 'euro', idea: 'spark' }
+export const KIND_LABEL: Record<string, string> = { list: '', mail: 'mail', client: 'cliente', task: 'task', design: 'design', quote: 'preventivo', idea: 'idea' }
 
 /* ───── caricamento di un nodo (con cache nello store) ───── */
 export function useNode(ref: string) {

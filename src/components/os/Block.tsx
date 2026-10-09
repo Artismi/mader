@@ -89,7 +89,7 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
 
   if (kind === 'list') return (
     <>
-      <Head title={node.title} lead={node.lead} />
+      <Head title={node.title} lead={node.lead} action={node.legacy && <a className="legacy" href={node.legacy}>vista completa ↗</a>} />
       {(node.groups ?? []).map(([l, items]) => <Group key={l} label={l} items={items} />)}
     </>
   )
@@ -122,6 +122,14 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
       <Head kicker={`design${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} lead={node.sub}
         action={node.href && <a className="primary" href={node.href}><span className="dot"><I n="pen" /></span>Apri nello Studio</a>} />
       <div className="preview-art">anteprima</div>
+    </>
+  )
+
+  if (kind === 'idea') return (
+    <>
+      <Head kicker={`idea${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} action={<PlusButton node={node} />} />
+      <div className="letter"><p>{node.lead}</p></div>
+      {node.legacy && <p style={{ marginTop: 28 }}><a className="legacy" href={node.legacy}>modifica nelle Idee ↗</a></p>}
     </>
   )
 

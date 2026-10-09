@@ -88,7 +88,8 @@ function createMainWindow() {
     show: false,
   })
 
-  mainWindow.loadURL(`http://localhost:${PORT}`)
+  // Si apre sul nuovo guscio circolare; l'interfaccia precedente resta su "/"
+  mainWindow.loadURL(`http://localhost:${PORT}/os`)
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
