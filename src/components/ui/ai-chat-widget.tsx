@@ -47,6 +47,8 @@ const CANVAS_TOOL_LABELS: Record<string, string> = {
     getCanvasState: 'Canvas letto',
 };
 
+const messageText = (m: UIMessage) => m.parts.filter(isTextUIPart).map(p => p.text).join('');
+
 function assistantMessageDisplayText(m: UIMessage): string | null {
     const text = m.parts.filter(isTextUIPart).map(p => p.text).join('').trim();
     if (text) return text;
@@ -302,7 +304,7 @@ function QuickActions({ lastMessage, onAction, disabled, inputRef }: {
     lastMessage?: UIMessage, 
     onAction: (text: string) => void,
     disabled: boolean,
-    inputRef: React.RefObject<HTMLInputElement>
+    inputRef: React.RefObject<HTMLInputElement | null>
 }) {
     const options = useMemo(() => {
         if (!lastMessage || lastMessage.role !== 'assistant') return [];
@@ -384,7 +386,6 @@ export function AIChatWidget() {
         return activeSession.messages.map(m => ({
             id: m.id,
             role: m.role,
-            content: m.content,
             parts: [{ type: 'text', text: m.content }]
         }));
     }, [activeSession]);
@@ -435,7 +436,7 @@ export function AIChatWidget() {
 
     const handleInspirationComplete = (urls: string[]) => {
         const refsString = urls.map(u => `[REFERENCE_URL: ${u}]`).join('\n');
-        sendMessage(`Analizza queste immagini selezionate e genera un Design Blueprint parametrico basato sulla loro struttura visiva (Visual Mimicry):\n${refsString}`);
+        sendMessage({ text: `Analizza queste immagini selezionate e genera un Design Blueprint parametrico basato sulla loro struttura visiva (Visual Mimicry):\n${refsString}` });
     };
 
     useEffect(() => {
@@ -496,9 +497,9 @@ export function AIChatWidget() {
         [router, pushAiCommand, activeSessionId, addMessage],
     );
 
-    const { messages, status, sendMessage, setMessages, error, stop, reload } = useChat({
+    const { messages, status, sendMessage, setMessages, error, stop, regenerate } = useChat({
         transport,
-        initialMessages,
+        messages: initialMessages,
         onFinish,
     });
 
@@ -643,15 +644,15 @@ export function AIChatWidget() {
                             <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/30">Creative Nexus v3.0</span>
                             <ProgressMeter status={{ 
                                 target: messages.some(m => {
-                                    const c = (m.content || '').toLowerCase();
+                                    const c = messageText(m).toLowerCase();
                                     return c.includes('target') || c.includes('pubblico') || c.includes('soggetto') || c.includes('cliente') || c.includes('destinatari');
                                 }), 
                                 tone: messages.some(m => {
-                                    const c = (m.content || '').toLowerCase();
+                                    const c = messageText(m).toLowerCase();
                                     return c.includes('tono') || c.includes('vibe') || c.includes('mood') || c.includes('atmosfera') || c.includes('stile');
                                 }), 
                                 assets: messages.some(m => {
-                                    const c = (m.content || '').toLowerCase();
+                                    const c = messageText(m).toLowerCase();
                                     return c.includes('asset') || c.includes('logo') || c.includes('immagine') || c.includes('font') || c.includes('colori');
                                 })
                             }} />
@@ -992,11 +993,11 @@ export function AIChatWidget() {
                         </p>
                         <button 
                             onClick={() => {
-                                if (typeof reload === 'function') {
-                                    reload();
+                                if (typeof regenerate === 'function') {
+                                    regenerate();
                                 } else {
                                     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-                                    if (lastUserMsg) sendMessage(lastUserMsg.content);
+                                    if (lastUserMsg) sendMessage({ text: messageText(lastUserMsg) });
                                 }
                             }}
                             className="w-fit mt-1 px-3 py-1.5 rounded-lg bg-red-400/10 hover:bg-red-400/20 text-red-400 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
