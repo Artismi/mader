@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useEffect } from 'react'
-import { Plus, BarChart2, Kanban, Trash2, ChevronRight, Instagram, Linkedin, Facebook, Users, TrendingUp, Eye, Loader2, RefreshCw, Settings2, PenTool, Send } from 'lucide-react'
+import { Plus, BarChart2, Kanban, Trash2, ChevronRight, Instagram, Linkedin, Facebook, Users, TrendingUp, Eye, Loader2, RefreshCw, Settings2, PenTool, Send, Film } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Client, EditorialPost } from '@/lib/db'
 import { useRouter } from 'next/navigation'
@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 
 type Status = EditorialPost['editorial_status']
-type MetricsMap = Record<string, { followers: number; engagement_rate: number; reach: number; recorded_at: string }>
+type MetricsMap = Record<string, { followers: number; engagement_rate: number; reach: number; recorded_at: string; top_media?: any[] }>
 
 const STATUSES: { id: Status; label: string; color: string }[] = [
   { id: 'idea',        label: 'Idea',        color: 'border-white/10 bg-white/[0.02]' },

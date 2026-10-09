@@ -6,7 +6,7 @@ import {
  * Optical Flow Motion Blur Node
  * Smears the pixels along a velocity vector.
  */
-export const opticalFlowBlur = Fn(([ colorTexture, vUv, velocity, intensity ]) => {
+export const opticalFlowBlur = Fn(([ colorTexture, vUv, velocity, intensity ]: any[]) => {
   const steps = 8;
   const stepSize = intensity.mul(velocity).div(float(steps));
   
@@ -25,7 +25,7 @@ export const opticalFlowBlur = Fn(([ colorTexture, vUv, velocity, intensity ]) =
  * Temporal Feedback Node
  * Blends the current frame with the previous state to create trails.
  */
-export const temporalFeedback = Fn(([ currentColor, previousTexture, vUv, persistence ]) => {
+export const temporalFeedback = Fn(([ currentColor, previousTexture, vUv, persistence ]: any[]) => {
   const prevColor = texture(previousTexture, vUv);
   return mix(currentColor, prevColor, persistence);
 });
@@ -34,7 +34,7 @@ export const temporalFeedback = Fn(([ currentColor, previousTexture, vUv, persis
  * High-Precision 16-bit Dithering Node
  * Eliminates banding in dark/smooth areas.
  */
-export const cinemaDither = Fn(([ color, uTime, amount ]) => {
+export const cinemaDither = Fn(([ color, uTime, amount ]: any[]) => {
   // Animate noise seed per-frame to break static spatially-correlated grain grid
   const animatedUv = uv().add(fract(uTime.mul(float(0.1))))
   const noise = fract(sin(dot(animatedUv, vec2(12.9898, 78.233))).mul(float(43758.5453)))
@@ -46,6 +46,6 @@ export const cinemaDither = Fn(([ color, uTime, amount ]) => {
  * Beat Pulse Node
  * Returns a 0-1 pulse based on the global BPM clock.
  */
-export const beatPulse = Fn(([ bpmClock ]) => {
+export const beatPulse = Fn(([ bpmClock ]: any[]) => {
   return sin(bpmClock.mul(Math.PI)).mul(0.5).add(0.5);
 });
