@@ -152,13 +152,47 @@ function AccCard({ a }: { a: Acc }) {
 
   if (a.kind === 'calendar') return <CalendarCard a={a} forTitle={forNode?.title} onInsert={t => insert(a.forRef, t)} />
   if (a.kind === 'quote') return <QuoteCard a={a} clientRef={forNode?.clientRef ?? (kindOf(a.forRef) === 'client' ? a.forRef : undefined)} forTitle={forNode?.title} />
-  if (a.kind === 'task' && !a.ref) return (
-    <Card a={a} k={`da · ${forNode?.title ?? ''}`} title="Nuovo task">
-      <p className="why" style={{ marginTop: 0 }}>sarà collegato a {forNode?.title}</p>
-      <a className="accbtn" href="/incarichi">Crea in Lavori</a>
+  if (a.kind === 'task' && !a.ref) return <TaskCreateCard a={a} forTitle={forNode?.title} forKind={kindOf(a.forRef)} />
+  return <NodeCard a={a} onPromote={() => promote(a.key)} />
+}
+
+const post = async (body: object) => {
+  const r = await fetch('/api/os', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error ?? 'Non riuscito')
+  return j
+}
+
+/** prossime scadenze sensate, come cerchi da scegliere */
+function dueOptions() {
+  const d = (n: number) => { const x = new Date(); x.setDate(x.getDate() + n); x.setHours(18, 0, 0, 0); return x }
+  const nextDow = (dow: number) => { const x = new Date(); const add = ((dow - x.getDay() + 7) % 7) || 7; return d(add) }
+  return [['oggi', d(0)], ['domani', d(1)], ['venerdì', nextDow(5)], ['lunedì', nextDow(1)], ['senza', null]] as [string, Date | null][]
+}
+
+function TaskCreateCard({ a, forTitle, forKind }: { a: Acc; forTitle?: string; forKind: string }) {
+  const { closeAcc, invalidate, say } = useOs.getState()
+  const [title, setTitle] = useState(forKind === 'mail' && forTitle ? `Seguire: ${forTitle.replace(/^(re|fw|fwd):\s*/i, '')}` : '')
+  const opts = dueOptions()
+  const [due, setDue] = useState(2)
+  const [busy, setBusy] = useState(false)
+  const create = async () => {
+    setBusy(true)
+    try {
+      const j = await post({ action: 'task', title, deadline: opts[due][1]?.toISOString() ?? null, fromRef: a.forRef })
+      invalidate(); closeAcc(a.key); say(`Task creato · nato da ${forTitle ?? 'qui'}`)
+      useOs.getState().toggleAcc('task', j.ref)        // resta a portata come accessorio
+    } catch (e) { say((e as Error).message, true) } finally { setBusy(false) }
+  }
+  return (
+    <Card a={a} k={`da · ${forTitle ?? ''}`} title="Nuovo task">
+      <input className="fld" value={title} onChange={e => setTitle(e.target.value)} placeholder="Cosa c'è da fare?" aria-label="Nome del task" autoFocus
+        onKeyDown={e => { if (e.key === 'Enter' && title.trim()) create() }} />
+      <p className="why" style={{ marginTop: 12 }}>scadenza</p>
+      <div className="slots" style={{ marginTop: 6 }}>{opts.map(([l], i) => <button key={l} aria-pressed={due === i} onClick={() => setDue(i)}>{l}</button>)}</div>
+      <button className="accbtn" onClick={create} disabled={!title.trim() || busy}>{busy ? 'Creo…' : 'Crea task'}</button>
     </Card>
   )
-  return <NodeCard a={a} onPromote={() => promote(a.key)} />
 }
 
 function NodeCard({ a, onPromote }: { a: Acc; onPromote: () => void }) {
@@ -193,21 +227,52 @@ function CalendarCard({ a, forTitle, onInsert }: { a: Acc; forTitle?: string; on
   )
 }
 
+type QItem = { desc: string; qty: number; unit_price: number }
+const eur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+
 function QuoteCard({ a, clientRef, forTitle }: { a: Acc; clientRef?: string; forTitle?: string }) {
-  const [q, setQ] = useState<{ title: string; total: number; items: { desc: string; qty: number; unit_price: number }[]; status: string } | null | undefined>(undefined)
-  useEffect(() => {
-    fetch(`/api/os?quote=${clientRef ? clientRef.split(':')[1] : ''}`).then(r => r.json()).then(setQ).catch(() => setQ(null))
-  }, [clientRef])
-  const eur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+  const [q, setQ] = useState<{ title: string; number: string; total: number; items: QItem[]; status: string } | null | undefined>(undefined)
+  const [editing, setEditing] = useState(false)
+  const [rows, setRows] = useState<QItem[]>([{ desc: '', qty: 1, unit_price: 0 }])
+  const [busy, setBusy] = useState(false)
+  const say = useOs(s => s.say)
+  const load = () => fetch(`/api/os?quote=${clientRef ? clientRef.split(':')[1] : ''}&from=${encodeURIComponent(a.forRef)}`).then(r => r.json()).then(setQ).catch(() => setQ(null))
+  useEffect(() => { load() }, [clientRef]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const set = (i: number, patch: Partial<QItem>) => setRows(r => r.map((x, k) => k === i ? { ...x, ...patch } : x))
+  const total = rows.reduce((s, r) => s + r.qty * r.unit_price, 0)
+  const save = async () => {
+    setBusy(true)
+    try {
+      const j = await post({ action: 'quote', fromRef: a.forRef, title: forTitle?.replace(/^(re|fw|fwd):\s*/i, '') ?? 'Preventivo', items: rows })
+      say(`Preventivo ${j.number} salvato in bozza`); setEditing(false); load()
+    } catch (e) { say((e as Error).message, true) } finally { setBusy(false) }
+  }
+
+  if (editing || q === null) return (
+    <Card a={a} k={`per · ${forTitle ?? ''}`} title="Nuovo preventivo">
+      {rows.map((r, i) => (
+        <div className="qrow" key={i}>
+          <input className="fld" value={r.desc} onChange={e => set(i, { desc: e.target.value })} placeholder="Voce (es. Logo, 3 varianti)" aria-label={`Voce ${i + 1}`} />
+          <input className="fld num" type="number" min={1} value={r.qty} onChange={e => set(i, { qty: +e.target.value })} aria-label="Quantità" />
+          <input className="fld num" type="number" min={0} step={10} value={r.unit_price || ''} onChange={e => set(i, { unit_price: +e.target.value })} placeholder="€" aria-label="Prezzo unitario" />
+        </div>
+      ))}
+      <button className="legacy" style={{ marginTop: 8 }} onClick={() => setRows(r => [...r, { desc: '', qty: 1, unit_price: 0 }])}>+ aggiungi voce</button>
+      <p className="why">totale {eur(total)} · resta in bozza finché non lo invii</p>
+      <button className="accbtn" onClick={save} disabled={busy || !rows.some(r => r.desc.trim())}>{busy ? 'Salvo…' : 'Salva in bozza'}</button>
+    </Card>
+  )
   return (
-    <Card a={a} k={`per · ${forTitle ?? ''}`} title={q?.title ?? 'Preventivo'}>
-      {q === undefined ? <p className="empty">un attimo…</p> : q ? (
+    <Card a={a} k={`per · ${forTitle ?? ''}`} title={q ? `${q.title} · ${q.number}` : 'Preventivo'}>
+      {q === undefined ? <p className="empty">un attimo…</p> : (
         <table className="lines"><tbody>
           {q.items.map((it, i) => <tr key={i}><td>{it.desc}{it.qty > 1 ? ` × ${it.qty}` : ''}</td><td>{eur(it.qty * it.unit_price)}</td></tr>)}
           <tr><td>Totale · {q.status}</td><td>{eur(q.total)}</td></tr>
         </tbody></table>
-      ) : <p className="why" style={{ marginTop: 0 }}>nessun preventivo per questo cliente: crealo in Finanze</p>}
-      <a className="accbtn" href="/finanze">{q ? 'Apri in Finanze' : 'Crea preventivo'}</a>
+      )}
+      <button className="legacy" style={{ marginTop: 12 }} onClick={() => setEditing(true)}>+ nuovo preventivo</button>
+      <a className="accbtn" href="/finanze">Apri in Finanze</a>
     </Card>
   )
 }

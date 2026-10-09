@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
-import { messages } from '@/lib/db'
-import { getList, getNode, quoteFor, search } from '@/lib/os/graph'
+import { messages, quotes, tasks } from '@/lib/db'
+import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 
 /**
  * API unica dello spazio di lavoro circolare.
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
       return n ? NextResponse.json(n) : NextResponse.json({ error: 'Non trovato' }, { status: 404 })
     }
     if (u.searchParams.has('q')) return NextResponse.json(search(u.searchParams.get('q')!))
-    if (u.searchParams.has('quote')) return NextResponse.json(quoteFor(u.searchParams.get('quote') || undefined))
+    if (u.searchParams.has('quote')) return NextResponse.json(quoteFor(u.searchParams.get('quote') || undefined, u.searchParams.get('from') || undefined))
     return NextResponse.json({ error: 'Parametro mancante' }, { status: 400 })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
@@ -70,6 +70,40 @@ export async function POST(req: Request) {
     } catch (e) {
       return NextResponse.json({ error: `Bozza non riuscita: ${(e as Error).message}` }, { status: 502 })
     }
+  }
+
+  // Nuovo task nato da un nodo (mail, cliente…): resta la traccia "nato da"
+  if (body.action === 'task') {
+    const title = String(body.title ?? '').trim()
+    if (!title) return NextResponse.json({ error: 'Dai un nome al task' }, { status: 400 })
+    const client = body.fromRef ? clientOfRef(body.fromRef) : undefined
+    const t = tasks.create({ client_id: client?.id, title, type: 'general', category: 'task', deadline: body.deadline ?? undefined, status: 'todo' })
+    if (body.fromRef) linkOrigin(body.fromRef, 'task', t.id)
+    return NextResponse.json({ ref: `task:${t.id}` })
+  }
+
+  if (body.action === 'done') {
+    const id = String(body.ref ?? '').replace(/^task:/, '')
+    if (!tasks.getById(id)) return NextResponse.json({ error: 'Task non trovato' }, { status: 404 })
+    tasks.update(id, { status: 'done' })
+    return NextResponse.json({ ok: true })
+  }
+
+  // Preventivo in bozza, collegato al cliente del nodo da cui nasce
+  if (body.action === 'quote') {
+    const client = body.fromRef ? clientOfRef(body.fromRef) : undefined
+    const items = (Array.isArray(body.items) ? body.items : [])
+      .map((i: { desc?: string; qty?: number; unit_price?: number }) => ({ desc: String(i.desc ?? '').trim(), qty: Number(i.qty) || 1, unit_price: Number(i.unit_price) || 0 }))
+      .filter((i: { desc: string }) => i.desc)
+    if (!items.length) return NextResponse.json({ error: 'Aggiungi almeno una voce' }, { status: 400 })
+    const year = new Date().getFullYear()
+    const q = quotes.create({
+      client_id: client?.id, client_name: client?.name ?? body.clientName ?? 'Senza cliente', title: String(body.title ?? 'Preventivo'),
+      number: `${year}-${String(quotes.getAll().length + 1).padStart(3, '0')}`, type: 'preventivo', status: 'bozza', items,
+      total: items.reduce((s: number, i: { qty: number; unit_price: number }) => s + i.qty * i.unit_price, 0),
+    })
+    if (body.fromRef) linkOrigin(body.fromRef, 'quote', q.id)
+    return NextResponse.json({ id: q.id, number: q.number })
   }
 
   return NextResponse.json({ error: 'Azione sconosciuta' }, { status: 400 })

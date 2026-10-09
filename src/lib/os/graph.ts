@@ -3,7 +3,7 @@
  * circolare sa mostrare. Ogni suggerimento porta il suo perché (intelligenza visibile).
  * Solo lato server.
  */
-import { clients, designProjects, ideas, messages, quotes, tasks, type Client, type Message } from '@/lib/db'
+import { clients, designProjects, ideas, memoryLinks, messages, quotes, tasks, type Client, type Message } from '@/lib/db'
 
 export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea'
 
@@ -36,6 +36,8 @@ export interface NodeDetail extends NodeSummary {
   petals: Petal[]
   href?: string          // per i nodi che si aprono in una vista legacy (es. canvas)
   legacy?: string        // vista completa precedente, finché la sezione non è rifatta del tutto
+  origin?: NodeSummary   // traccia: da cosa è nato questo nodo
+  done?: boolean
 }
 
 // ───────── utilità ─────────
@@ -215,7 +217,7 @@ export function getNode(ref: string): NodeDetail | null {
   if (kind === 'task') {
     const t = tasks.getById(id)
     if (!t) return null
-    return { ...taskSummary(t), lead: t.deadline ? `Scadenza: ${new Date(t.deadline).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}` : 'Senza scadenza',
+    return { ...taskSummary(t), origin: originOf(id, cm), done: /^(done|completat|fatt|chius)/i.test(t.status), lead: t.deadline ? `Scadenza: ${new Date(t.deadline).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}` : 'Senza scadenza',
       clientRef: t.client_id ? `client:${t.client_id}` : undefined, clientName: t.client_name,
       sats: t.client_id ? [{ kind: 'client', ref: `client:${t.client_id}`, tip: t.client_name ?? 'Cliente' }] : [], petals: [] }
   }
@@ -239,6 +241,34 @@ export function getNode(ref: string): NodeDetail | null {
   return null
 }
 
+// ───────── tracce "nato da" (riusa memory_links con relation = 'origin') ─────────
+export function linkOrigin(fromRef: string, targetType: string, targetId: string) {
+  const [source_type, source_id] = fromRef.split(':')
+  if (!source_id || source_type === 'list') return
+  memoryLinks.create({ source_id, source_type, target_id: targetId, target_type: targetType, relation: 'origin' })
+}
+function originOf(targetId: string, cm: Map<string, Client>): NodeSummary | undefined {
+  const l = (memoryLinks.getAll() as { source_id: string; source_type: string; target_id: string; relation: string }[])
+    .find(x => x.target_id === targetId && x.relation === 'origin')
+  if (!l) return undefined
+  if (l.source_type === 'mail') {
+    const m = messages.getAll({ limit: 1000 }).find(x => x.id === l.source_id)
+    return m ? mailSummary(m, cm) : undefined
+  }
+  if (l.source_type === 'client') { const c = cm.get(l.source_id); return c ? clientSummary(c, 0) : undefined }
+  return undefined
+}
+
+/** Cliente collegato al nodo da cui si crea qualcosa */
+export function clientOfRef(ref: string): Client | undefined {
+  const [kind, id] = ref.split(':')
+  const cm = clientMap()
+  if (kind === 'client') return cm.get(id)
+  if (kind === 'mail') { const m = messages.getAll({ limit: 1000 }).find(x => x.id === id); return m?.client_id ? cm.get(m.client_id) : undefined }
+  if (kind === 'task') { const t = tasks.getById(id); return t?.client_id ? cm.get(t.client_id) : undefined }
+  return undefined
+}
+
 // ───────── ricerca per Ctrl+K ─────────
 export function search(q: string): NodeSummary[] {
   const s = q.trim().toLowerCase()
@@ -253,8 +283,15 @@ export function search(q: string): NodeSummary[] {
   ].slice(0, 12)
 }
 
-/** Ultimo preventivo del cliente (per l'accessorio) */
-export function quoteFor(clientId?: string) {
+/** Preventivo per l'accessorio: quello nato da questo nodo, altrimenti l'ultimo del cliente, altrimenti nessuno */
+export function quoteFor(clientId?: string, fromRef?: string) {
   const all = quotes.getAll()
-  return (clientId ? all.filter((q: any) => q.client_id === clientId) : all)[0] ?? null
+  const fromId = fromRef?.split(':')[1]
+  if (fromId) {
+    const link = (memoryLinks.getAll() as { source_id: string; target_id: string; target_type: string; relation: string }[])
+      .find(l => l.source_id === fromId && l.target_type === 'quote' && l.relation === 'origin')
+    const q = link && all.find(x => x.id === link.target_id)
+    if (q) return q
+  }
+  return clientId ? all.find(q => q.client_id === clientId) ?? null : null
 }

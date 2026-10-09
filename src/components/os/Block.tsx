@@ -113,9 +113,7 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
     </>
   )
 
-  if (kind === 'task') return (
-    <Head kicker={`task${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} lead={node.lead} />
-  )
+  if (kind === 'task') return <TaskView node={node} />
 
   if (kind === 'design') return (
     <>
@@ -134,6 +132,31 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
   )
 
   return <Head title={node.title} />
+}
+
+function TaskView({ node }: { node: NodeDetail }) {
+  const { go, back, say, invalidate } = useOs.getState()
+  const [busy, setBusy] = useState(false)
+  const done = async () => {
+    setBusy(true)
+    const r = await fetch('/api/os', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'done', ref: node.ref }) })
+    setBusy(false)
+    if (!r.ok) return say('Non sono riuscito a segnarlo', true)
+    invalidate(); say('Fatto. Un cerchio in meno'); back()
+  }
+  return (
+    <>
+      <Head kicker={`task${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} lead={node.lead}
+        action={!node.done && <button className="primary" onClick={done} disabled={busy}><span className="dot"><I n="check" /></span>Fatto</button>} />
+      {node.origin && (
+        <>
+          <h2>Nato da</h2>
+          <button className="origin" onClick={() => go(node.origin!.ref)}><span className="av">{node.origin.ini ?? <I n="inbox" />}</span>{node.origin.title}<span style={{ color: 'var(--t3)', fontSize: 13 }}>· {node.origin.when}</span></button>
+        </>
+      )}
+      {node.done && <p className="why">già fatto</p>}
+    </>
+  )
 }
 
 /* Stessa mail, funzione diversa: rispondere */

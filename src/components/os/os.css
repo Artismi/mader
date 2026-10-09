@@ -162,6 +162,14 @@
 .os .slots button[aria-pressed=true] { background: var(--ink); color: var(--surface); box-shadow: none; }
 .os .slots button.best:not([aria-pressed=true]) { box-shadow: inset 0 0 0 2px var(--hot); }
 .os .accbtn { display: grid; place-items: center; width: 100%; height: 46px; border-radius: 999px; background: var(--ink); color: var(--surface); font-weight: 600; margin-top: 16px; text-decoration: none; }
+.os .fld { width: 100%; height: 42px; padding: 0 16px; border: 0; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); background: var(--surface); font: inherit; color: var(--ink); outline: none; transition: box-shadow .2s; }
+.os .fld:focus { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.os .qrow { display: grid; grid-template-columns: 1fr 56px 76px; gap: 6px; margin-bottom: 6px; }
+.os .qrow .num { padding: 0 10px; font-family: var(--mono); font-size: 13px; text-align: right; }
+.os .accbtn:disabled { opacity: .45; }
+.os .origin { display: inline-flex; align-items: center; gap: 10px; margin-top: 4px; padding: 6px 16px 6px 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; color: var(--ink); text-align: left; }
+.os .origin:hover { background: var(--sunk); }
+.os .origin .av { width: 32px; height: 32px; font-size: 11px; }
 .os .lines { width: 100%; border-collapse: collapse; font-size: 14px; }
 .os .lines td { padding: 9px 0; border-bottom: 1px dashed var(--line); color: var(--ink); }
 .os .lines td:last-child { text-align: right; font-family: var(--mono); font-size: 13px; }
