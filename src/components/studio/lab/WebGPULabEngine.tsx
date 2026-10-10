@@ -3,352 +3,415 @@
 import React, { useRef, useEffect } from 'react'
 import * as THREE from 'three/webgpu'
 import { useLabStore } from '../hooks/use-lab-store'
-import { SpringIntegrator } from '@/lib/motion/spring-physics'
-import * as fabric from 'fabric'
-const getObjId = (obj: any): string => {
-  if (!obj) return ''
-  if (!obj.objId) {
-    obj.objId = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) 
-      ? (crypto as any).randomUUID() 
-      : 'obj_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now()
-  }
-  return obj.objId
-}
-
-// TSL Nodes
 import {
-  texture, uniform, vec4, uv, mix, vec2, float
+  texture, uniform, vec4, vec2, float, uv, mix
 } from 'three/tsl'
-import { crtDistort, crtColorEffect } from './nodes/crt-node'
-import { patternNode } from './nodes/pattern-node'
-import { ditherNode } from './nodes/dither-node'
-import { liquidDistort } from './nodes/liquid-node'
-import { vhsDistort } from './nodes/vhs-node'
-import { glitchDistort } from './nodes/glitch-node'
-import { getSelectionMask } from './nodes/shared-tsl'
-import { opticalFlowBlur, temporalFeedback, cinemaDither } from './nodes/motion-node'
+import { crtDistort, crtColorEffect }    from './nodes/crt-node'
+import { ditherNode }                    from './nodes/dither-node'
+import { liquidDistort }                 from './nodes/liquid-node'
+import { vhsDistort, vhsColorEffect }    from './nodes/vhs-node'
+import { glitchDistort }                 from './nodes/glitch-node'
+import { opticalFlowBlur, cinemaDither } from './nodes/motion-node'
+import { bloomPass }                     from './nodes/bloom-node'
+import { patternNode }                   from './nodes/pattern-node'
+import { halftoneNode }                  from './nodes/halftone-node'
+import { colorGradeNode }                from './nodes/color-grade-node'
+import { dotMatrixNode }                 from './nodes/dot-matrix-node'
+import { chladniNode }                   from './nodes/chladni-node'
+import { thresholdNode }                 from './nodes/threshold-node'
+import { gaussianNoiseNode }             from './nodes/noise-node'
+import { fogPointcloudNode }             from './nodes/fog-node'
 
 interface Props {
-  fabricCanvas: any // This is now the Fabric Instance
+  fabricCanvas: any
   className?: string
+  onReady?: () => void
 }
 
 /**
- * WebGPULabEngine V7.0 - PERSISTENT MULTI-OBJECT ENGINE
- * Performs high-precision rendering with matrix-projections and mesh pooling.
+ * WebGPU Lab Engine — Artboard Mode
+ *
+ * Full-canvas single-pass post-processing. Captures the Fabric canvas as a
+ * texture and renders it back with all enabled Lab effects applied. Positioned
+ * as a pointer-events:none overlay so Fabric still receives all input.
+ *
+ * Only mounts when filterTarget === 'artboard'. Object-mode per-object overlays
+ * are handled by WebGPUObjectOverlay (creative-studio.tsx).
  */
-export function WebGPULabEngine({ fabricCanvas, className }: Props) {
+export function WebGPULabEngine({ fabricCanvas, className, onReady }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const rendererRef = useRef<THREE.WebGPURenderer | null>(null)
-  const fabricRef = useRef<any>(fabricCanvas) // Initialize with prop
-  const store = useLabStore()
+  const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const rendererRef  = useRef<THREE.WebGPURenderer | null>(null)
+  const onReadyRef   = useRef(onReady)
+  useEffect(() => { onReadyRef.current = onReady }, [onReady])
 
-  // Mesh/Material Pool for Vanguard V7.0
-  const pool = useRef<Map<string, { mesh: THREE.Mesh, material: THREE.MeshBasicNodeMaterial, uniforms: any }>>(new Map()).current
+  const labActive    = useLabStore(s => s.labActive)
+  const filterTarget = useLabStore(s => s.filterTarget)
 
-  // B4: Spring integrator + per-object previous positions for velocity
-  const spring = useRef(new SpringIntegrator()).current
-  const prevPositions = useRef<Map<string, { x: number; y: number }>>(new Map()).current
-  const lastFrameTime = useRef(performance.now())
-
-  // Unified Frame Time
-  const uTime = React.useMemo(() => uniform(0), [])
-
-  // Helper to create a unique Material Instance for an object
-  const createLabMaterial = (initialUniforms: any, sourceTex: THREE.CanvasTexture) => {
-    const vUv = uv()
-    const u = initialUniforms
-    
-    let distortedUv = vUv
-    distortedUv = liquidDistort(distortedUv, uTime, u.liquidIntensity, u.liquidViscosity, u.liquidComplexity, u.selectionRect, u.selectionActive, u.selectionFeather)
-    distortedUv = glitchDistort(distortedUv, uTime, u.glitchAmount, u.glitchSeed, u.selectionRect, u.selectionActive, u.selectionFeather)
-    distortedUv = vhsDistort(distortedUv, uTime, u.vhsIntensity, u.vhsTracking, u.selectionRect, u.selectionActive, u.selectionFeather)
-    distortedUv = crtDistort(distortedUv, u.crtDistortion, u.selectionRect, u.selectionActive, u.selectionFeather)
-
-    // AG3: Chromatic aberration — R and B channels sampled at ±offset UVs
-    const aberr = u.chromaticAberration
-    const r = texture(sourceTex, distortedUv.add(vec2(aberr, float(0)))).r
-    const g = texture(sourceTex, distortedUv).g
-    const b = texture(sourceTex, distortedUv.sub(vec2(aberr, float(0)))).b
-    const sampledColor = vec4(r, g, b, texture(sourceTex, distortedUv).a)
-    let finalColor = vec4(sampledColor.rgb, sampledColor.a)
-
-    finalColor = crtColorEffect(finalColor, distortedUv, uTime, u.crtMaskScale, u.crtMaskIntensity, u.crtScanlineIntensity, u.crtBrightness, u.selectionRect, u.selectionActive, u.selectionFeather)
-    finalColor = ditherNode(finalColor, u.ditherMode, u.ditherColorDepth)
-
-    // B3: Motion blur blends OVER post-processed color — does not replace it
-    const blurredColor = opticalFlowBlur(sourceTex, distortedUv, u.uVelocity, u.motionBlurIntensity)
-    finalColor = mix(finalColor, blurredColor, u.motionBlurIntensity.mul(0.5))
-    finalColor = cinemaDither(finalColor)
-
-    const mask = getSelectionMask(vUv, u.selectionRect, u.selectionActive, u.selectionFeather)
-    
-    const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.NormalBlending })
-    mat.colorNode = finalColor.mul(mask)
-    return mat
-  }
-
-  // Keep fabricRef in sync with props
   useEffect(() => {
-    if (!fabricCanvas || !canvasRef.current || !store.labActive) return
-    
+    if (!fabricCanvas || !canvasRef.current) return
+    if (!labActive || filterTarget !== 'artboard') return
+
     let renderer: THREE.WebGPURenderer
-    let scene: THREE.Scene
-    let camera: THREE.OrthographicCamera
-    let sourceTexture: THREE.CanvasTexture
     let mainTarget: THREE.RenderTarget
-    let bgMesh: THREE.Mesh
-    let compositeMesh: THREE.Mesh
-    let bgMaterial: THREE.MeshBasicNodeMaterial
-    let finalMaterial: THREE.MeshBasicNodeMaterial
+    let src: THREE.CanvasTexture
+    let mat: THREE.MeshBasicNodeMaterial | undefined
+    let bloomMat: THREE.MeshBasicNodeMaterial | undefined
+    let planeGeo: THREE.PlaneGeometry | undefined
 
-    const updateSize = () => {
-      const width = containerRef.current?.clientWidth || window.innerWidth
-      const height = containerRef.current?.clientHeight || window.innerHeight
-      if (renderer) renderer.setSize(width, height)
+    // ── Uniforms ────────────────────────────────────────────────────────────
+    const U = {
+      crtDistortion:        uniform(0),
+      crtMaskScale:         uniform(6),
+      crtMaskIntensity:     uniform(0),
+      crtScanlineIntensity: uniform(0),
+      crtBrightness:        uniform(1),
+      liquidIntensity:      uniform(0),
+      liquidViscosity:      uniform(0.4),
+      liquidComplexity:     uniform(3),
+      vhsIntensity:         uniform(0),
+      vhsTracking:          uniform(0.5),
+      vhsBleed:             uniform(0.5),
+      glitchAmount:         uniform(0),
+      glitchSeed:           uniform(0),
+      ditherMode:           uniform(-1),
+      ditherColorDepth:     uniform(8),
+      uVelocity:            uniform(new THREE.Vector2(0, 0)),
+      motionBlurIntensity:  uniform(0),
+      cinemaDitherAmt:      uniform(0),
+      chromaticAberration:  uniform(0),
+      selectionRect:        uniform(new THREE.Vector4(0, 0, 1, 1)),
+      selectionActive:      uniform(0),
+      selectionFeather:     uniform(0.02),
+      patternEnabled:       uniform(0),
+      patternType:          uniform(0),
+      patternScale:         uniform(50),
+      patternThickness:     uniform(0.2),
+      patternBlend:         uniform(0),
+      halftoneEnabled:      uniform(0),
+      halftoneSpacing:      uniform(0.025),
+      halftoneDotSize:      uniform(1.0),
+      halftoneAngle:        uniform(0),
+      halftoneMode:         uniform(0),
+      dotMatrixEnabled:     uniform(0),
+      dotMatrixSpacing:     uniform(0.04),
+      dotMatrixDotSize:     uniform(0.7),
+      dotMatrixThreshold:   uniform(0.05),
+      dotMatrixShape:       uniform(0),
+      dotMatrixPattern:     uniform(0),
+      dotMatrixMotion:      uniform(0),
+      dotMatrixSpeed:       uniform(1.0),
+      dotMatrixStrength:    uniform(0.5),
+      dotMatrixPatScale:    uniform(1.0),
+      dotMatrixAngle:       uniform(0),
+      dotMatrixDotW:        uniform(1.0),
+      dotMatrixDotH:        uniform(1.0),
+      chladniEnabled:       uniform(0),
+      chladniM:             uniform(3),
+      chladniN:             uniform(2),
+      chladniDensity:       uniform(0.03),
+      chladniParticleSize:  uniform(0.25),
+      chladniSettle:        uniform(0.85),
+      chladniSpeed:         uniform(1.0),
+      chladniIntensity:     uniform(0.9),
+      chladniUseSourceColor: uniform(0),
+      thresholdEnabled:     uniform(0),
+      thresholdValue:       uniform(0.5),
+      thresholdSmoothing:   uniform(0.1),
+      noiseEnabled:         uniform(0),
+      noiseIntensity:       uniform(0.1),
+      noiseMonochrome:      uniform(1),
+      fogEnabled:           uniform(0),
+      fogDensity:           uniform(0.5),
+      fogOscillation:       uniform(0.5),
+      fogDepth:             uniform(0.5),
+      fogLuminescence:      uniform(0.8),
+      fogPointScale:        uniform(1.0),
+      gradeExposure:        uniform(0),
+      gradeContrast:        uniform(1),
+      gradeSaturation:      uniform(1),
+      gradeVibrance:        uniform(0),
+      gradeTemperature:     uniform(0),
+      gradeHue:             uniform(0),
+      gradeToneMap:         uniform(0),
+    }
+    const uTime         = uniform(0)
+    const uBloom        = uniform(0)
+    const uBloomTh      = uniform(0.1)
+    const uBloomRad     = uniform(0.025)
+    const uPatColor     = uniform(new THREE.Color(0x33ff55))
+    const uChladniColor = uniform(new THREE.Color(0xffffff))
+
+    // ── Push store state into uniforms ───────────────────────────────────────
+    const pushUniforms = (s: any) => {
+      U.crtDistortion.value        = s.crtEnabled ? s.crtDistortion : 0
+      U.crtMaskScale.value         = s.crtMaskScale
+      U.crtMaskIntensity.value     = s.crtEnabled ? s.crtMaskIntensity : 0
+      U.crtScanlineIntensity.value = s.crtEnabled ? s.crtScanlineIntensity : 0
+      U.crtBrightness.value        = s.crtBrightness
+      U.liquidIntensity.value      = s.liquidEnabled ? s.liquidIntensity : 0
+      U.liquidViscosity.value      = s.liquidViscosity
+      U.liquidComplexity.value     = s.liquidComplexity
+      U.vhsIntensity.value         = s.vhsEnabled ? s.vhsIntensity : 0
+      U.vhsBleed.value             = s.vhsBleed
+      U.vhsTracking.value          = s.vhsTracking
+      U.glitchAmount.value         = s.glitchEnabled ? s.glitchAmount : 0
+      U.glitchSeed.value           = s.glitchSeed
+      U.ditherMode.value           = s.ditherEnabled ? s.ditherMode : -1
+      U.ditherColorDepth.value     = s.ditherColorDepth
+      U.motionBlurIntensity.value  = s.motionBlurEnabled ? s.motionBlurIntensity : 0
+      U.cinemaDitherAmt.value      = s.cinemaDitherEnabled ? 1 : 0
+      U.chromaticAberration.value  =
+        (s.vhsEnabled    ? s.vhsIntensity * 0.003 : 0) +
+        (s.glitchEnabled ? s.glitchAmount  * 0.004 : 0)
+      uBloom.value    = s.bloomEnabled ? s.bloomIntensity : 0
+      uBloomTh.value  = s.bloomThreshold
+      uBloomRad.value = s.bloomRadius * 0.025
+      U.patternEnabled.value   = s.patternEnabled ? 1 : 0
+      U.patternType.value      = s.patternType
+      U.patternScale.value     = s.patternScale
+      U.patternThickness.value = s.patternThickness
+      U.patternBlend.value     = s.patternBlendMode
+      if (s.patternEnabled) uPatColor.value.setStyle(s.patternColor)
+      U.halftoneEnabled.value  = s.halftoneEnabled ? 1 : 0
+      U.halftoneSpacing.value  = s.halftoneSpacing
+      U.halftoneDotSize.value  = s.halftoneDotSize
+      U.halftoneAngle.value    = s.halftoneAngle
+      U.halftoneMode.value     = s.halftoneMode
+      U.dotMatrixEnabled.value    = s.dotMatrixEnabled ? 1 : 0
+      U.dotMatrixSpacing.value    = s.dotMatrixSpacing
+      U.dotMatrixDotSize.value    = s.dotMatrixDotSize
+      U.dotMatrixThreshold.value  = s.dotMatrixThreshold
+      U.dotMatrixShape.value      = s.dotMatrixShape
+      U.dotMatrixPattern.value    = s.dotMatrixPattern
+      U.dotMatrixMotion.value     = s.dotMatrixMotion
+      U.dotMatrixSpeed.value      = s.dotMatrixSpeed
+      U.dotMatrixStrength.value   = s.dotMatrixStrength
+      U.dotMatrixPatScale.value   = s.dotMatrixPatScale
+      U.dotMatrixAngle.value      = s.dotMatrixAngle
+      U.dotMatrixDotW.value       = s.dotMatrixDotW
+      U.dotMatrixDotH.value       = s.dotMatrixDotH
+      U.chladniEnabled.value        = s.chladniEnabled ? 1 : 0
+      U.chladniM.value              = s.chladniM
+      U.chladniN.value              = s.chladniN
+      U.chladniDensity.value        = s.chladniDensity
+      U.chladniParticleSize.value   = s.chladniParticleSize
+      U.chladniSettle.value         = s.chladniSettle
+      U.chladniSpeed.value          = s.chladniSpeed
+      U.chladniIntensity.value      = s.chladniIntensity
+      U.chladniUseSourceColor.value = s.chladniUseSourceColor ? 1 : 0
+      if (s.chladniEnabled) uChladniColor.value.setStyle(s.chladniColor)
+      U.thresholdEnabled.value   = s.thresholdEnabled ? 1 : 0
+      U.thresholdValue.value     = s.thresholdValue
+      U.thresholdSmoothing.value = s.thresholdSmoothing
+      U.noiseEnabled.value       = s.noiseEnabled ? 1 : 0
+      U.noiseIntensity.value     = s.noiseIntensity
+      U.noiseMonochrome.value    = s.noiseMonochrome ? 1 : 0
+      U.fogEnabled.value         = s.fogEnabled ? 1 : 0
+      U.fogDensity.value         = s.fogDensity
+      U.fogOscillation.value     = s.fogOscillation
+      U.fogDepth.value           = s.fogDepth
+      U.fogLuminescence.value    = s.fogLuminescence
+      U.fogPointScale.value      = s.fogPointScale
+      U.gradeExposure.value    = s.colorGradeEnabled ? s.gradeExposure    : 0
+      U.gradeContrast.value    = s.colorGradeEnabled ? s.gradeContrast    : 1
+      U.gradeSaturation.value  = s.colorGradeEnabled ? s.gradeSaturation  : 1
+      U.gradeVibrance.value    = s.colorGradeEnabled ? s.gradeVibrance    : 0
+      U.gradeTemperature.value = s.colorGradeEnabled ? s.gradeTemperature : 0
+      U.gradeHue.value         = s.colorGradeEnabled ? s.gradeHue         : 0
+      U.gradeToneMap.value     = s.colorGradeEnabled ? s.gradeToneMap     : 0
+      U.selectionActive.value      = s.selectionActive ? 1 : 0
+      if (s.selectionActive) U.selectionRect.value.fromArray(s.selectionRect)
+      U.selectionFeather.value     = s.selectionFeather
     }
 
-    const initFeedback = () => {
-      const f = fabricRef.current
-      if (!f || !mainTarget) return
-      const width = f.getWidth(), height = f.getHeight()
-      mainTarget.setSize(width, height)
-    }
-
+    // ── WebGPU init ──────────────────────────────────────────────────────────
     const init = async () => {
       try {
-        renderer = new THREE.WebGPURenderer({ 
-          canvas: canvasRef.current!, 
+        renderer = new THREE.WebGPURenderer({
+          canvas: canvasRef.current!,
           antialias: true,
           alpha: true,
-          forceWebGL: false 
+          forceWebGL: false,
         })
-        console.info("[LabEngine] Renderer initialized successfully.")
-        
-        // Initial target creation
-        mainTarget = new THREE.RenderTarget(1, 1, { type: THREE.HalfFloatType })
-      } catch (e) {
-        console.error("[LabEngine] Renderer initialization failed:", e)
-        return
-      }
+      } catch (e) { console.error('[LabEngine] init failed:', e); return }
+
       renderer.setPixelRatio(window.devicePixelRatio)
       renderer.setClearColor(0x000000, 0)
-      renderer.setClearAlpha(0)
       renderer.autoClear = false
-      await renderer.init()
+      try { await renderer.init() } catch (e) { console.error('[LabEngine] renderer.init:', e); return }
       rendererRef.current = renderer
-      // B2: Size mainTarget to actual canvas dimensions immediately — not 1×1
-      mainTarget.setSize(fabricCanvas.getWidth(), fabricCanvas.getHeight())
 
-      scene = new THREE.Scene()
-      camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
-      sourceTexture = new THREE.CanvasTexture(fabricCanvas.lowerCanvasEl)
+      const cw = fabricCanvas.getWidth?.() ?? canvasRef.current!.clientWidth
+      const ch = fabricCanvas.getHeight?.() ?? canvasRef.current!.clientHeight
+      renderer.setSize(cw, ch)
+
+      mainTarget = new THREE.RenderTarget(cw, ch, { type: THREE.HalfFloatType })
+      const scene  = new THREE.Scene()
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+
+      // flipY=false: WebGPU UV (0,0)=top-left matches canvas (0,0)=top-left.
+      // We flip Y manually in the shader so all downstream effect nodes get it right.
+      src = new THREE.CanvasTexture(fabricCanvas.lowerCanvasEl)
+      src.flipY = false
+      src.minFilter = THREE.LinearFilter
+      src.magFilter = THREE.LinearFilter
+
+      // ── Shader graph ────────────────────────────────────────────────────────
+      const vUv = vec2(uv().x, float(1).sub(uv().y))
+      let dUv = vUv
+
+      dUv = liquidDistort(dUv, uTime, U.liquidIntensity, U.liquidViscosity, U.liquidComplexity, U.selectionRect, U.selectionActive, U.selectionFeather)
+      dUv = glitchDistort(dUv, uTime, U.glitchAmount, U.glitchSeed, U.selectionRect, U.selectionActive, U.selectionFeather)
+      dUv = vhsDistort(dUv, uTime, U.vhsIntensity, U.vhsTracking, U.selectionRect, U.selectionActive, U.selectionFeather)
+      dUv = crtDistort(dUv, U.crtDistortion, U.selectionRect, U.selectionActive, U.selectionFeather)
+
+      const rCh    = texture(src, dUv.add(vec2(U.chromaticAberration, float(0)))).r
+      const gCh    = texture(src, dUv).g
+      const bCh    = texture(src, dUv.sub(vec2(U.chromaticAberration, float(0)))).b
+      const sampled = vec4(rCh, gCh, bCh, texture(src, dUv).a)
+      let fc = vec4(sampled.rgb, sampled.a)
+
+      fc = vhsColorEffect(src, fc, dUv, uTime, U.vhsIntensity, U.vhsBleed)
+      const halftoned = halftoneNode(src, vUv, U.halftoneSpacing, U.halftoneDotSize, U.halftoneAngle, U.halftoneMode)
+      fc = mix(fc, halftoned, U.halftoneEnabled)
+      fc = colorGradeNode(fc, U.gradeExposure, U.gradeContrast, U.gradeSaturation, U.gradeVibrance, U.gradeTemperature, U.gradeHue, U.gradeToneMap)
+      fc = crtColorEffect(fc, dUv, uTime, U.crtMaskScale, U.crtMaskIntensity, U.crtScanlineIntensity, U.crtBrightness, U.selectionRect, U.selectionActive, U.selectionFeather)
+      fc = ditherNode(fc, U.ditherMode, U.ditherColorDepth)
+      const blurred = opticalFlowBlur(src, dUv, U.uVelocity, U.motionBlurIntensity)
+      fc = mix(fc, blurred, U.motionBlurIntensity.mul(0.5))
+      fc = cinemaDither(fc, uTime, U.cinemaDitherAmt)
+
+      const patResult = patternNode(uTime, U.patternScale, U.patternThickness, U.patternType, vec4(uPatColor, float(1)), U.patternBlend, fc)
+      fc = mix(fc, patResult, U.patternEnabled)
+
+      const dmResult = dotMatrixNode(src, vUv, U.dotMatrixSpacing, U.dotMatrixDotSize, U.dotMatrixThreshold, U.dotMatrixShape, U.dotMatrixPattern, U.dotMatrixMotion, U.dotMatrixSpeed, U.dotMatrixStrength, U.dotMatrixPatScale, U.dotMatrixAngle, U.dotMatrixDotW, U.dotMatrixDotH, uTime)
+      fc = mix(fc, dmResult, U.dotMatrixEnabled)
+
+      const chResult = chladniNode(src, vUv, U.chladniM, U.chladniN, U.chladniDensity, U.chladniParticleSize, U.chladniSettle, U.chladniSpeed, U.chladniIntensity, vec4(uChladniColor, float(1)), U.chladniUseSourceColor, uTime)
+      fc = mix(fc, chResult, U.chladniEnabled)
+
+      const threshResult = thresholdNode(fc, U.thresholdValue, U.thresholdSmoothing)
+      fc = mix(fc, threshResult, U.thresholdEnabled)
       
-      const vUv = uv()
+      const fogResult = fogPointcloudNode(src, fc, vUv, uTime, U.fogDensity, U.fogOscillation, U.fogDepth, U.fogLuminescence, U.fogPointScale)
+      fc = mix(fc, fogResult, U.fogEnabled)
+      
+      const noiseResult = gaussianNoiseNode(fc, vUv, uTime, U.noiseIntensity, U.noiseMonochrome)
+      fc = mix(fc, noiseResult, U.noiseEnabled)
 
-      // BG Material
-      const uBg = {
-        patternScale: uniform(50),
-        patternThickness: uniform(0.2),
-        patternType: uniform(0),
-        patternColor: uniform(new THREE.Color('#ffffff'))
-      }
-      bgMaterial = new THREE.MeshBasicNodeMaterial({ transparent: true, opacity: 0.1 })
-      const bgNode = patternNode(vUv, uBg.patternScale, uBg.patternThickness, uBg.patternType, uBg.patternColor)
-      bgMaterial.colorNode = vec4(bgNode.rgb, bgNode.a)
-      bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMaterial)
-      bgMesh.visible = false
-      scene.add(bgMesh)
+      const colorNode = vec4(fc.rgb, sampled.a)
 
-      // Final Composite
-      finalMaterial = new THREE.MeshBasicNodeMaterial({ transparent: true })
-      finalMaterial.colorNode = texture(mainTarget.texture)
-      compositeMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), finalMaterial)
-      compositeMesh.visible = false
-      scene.add(compositeMesh)
+      let effectMesh: THREE.Mesh
+      let bloomMesh: THREE.Mesh
+      planeGeo = new THREE.PlaneGeometry(2, 2)
+      try {
+        mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
+        mat.colorNode = colorNode
+        effectMesh = new THREE.Mesh(planeGeo, mat)
+        scene.add(effectMesh)
 
-      const getScreenUVs = (obj: any, f: any) => {
-        const cw = f.getWidth(), ch = f.getHeight()
-        
-        // Use Fabric's internal projection utility for 100% accuracy
-        const rect = obj.getBoundingRect(false)
-        const tl = fabric.util.transformPoint(new fabric.Point(rect.left, rect.top), f.viewportTransform)
-        const br = fabric.util.transformPoint(new fabric.Point(rect.left + rect.width, rect.top + rect.height), f.viewportTransform)
+        // compUv flips Y so the intermediate render target reads top→top (matches IsolationWindow)
+        const compUv = vec2(uv().x, float(1).sub(uv().y))
+        bloomMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
+        bloomMat.colorNode = bloomPass(mainTarget.texture, compUv, uBloom, uBloomTh, uBloomRad)
+        bloomMesh = new THREE.Mesh(planeGeo, bloomMat)
+        bloomMesh.visible = false
+        scene.add(bloomMesh)
+      } catch (e) { console.error('[LabEngine] scene build:', e); return }
 
-        const uvX = tl.x / cw
-        const uvY = 1.0 - (br.y / ch) 
-        const uvW = (br.x - tl.x) / cw
-        const uvH = (br.y - tl.y) / ch
-        
-        return [uvX, uvY, uvW, uvH] as [number, number, number, number]
-      }
-
-      renderer.setAnimationLoop(() => {
-        // Sync with the actual rendering canvas in case of disposal/REBIND
-        if (!fabricRef.current) fabricRef.current = fabricCanvas
-        
-        const f = fabricRef.current
-        if (!f) return
-
-        if (sourceTexture.image !== f.lowerCanvasEl) {
-           sourceTexture.image = f.lowerCanvasEl
-           sourceTexture.needsUpdate = true
-           initFeedback()
-        }
-        
-        const now = performance.now()
-        const dt = Math.min((now - lastFrameTime.current) / 1000, 0.05) // cap at 50ms
-        lastFrameTime.current = now
-        uTime.value = now / 1000
-
-        // 1. CAPTURE PHASE
-        f.renderAll()
-        sourceTexture.needsUpdate = true
-        
-        // 2. SYNC MESH POOL
-        const labObjects = f.getObjects().filter((o: any) => o.labParams)
-        const activeIds = new Set(labObjects.map((o: any) => getObjId(o)))
-
-        // Cleanup stale meshes + spring state
-        for (const [id, data] of pool.entries()) {
-          if (!activeIds.has(id)) {
-            scene.remove(data.mesh)
-            data.material.dispose()
-            pool.delete(id)
-            spring.reset(`${id}_x`, 0)
-            spring.reset(`${id}_y`, 0)
-            prevPositions.delete(id)
-          }
-        }
-
-        // Update/Create meshes
-        labObjects.forEach((obj: any) => {
-          const id = getObjId(obj)
-          let data = pool.get(id)
-          if (!data) {
-            const uniforms = {
-              crtDistortion: uniform(0),
-              crtMaskScale: uniform(6),
-              crtMaskIntensity: uniform(0),
-              crtScanlineIntensity: uniform(0),
-              crtBrightness: uniform(1),
-              liquidIntensity: uniform(0),
-              liquidViscosity: uniform(0.4),
-              liquidComplexity: uniform(3),
-              vhsIntensity: uniform(0),
-              vhsTracking: uniform(0.5),
-              glitchAmount: uniform(0),
-              glitchSeed: uniform(0),
-              ditherMode: uniform(-1),
-              ditherColorDepth: uniform(8),
-              selectionRect: uniform(new THREE.Vector4(0, 0, 1, 1)),
-              selectionActive: uniform(1),
-              selectionFeather: uniform(0.01),
-              uVelocity: uniform(new THREE.Vector2(0, 0)),
-              motionBlurIntensity: uniform(0),
-              chromaticAberration: uniform(0)
-            }
-            const material = createLabMaterial(uniforms, sourceTexture)
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
-            data = { mesh, material, uniforms }
-            pool.set(id, data)
-            scene.add(mesh)
-          }
-
-          // Update Uniforms
-          const p = obj.labParams
-          const u = data.uniforms
-          const rect = getScreenUVs(obj, f)
-          const cw = f.getWidth(), ch = f.getHeight()
-          
-          u.crtDistortion.value = p.crtEnabled ? (p.crtDistortion ?? 0.15) : 0
-          u.crtMaskScale.value = p.crtMaskScale ?? 6
-          u.crtMaskIntensity.value = p.crtEnabled ? (p.crtMaskIntensity ?? 0.8) : 0
-          u.crtScanlineIntensity.value = p.crtEnabled ? (p.crtScanlineIntensity ?? 0.25) : 0
-          u.crtBrightness.value = p.crtBrightness ?? 1
-          u.liquidIntensity.value = p.liquidEnabled ? (p.liquidIntensity ?? 0.5) : 0
-          u.vhsIntensity.value = p.vhsEnabled ? (p.vhsIntensity ?? 0.5) : 0
-          u.glitchAmount.value = p.glitchEnabled ? (p.glitchAmount ?? 0.4) : 0
-          u.ditherMode.value = (p.ditherEnabled) ? (p.ditherMode ?? 0) : -1
-          u.selectionRect.value.fromArray(rect)
-          
-          // B4: Advance spring toward object's current position, read resulting velocity
-          const springConfig = {
-            stiffness: store.springStiffness,
-            damping: store.springDamping,
-            mass: store.springMass,
-          }
-          const prev = prevPositions.get(id) ?? { x: obj.left ?? 0, y: obj.top ?? 0 }
-          spring.update(`${id}_x`, obj.left ?? 0, springConfig, dt)
-          spring.update(`${id}_y`, obj.top ?? 0, springConfig, dt)
-          prevPositions.set(id, { x: obj.left ?? 0, y: obj.top ?? 0 })
-          const vx = store.springEnabled ? spring.getVelocity(`${id}_x`) : 0
-          const vy = store.springEnabled ? spring.getVelocity(`${id}_y`) : 0
-          u.uVelocity.value.set(vx / cw, vy / ch)
-          u.motionBlurIntensity.value = p.motionBlurEnabled ? (p.motionBlurIntensity ?? 0.5) : 0
-          u.chromaticAberration.value =
-            (p.vhsEnabled ? (p.vhsIntensity ?? 0) * 0.003 : 0) +
-            (p.glitchEnabled ? (p.glitchAmount ?? 0) * 0.004 : 0)
-
-          data.mesh.visible = true
-        })
-
-        // 3. RENDER VANGUARD PASS to mainTarget
+      let didCallReady = false
+      let readyFrameCount = 0
+      const drawFrame = () => {
+        src.needsUpdate = true
+        effectMesh.visible = true
+        bloomMesh.visible  = false
         renderer.setRenderTarget(mainTarget)
         renderer.setClearAlpha(0)
         renderer.clear()
-
-        bgMesh.visible = false
-        compositeMesh.visible = false
-
         renderer.render(scene, camera)
-
-        // 4. FINAL COMPOSITE — GPU overlay occludes Fabric objects via zIndex:9999
+        effectMesh.visible = false
+        bloomMesh.visible  = true
         renderer.setRenderTarget(null)
         renderer.setClearAlpha(0)
         renderer.clear()
-
-        for (const data of pool.values()) data.mesh.visible = false
-        compositeMesh.visible = true
         renderer.render(scene, camera)
-      })
+        // Wait for 2 frames so the CanvasTexture is fully uploaded before hiding
+        // the Fabric canvas — avoids a one-frame blank flash on activation.
+        readyFrameCount++
+        if (readyFrameCount >= 2 && !didCallReady) { didCallReady = true; onReadyRef.current?.() }
+      }
 
+      const tick = () => {
+        const s = useLabStore.getState()
+        if (s.animated) uTime.value = s.animTime >= 0 ? s.animTime : (performance.now() / 1000)
+        pushUniforms(s)
+        drawFrame()
+      }
+
+      const startLoop = () => renderer.setAnimationLoop(tick)
+      const stopLoop  = () => { renderer.setAnimationLoop(null); tick() }
+
+      // Force Fabric to render NOW so the CanvasTexture captures current content.
+      fabricCanvas.requestRenderAll()
+
+      if (useLabStore.getState().animated) startLoop()
+      else stopLoop()
+
+      const unsubStore = useLabStore.subscribe((state, prev) => {
+        if (state.animated !== prev.animated) {
+          state.animated ? startLoop() : stopLoop()
+        } else if (!state.animated) {
+          tick()
+        }
+      })
+      ;(renderer as any)._unsubStore = unsubStore
+
+      // Re-render whenever Fabric redraws (drag, scale, object add/remove).
+      // In animated mode the loop already handles this; in static mode it's the
+      // only way to keep the WebGPU output in sync with the live Fabric canvas.
+      const onFabricRender = () => { if (!useLabStore.getState().animated) tick() }
+      fabricCanvas.on('after:render', onFabricRender)
+      ;(renderer as any)._offFabric = () => fabricCanvas.off('after:render', onFabricRender)
+
+      const updateSize = () => {
+        if (!containerRef.current || !renderer) return
+        const { clientWidth: w, clientHeight: h } = containerRef.current
+        renderer.setSize(w, h)
+        mainTarget.setSize(w, h)
+      }
       window.addEventListener('resize', updateSize)
-      updateSize()
+      ;(renderer as any)._offResize = () => window.removeEventListener('resize', updateSize)
     }
 
     init()
 
     return () => {
-      window.removeEventListener('resize', updateSize)
       if (rendererRef.current) {
         rendererRef.current.setAnimationLoop(null)
+        ;(rendererRef.current as any)._unsubStore?.()
+        ;(rendererRef.current as any)._offResize?.()
+        ;(rendererRef.current as any)._offFabric?.()
         rendererRef.current.dispose()
+        rendererRef.current = null
       }
-      if (sourceTexture) sourceTexture.dispose()
-      for (const data of pool.values()) {
-        data.material.dispose()
-      }
-      pool.clear()
-      rendererRef.current = null
+      src?.dispose()
+      mainTarget?.dispose()
+      mat?.dispose()
+      bloomMat?.dispose()
+      planeGeo?.dispose()
     }
-  }, [fabricCanvas, store.labActive])
+  }, [fabricCanvas, labActive, filterTarget])
 
-  if (!store.labActive) return null
+  if (!labActive || filterTarget !== 'artboard') return null
 
   return (
-    <div 
-      ref={containerRef} 
-      className={className} 
-      style={{ 
-        position: 'absolute', 
-        inset: 0, 
-        zIndex: 9999, 
-        pointerEvents: 'none'
-      }}
+    <div
+      ref={containerRef}
+      className={className}
+      style={{ position: 'absolute', inset: 0, zIndex: 9999, pointerEvents: 'none' }}
     >
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }} />
     </div>
   )
 }

@@ -382,6 +382,8 @@ function buildCrewStreamResponse(
                 const log = event.log as string | undefined
                 const toolName = event.tool as string | undefined
                 const toolInput = event.tool_input as string | undefined
+                const agent = (event.agent as string | undefined) ?? 'Agente'
+                const emoji = (event.emoji as string | undefined) ?? '🤖'
 
                 // Nuovo formato strutturato per UI Accordion
                 let stepContent = `<agent_step agent="${agent}" emoji="${emoji}">\n`
@@ -734,7 +736,7 @@ export async function POST(req: Request) {
 
     const model = modelId === 'gemini'
       ? google('gemini-2.5-flash')
-      : anthropic('claude-3-5-sonnet-latest')
+      : anthropic('claude-sonnet-5-5')
 
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
@@ -743,7 +745,7 @@ export async function POST(req: Request) {
       model,
       system: SYSTEM_PROMPT,
       messages: modelMessages,
-      maxSteps: 10, // Permette loop multipli Thought -> Tool -> Thought
+      stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
       experimental_telemetry: {
         isEnabled: true,

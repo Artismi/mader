@@ -40,7 +40,8 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
   // 0 = Chiuso/Normale, 1 = Context Graph (Immersivo)
   const [aiState, setAiState] = useState<0 | 1>(0)
   const [zoomFeedback, setZoomFeedback] = useState<number | null>(null)
-  const isOverlay = pathname === '/overlay'
+  // Rotte che non usano la shell legacy: overlay Electron e nuovo guscio circolare
+  const isOverlay = pathname === '/overlay' || pathname?.startsWith('/os')
 
   // Global UI Zoom control using IPC (Ctrl++ / Ctrl-- / Ctrl-0)
   useEffect(() => {

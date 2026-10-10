@@ -12,6 +12,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react'
 import * as fabric from 'fabric'
+import { useLabStore } from './use-lab-store'
 const getObjId = (obj: any): string => {
   if (!obj) return ''
   if (!obj.objId) {
@@ -375,6 +376,8 @@ export function useAnimationEngine(fabricRef: React.RefObject<fabric.Canvas | nu
     cancelAnimationFrame(rafRef.current)
     playStartRef.current = null
     setIsPlaying(false)
+    // Release WebGPU engines back to wall-clock time
+    useLabStore.getState().set({ animTime: -1 })
   }, [])
 
   const startPlayback = useCallback((fromTime?: number) => {
@@ -411,6 +414,8 @@ export function useAnimationEngine(fabricRef: React.RefObject<fabric.Canvas | nu
       }
       canvas.requestRenderAll()
       setCurrentTime(t)
+      // Sync WebGPU shader clock to keyframe time
+      useLabStore.getState().set({ animTime: t })
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)

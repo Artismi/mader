@@ -7,7 +7,9 @@ import { ArchitectureEditor } from '@/components/ui/architecture-editor'
 import { MemoryManager } from '@/components/ui/memory-manager'
 import { SkillFoundry } from '@/components/ui/skill-foundry'
 import { VaultEditor } from '@/components/ui/vault-editor'
-import { BrainGraph } from '@/components/ui/brain-graph'
+import dynamic from 'next/dynamic'
+// react-force-graph-2d tocca window al caricamento: solo client
+const BrainGraph = dynamic(() => import('@/components/ui/brain-graph').then(m => m.BrainGraph), { ssr: false })
 import { GlobalBrainSearch } from '@/components/ui/global-brain-search'
 import { cn } from '@/lib/utils'
 

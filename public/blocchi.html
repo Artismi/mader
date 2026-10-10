@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creative OS — prototipo</title>
+<style>
+  :root {
+    --bg: #f6f5f3;         /* scrivania: neutro caldo */
+    --surface: #ffffff;
+    --sunk: #f1efec;
+    --line: #e8e5e1;
+    --t1: #1c1b1a;         /* titoli e contenuto */
+    --t2: #55524e;         /* testo secondario */
+    --t3: #8d8984;         /* metadati */
+    --accent: #3d5afe;     /* unico colore: azione principale, selezione, link */
+    --accent-soft: #eef1ff;
+    --urgent: #c2410c;
+    --urgent-soft: #fff1e8;
+    --ok: #15803d;
+    --r: 12px;
+    --shadow: 0 1px 2px rgba(28,27,26,.04), 0 8px 24px -12px rgba(28,27,26,.12);
+    --ease: cubic-bezier(.2,.8,.2,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font: 15px/1.55 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--t2); background: var(--bg); display: flex; overflow: hidden; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; }
+  svg { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+  /* ── Barra laterale: scegli da dove partire. Silenziosa. ── */
+  nav { width: 232px; flex: none; display: flex; flex-direction: column; padding: 20px 12px; gap: 2px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 22px; font-weight: 600; color: var(--t1); letter-spacing: -.01em; }
+  .brand i { width: 26px; height: 26px; border-radius: 8px; background: var(--t1); display: grid; place-items: center; color: #fff; font: 600 13px/1 system-ui; font-style: normal; }
+  .search { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 8px 10px; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); color: var(--t3); font-size: 14px; }
+  .search kbd { margin-left: auto; font: 500 11px system-ui; color: var(--t3); background: var(--sunk); padding: 2px 6px; border-radius: 5px; }
+  nav .item { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 9px; color: var(--t2); text-align: left; transition: background .15s; }
+  nav .item:hover { background: rgba(28,27,26,.05); }
+  nav .item[aria-current] { background: var(--surface); color: var(--t1); font-weight: 600; box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.04); }
+  nav .item[aria-current] svg { color: var(--accent); }
+  nav .badge { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--urgent); }
+  nav .sep { flex: 1; }
+  nav .me { display: flex; align-items: center; gap: 10px; padding: 10px; font-size: 14px; color: var(--t2); }
+
+  /* ── Scrivania ── */
+  #desk { flex: 1; display: flex; gap: 20px; padding: 16px 20px 16px 0; min-width: 0; }
+
+  /* Blocco principale: uno solo, si trasforma */
+  .main { flex: 1; min-width: 0; background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line), var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+  .main .inner { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .fwd  { animation: fwd .32s var(--ease); }
+  .bwd  { animation: bwd .32s var(--ease); }
+  .morph{ animation: morph .32s var(--ease); }
+  @keyframes fwd  { from { opacity: 0; transform: translateX(28px); } }
+  @keyframes bwd  { from { opacity: 0; transform: translateX(-28px); } }
+  @keyframes morph{ from { opacity: 0; transform: scale(.985); } }
+
+  .top { display: flex; align-items: center; gap: 10px; padding: 14px 20px; min-height: 60px; }
+  .back { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 6px; border-radius: 8px; color: var(--t2); font-size: 14px; transition: background .15s; }
+  .back:hover { background: var(--sunk); color: var(--t1); }
+  .back[hidden] { display: none; }
+  .crumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--t3); min-width: 0; overflow: hidden; white-space: nowrap; }
+  .crumbs button:hover { color: var(--t1); text-decoration: underline; text-underline-offset: 3px; }
+  .crumbs .now { color: var(--t2); }
+  .top .sp { flex: 1; }
+  .saved { font-size: 13px; color: var(--t3); display: inline-flex; align-items: center; gap: 6px; }
+  .saved::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+
+  .scroll { flex: 1; overflow: auto; }
+  .col { max-width: 720px; margin: 0 auto; padding: 8px 32px 64px; }   /* misura di lettura comoda */
+
+  .head { display: flex; align-items: flex-end; gap: 16px; margin: 12px 0 28px; }
+  .head .tt { flex: 1; min-width: 0; }
+  .kicker { font-size: 13px; color: var(--t3); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+  .mode { font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 1px 8px; border-radius: 999px; }
+  h1 { font: 650 30px/1.15 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; color: var(--t1); letter-spacing: -.02em; }
+  .lead { margin-top: 8px; font-size: 15px; color: var(--t2); }
+
+  .primary { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 2px rgba(61,90,254,.3), inset 0 1px 0 rgba(255,255,255,.15); transition: transform .1s, filter .15s; white-space: nowrap; }
+  .primary:hover { filter: brightness(1.06); }
+  .primary:active { transform: translateY(1px); }
+  .secondary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 9px; box-shadow: 0 0 0 1px var(--line); color: var(--t1); font-size: 14px; background: var(--surface); transition: background .15s; white-space: nowrap; }
+  .secondary:hover { background: var(--sunk); }
+  .secondary svg { width: 16px; height: 16px; color: var(--t3); }
+
+  h2 { font-size: 13px; font-weight: 600; color: var(--t3); margin: 32px 0 8px; display: flex; justify-content: space-between; }
+  h2 span { font-weight: 500; }
+
+  /* Righe: si leggono dall'alto in basso */
+  .row { display: flex; align-items: center; gap: 14px; padding: 12px 12px; margin: 0 -12px; border-radius: 10px; cursor: pointer; transition: background .15s; }
+  .row:hover { background: var(--sunk); }
+  .row.was { background: var(--accent-soft); }
+  .row .mn { flex: 1; min-width: 0; }
+  .row .t { color: var(--t1); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .m { font-size: 13px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .w { font-size: 13px; color: var(--t3); white-space: nowrap; }
+  .row + .row { box-shadow: 0 -1px 0 var(--line); }
+  .row:hover, .row:hover + .row, .row.was, .row.was + .row { box-shadow: none; }
+  .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--t1); background: var(--sunk); flex: none; }
+  .av.sq { border-radius: 9px; color: var(--t3); }
+  .pill { font-size: 12px; font-weight: 600; color: var(--urgent); background: var(--urgent-soft); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+
+  /* Oggi: "inizia da qui" è l'unica cosa in evidenza */
+  .hero { display: flex; align-items: center; gap: 16px; padding: 20px; border-radius: 14px; background: var(--sunk); cursor: pointer; transition: background .15s, box-shadow .15s; }
+  .hero:hover { box-shadow: 0 0 0 1px var(--line), var(--shadow); background: var(--surface); }
+  .hero .lbl { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 2px; }
+  .hero .t { font: 600 18px/1.3 "Segoe UI Variable Display", "Segoe UI", system-ui; color: var(--t1); }
+  .hero .m { font-size: 14px; color: var(--t2); margin-top: 2px; }
+  .hero .go { margin-left: auto; color: var(--accent); }
+  .agenda { display: grid; grid-template-columns: 56px 1fr; gap: 2px 14px; font-size: 14px; }
+  .agenda .h { color: var(--t3); font-variant-numeric: tabular-nums; padding: 8px 0; }
+  .agenda .e { padding: 8px 0 8px 14px; border-left: 2px solid var(--line); color: var(--t1); }
+  .agenda .e small { display: block; color: var(--t3); font-size: 13px; }
+
+  /* Mail */
+  .from { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .from b { color: var(--t1); font-weight: 600; display: block; }
+  .from small { color: var(--t3); font-size: 13px; }
+  .letter { font-size: 17px; line-height: 1.7; color: var(--t1); max-width: 64ch; }
+  .letter p + p { margin-top: 14px; }
+  .attach { display: inline-flex; align-items: center; gap: 10px; margin-top: 22px; padding: 10px 14px; border-radius: 10px; box-shadow: 0 0 0 1px var(--line); font-size: 14px; color: var(--t1); }
+  .attach svg { color: var(--t3); }
+  .linked { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Risposta: il blocco cambia funzione */
+  .quote { border-radius: 10px; background: var(--sunk); padding: 12px 16px; font-size: 14px; color: var(--t2); margin-bottom: 18px; cursor: pointer; }
+  .quote b { color: var(--t1); font-weight: 600; }
+  .quote .txt { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .quote.open .txt { -webkit-line-clamp: unset; }
+  textarea { width: 100%; min-height: 220px; border: 0; padding: 0; font-family: inherit; font-size: 17px; line-height: 1.7; color: var(--t1); resize: none; outline: none; background: transparent; }
+  textarea::placeholder { color: var(--t3); }
+  .composebar { position: sticky; bottom: 0; display: flex; gap: 8px; align-items: center; padding: 14px 0; margin-top: 12px; background: linear-gradient(transparent, var(--surface) 30%); border-top: 1px solid var(--line); }
+  .composebar .sp { flex: 1; }
+
+  .check { display: flex; gap: 12px; align-items: center; padding: 10px 0; color: var(--t1); }
+  .box { width: 18px; height: 18px; border-radius: 5px; box-shadow: inset 0 0 0 1.5px #bdb8b2; flex: none; }
+  .progress { height: 6px; border-radius: 999px; background: var(--sunk); overflow: hidden; margin-top: 10px; }
+  .progress i { display: block; height: 100%; width: 35%; background: var(--accent); border-radius: inherit; }
+  .canvas { aspect-ratio: 4/3; border-radius: 12px; background: var(--sunk); display: grid; place-items: center; color: var(--t3); }
+  .empty { text-align: center; padding: 64px 20px; color: var(--t3); }
+  .empty b { display: block; color: var(--t1); font-size: 17px; margin-bottom: 6px; }
+
+  /* ── Accessori: secondari per costruzione ── */
+  #accs { width: 320px; flex: none; display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+  #accs:empty { display: none; }
+  .acc { background: var(--surface); border-radius: var(--r); box-shadow: 0 0 0 1px var(--line); animation: acc .3s var(--ease); }
+  @keyframes acc { from { opacity: 0; transform: translateY(8px); } }
+  .ah { display: flex; align-items: flex-start; gap: 6px; padding: 14px 12px 10px 16px; }
+  .ah .tt { flex: 1; min-width: 0; }
+  .ah .k { font-size: 12px; color: var(--t3); }
+  .ah h3 { font-size: 15px; font-weight: 600; color: var(--t1); }
+  .ib { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--t3); transition: background .15s; }
+  .ib:hover { background: var(--sunk); color: var(--t1); }
+  .ib svg { width: 16px; height: 16px; }
+  .ab { padding: 0 16px 16px; font-size: 14px; }
+  .day { font-size: 12px; font-weight: 600; color: var(--t3); margin: 10px 0 6px; }
+  .slots { display: flex; flex-wrap: wrap; gap: 6px; }
+  .slots button { padding: 6px 12px; border-radius: 999px; box-shadow: 0 0 0 1px var(--line); font-size: 13px; color: var(--t1); transition: all .15s; }
+  .slots button:hover { box-shadow: 0 0 0 1px var(--t3); }
+  .slots button[aria-pressed=true] { background: var(--accent); color: #fff; box-shadow: none; }
+  .lines { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .lines td { padding: 7px 0; border-bottom: 1px solid var(--line); color: var(--t1); }
+  .lines td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .lines tr:last-child td { border: 0; font-weight: 600; padding-top: 10px; }
+  .accbtn { width: 100%; justify-content: center; margin-top: 14px; }
+  .done { color: var(--ok); font-size: 13px; margin-top: 10px; text-align: center; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; background: var(--t1); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; transition: all .25s var(--ease); pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+  @media (max-width: 1180px) { #desk { flex-direction: column; overflow: auto; } #accs { width: auto; flex-direction: row; overflow: visible; } .acc { flex: 1; } }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="i-euro" viewBox="0 0 24 24"><path d="M18 7a7 7 0 1 0 0 10M4 10h10M4 14h10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 24 24"><path d="M9 17l-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+</svg>
+
+<nav aria-label="Navigazione principale">
+  <div class="brand"><i>C</i>Creative OS</div>
+  <div class="search"><svg><use href="#i-search"/></svg>Cerca o fai…<kbd>Ctrl K</kbd></div>
+  <button class="item" data-root="oggi"><svg><use href="#i-sun"/></svg>Oggi</button>
+  <button class="item" data-root="messaggi"><svg><use href="#i-inbox"/></svg>Messaggi<span class="badge">2</span></button>
+  <button class="item" data-root="clienti"><svg><use href="#i-users"/></svg>Clienti</button>
+  <button class="item" data-root="lavori"><svg><use href="#i-check"/></svg>Lavori</button>
+  <button class="item" data-root="studio"><svg><use href="#i-pen"/></svg>Studio</button>
+  <button class="item" data-root="archivio"><svg><use href="#i-archive"/></svg>Archivio</button>
+  <div class="sep"></div>
+  <div class="me"><span class="av" style="width:28px;height:28px;font-size:12px">A</span>Il tuo studio</div>
+</nav>
+
+<div id="desk">
+  <section class="main" id="main" aria-live="polite"></section>
+  <aside id="accs" aria-label="Blocchi accessori"></aside>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* REGOLA — stessa famiglia: il blocco si trasforma · famiglia diversa: accessorio accanto · ← risale con memoria */
+const HUB = new Set(['list', 'client', 'project'])
+const FAMILY = { mail: 'comm', reply: 'comm', project: 'work', task: 'work', client: 'people', design: 'studio' }
+const KIND = { list: '', mail: 'Mail', reply: 'Risposta', client: 'Cliente', project: 'Progetto', task: 'Task', design: 'Design' }
+
+const D = {
+  oggi:     { kind: 'list', title: 'Buongiorno', lead: 'Hai 2 mail da rispondere e una consegna oggi.' },
+  messaggi: { kind: 'list', title: 'Messaggi', lead: '2 da rispondere', groups: [['Da rispondere', ['m1', 'm2']], ['Letti', ['m3']]] },
+  clienti:  { kind: 'list', title: 'Clienti', lead: '3 clienti attivi', groups: [['Attivi', ['c1', 'c2', 'c3']]] },
+  lavori:   { kind: 'list', title: 'Lavori', lead: 'Questa settimana', groups: [['In scadenza', ['t1', 't2', 't3']], ['Progetti', ['p1']]] },
+  studio:   { kind: 'list', title: 'Studio', lead: 'I tuoi design recenti', groups: [['Recenti', ['g1', 'g2']]] },
+  archivio: { kind: 'list', title: 'Archivio', lead: 'Note, idee e file', groups: [] },
+
+  m1: { kind: 'mail', title: 'Preventivo logo', who: 'Mario Rossi', ini: 'MR', client: 'c1', urgent: 'Da rispondere', when: 'ieri, 18:42',
+        text: ['Ciao! Avremmo bisogno di un preventivo per il restyling del logo e delle grafiche social, entro fine mese.', 'Ti allego il brief. Possiamo sentirci la prossima settimana per parlarne?'], file: 'brief-rossi.pdf' },
+  m2: { kind: 'mail', title: 'Foto nuova collezione', who: 'Luca Ferri', ini: 'LF', client: 'c2', urgent: 'Da rispondere', when: 'oggi, 9:10',
+        text: ['Ti mando le foto per i post di novembre. Fammi sapere se servono altri scatti.'] },
+  m3: { kind: 'mail', title: 'Conferma call', who: 'Anna Mossetto', ini: 'AM', client: 'c3', when: 'oggi, 8:02', text: ['Confermo la call di domani alle 10.'] },
+  c1: { kind: 'client', title: 'Rossi Srl', ini: 'RS', lead: 'Mario Rossi · mario@rossi.it', meta: '2 progetti', items: [['Prossima cosa', ['m1']], ['Progetti', ['p1']], ['Design', ['g1']]] },
+  c2: { kind: 'client', title: 'Bicicleria', ini: 'BI', lead: 'Luca Ferri · info@bicicleria.it', meta: '1 progetto', items: [['Prossima cosa', ['m2']], ['Lavori', ['t2']]] },
+  c3: { kind: 'client', title: 'Mossetto', ini: 'MO', lead: 'Anna Mossetto', meta: 'nessun progetto', items: [['Messaggi', ['m3']]] },
+  p1: { kind: 'project', title: 'Restyling logo', ini: 'RL', lead: 'Rossi Srl · consegna 31 ottobre', meta: 'Rossi Srl', client: 'c1', items: [['Task', ['t1', 't3']], ['Design', ['g1', 'g2']]] },
+  t1: { kind: 'task', title: 'Consegnare moodboard', meta: 'Restyling logo', when: 'oggi', parent: 'p1', client: 'c1' },
+  t2: { kind: 'task', title: 'Post di novembre', meta: 'Bicicleria', when: 'venerdì', client: 'c2' },
+  t3: { kind: 'task', title: 'Varianti colore', meta: 'Restyling logo', when: 'lunedì', parent: 'p1', client: 'c1' },
+  g1: { kind: 'design', title: 'Logo — variante B', meta: 'Restyling logo', when: 'ieri', client: 'c1' },
+  g2: { kind: 'design', title: 'Logo — variante A', meta: 'Restyling logo', when: '3 giorni fa', client: 'c1' },
+}
+
+let chain = []           // catena del blocco principale: { id, kind, mem }
+let accs = []            // accessori: { id, kind, for }
+const drafts = {}
+const cur = () => chain[chain.length - 1]
+const ico = n => `<svg><use href="#i-${n}"/></svg>`
+const name = s => s.kind === 'reply' ? 'Risposta' : (s.id === 'oggi' ? 'Oggi' : D[s.id].title)
+
+function remember() {
+  const c = cur(); if (!c) return
+  const s = document.querySelector('#main .scroll'); if (s) c.mem.scroll = s.scrollTop
+  const ta = document.querySelector('#main textarea'); if (ta) drafts[c.id] = ta.value
+}
+
+function go(id, kind = D[id].kind) {
+  const here = cur()
+  if (here && !(HUB.has(here.kind) || FAMILY[here.kind] === FAMILY[kind])) return openAcc(id, kind)
+  remember()
+  if (here) here.mem.from = id
+  const anim = here && here.id === id ? 'morph' : 'fwd'      // stesso nodo = cambia funzione
+  chain.push({ id, kind, mem: {} })
+  render(anim)
+}
+function back(to = chain.length - 2) { if (to < 0 || to >= chain.length - 1) return; remember(); chain = chain.slice(0, to + 1); render('bwd') }
+function openAcc(id, kind) {
+  accs = accs.filter(a => !(a.id === id && a.kind === kind))
+  accs.unshift({ id, kind, for: cur().id })
+  accs = accs.slice(0, 2)
+  renderAccs()
+}
+function promote(i) { const a = accs.splice(i, 1)[0]; remember(); cur().mem.from = a.id; chain.push({ id: a.id, kind: a.kind, mem: {} }); render('fwd'); renderAccs() }
+
+function avatar(n) {
+  if (n.kind === 'mail') return `<span class="av">${n.ini}</span>`
+  if (n.kind === 'client') return `<span class="av sq">${n.ini}</span>`
+  const i = { task: 'check', project: 'file', design: 'pen' }[n.kind]
+  return `<span class="av sq">${ico(i)}</span>`
+}
+function row(id) {
+  const n = D[id], was = cur().mem.from === id ? ' was' : ''
+  const sub = n.kind === 'mail' ? `${n.who} · ${n.when}` : [KIND[n.kind], n.meta].filter(Boolean).join(' · ')
+  const right = n.urgent ? `<span class="pill">${n.urgent}</span>` : `<span class="w">${n.when ?? ''}</span>`
+  return `<div class="row${was}" data-go="${id}" tabindex="0">${avatar(n)}<div class="mn"><div class="t">${n.title}</div><div class="m">${sub}</div></div>${right}</div>`
+}
+const group = ([label, ids]) => `<h2>${label}<span>${ids.length}</span></h2>` + ids.map(row).join('')
+
+function view(c) {
+  const n = D[c.id]
+  if (c.id === 'oggi') return {
+    kicker: 'Venerdì 9 ottobre', title: n.title, lead: n.lead,
+    body: `<div class="hero" data-go="m1" tabindex="0">${avatar(D.m1)}<div><div class="lbl">Inizia da qui</div><div class="t">Rispondi a Mario Rossi</div><div class="m">"Preventivo logo" · ieri, 18:42</div></div><span class="go">${ico('right')}</span></div>
+      <h2>Poi<span>3</span></h2>${['t1', 'm2', 't2'].map(row).join('')}
+      <h2>Agenda di oggi</h2><div class="agenda"><div class="h">10:00</div><div class="e">Call con Anna Mossetto<small>Google Meet · 30 min</small></div><div class="h">15:30</div><div class="e">Lavoro su Restyling logo<small>Blocco di concentrazione</small></div></div>` }
+  if (c.kind === 'list') return { title: n.title, lead: n.lead,
+    body: n.groups.length ? n.groups.map(group).join('') : `<div class="empty"><b>Ancora niente qui</b>Le note e i file che salvi compariranno in questo elenco.</div>` }
+  if (c.kind === 'mail') return {
+    kicker: 'Mail', title: n.title, action: `<button class="primary" data-morph="reply">${ico('reply')}Rispondi</button>`,
+    body: `<div class="from">${avatar(n)}<div><b>${n.who}</b><small>${D[n.client].title} · ${n.when}</small></div></div>
+      <div class="letter">${n.text.map(p => `<p>${p}</p>`).join('')}</div>
+      ${n.file ? `<div class="attach">${ico('file')}${n.file}</div>` : ''}
+      <h2>Collegati</h2><div class="linked">
+        <button class="secondary" data-acc="${n.client}">${ico('users')}${D[n.client].title}</button>
+        <button class="secondary" data-acck="calendar">${ico('cal')}Proponi un appuntamento</button>
+        <button class="secondary" data-acck="quote">${ico('euro')}Prepara preventivo</button></div>` }
+  if (c.kind === 'reply') return {
+    kicker: `<span class="mode">Stessa mail · ora rispondi</span>`, title: `Risposta a ${n.who.split(' ')[0]}`, saved: !!drafts[c.id],
+    body: `<div class="quote" data-toggle tabindex="0"><b>${n.who}:</b> <span class="txt">${n.text.join(' ')}</span></div>
+      <textarea id="draft" placeholder="Scrivi la risposta…" aria-label="Risposta">${drafts[c.id] ?? ''}</textarea>
+      <div class="composebar"><button class="secondary">${ico('clip')}Allega</button>
+        <button class="secondary" data-acck="calendar">${ico('cal')}Appuntamento</button>
+        <button class="secondary" data-acck="quote">${ico('euro')}Preventivo</button><span class="sp"></span>
+        <button class="primary" data-send>${ico('send')}Invia</button></div>` }
+  if (c.kind === 'client' || c.kind === 'project') return {
+    kicker: KIND[c.kind], title: n.title, lead: n.lead,
+    action: `<button class="primary">${c.kind === 'client' ? 'Nuovo progetto' : 'Nuovo task'}</button>`,
+    body: (c.kind === 'project' ? `<div class="progress" aria-label="Avanzamento 35%"><i></i></div>` : '') + n.items.map(group).join('') }
+  if (c.kind === 'task') return {
+    kicker: `Task · ${n.meta}`, title: n.title, lead: `Scadenza: ${n.when}`, action: `<button class="primary">${ico('check')}Segna fatto</button>`,
+    body: `<h2>Checklist<span>0 di 2</span></h2><div class="check"><span class="box"></span>Raccogliere i riferimenti</div><div class="check"><span class="box"></span>Impaginare la moodboard</div>
+      <h2>Collegati</h2><div class="linked">${n.parent ? `<button class="secondary" data-go="${n.parent}">${ico('file')}Restyling logo</button>` : ''}<button class="secondary" data-acc="${n.client}">${ico('users')}${D[n.client].title}</button></div>` }
+  if (c.kind === 'design') return { kicker: `Design · ${n.meta}`, title: n.title, action: `<button class="primary">Apri nello Studio</button>`, body: `<div class="canvas">anteprima del design</div>` }
+}
+
+function render(anim = 'fwd') {
+  const c = cur(), v = view(c), n = chain.length
+  const crumbs = chain.map((s, i) => i === n - 1 ? `<span class="now">${name(s)}</span>` : `<button data-to="${i}">${name(s)}</button>`).join(`<span aria-hidden>›</span>`)
+  document.getElementById('main').innerHTML = `<div class="inner ${anim}">
+    <div class="top">
+      <button class="back" data-back ${n < 2 ? 'hidden' : ''} title="Alt + ←">${ico('back')}${n > 1 ? name(chain[n - 2]) : ''}</button>
+      ${n > 2 ? `<div class="crumbs">${crumbs}</div>` : ''}
+      <span class="sp"></span>${v.saved ? '<span class="saved">Bozza salvata</span>' : ''}
+    </div>
+    <div class="scroll"><div class="col">
+      <div class="head"><div class="tt">${v.kicker ? `<div class="kicker">${v.kicker}</div>` : ''}<h1>${v.title}</h1>${v.lead ? `<p class="lead">${v.lead}</p>` : ''}</div>${v.action ?? ''}</div>
+      ${v.body}</div></div></div>`
+  document.querySelector('#main .scroll').scrollTop = c.mem.scroll ?? 0
+  const ta = document.getElementById('draft')
+  if (ta) { ta.focus(); ta.selectionStart = ta.value.length; ta.oninput = () => { drafts[c.id] = ta.value; document.querySelector('.top .sp').insertAdjacentHTML('afterend', document.querySelector('.saved') ? '' : '<span class="saved">Bozza salvata</span>') } }
+  document.querySelectorAll('nav .item').forEach(x => x.toggleAttribute('aria-current', x.dataset.root === chain[0].id))
+}
+
+function renderAccs() {
+  document.getElementById('accs').innerHTML = accs.map((a, i) => {
+    const forName = D[a.for]?.title ?? ''
+    if (a.kind === 'calendar') return acc(i, 'Per: ' + forName, 'Proponi un orario', `
+      <div class="day">Lunedì 12</div><div class="slots">${['10:00', '15:00'].map(s => slot('Lun ' + s, s)).join('')}</div>
+      <div class="day">Martedì 13</div><div class="slots">${['9:30', '11:00', '16:30'].map(s => slot('Mar ' + s, s)).join('')}</div>
+      <button class="secondary accbtn" data-insert>Inserisci nella risposta</button>`, false)
+    if (a.kind === 'quote') return acc(i, 'Per: ' + forName, 'Preventivo — bozza', `
+      <table class="lines"><tr><td>Logo, 3 varianti</td><td>€ 900</td></tr><tr><td>Grafiche social × 6</td><td>€ 340</td></tr><tr><td>Totale</td><td>€ 1.240</td></tr></table>
+      <button class="secondary accbtn" data-attach>${ico('clip')}Allega alla risposta</button>`, true)
+    const n = D[a.id]
+    return acc(i, KIND[a.kind], n.title, `<p style="color:var(--t2)">${n.lead ?? ''}</p><p style="margin-top:6px;color:var(--t3)">${n.meta ?? ''}</p>`, true)
+  }).join('')
+}
+const slot = (v, label) => `<button aria-pressed="false" data-slot="${v}">${label}</button>`
+const acc = (i, k, title, body, canPromote) => `<section class="acc" aria-label="${title}">
+  <div class="ah"><div class="tt"><div class="k">${k}</div><h3>${title}</h3></div>
+  ${canPromote ? `<button class="ib" title="Porta al centro" data-promote="${i}">${ico('expand')}</button>` : ''}<button class="ib" title="Chiudi (Esc)" data-close="${i}">${ico('x')}</button></div>
+  <div class="ab">${body}</div></section>`
+
+function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 1800) }
+
+/* Gli accessori lavorano PER il blocco principale */
+function ensureReply() { const c = cur(); if (c.kind === 'mail') go(c.id, 'reply'); return document.getElementById('draft') }
+function insert(text) { const ta = ensureReply(); if (!ta) return toast('Apri la mail per inserirlo nella risposta'); ta.value = (ta.value ? ta.value.trimEnd() + '\n\n' : '') + text; ta.dispatchEvent(new Event('input')); ta.focus() }
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-go],[data-morph],[data-acc],[data-acck],[data-back],[data-to],[data-root],[data-close],[data-promote],[data-slot],[data-insert],[data-attach],[data-send],[data-toggle]')
+  if (!t) return
+  const d = t.dataset
+  if ('root' in d) { remember(); chain = [{ id: d.root, kind: 'list', mem: {} }]; accs = []; render('morph'); renderAccs() }
+  else if ('back' in d) back()
+  else if ('to' in d) back(+d.to)
+  else if ('morph' in d) go(cur().id, d.morph)
+  else if ('go' in d) go(d.go)
+  else if ('acc' in d) openAcc(d.acc, D[d.acc].kind)
+  else if ('acck' in d) openAcc(cur().id, d.acck)
+  else if ('close' in d) { accs.splice(+d.close, 1); renderAccs() }
+  else if ('promote' in d) promote(+d.promote)
+  else if ('slot' in d) t.parentElement.parentElement.querySelectorAll('[data-slot]').forEach(b => b.setAttribute('aria-pressed', b === t))
+  else if ('insert' in d) { const s = document.querySelector('[data-slot][aria-pressed=true]'); if (!s) return toast('Scegli prima un orario'); insert(`Ti propongo ${s.dataset.slot.replace('Lun', 'lunedì').replace('Mar', 'martedì')}, ti va bene?`); toast('Orario inserito nella risposta') }
+  else if ('attach' in d) { if (!ensureReply()) return toast('Apri la mail per allegarlo'); toast('Preventivo allegato alla risposta') }
+  else if ('send' in d) { toast('Risposta inviata'); delete drafts[cur().id]; D[cur().id].urgent = null; accs = []; renderAccs(); back(chain.findIndex(s => s.kind === 'list')) }
+  else if ('toggle' in d) t.classList.toggle('open')
+})
+document.addEventListener('keydown', e => {
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); back() }
+  else if (e.key === 'Escape') { if (accs.length) { accs.shift(); renderAccs() } else back() }
+  else if (e.key === 'Enter' && e.target.matches('.row,.hero')) e.target.click()
+})
+
+chain = [{ id: 'oggi', kind: 'list', mem: {} }]; render('morph')
+</script>
+</body>
+</html>

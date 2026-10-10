@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as fabric from 'fabric'
 import {
@@ -56,10 +56,11 @@ import {
   ThermalFilter, PrismFilter, NeonGlowFilter, HolographicFilter, BloomFilter, PixelateFilter,
   // Texture
   GrainFilter, FiberFilter, EliteHalftone, ASCIIFilter,
-  // Style
   Risograph, EliteClay, OilPaintFilter, OutlineFilter,
   DuotoneFilter, VignetteFilter, PosterizeFilter, VolumetricDepthFilter,
 } from './extensions/filters'
+
+import { Vanguard3DInjector } from './lab/Vanguard3DInjector'
 
 import { solveBoard, type LayoutBoard } from '@/lib/design/engine'
 import * as generative from '@/lib/design/generative'
@@ -218,8 +219,10 @@ import { useAnimationEngine } from './hooks/use-animation-engine'
 import { AnimationTimeline } from './animation-timeline'
 
 import { WebGPULabEngine } from './lab/WebGPULabEngine'
+import { WebGPUObjectOverlay, type WebGPUObjectOverlayHandle } from './lab/WebGPUObjectOverlay'
 import { LabPanel } from './lab/LabPanel'
-import { useLabStore } from './hooks/use-lab-store'
+import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
+import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -296,6 +299,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const [showFX, setShowFX] = useState(false)
   const [canvasReady, setCanvasReady] = useState(false)
   const [showAB, setShowAB] = useState(false)
+  const [showCervello, setShowCervello] = useState(false)
   const [showFP, setShowFP] = useState(false)
   const [showLib, setShowLib] = useState(false)
   const [showLayers, setShowLayers] = useState(false)
@@ -366,6 +370,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const animFilterObjsRef = useRef<Set<any>>(new Set())
   const physicsObjsRef = useRef<Set<any>>(new Set())
   const subtitleObjsRef = useRef<Set<any>>(new Set())
+
+  // ── Lab System ──────────────────────────────────────────────────────────────
+  const [labPersistedObjects, setLabPersistedObjects] = useState<any[]>([])
+  const [labSelectedObj, setLabSelectedObj] = useState<any | null>(null)
+  const [selFabricType, setSelFabricType] = useState<string>('')
+  const [gpuLabReady, setGpuLabReady] = useState(false)
+  const [v3dAspect, setV3dAspect] = useState(1)
+  const labOverlayRef = useRef<WebGPUObjectOverlayHandle | null>(null)
+  const suppressLabSyncRef = useRef(false)
+
 
   // Animated filter types: { FX key → filter .type string }
   const ANIMATED_FX: Record<string, string> = {
@@ -489,6 +503,67 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     setArtboardBadges(newBadges)
   }, [])
 
+  // Clear persisted Lab overlays when Lab is deactivated
+  useEffect(() => {
+    if (!store.labActive) {
+      // Restore objectCaching on any text objects that were modified for lab mode
+      const canvas = fabricRef.current
+      if (canvas) {
+        canvas.getObjects().forEach((o: any) => {
+          if (o._labOriginalCaching !== undefined) {
+            o.set('objectCaching', o._labOriginalCaching)
+            delete o._labOriginalCaching
+          }
+        })
+        canvas.requestRenderAll()
+      }
+      setLabPersistedObjects([])
+      setLabSelectedObj(null)
+    }
+  }, [store.labActive])
+
+  // Reset GPU readiness when leaving artboard mode
+  useEffect(() => {
+    if (!store.labActive || store.filterTarget !== 'artboard') setGpuLabReady(false)
+  }, [store.labActive, store.filterTarget])
+
+  // When the user switches to Object mode with an object already selected on canvas,
+  // syncLabSelection (bound to Fabric events) won't fire automatically.
+  // Re-sync manually so labSelectedObj is populated and the 3D preview can render.
+  useEffect(() => {
+    if (store.filterTarget !== 'object') return
+    if (!fabricRef.current) return
+    const objects = fabricRef.current.getActiveObjects() as any[]
+    if (objects.length === 0) return
+    const obj = objects[0]
+    setLabPersistedObjects(prev => prev.includes(obj) ? prev : [...prev, obj])
+    setLabSelectedObj(obj)
+    suppressLabSyncRef.current = true
+    useLabStore.getState().set(obj.labParams ?? LAB_FILTER_DEFAULTS)
+    suppressLabSyncRef.current = false
+  }, [store.filterTarget])
+
+  // Bake Lab effect onto the Fabric object (replaces original with PNG)
+  const handleLabApply = useCallback((dataUrl: string, targetObj: any) => {
+    const canvas = fabricRef.current
+    if (!canvas || !targetObj) return
+    fabric.FabricImage.fromURL(dataUrl).then((img: fabric.FabricImage) => {
+      img.set({
+        left:   targetObj.left,
+        top:    targetObj.top,
+        scaleX: targetObj.getScaledWidth()  / (img.width  ?? 1),
+        scaleY: targetObj.getScaledHeight() / (img.height ?? 1),
+        angle:  0,
+      })
+      canvas.remove(targetObj)
+      canvas.add(img)
+      canvas.setActiveObject(img)
+      canvas.requestRenderAll()
+      pushHistory()
+      setLabPersistedObjects((prev: any[]) => prev.filter((o: any) => o !== targetObj))
+    })
+  }, [pushHistory])
+
   const cleanupOrphanedLabels = React.useCallback((canvas: fabric.Canvas) => {
     const objs = canvas.getObjects()
     const artboardNames = new Set(objs.filter(o => (o as any).isArtboard).map(o => o.get('name')))
@@ -600,24 +675,54 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     // ── Lab Selection Sync ──────────────────────────────────
     const syncLabSelection = () => {
+      const labStore = useLabStore.getState()
       const objects = canvas.getActiveObjects()
+
       if (objects.length === 0) {
-        store.set({ selectionActive: false, selectionRect: [0, 0, 1, 1] })
+        setLabSelectedObj(null)
+        setSelFabricType('')
         return
       }
 
-      const primary = objects[0] as any
-      const cw = canvas.getWidth(), ch = canvas.getHeight()
-      const rect = primary.getBoundingRect(true, true)
-      const normalizedRect: [number, number, number, number] = [rect.left/cw, rect.top/ch, rect.width/cw, rect.height/ch]
+      const obj = objects[0] as any
+      setSelFabricType(obj.type || '')
 
-      // Deep Sync: Push current store params into the object immediately
-      const { set: _set, labActive, selectionActive, selectionRect: _sr, ...params } = store
-      objects.forEach(obj => {
-        (obj as any).labParams = { ...((obj as any).labParams || {}), ...params }
-      })
+      setLabSelectedObj(obj)
 
-      store.set({ selectionActive: true, selectionRect: normalizedRect })
+      // Load this object's saved params into the store.
+      suppressLabSyncRef.current = true
+      if (labStore.filterTarget === 'object') {
+        labStore.set(obj.labParams ?? LAB_FILTER_DEFAULTS)
+      } else {
+        // Even in Artboard mode, we must load the object's 3D state so the UI reflects it!
+        const p = obj.labParams ?? {}
+        labStore.set({
+           threeDEnabled: p.threeDEnabled ?? false,
+           threeDDepth: p.threeDDepth ?? 2.2,
+           threeDBevel: p.threeDBevel ?? 0.05,
+           threeDMaterial: p.threeDMaterial ?? 'chrome',
+           threeDMotion: p.threeDMotion ?? true,
+        })
+      }
+      suppressLabSyncRef.current = false
+
+      if (!labStore.labActive) return
+      if (labStore.filterTarget !== 'object') return
+
+      // Text objects cache their pixels by default which prevents WebGPU from reading
+      // updated content. Disable caching while in object lab mode and store the original
+      // value so it can be restored when the lab is deactivated.
+      const isText = ['textbox', 'i-text', 'text'].includes(obj.type || '')
+      if (isText) {
+        if (obj._labOriginalCaching === undefined) {
+          obj._labOriginalCaching = obj.objectCaching
+        }
+        obj.set('objectCaching', false)
+        canvas.requestRenderAll()
+      }
+
+      // Track object for persistent overlay
+      setLabPersistedObjects(prev => prev.includes(obj) ? prev : [...prev, obj])
     }
 
     canvas.on('selection:created', syncLabSelection)
@@ -635,36 +740,51 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     })
     canvas.on('object:scaling', syncLabSelection)
 
-    // Bi-directional Sync: Lab UI -> Active Objects
-    const labSubscription = useLabStore.subscribe((state) => {
+    // Lab UI → active object params (object mode only)
+    // Also: when Lab is activated or mode switches to 'object', sync the current canvas selection
+    // so the overlay appears without requiring a re-click.
+    const labSubscription = useLabStore.subscribe((state, prev) => {
+      const justActivated = state.labActive && !prev.labActive
+      const justSwitchedToObject = state.filterTarget === 'object' && prev.filterTarget !== 'object' && state.labActive
+      if (!suppressLabSyncRef.current && (justActivated || justSwitchedToObject)) {
+        syncLabSelection()
+      }
+
+      if (suppressLabSyncRef.current) return
       if (!canvas || !state.labActive) return
-      
+      if (state.filterTarget !== 'object') return
+
       const activeObjects = canvas.getActiveObjects()
       if (activeObjects.length === 0) return
 
-      const { set: _set, labActive, selectionActive, selectionRect, ...params } = state
+      // Persist params to the object
+      const filterParams: Record<string, unknown> = {}
       
-      activeObjects.forEach(obj => {
-        getObjId(obj as any);
-        const oldParams = JSON.stringify((obj as any).labParams)
-        const newParams = { ...((obj as any).labParams || {}), ...params }
-        
-        if (oldParams !== JSON.stringify(newParams)) {
-          console.info(`[LabBridge] Syncing params to ${obj.type}`)
-          ;(obj as any).labParams = newParams
-          obj.set('dirty', true) // Mark for engine refresh
+      if (state.filterTarget === 'object') {
+        for (const [k, v] of Object.entries(state)) {
+          if (!LAB_GLOBAL_KEYS.has(k)) filterParams[k] = v
         }
+      } else {
+        // In artboard mode, ONLY persist the 3D Genesis parameters
+        const objKeys = ['threeDEnabled', 'threeDDepth', 'threeDBevel', 'threeDMaterial', 'threeDMotion']
+        for (const k of objKeys) {
+           filterParams[k] = state[k as keyof typeof state]
+        }
+      }
+
+      activeObjects.forEach(obj => {
+        ;(obj as any).labParams = { ...((obj as any).labParams ?? {}), ...filterParams }
       })
-      canvas.requestRenderAll()
     })
 
-    // Video DOM cleanup: rimuove il <video> nascosto quando l'oggetto viene cancellato dal canvas
+    // Video DOM cleanup + Lab overlay cleanup when object is removed from canvas
     canvas.on('object:removed', (e: any) => {
       const obj = e.target
       if ((obj as any).isVideo) {
         const vid = (obj as any).videoElement as HTMLVideoElement | undefined
         if (vid?.parentElement) vid.parentElement.removeChild(vid)
       }
+      setLabPersistedObjects((prev: any[]) => prev.filter((o: any) => o !== obj))
     })
 
     // Auto-apply filters for special brushes (Chrome)
@@ -1178,26 +1298,65 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const runner = Matter.Runner.create()
     const bodiesMap = new Map<string, any>()
 
-    // Create ground
-    const ground = Matter.Bodies.rectangle(canvas.width! / 2, canvas.height! + 50, canvas.width! * 2, 100, { isStatic: true })
-    Matter.World.add(engine.world, ground)
+    const W = canvas.width! || 800
+    const H = canvas.height! || 600
+    const WALL = 60
 
-    // Initial Body Sync
+    // Boundaries: ground + left + right + ceiling
+    const ground  = Matter.Bodies.rectangle(W / 2, H + WALL / 2,     W * 2, WALL, { isStatic: true })
+    const wallL   = Matter.Bodies.rectangle(-WALL / 2, H / 2,         WALL,  H * 2, { isStatic: true })
+    const wallR   = Matter.Bodies.rectangle(W + WALL / 2, H / 2,      WALL,  H * 2, { isStatic: true })
+    const ceiling = Matter.Bodies.rectangle(W / 2, -WALL / 2,         W * 2, WALL, { isStatic: true })
+    Matter.World.add(engine.world, [ground, wallL, wallR, ceiling])
+
+    /** Create the correct Matter body for a Fabric object */
+    const makeBody = (obj: fabric.FabricObject) => {
+      const center = obj.getCenterPoint()
+      const ang = (obj.angle || 0) * (Math.PI / 180)
+      const opts = { restitution: 0.5, friction: 0.1, angle: ang }
+      if (obj.type === 'circle') {
+        const r = Math.max(1, ((obj as any).radius || 50) * (obj.scaleX || 1))
+        return Matter.Bodies.circle(center.x, center.y, r, opts)
+      }
+      return Matter.Bodies.rectangle(
+        center.x, center.y,
+        Math.max(1, obj.getScaledWidth()),
+        Math.max(1, obj.getScaledHeight()),
+        opts,
+      )
+    }
+
+    // Initial body sync — all existing eligible objects
     canvas.getObjects().forEach(obj => {
       if ((obj as any).isArtboard || !obj.selectable) return
-      const id = (obj as any).objId || getObjId(obj)
-      const center = obj.getCenterPoint()
-      const body = Matter.Bodies.rectangle(center.x, center.y, obj.getScaledWidth(), obj.getScaledHeight(), {
-        restitution: 0.5,
-        friction: 0.1,
-        angle: (obj.angle || 0) * (Math.PI / 180)
-      })
+      const id = getObjId(obj)
+      const body = makeBody(obj)
       bodiesMap.set(id, body)
       Matter.World.add(engine.world, body)
     })
 
     physicsRef.current = { engine, runner, bodies: bodiesMap }
     Matter.Runner.run(runner, engine)
+
+    // Register objects added after physics was enabled
+    const onAdded = (e: any) => {
+      const obj = e.target
+      if (!obj || (obj as any).isArtboard || !obj.selectable) return
+      const id = getObjId(obj)
+      if (!bodiesMap.has(id)) {
+        const body = makeBody(obj)
+        bodiesMap.set(id, body)
+        Matter.World.add(engine.world, body)
+      }
+    }
+    const onRemoved = (e: any) => {
+      const obj = e.target; if (!obj) return
+      const id = (obj as any).objId
+      const body = bodiesMap.get(id)
+      if (body) { Matter.World.remove(engine.world, body); bodiesMap.delete(id) }
+    }
+    canvas.on('object:added',   onAdded)
+    canvas.on('object:removed', onRemoved)
 
     let animId: number
     const tick = () => {
@@ -1215,6 +1374,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           })
           obj.setCoords()
         } else if (body && canvas.getActiveObject() === obj) {
+          // User is dragging — push body to match
           const center = obj.getCenterPoint()
           Matter.Body.setPosition(body, { x: center.x, y: center.y })
           Matter.Body.setAngle(body, (obj.angle || 0) * (Math.PI / 180))
@@ -1229,6 +1389,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     return () => {
       cancelAnimationFrame(animId)
+      canvas.off('object:added',   onAdded)
+      canvas.off('object:removed', onRemoved)
       Matter.Runner.stop(runner)
       Matter.Engine.clear(engine)
     }
@@ -3077,12 +3239,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     canvas.setViewportTransform(originalVpt || [1, 0, 0, 1, 0, 0]);
     labels.forEach(l => l.set('visible', true))
 
+    // Build artboard rect map (canvas pixel coords, no zoom) for video export
+    const artboardRects: Record<string, { left: number; top: number; width: number; height: number }> = {}
+    artboards.forEach(ab => {
+      const b2 = ab.getBoundingRect(false)
+      const id = (ab as any).objId || ab.name || ab.get('name') as string
+      artboardRects[id] = { left: b2.left, top: b2.top, width: b2.width, height: b2.height }
+    })
+
     setUniversalLaunchData({
       projectTitle: currentProjectNameRef.current,
       artboards: artboardsData,
       globalPalette: [...new Set(artboardsData.flatMap(a => a.palette))],
       animationTracks: anim.tracks,
-    })
+      // Extra data for video export
+      _artboardRects: artboardRects,
+    } as any)
 
     setShowLaunchHub(true)
   }
@@ -3326,7 +3498,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   // 5. Hand-Drawn Mode (Rough.js)
-  function toggleHandDrawn() {
+  function toggleHandDrawn(roughness = 1.8, bowing = 1.2) {
     const canvas = fabricRef.current; if (!canvas) return
     const obj = canvas.getActiveObject()
     if (!obj) return
@@ -3354,12 +3526,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     } else if (obj.type === 'circle') {
       const r = (obj as any).radius || 50
       srcD = `M ${-r} 0 A ${r} ${r} 0 1 0 ${r} 0 A ${r} ${r} 0 1 0 ${-r} 0`
+    } else if (obj.type === 'ellipse') {
+      const rx = (obj as any).rx || 60, ry = (obj as any).ry || 40
+      srcD = `M ${-rx} 0 A ${rx} ${ry} 0 1 0 ${rx} 0 A ${rx} ${ry} 0 1 0 ${-rx} 0`
     } else { return }
 
     try {
       const gen = rough.generator()
       const drawable = gen.path(srcD, {
-        roughness: 1.8, bowing: 1.2,
+        roughness,
+        bowing,
         stroke: (obj as any).stroke || '#ffffff',
         strokeWidth: ((obj as any).strokeWidth || 1) * 1.2,
         fill: 'none', disableMultiStroke: false,
@@ -3381,6 +3557,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         strokeWidth: (obj as any).strokeWidth || 1.5, objectCaching: false,
       })
         ; (roughPath as any)._roughOriginalPath = srcD
+        ; (roughPath as any)._roughParams = { roughness, bowing }
 
       canvas.remove(obj); canvas.add(roughPath); canvas.setActiveObject(roughPath)
       setSel(p => ({ ...p, isHandDrawn: true }))
@@ -3619,13 +3796,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         {/* AI Control Center Floating Bar */}
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
           <button
-            onClick={() => setShowAB(!showAB)}
+            onClick={() => setShowCervello(!showCervello)}
             className={cn(
               "p-2 rounded-xl transition-all group flex items-center gap-2",
-              showAB ? "bg-accent/20 text-accent border border-accent/20" : "bg-white/5 text-white/40 hover:bg-white/10 border border-transparent"
+              showCervello ? "bg-accent/20 text-accent border border-accent/20" : "bg-white/5 text-white/40 hover:bg-white/10 border border-transparent"
             )}
           >
-            <Sparkles className={cn("w-4 h-4 transition-transform duration-500", showAB ? "scale-110" : "group-hover:scale-110")} />
+            <Sparkles className={cn("w-4 h-4 transition-transform duration-500", showCervello ? "scale-110" : "group-hover:scale-110")} />
             <span className="text-[10px] font-black uppercase tracking-widest pr-1">Art Director</span>
           </button>
           
@@ -3735,11 +3912,43 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         {/* ── CANVAS AREA ──────────────────────────────────────────────────────── */}
         <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden"
           onContextMenu={e => e.preventDefault()}>
-          <canvas ref={canvasRef} className="w-full h-full" />
+          {/* Fabric canvas is hidden only once WebGPU has rendered its first frame.
+              During GPU init the canvas stays visible — if GPU fails it stays visible forever. */}
+          <canvas ref={canvasRef} className="w-full h-full"
+            style={store.labActive && store.filterTarget === 'artboard' && gpuLabReady ? { opacity: 0 } : undefined} />
 
-          {/* WebGPU Lab Engine Overlay */}
-          {canvasReady && <WebGPULabEngine fabricCanvas={fabricRef.current} className="pointer-events-none" />}
+          {/* WebGPU Lab — artboard mode: full-canvas effect */}
+          {canvasReady && store.labActive && store.filterTarget === 'artboard' && (
+            <WebGPULabEngine fabricCanvas={fabricRef.current} className="pointer-events-none" onReady={() => setGpuLabReady(true)} />
+          )}
 
+          {/* WebGPU Lab — object mode: per-object persistent overlays */}
+          {canvasReady && store.labActive && store.filterTarget === 'object' && (
+            labPersistedObjects.map(obj => (
+              <WebGPUObjectOverlay
+                key={getObjId(obj)}
+                fabricObject={obj}
+                fabricCanvas={fabricRef.current}
+                isSelected={obj === labSelectedObj}
+                onApply={handleLabApply}
+                ref={obj === labSelectedObj ? labOverlayRef : undefined}
+              />
+            ))
+          )}
+
+          {/* 3D Genesis Injectors — Runs for any object with 3D enabled */}
+          {canvasReady && store.labActive && (
+            fabricRef.current?.getObjects().filter(o => 
+              (o as any).labParams?.threeDEnabled || (o === labSelectedObj && store.threeDEnabled)
+            ).map((obj: any) => (
+               <Vanguard3DInjector 
+                 key={`v3d-${getObjId(obj)}`} 
+                 fabricObject={obj} 
+                 isSelected={obj === labSelectedObj} 
+                 fabricCanvas={fabricRef.current} 
+               />
+            ))
+          )}
 
           {/* Grid overlay */}
           {showGrid && (
@@ -3913,6 +4122,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           setShowImgFx={setShowImgFx}
           showFP={showFP}
           setShowFP={setShowFP}
+          labSelectedObj={labSelectedObj}
         />
 
         {showImgFx && sel.type === 'image' && (
@@ -3952,7 +4162,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             ['Snap', snapGrid, () => setSnapGrid(p => !p), 'S'],
             ['Ruler', showRulers, () => setShowRulers(p => !p), 'R'],
             ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), 'E'],
-            ['Organic', sel.isHandDrawn, () => setSel(p => ({ ...p, isHandDrawn: !p.isHandDrawn })), 'O'],
+            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), 'O'],
             ['Gravity', gravityEnabled, () => setGravityEnabled(p => !p), ''],
           ] as [string, boolean, () => void, string][]).map(([label, active, toggle, key]) => (
             <button key={label} onClick={toggle} title={key ? `${label} [${key}]` : label}
@@ -4052,10 +4262,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       )}
 
       {/* Art Director Dashboard Overlay */}
-      {showAB && (
+      {showCervello && (
         <div className="fixed inset-0 z-[500] pointer-events-none p-4">
           <div className="h-full flex flex-col pointer-events-auto">
-            <CervelloDashboard onClose={() => setShowAB(false)} />
+            <CervelloDashboard onClose={() => setShowCervello(false)} />
           </div>
         </div>
       )}
@@ -4065,6 +4275,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         <UniversalLaunchHub 
           onClose={() => setShowLaunchHub(false)} 
           data={universalLaunchData}
+          fabricCanvasEl={fabricRef.current?.lowerCanvasEl as HTMLCanvasElement | null}
+          artboardRects={(universalLaunchData as any)?._artboardRects}
         />
       )}
 
@@ -4120,7 +4332,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         document.body
       )}
       {showLaunchHub && universalLaunchData && (
-        <UniversalLaunchHub data={universalLaunchData} animationTracks={anim.tracks} onClose={() => setShowLaunchHub(false)} />
+        <UniversalLaunchHub
+          data={universalLaunchData}
+          animationTracks={anim.tracks}
+          onClose={() => setShowLaunchHub(false)}
+          fabricCanvasEl={fabricRef.current?.lowerCanvasEl as HTMLCanvasElement | null}
+          artboardRects={(universalLaunchData as any)?._artboardRects}
+        />
       )}
 
       {videoMode && (
@@ -4343,6 +4561,8 @@ interface PanelProps {
   setShowImgFx: React.Dispatch<React.SetStateAction<boolean>>
   showFP: boolean
   setShowFP: React.Dispatch<React.SetStateAction<boolean>>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  labSelectedObj: any | null
 }
 
 type PanelTab = 'prop' | 'layers' | 'lib' | 'lab'
@@ -4561,6 +4781,22 @@ function PropertiesPanel(props: PanelProps) {
                         onReset={props.onResetImgFilters} onClose={() => { }} />
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 3D Genesis Preview — inline viewer shown when 3D is active + object selected */}
+              {propTab === 'lab' && store.threeDEnabled && props.labSelectedObj && (
+                <div className="h-60 flex-shrink-0">
+                  <Vanguard3DEngine
+                    fabricObject={props.labSelectedObj}
+                    isSelected
+                    onFrameUpdate={() => {
+                      // Drive Fabric re-renders from the panel engine's animation loop.
+                      // This engine is always visible (Chrome never throttles it), so
+                      // it serves as a reliable heartbeat for the canvas overlay.
+                      props.labSelectedObj?.canvas?.requestRenderAll?.()
+                    }}
+                  />
                 </div>
               )}
 

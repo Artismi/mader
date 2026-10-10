@@ -83,7 +83,7 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
     const sel = canvas.getActiveObject()
     if (!sel) return
     const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
-    objs.forEach((o: any) => canvas.bringForward(o))
+    objs.forEach((o: any) => canvas.bringObjectForward(o))
     canvas.requestRenderAll()
     refreshLayers()
   }, [refreshLayers, fabricRef])
@@ -97,7 +97,7 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
     const sel = canvas.getActiveObject()
     if (!sel) return
     const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
-    objs.forEach((o: any) => canvas.sendBackwards(o))
+    objs.forEach((o: any) => canvas.sendObjectBackwards(o))
     canvas.requestRenderAll()
     refreshLayers()
   }, [refreshLayers, fabricRef])
@@ -111,7 +111,7 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
     const sel = canvas.getActiveObject()
     if (!sel) return
     const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
-    objs.forEach((o: any) => canvas.bringToFront(o))
+    objs.forEach((o: any) => canvas.bringObjectToFront(o))
     canvas.requestRenderAll()
     refreshLayers()
   }, [refreshLayers, fabricRef])
@@ -125,7 +125,7 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
     const sel = canvas.getActiveObject()
     if (!sel) return
     const objs = sel.type === 'activeSelection' ? (sel as any).getObjects() : [sel]
-    objs.forEach((o: any) => canvas.sendToBack(o))
+    objs.forEach((o: any) => canvas.sendObjectToBack(o))
     canvas.requestRenderAll()
     refreshLayers()
   }, [refreshLayers, fabricRef])

@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { X, Mail, Sparkles, Copy, Check, Instagram, MessageSquare, ArrowRight, Layout, ChevronUp, ChevronDown, Zap } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { X, Mail, Sparkles, Copy, Check, Instagram, MessageSquare, ArrowRight, Layout, ChevronUp, ChevronDown, Zap, Video, Play, Square, Download, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AnimTrack, AnimPreset } from './hooks/use-animation-engine'
+import { VIDEO_CHANNEL_PRESETS, recordArtboardVideo, downloadVideoBlob } from './video-export-engine'
+import type { VideoExportState, VideoChannelPreset } from './video-export-engine'
 
 interface ArtboardBundle {
   id: string
@@ -25,6 +27,12 @@ interface UniversalLaunchHubProps {
   }
   animationTracks?: AnimTrack[]
   onClose: () => void
+  /** The live Fabric.js canvas element — needed for video capture */
+  fabricCanvasEl?: HTMLCanvasElement | null
+  /** Artboard bounding rects keyed by artboard id (canvas coords, no zoom) */
+  artboardRects?: Record<string, { left: number; top: number; width: number; height: number }>
+  /** Optional Lab/WebGL overlay canvas to composite during recording */
+  labEffectCanvas?: HTMLCanvasElement | null
 }
 
 // ── CSS animation helpers ─────────────────────────────────────────────────────
@@ -53,14 +61,49 @@ function getArtboardPreset(ab: ArtboardBundle, tracks: AnimTrack[]): AnimPreset 
   return match?.preset ?? null
 }
 
-export function UniversalLaunchHub({ data, animationTracks: animTracksProp, onClose }: UniversalLaunchHubProps) {
-  const [activeTab, setActiveTab] = useState<'newsletter' | 'social' | 'dm'>('newsletter')
+export function UniversalLaunchHub({ data, animationTracks: animTracksProp, onClose, fabricCanvasEl, artboardRects, labEffectCanvas }: UniversalLaunchHubProps) {
+  const [activeTab, setActiveTab] = useState<'newsletter' | 'social' | 'dm' | 'video'>('newsletter')
   const [copied, setCopied] = useState(false)
   const [newsletterView, setNewsletterView] = useState<'preview' | 'code'>('preview')
   const [customNewsletterHTML, setCustomNewsletterHTML] = useState<string | null>(null)
   
   // Animation tracks — prefer prop, fallback to data field
   const animationTracks: AnimTrack[] = animTracksProp ?? data.animationTracks ?? []
+
+  // ── Video Export State ─────────────────────────────────────────────────────
+  const [videoState, setVideoState] = useState<VideoExportState>({ status: 'idle' })
+  const [selectedPreset, setSelectedPreset] = useState<VideoChannelPreset>(VIDEO_CHANNEL_PRESETS[0])
+  const [recordDuration, setRecordDuration] = useState(10)
+  const [activeArtboardId, setActiveArtboardForVideo] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (data.artboards[0]) setActiveArtboardForVideo(data.artboards[0].id)
+  }, [data.artboards])
+
+  const startRecording = useCallback(async () => {
+    if (!fabricCanvasEl) {
+      setVideoState({ status: 'error', message: 'Canvas non disponibile. Riapri dal Studio.' })
+      return
+    }
+    const abId = activeArtboardId ?? data.artboards[0]?.id
+    const rect = artboardRects?.[abId ?? ''] ?? {
+      left: 0, top: 0,
+      width: fabricCanvasEl.width,
+      height: fabricCanvasEl.height,
+    }
+    try {
+      await recordArtboardVideo(
+        fabricCanvasEl,
+        rect,
+        selectedPreset,
+        recordDuration,
+        (s) => setVideoState(s),
+        labEffectCanvas,
+      )
+    } catch (e: any) {
+      setVideoState({ status: 'error', message: e?.message ?? 'Errore sconosciuto' })
+    }
+  }, [fabricCanvasEl, artboardRects, activeArtboardId, selectedPreset, recordDuration, labEffectCanvas, data.artboards])
 
   // Local state for LIVE EDITING of all artboards
   const [editableArtboards, setEditableArtboards] = useState<ArtboardBundle[]>(data.artboards)
@@ -403,9 +446,10 @@ export function UniversalLaunchHub({ data, animationTracks: animTracksProp, onCl
             <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-4">Canale di Lancio</p>
             <div className="space-y-2">
                {[
-                 { id: 'newsletter', label: 'Newsletter', icon: Mail, color: 'text-accent', bg: 'bg-accent/10', sub: 'HTML Fidelity Stack' },
-                 { id: 'social', label: 'Social Content', icon: Instagram, iconType: Instagram, color: 'text-pink-400', bg: 'bg-pink-500/10', sub: 'Captions & Images' },
-                 { id: 'dm', label: 'Messaging', icon: MessageSquare, color: 'text-emerald-400', bg: 'bg-emerald-500/10', sub: 'Personal DM' }
+                 { id: 'newsletter', label: 'Newsletter',     icon: Mail,          color: 'text-accent',     bg: 'bg-accent/10',      sub: 'HTML Fidelity Stack' },
+                 { id: 'social',     label: 'Social Content', icon: Instagram,     color: 'text-pink-400',   bg: 'bg-pink-500/10',    sub: 'Captions & Images' },
+                 { id: 'dm',         label: 'Messaging',      icon: MessageSquare, color: 'text-emerald-400',bg: 'bg-emerald-500/10', sub: 'Personal DM' },
+                 { id: 'video',      label: 'Video Export',   icon: Video,         color: 'text-sky-400',    bg: 'bg-sky-500/10',     sub: 'MP4 per Canale' },
                ].map(tab => (
                  <button 
                    key={tab.id}
@@ -733,6 +777,207 @@ export function UniversalLaunchHub({ data, animationTracks: animTracksProp, onCl
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {/* ── VIDEO EXPORT ─────────────────────────────────────────── */}
+              {activeTab === 'video' && (
+                <div className="animate-in slide-in-from-right-10 duration-500 space-y-8">
+                  <div className="flex items-center gap-3">
+                    <Video className="w-5 h-5 text-sky-400" />
+                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/40 italic">Video Export Engine</h3>
+                  </div>
+
+                  {/* Artboard selector */}
+                  {data.artboards.length > 1 && (
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Tavola da Registrare</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {data.artboards.map(ab => (
+                          <button
+                            key={ab.id}
+                            onClick={() => setActiveArtboardForVideo(ab.id)}
+                            className={cn(
+                              'h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border',
+                              activeArtboardId === ab.id
+                                ? 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+                                : 'text-white/20 hover:text-white/50 border-transparent hover:border-white/10'
+                            )}
+                          >
+                            {ab.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Channel preset grid */}
+                  <div className="space-y-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Canale di Destinazione</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {VIDEO_CHANNEL_PRESETS.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedPreset(p)}
+                          className={cn(
+                            'flex items-center gap-4 p-4 rounded-2xl border text-left transition-all',
+                            selectedPreset.id === p.id
+                              ? 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+                              : 'bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-white/[0.06] hover:text-white/60'
+                          )}
+                        >
+                          <div className={cn(
+                            'w-10 h-10 rounded-xl flex items-center justify-center font-black text-[9px] border flex-shrink-0',
+                            selectedPreset.id === p.id ? 'bg-sky-500/20 border-sky-500/30 text-sky-300' : 'bg-white/5 border-white/10 text-white/30'
+                          )}>
+                            {p.aspectLabel}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">{p.label}</p>
+                            <p className="text-[8px] font-bold opacity-40">
+                              {p.width}×{p.height} · {p.fps}fps · max {p.maxDuration}s
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-white/20">Durata Registrazione</p>
+                      <span className="text-[9px] font-black font-mono text-sky-400">{recordDuration}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={Math.min(selectedPreset.maxDuration, 60)}
+                      value={recordDuration}
+                      onChange={e => setRecordDuration(Number(e.target.value))}
+                      className="w-full h-1 rounded-full bg-white/10 appearance-none cursor-pointer accent-sky-400"
+                    />
+                    <p className="text-[8px] text-white/20">
+                      La registrazione cattura la tavola live inclusi effetti Lab, 3D e video embedded.
+                    </p>
+                  </div>
+
+                  {/* Status / Controls */}
+                  <div className="space-y-4">
+                    {videoState.status === 'idle' && (
+                      <button
+                        onClick={startRecording}
+                        disabled={!fabricCanvasEl}
+                        className="w-full h-14 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sky-500/20 hover:shadow-sky-500/40 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Play className="w-4 h-4 fill-white" />
+                        Avvia Registrazione
+                      </button>
+                    )}
+
+                    {videoState.status === 'recording' && (
+                      <div className="space-y-3">
+                        {/* Progress bar */}
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all"
+                            style={{ width: `${(videoState.elapsed / videoState.duration) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] font-black font-mono">
+                          <span className="text-sky-400 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            REC {videoState.elapsed.toFixed(1)}s / {videoState.duration}s
+                          </span>
+                          <span className="text-white/30">{selectedPreset.label}</span>
+                        </div>
+                        {/* Artboard live preview thumbnail */}
+                        {(activeArtboardId ?? data.artboards[0]?.id) && (
+                          <div className="relative rounded-xl overflow-hidden border border-sky-500/20">
+                            <img
+                              src={data.artboards.find(a => a.id === (activeArtboardId ?? data.artboards[0]?.id))?.screenshot}
+                              className="w-full object-cover opacity-60"
+                              alt="preview"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {videoState.status === 'encoding' && (
+                      <div className="flex items-center justify-center gap-3 py-8 text-sky-400">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Compilazione video…</span>
+                      </div>
+                    )}
+
+                    {videoState.status === 'done' && (
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center gap-4">
+                          <div className="w-8 h-8 rounded-xl bg-sky-500/20 flex items-center justify-center text-sky-400 flex-shrink-0">
+                            <Check className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black text-sky-300 uppercase tracking-widest">{videoState.preset.label}</p>
+                            <p className="text-[9px] text-sky-400/60 font-mono">{videoState.filename}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => downloadVideoBlob(videoState.url, videoState.filename)}
+                            className="h-12 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                          >
+                            <Download className="w-4 h-4" /> Scarica Video
+                          </button>
+                          <button
+                            onClick={() => setVideoState({ status: 'idle' })}
+                            className="h-12 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                          >
+                            <Play className="w-3 h-3" /> Nuova Registrazione
+                          </button>
+                        </div>
+                        <video
+                          src={videoState.url}
+                          controls
+                          className="w-full rounded-2xl border border-white/10 mt-2"
+                        />
+                      </div>
+                    )}
+
+                    {videoState.status === 'error' && (
+                      <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
+                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Errore Registrazione</p>
+                        <p className="text-[9px] text-red-400/60">{videoState.message}</p>
+                        <button
+                          onClick={() => setVideoState({ status: 'idle' })}
+                          className="mt-3 text-[8px] font-black uppercase tracking-widest text-red-400/60 hover:text-red-400 transition-colors"
+                        >
+                          Riprova
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info note */}
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-white/20">Note Tecniche</p>
+                    <ul className="space-y-1">
+                      {[
+                        'Il video viene esportato in formato WebM (compatibile con tutti i principali social network)',
+                        'Gli effetti Lab, il motore 3D e i video embedded sulla tavola vengono catturati in tempo reale',
+                        'La tavola funge sempre da cornice: il contenuto viene adattato (cover) al formato del canale selezionato',
+                        'Per ottenere MP4 nativo converti il file WebM con un tool come HandBrake o FFmpeg',
+                      ].map((note, i) => (
+                        <li key={i} className="text-[8px] text-white/25 flex gap-2">
+                          <span className="text-white/15 flex-shrink-0">·</span>
+                          {note}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               )}
 

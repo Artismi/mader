@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pannelli dinamici</title>
+<style>
+  /* Wireframe grigio: si giudica il comportamento dei pannelli, non lo stile */
+  :root { --t1:#111; --t2:#444; --t3:#888; --line:#e3e3e3; --side:#f6f6f6; --fill:#ececec; --spine:44px; --ctx:320px; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 15px/1.5 system-ui, "Segoe UI", sans-serif; color: var(--t2); height: 100vh; display: flex; overflow: hidden; background: #fff; }
+  button { font: inherit; cursor: pointer; }
+
+  nav { width: 200px; flex: none; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 16px 10px; gap: 2px; }
+  nav .brand { font-weight: 600; color: var(--t1); padding: 4px 10px 18px; }
+  nav .search { margin: 0 0 14px; padding: 7px 10px; border: 1px solid var(--line); background: #fff; border-radius: 6px; color: var(--t3); font-size: 13px; display: flex; justify-content: space-between; }
+  nav button { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; color: var(--t2); background: none; border: 0; text-align: left; }
+  nav button:hover { background: var(--fill); }
+  nav button[aria-current] { background: #fff; color: var(--t1); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+  nav .ico { width: 16px; height: 16px; border-radius: 4px; background: #cfcfcf; }
+  nav .spacer { flex: 1; }
+
+  /* La fila dei pannelli = il ramo */
+  #stack { flex: 1; display: flex; overflow: hidden; background: #f4f4f4; }
+  .panel { background: #fff; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+           transition: flex-basis .28s cubic-bezier(.2,.8,.2,1), opacity .2s; animation: enter .28s cubic-bezier(.2,.8,.2,1); }
+  @keyframes enter { from { opacity: 0; transform: translateX(24px); } }
+  @media (prefers-reduced-motion: reduce) { .panel { transition: none; animation: none; } }
+
+  .panel.focus { flex: 1 1 0; }                 /* il più largo: lì va l'occhio */
+  .panel.ctx   { flex: 0 0 var(--ctx); }        /* il genitore: contesto leggibile */
+  .panel.ctx .body { opacity: .75; }
+  .panel.spine { flex: 0 0 var(--spine); cursor: pointer; background: #fafafa; }
+  .panel.spine:hover { background: var(--fill); }
+  .panel.spine > :not(.spinelabel) { display: none; }
+  .spinelabel { display: none; writing-mode: vertical-rl; transform: rotate(180deg); padding: 14px 0; margin: 0 auto; font-size: 13px; color: var(--t2); white-space: nowrap; }
+  .panel.spine .spinelabel { display: block; }
+
+  .phead { padding: 18px 24px 10px; display: flex; gap: 10px; align-items: flex-start; }
+  .ctx .phead { padding: 16px 16px 8px; }
+  .phead .titles { flex: 1; min-width: 0; }
+  .type { font-size: 12px; color: var(--t3); }
+  .phead h1 { font-size: 26px; line-height: 1.2; color: var(--t1); font-weight: 650; }
+  .ctx .phead h1 { font-size: 17px; }
+  .ctx .phead .acts { display: none; }
+  .acts { display: flex; gap: 6px; }
+  .primary { background: #111; color: #fff; border: 0; border-radius: 6px; height: 34px; padding: 0 14px; font-weight: 600; }
+  .icon { background: none; border: 1px solid var(--line); border-radius: 6px; height: 34px; width: 34px; color: var(--t3); }
+  .ghost { background: none; border: 1px solid var(--line); border-radius: 6px; height: 32px; padding: 0 12px; color: var(--t2); }
+  .sub { padding: 0 24px 14px; color: var(--t3); font-size: 14px; }
+  .ctx .sub { padding: 0 16px 10px; font-size: 13px; }
+  .body { flex: 1; overflow: auto; padding: 0 24px 40px; }
+  .ctx .body { padding: 0 8px 24px; }
+
+  h2 { font-size: 13px; font-weight: 600; color: var(--t3); margin: 22px 0 6px; }
+  .ctx h2 { margin: 14px 8px 4px; }
+  .row { display: flex; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 4px; }
+  .row:hover { background: #fafafa; }
+  .row.open { background: #efefef; box-shadow: inset 3px 0 0 #111; }   /* da qui è nato il pannello a destra */
+  .row .main { flex: 1; min-width: 0; }
+  .row .t { color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .m { font-size: 13px; color: var(--t3); }
+  .row .w { font-size: 13px; color: var(--t3); white-space: nowrap; }
+  .ctx .row .w, .ctx .urgent { display: none; }
+  .urgent { font-size: 12px; font-weight: 600; color: #111; border: 1px solid #111; border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #111; flex: none; }
+  .dot.off { background: none; border: 1px solid #bbb; }
+
+  .mail { color: var(--t1); font-size: 16px; line-height: 1.65; max-width: 62ch; }
+  .composer { margin-top: 24px; border: 1px solid #bbb; border-radius: 8px; }
+  .composer textarea { width: 100%; border: 0; padding: 14px 16px; font: inherit; min-height: 120px; resize: vertical; outline: none; }
+  .composer .bar { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .composer .bar .sp { flex: 1; }
+  .branches { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); align-items: center; }
+  .branches span { font-size: 13px; color: var(--t3); margin-right: 4px; }
+  .art { aspect-ratio: 4/3; background: #f1f1f1; display: grid; place-items: center; color: #aaa; border-radius: 6px; max-width: 760px; }
+  .note { position: fixed; right: 14px; bottom: 14px; background: #fff; border: 1px solid #bbb; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--t2); max-width: 300px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+
+<nav aria-label="Navigazione principale">
+  <div class="brand">Creative OS</div>
+  <div class="search">Cerca o fai… <span>Ctrl K</span></div>
+  <button data-root="oggi"><span class="ico"></span>Oggi</button>
+  <button data-root="messaggi"><span class="ico"></span>Messaggi</button>
+  <button data-root="clienti"><span class="ico"></span>Clienti</button>
+  <button data-root="lavori"><span class="ico"></span>Lavori</button>
+  <button data-root="studio"><span class="ico"></span>Studio</button>
+  <button data-root="archivio"><span class="ico"></span>Archivio</button>
+  <div class="spacer"></div>
+  <button data-root="admin"><span class="ico"></span>Amministrazione</button>
+</nav>
+
+<div id="stack" aria-live="polite"></div>
+
+<div class="note"><b>Prova:</b> Oggi → mail di Rossi → "Rossi Srl" → un lavoro → il design. Clicca le strisce verticali per tornare indietro. <kbd>Esc</kbd> chiude l'ultimo pannello.</div>
+
+<script>
+/* ── Dati finti: ogni cosa è un nodo, ogni riga apre un nodo ── */
+const N = {
+  oggi:     { type: 'Sezione', title: 'Oggi', sub: '3 da rispondere · 2 scadenze · 1 appuntamento',
+              groups: [['Da fare adesso', ['m1', 't1', 'd1']], ['Agenda', ['e1']], ['Ripresi di recente', ['g1']]] },
+  messaggi: { type: 'Sezione', title: 'Messaggi', sub: '3 da rispondere', groups: [['Da rispondere', ['m1', 'm2', 'm3']]] },
+  clienti:  { type: 'Sezione', title: 'Clienti', sub: '4 attivi', groups: [['Attivi', ['c1', 'c2', 'c3']]] },
+  lavori:   { type: 'Sezione', title: 'Lavori', sub: 'Tutti i task e le scadenze', groups: [['Questa settimana', ['t1', 't2', 'd1']]] },
+  studio:   { type: 'Sezione', title: 'Studio', sub: 'Design recenti', groups: [['Recenti', ['g1', 'g2']]] },
+  archivio: { type: 'Sezione', title: 'Archivio', sub: 'Note, idee, file', groups: [['Recenti', ['n1']]] },
+  admin:    { type: 'Sezione', title: 'Amministrazione', sub: 'Preventivi e domini', groups: [['Scadenze', ['d1']]] },
+
+  m1: { kind: 'mail', type: 'Mail · Rossi Srl', title: 'Preventivo logo', meta: 'ieri 18:42', urgent: 'da rispondere', client: 'c1',
+        text: 'Ciao! Avremmo bisogno di un preventivo per il restyling del logo e delle grafiche social entro fine mese. Possiamo sentirci la prossima settimana?' },
+  m2: { kind: 'mail', type: 'Mail · Bicicleria', title: 'Foto nuova collezione', meta: 'oggi 9:10', urgent: 'da rispondere', client: 'c2', text: 'Ti mando le foto per i post di novembre.' },
+  m3: { kind: 'mail', type: 'Mail · Mossetto', title: 'Conferma call', meta: 'oggi 8:02', client: 'c3', text: 'Confermo la call di domani alle 10.' },
+  c1: { kind: 'client', type: 'Cliente', title: 'Rossi Srl', meta: 'Mario Rossi · mario@rossi.it',
+        groups: [['Prossima cosa', ['m1']], ['Lavori', ['p1', 't1']], ['Design', ['g1']], ['Preventivi', ['q1']]] },
+  c2: { kind: 'client', type: 'Cliente', title: 'Bicicleria', meta: 'Luca · info@bicicleria.it', groups: [['Prossima cosa', ['m2']], ['Lavori', ['t2']]] },
+  c3: { kind: 'client', type: 'Cliente', title: 'Mossetto', meta: 'Anna · anna@mossetto.it', groups: [['Messaggi', ['m3']]] },
+  p1: { kind: 'project', type: 'Progetto · Rossi Srl', title: 'Restyling logo', meta: 'scade fine mese · nato da: mail del 2/10',
+        groups: [['Task', ['t1', 't3']], ['Design', ['g1', 'g2']]] },
+  t1: { kind: 'task', type: 'Task · Restyling logo', title: 'Consegnare moodboard', meta: 'oggi', w: 'oggi', client: 'c1' },
+  t2: { kind: 'task', type: 'Task · Bicicleria', title: 'Post novembre', meta: 'venerdì', w: 'venerdì', client: 'c2' },
+  t3: { kind: 'task', type: 'Task · Restyling logo', title: 'Varianti colore', meta: 'lunedì', w: 'lunedì', client: 'c1' },
+  d1: { kind: 'task', type: 'Dominio', title: 'Rinnovo rossi.it', meta: 'tra 7 giorni', w: 'tra 7 gg', client: 'c1' },
+  e1: { kind: 'task', type: 'Evento · 10:00', title: 'Call con Mossetto', meta: 'Google Meet', w: '10:00', client: 'c3' },
+  g1: { kind: 'design', type: 'Design · Restyling logo', title: 'Logo — variante B', meta: 'modificato ieri', w: 'ieri' },
+  g2: { kind: 'design', type: 'Design · Restyling logo', title: 'Logo — variante A', meta: 'settimana scorsa', w: '1 sett' },
+  q1: { kind: 'task', type: 'Preventivo', title: 'Restyling logo — bozza', meta: '€ 1.240', w: 'bozza', client: 'c1' },
+  n1: { kind: 'task', type: 'Nota', title: 'Idee palette autunno', meta: 'vault/idee', w: '' },
+}
+
+let stack = []   // ids dei pannelli aperti, da sinistra a destra = il ramo
+
+function row(id, parentIdx) {
+  const n = N[id]
+  const open = stack[parentIdx + 1] === id ? ' open' : ''
+  const dot = n.urgent ? '<span class="dot"></span>' : '<span class="dot off"></span>'
+  const right = n.urgent ? `<span class="urgent">${n.urgent}</span>` : `<span class="w">${n.w ?? ''}</span>`
+  return `<div class="row${open}" data-open="${id}" data-from="${parentIdx}">${dot}<div class="main"><div class="t">${n.title}</div><div class="m">${n.type}</div></div>${right}</div>`
+}
+
+function body(id, i) {
+  const n = N[id]
+  let h = ''
+  if (n.kind === 'mail') {
+    h += `<p class="mail">${n.text}</p>
+      <div class="composer"><textarea placeholder="Scrivi la risposta…"></textarea>
+        <div class="bar"><button class="ghost">Allega</button><button class="ghost">Proponi appuntamento</button><span class="sp"></span><button class="primary">Invia</button></div></div>
+      <div class="branches"><span>Da qui:</span>
+        <button class="ghost" data-open="${n.client}" data-from="${i}">Apri cliente</button>
+        <button class="ghost">+ Task</button><button class="ghost">+ Preventivo</button></div>`
+  } else if (n.kind === 'design') {
+    h += `<div class="art">disegno — nel vero Studio questo pannello va a tutto schermo</div>
+      <div class="branches"><span>Da qui:</span><button class="ghost">+ Variante</button><button class="ghost">Esporta</button></div>`
+  } else if (n.kind === 'task') {
+    h += `<p style="color:#111">Dettagli del task, checklist, file collegati.</p>
+      <div class="branches"><span>Da qui:</span>${n.client ? `<button class="ghost" data-open="${n.client}" data-from="${i}">Apri cliente</button>` : ''}<button class="ghost">Segna fatto</button></div>`
+  }
+  for (const [label, ids] of n.groups ?? []) h += `<h2>${label}</h2>` + ids.map(x => row(x, i)).join('')
+  return h
+}
+
+const action = { mail: 'Rispondi', client: 'Nuovo…', project: 'Nuovo task', task: 'Fatto', design: 'Apri in Studio' }
+
+function render() {
+  const el = document.getElementById('stack')
+  const last = stack.length - 1
+  el.innerHTML = stack.map((id, i) => {
+    const n = N[id]
+    const role = i === last ? 'focus' : i === last - 1 ? 'ctx' : 'spine'
+    const acts = n.kind ? `<div class="acts"><button class="primary">${action[n.kind]}</button><button class="icon" aria-label="Altre azioni">⋯</button>${i > 0 ? `<button class="icon" aria-label="Chiudi" data-close="${i}">✕</button>` : ''}</div>` : ''
+    return `<section class="panel ${role}" data-idx="${i}" aria-label="${n.title}">
+      <div class="spinelabel">${n.title}</div>
+      <div class="phead"><div class="titles"><div class="type">${n.type}</div><h1>${n.title}</h1></div>${acts}</div>
+      ${n.sub || n.meta ? `<div class="sub">${n.sub || n.meta}</div>` : ''}
+      <div class="body">${body(id, i)}</div></section>`
+  }).join('')
+  document.querySelectorAll('nav button').forEach(b => b.toggleAttribute('aria-current', b.dataset.root === stack[0]))
+}
+
+/* Aprire da un pannello: tutto ciò che stava a destra si chiude, il nuovo diventa il focus */
+function open(id, from) { stack = stack.slice(0, from + 1); if (stack[stack.length - 1] !== id) stack.push(id); render() }
+function back(i) { stack = stack.slice(0, i + 1); render() }
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-open],[data-close],.panel.spine,[data-root]')
+  if (!t) return
+  if (t.dataset.root) { stack = [t.dataset.root]; render() }
+  else if (t.dataset.close) back(+t.dataset.close - 1)
+  else if (t.classList.contains('spine')) back(+t.dataset.idx)
+  else open(t.dataset.open, +t.dataset.from)
+})
+addEventListener('keydown', e => { if (e.key === 'Escape' && stack.length > 1) back(stack.length - 2) })
+
+stack = ['oggi']; render()
+</script>
+</body>
+</html>

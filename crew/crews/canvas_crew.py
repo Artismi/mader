@@ -96,6 +96,31 @@ def _load_tools_knowledge():
 
 # ── Agenti ────────────────────────────────────────────────────────────────────
 
+def build_trend_scout() -> Agent:
+    """Lo Scout — cacciatore di ispirazione: vision, visual mimicry e trend scouting."""
+    return Agent(
+        role="Trend Scout DIC — Aesthetic DNA & Synthesis Scout",
+        goal=(
+            "Analizza le reference visive fornite non come mattoni da copiare, ma come ESTREMI di un gradiente estetico.\n"
+            "Identifica le polarità (es. Minimalismo vs Caos) e estrai le 'SFUMATURE' (nuances) che possono nascere dalla loro unione.\n"
+            "Estrai parametri di Visual Mimicry flessibili:\n"
+            "1. TENSIONE SPAZIALE: Come gli estremi di vuoto e pieno interagiscono per creare equilibrio.\n"
+            "2. CONTRASTO CROMATICO: Come i colori delle diverse fonti si fondono in una nuova palette coerente.\n"
+            "3. BLUEPRINT DI SINTESI: Un set di regole che non mixa, ma fonde gli stili in una nuova entità."
+        ),
+        backstory=(
+            "Sei un alchimista dei trend. Per te il design è un gradiente. Se vedi Cyberpunk e Minimalismo, non vedi "
+            "un conflitto, ma una nuova sfumatura di futuro pulito e tecnologico. Il tuo compito è trovare il punto "
+            "di fusione creativa dove gli estremi si toccano."
+        ),
+        llm=make_gemini_flash(),
+        verbose=True,
+        max_iter=2,
+        allow_delegation=False,
+        multimodal=True,
+    )
+
+
 def build_brief_enricher(context_snapshot: str) -> Agent:
     return Agent(
         role="Tenente × Brief Enricher — DIC Vanguard Intelligence",
@@ -193,17 +218,16 @@ def build_layout_architect() -> Agent:
     agent_kwargs = dict(
         role="Alchimista x Layout Architect — DIC Atomic Synthesizer",
         goal=(
-            "PRIMA DI AGIRE — genera la Tensione Creativa:\n"
-            "  D1: Quale pattern compositivo (EDITORIAL_SPLIT, etc.) si adatta meglio?\n"
+            "PRIMA DI AGIRE — genera la Sintesi Estetica:\n"
+            "  D1: Come posso fondere gli ESTREMI del Blueprint di Sintesi in una sfumatura unica?\n"
             "  D2: Qual è la tensione tra opposti che voglio creare? (es. luxury vs caos, brutalist vs fashion)\n"
             "  D3: Come posso violare la griglia pur rispettandola matematicamente?\n"
             "  D4: DNA Extraction: Ho integrato i token identitari (palette OKLCH, font personality) in modo strutturale?\n"
             "\n"
-            "Fusione Atomica: progettare una struttura visiva inattaccabile basata sul **Layering Non-Distruttivo**. "
-            "USA LA TENSIONE CONCETTUALE del Tenente come bussola. "
-            "Se stratification_needed è TRUE, dividi lo spazio in almeno 3 layer di profondità. "
-            "Applica VADAR (Visual Architecture Directive) e MoRE (Mixture of Rule Experts) per il calcolo dei padding. "
-            "Il risultato deve essere una spec di layout che sfida lo spettatore, non che lo rassicura."
+            "Fusione Atomica: progettare una struttura visiva che sia una SINTESI SUPERIORE tra le reference. "
+            "Non usare gli stili come mattoni, ma come colori per creare nuove SFUMATURE. "
+            "Se viene rilevata una tensione tra stili (es. Cyberpunk vs Minimal), cerca il punto di fusione dove l'uno eleva l'altro. "
+            "Applica VADAR e MoRE per il calcolo dei padding e della densità."
         ),
         backstory=(
             "Sei l'Alchimista del DIC — l'agente che 'vede' le sottostrutture invisibili. "
@@ -445,23 +469,18 @@ def build_geometra() -> Agent:
 def build_tribunale() -> Agent:
     """Il Tribunale — adversarial audit: multimodale, forense e anti-noia."""
     return Agent(
-        role="Tribunale DIC — Digital Intelligence Adversary & Forensic Auditor",
+        role="Tribunale DIC — Synthesis & Excellence Auditor",
         goal=(
-            "PROTOCOLLO TRIBUNALE v3.0 (Obbligatorio):\n"
-            "1. **INDIPENDENTE (Audit)**: Usa audit_workspace per toccare con mano i file. Verifica byte e metadati.\n"
-            "2. **INDECISO (Attacco)**: Distruggi l'estetica. Cerca lo slop algoritmico. Poni le 3 domande destabilizzanti.\n"
-            "3. **CONVINTO (Difesa)**: Giustifica le scelte deliberate o ammetti l'errore con un fix numerico esatto.\n"
-            "4. **BOREDOM SCORE**: Se l'originalità è < 30/100, genera un REJECT bloccante (approved=false).\n"
-            "\n"
-            "Sei il guardiano dell'eccellenza. Non approvare se il design è 'accettabile'. "
-            "Approva solo se il design è inattaccabile e fisicamente validato nella sandbox. "
-            "Se ti viene fornito un 'visual_screenshot', commutati sulla visione multimodale "
-            "e giudica il 'vibe' reale, i colori e la leggibilità che solo un occhio umano può percepire."
+            "PROTOCOLLO TRIBUNALE v3.1 (Sintesi Estetica):\n"
+            "1. **QUALITÀ DELLA SINTESI**: Il design fonde gli estremi delle reference in una sfumatura armoniosa? "
+            "Se il risultato è un 'Frankenstein' disordinato, genera un REJECT.\n"
+            "2. **AUDIT DEI GRADIENTI**: Verifica che il contrasto tra gli stili generi tensione creativa e non confusione.\n"
+            "3. **BOREDOM & SLOP**: Mantieni lo score di originalità elevato. Il design deve essere solido ma 'nuovo'.\n"
+            "Approva solo se il design è una sintesi superiore alle parti originali."
         ),
         backstory=(
-            "Sei il collegio dei tre giudici del DIC. Odi la noia, odi il design 'stock'. "
-            "Usi audit_workspace come una lente d'ingrandimento per smascherare deliverable fatti senza anima. "
-            "Il tuo giudizio è l'ultima barriera tra la mediocrità e il genio editoriale."
+            "Sei il custode dell'Armonia degli Opposti. Sai riconoscere quando due stili contrastanti hanno generato "
+            "una sfumatura capolavoro o quando sono rimasti mattoni separati e incompatibili."
         ),
         tools=[audit_workspace],
         llm=make_gemini_flash_lite(),
@@ -484,6 +503,21 @@ def build_tasks(brief: str, client_name: str | None, agents: dict, critic_feedba
         f"\n\n⚠️ RETRY — Feedback dal Quality Critic:\n{critic_feedback}\n"
         "Risolvi TUTTI i problemi elencati prima di produrre il nuovo output."
         if critic_feedback else ""
+    )
+
+    # STAGE 0 — Visual Discovery & Blueprint Extraction
+    task_scout = Task(
+        description=(
+            f"Analizza il brief cercandole come [REFERENCE_URL: url]. Brief: \"{brief}\"\n"
+            "Analizza le reference non per copiarle, ma per identificare il GRADIENTE di sintesi.\n\n"
+            "DNA DA ESTRARRE:\n"
+            "- polarità_estreme: Quali sono i due mondi visivi che si incontrano?\n"
+            "- punto_di_fusione: Come devono interagire (es: griglia minimal con dettagli cyberpunk)?\n"
+            "- parametri_blueprint: Traduzione tecnica della 'sfumatura' (padding, scales, colors).\n"
+            "- visual_direction: Istruzioni per l'Alchimista su come interpolare tra i riferimenti."
+        ),
+        expected_output="Aesthetic Blueprint JSON che definisce la sintesi originale tra le reference fornite.",
+        agent=agents["trend_scout"],
     )
 
     task_enrich = Task(
@@ -642,7 +676,7 @@ def build_tasks(brief: str, client_name: str | None, agents: dict, critic_feedba
             "sections array con ALMENO 10 elementi (5+ rect strutturali, 1+ image_zone, 3+ zone testo distinte)."
         ),
         agent=agents["layout_architect"],
-        context=[task_enrich, task_curation],
+        context=[task_enrich, task_curation, task_scout],
     )
 
     task_assets = Task(
@@ -829,21 +863,21 @@ def build_tasks(brief: str, client_name: str | None, agents: dict, critic_feedba
 
     task_tribunale = Task(
         description=task_description_trib + (
-            "\nOUTPUT JSON:\n"
+            "\nVALUTAZIONE DELLA SINTESI (MANDATORIA):\n"
+            "Il design finale è un mix caotico (Frankenstein) o una sfumatura armoniosa (Sintesi superiore)?\n"
+            "Se è incoerente, scrivi 'REJECT: Incoerenza Estetica' e chiedi un fix strutturale.\n\n"
+            "OUTPUT JSON:\n"
             "{\n"
             '  "total_score": 0-100,\n'
-            '  "boredom_score": 0-100,\n'
+            '  "synthesis_quality": "High|Medium|Low",\n'
             '  "approved": boolean,\n'
-            '  "indeciso_criticisms": [],\n'
-            '  "convinto_defenses": [],\n'
-            '  "perizia_forense": {"file_exists": "PASS|FAIL", "integrity": "PASS|FAIL"},\n'
-            '  "issues": ["Se rilevi overflow visivi, scrivi qui il fix esatto in JSON string"],\n'
+            '  "issues": [],\n'
             '  "suggestions": []\n'
             "}"
         ),
-        expected_output="JSON con giudizio avversariale, boredom_score e validazione visiva/fisica della tavola.",
+        expected_output="JSON con giudizio sulla qualità della sintesi e validazione visiva della tavola.",
         agent=agents["tribunale"],
-        context=[task_enrich, task_geometra, task_curation],
+        context=[task_enrich, task_geometra, task_curation, task_scout],
     )
 
     # FASE 6 — Artigiano: micro-perfezioni finali
@@ -872,7 +906,7 @@ def build_tasks(brief: str, client_name: str | None, agents: dict, critic_feedba
         context=[task_geometra, task_tribunale, task_curation],
     )
 
-    return [task_enrich, task_curation, task_layout, task_assets, task_strumentista, task_generate, task_massimalista, task_geometra, task_tribunale, task_artigiano]
+    return [task_scout, task_enrich, task_curation, task_layout, task_assets, task_strumentista, task_generate, task_massimalista, task_geometra, task_tribunale, task_artigiano]
 
 
 
@@ -1338,16 +1372,16 @@ def run_brief_enricher_only(brief: str, context: dict, client_name: str | None) 
 # ── Streaming runner ──────────────────────────────────────────────────────────
 
 _AGENT_META = [
+    ("Trend Scout DIC",                "🧭", "Visual Mimicry: estrazione DNA da reference visive"),
     ("Tenente x Brief Enricher",       "🎯", "SITREP militare + DNA extraction del brand"),
     ("Curatore x Artboard Curator",    "🖼️", "Strategia canvas: multi-board e gestione stati"),
     ("Alchimista x Layout Architect",  "⚗️", "Fusione atomica: struttura visiva inattaccabile"),
     ("Sperimentatore x Asset Curator", "🎞️", "Layer materico: assets con firma fisica"),
     ("Strumentista DIC",               "🛠️", "Technical production planner: sfrutta ogni strumento"),
-    ("Ingegnere x Bambino x Generator","⚙️", "Tecnica off-label + imperfezione umana"),
+    ("Artigiano x Board Generator",    "🏺", "Micro-perfezioni finali + sentenza Professorotto"),
     ("Massimalista DIC",               "🎭", "Editorial complexity guardian: rigetta il piattume"),
     ("Geometra DIC",                   "📐", "Audit spaziale: overlap, respiro, griglia, equilibrio"),
     ("Tribunale DIC",                  "⚖️", "Dibattito avversariale: Indeciso x Convinto x Forense"),
-    ("Artigiano x Board Generator",    "🏺", "Micro-perfezioni finali + sentenza Professorotto"),
 ]
 
 
@@ -1516,11 +1550,12 @@ def run_canvas_crew_streaming(
                 "massimalista": build_massimalista(),
                 "geometra": build_geometra(),
                 "tribunale": build_tribunale(),
+                "trend_scout": build_trend_scout(),
             }
 
             # ──────── STAGE 1: DISCOVERY ────────
-            tasks_stage1 = build_tasks(brief, client_name, agents, critic_feedback, context_snapshot, bad_dreams)[:2]
-            crew1 = Crew(agents=[agents["brief_enricher"], agents["artboard_curator"]], tasks=tasks_stage1, process=Process.sequential, step_callback=step_callback, task_callback=task_callback, verbose=True)
+            tasks_stage1 = build_tasks(brief, client_name, agents, critic_feedback, context_snapshot, bad_dreams)[:3] # Scout + Enrich + Curation
+            crew1 = Crew(agents=[agents["trend_scout"], agents["brief_enricher"], agents["artboard_curator"]], tasks=tasks_stage1, process=Process.sequential, step_callback=step_callback, task_callback=task_callback, verbose=True)
             res1 = crew1.kickoff()
             brief_output = res1.tasks_output[0].raw
             brief_json = _extract_json(brief_output) or {}
@@ -1549,10 +1584,10 @@ def run_canvas_crew_streaming(
 
                 all_tasks = build_tasks(brief, client_name, agents, critic_feedback, context_snapshot, bad_dreams, shared_screenshot)
                 
-                # Filtriamo i task creativi (indici 2 a 6) in base alla policy
+                # Filtriamo i task creativi (indici 3 a 7) in base alla policy
                 tasks_creative = []
-                for i in range(2, 7):
-                    task_name = ["layout", "assets", "strumentista", "generate", "massimalista"][i-2]
+                for i in range(3, 8):
+                    task_name = ["layout", "assets", "strumentista", "generate", "massimalista"][i-3]
                     if task_name == "massimalista" and "massimalista" not in active_agents:
                         continue
                     tasks_creative.append(all_tasks[i])
@@ -1570,7 +1605,7 @@ def run_canvas_crew_streaming(
                 
                 # ──────── STAGE 3: VALIDATION ────────
                 _put({"type": "step", "agent": "System Orchestrator", "emoji": "⚖️", "thought": "Avvio Fase di Validazione Spaziale ed Estetica (Tiered Evaluation)"})
-                tasks_val = build_tasks(brief, client_name, agents, critic_feedback, context_snapshot, bad_dreams, shared_screenshot)[7:9]
+                tasks_val = build_tasks(brief, client_name, agents, critic_feedback, context_snapshot, bad_dreams, shared_screenshot)[8:10]
                 crew_val = Crew(agents=[agents["geometra"], agents["tribunale"]], tasks=tasks_val, process=Process.sequential, step_callback=step_callback, task_callback=task_callback, verbose=True)
                 res_val = crew_val.kickoff(inputs={"image": shared_screenshot}) if shared_screenshot else crew_val.kickoff()
                 
