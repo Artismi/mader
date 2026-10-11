@@ -16,6 +16,7 @@
 import * as fabric from 'fabric'
 import { LOOKS, fxDef, migrateFx, newFx, type Adjust, type FxEntry, type FxId, type Look } from './catalog'
 import { fxPadding, fxSpeed, isActive, renderFx, type FxData } from './render'
+import { onAssetReady } from './gl'
 
 interface FxState {
   adjust?: Adjust
@@ -134,7 +135,7 @@ function tick(now: number) {
 export function attachFx(canvas: fabric.Canvas) {
   installFxEngine()
   // in sviluppo il catalogo è raggiungibile dalla console (e dai test nel browser)
-  if (process.env.NODE_ENV !== 'production') Object.assign(window, { __fx: { newFx, fxDef, LOOKS, applyFx, canvas } })
+  if (process.env.NODE_ENV !== 'production') Object.assign(window, { __fx: { newFx, fxDef, LOOKS, applyFx, canvas, fabric } })
   const visit = (o: fabric.FabricObject) => {
     if (hasFx(o)) applyFx(o)
     if (o instanceof fabric.Group) o.getObjects().forEach(visit)
@@ -144,7 +145,12 @@ export function attachFx(canvas: fabric.Canvas) {
   canvas.on('object:added', onAdded)
   canvas.on('object:removed', onRemoved)
   canvas.getObjects().forEach(visit)
-  return () => { canvas.off('object:added', onAdded); canvas.off('object:removed', onRemoved) }
+  // quando arriva la texture di un materiale, gli oggetti che la usano si ridisegnano
+  const stopAssets = onAssetReady(() => {
+    const mark = (o: fabric.FabricObject) => { if ((o as FxObject)._fxOn) { (o as FxObject)._fxStale = true; o.set('dirty', true) } if (o instanceof fabric.Group) o.getObjects().forEach(mark) }
+    canvas.getObjects().forEach(mark); canvas.requestRenderAll()
+  })
+  return () => { canvas.off('object:added', onAdded); canvas.off('object:removed', onRemoved); stopAssets() }
 }
 
 /* ───────── anteprime (miniature come in Canva) ───────── */

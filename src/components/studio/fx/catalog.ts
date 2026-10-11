@@ -118,7 +118,7 @@ export type FxId =
   | 'wave' | 'ripple' | 'twirl' | 'bulge' | 'mosaic' | 'chroma'
   | 'vhs' | 'crt'
   | 'material3d' | 'genFill'
-  | 'grunge' | 'stitch' | 'foil'
+  | 'grunge' | 'stitch' | 'foil' | 'impressione'
 
 export type PVal = number | string
 export interface FxEntry { id: FxId; on: boolean; amount: number; p: Record<string, PVal>; variant?: string }
@@ -295,6 +295,18 @@ export const FX_DEFS: FxDef[] = [
       { id: 'scia', label: 'Scia', p: { count: 5, distance: 6, useColor: 0, fade: 75 } },
       { id: 'colore', label: 'Colorata', p: { count: 3, distance: 10, useColor: 1, color: '#ff5a5f', fade: 40 } },
       { id: 'pop', label: 'Pop', p: { count: 2, distance: 14, useColor: 1, color: '#00c2ff', fade: 0, angle: 45 } },
+    ] },
+  { id: 'impressione', label: 'Impressione', cat: 'Stampa', hint: 'testo impresso a secco, in rilievo, in lamina o a inchiostro su carta, pietra, pelle veri',
+    pad: p => (n(p.mode) > 3.5 ? 0 : n(p.size, 8) * 3 + 8),
+    params: [s('mode', 'Tecnica', ['A secco', 'In rilievo', 'Lamina', 'Inchiostro', 'Solo materiale'], 0), s('material', 'Materiale', ['Carta bianca', 'Carta grigia', 'Carta stropicciata', 'Cartoncino avana', 'Carta kraft', 'Carta paglia', 'Gesso', 'Intonaco', 'Cemento scuro', 'Marmo nero', 'Pelle', 'Tela', 'Metallo spazzolato', 'Metallo bianco', 'Lamina', 'Plastica'], 0), c('tint', 'Tinta', '#ffffff'), r('depth', 'Profondità', 0, 100, 60), r('size', 'Smusso', 1, 30, 8), r('light', 'Luce', 0, 360, 135), r('micro', 'Grana materiale', 0, 100, 60), r('scene', 'Luce di scena', 0, 100, 60), r('scale', 'Scala materiale', 30, 300, 100), c('ink', 'Inchiostro', '#1d2a6b'), c('c1', 'Lamina scura', '#6b4a10'), c('c2', 'Lamina chiara', '#ffe9a8')],
+    variants: [
+      { id: 'secco', label: 'A secco su carta', p: { mode: 0, material: 0, size: 9, depth: 75 } },
+      { id: 'rilievo', label: 'Rilievo su gesso', p: { mode: 1, material: 6, depth: 70, size: 10 } },
+      { id: 'oro', label: 'Oro su carta', p: { mode: 2, material: 3, depth: 40 } },
+      { id: 'argento', label: 'Argento su nero', p: { mode: 2, material: 9, depth: 40, c1: '#4c4f57', c2: '#f4f6fa' } },
+      { id: 'pietra', label: 'Inciso nella pietra', p: { mode: 0, material: 7, depth: 95, size: 12 } },
+      { id: 'pelle', label: 'Marchio su pelle', p: { mode: 0, material: 10, depth: 85, size: 7 } },
+      { id: 'timbro', label: 'Timbro su kraft', p: { mode: 3, material: 4, ink: '#1a1a1a', depth: 25 } },
     ] },
   { id: 'foil', label: 'Lamina', cat: 'Testo', hint: 'lamina metallica stropicciata con smusso e riflessi',
     params: [c('c1', 'Ombra metallo', '#7a5310'), c('c2', 'Luce metallo', '#fff1b8'), r('crinkle', 'Stropicciatura', 0, 100, 60), r('bevel', 'Smusso', 0, 20, 4), r('light', 'Luce', 0, 360, 220)],

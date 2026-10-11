@@ -63,6 +63,10 @@ vec3 blend(vec3 b, vec3 s, float m) {
 `
 
 let shared: FxGL | null = null
+/** immagini (texture di materiali) caricate una volta e tenute fuori dal pool */
+const images = new Map<string, { tex: Tex | null }>()
+const readyListeners = new Set<() => void>()
+export const onAssetReady = (f: () => void) => { readyListeners.add(f); return () => { readyListeners.delete(f) } }
 let broken = false
 
 export class FxGL {
@@ -133,6 +137,31 @@ export class FxGL {
   }
   /** libera tutto ciò che non è stato rilasciato (fine di un render) */
   releaseAll() { this.release(...this.live) }
+
+  /** texture ripetibile da un'immagine (materiali): null finché non è arrivata */
+  image(url: string): Tex | null {
+    let e = images.get(url)
+    if (!e) {
+      e = { tex: null }; images.set(url, e)
+      const entry = e, img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => {
+        const gl = this.gl, t = gl.createTexture()!
+        gl.bindTexture(gl.TEXTURE_2D, t)
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img)
+        gl.generateMipmap(gl.TEXTURE_2D)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT)
+        entry.tex = { t, f: null as unknown as WebGLFramebuffer, w: img.width, h: img.height, fmt: 'rgba8' }
+        readyListeners.forEach(f => f())
+      }
+      img.src = url
+    }
+    return e.tex
+  }
 
   upload(src: TexImageSource, w: number, h: number): Tex {
     const gl = this.gl

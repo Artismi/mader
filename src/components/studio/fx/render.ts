@@ -7,7 +7,7 @@
  */
 import { FxGL, type Tex, type UVal } from './gl'
 import {
-  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
+  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
 } from './shaders'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
@@ -118,6 +118,7 @@ function sdfReach(stack: FxEntry[]): number {
       case 'hollow': case 'splice': m = Math.max(m, num(p.thickness, 3) + 2); break
       case 'material3d': m = Math.max(m, 100000); break
       case 'grunge': m = Math.max(m, 10); break
+      case 'impressione': break
       case 'stitch': m = Math.max(m, num(p.inset, 5) + 6); break
       case 'foil': m = Math.max(m, num(p.bevel, 4) + 4); break
     }
@@ -179,6 +180,8 @@ const std = (c: Ctx, cur: Tex, amt: number, extra: Record<string, UVal> = {}): R
 const simple = (key: string, frag: string, uni: (c: Ctx, p: Record<string, PVal>) => Record<string, UVal>): Run =>
   (c, cur, p, amt) => c.g.pass(key, frag, c.W, c.H, std(c, cur, amt, uni(c, p)))
 
+export const MATERIALS = ['carta-bianca', 'carta-grigia', 'carta-stropicciata', 'cartoncino-avana', 'carta-kraft', 'carta-paglia', 'gesso', 'intonaco', 'cemento-scuro', 'marmo-nero', 'pelle', 'tela', 'metallo-spazzolato', 'metallo-bianco', 'lamina', 'plastica']
+
 const RUN: Partial<Record<string, Run>> = {
   dropShadow: (c, cur, p) => {
     const m = c.mask(-num(p.spread) * c.z)
@@ -233,6 +236,19 @@ const RUN: Partial<Record<string, Run>> = {
     return out
   },
   echo: simple('echo', ECHO, (c, p) => ({ uCount: Math.round(num(p.count, 4)), uOff: dirUv(c, num(p.angle, 315), num(p.distance, 8)), uUse: num(p.useColor), uCol: rgb(p.color), uFade: num(p.fade, 70) / 100 })),
+  impressione: (c, cur, p, amt) => {
+    const name = MATERIALS[num(p.material)] ?? MATERIALS[0]
+    const mat = c.g.image(`/assets/materials/${name}.jpg`), nrm = c.g.image(`/assets/materials/${name}-rilievo.jpg`)
+    const size = num(p.size, 8)
+    const mode = num(p.mode)
+    const h = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 0.6)
+    const hb = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 1.8)
+    return c.g.pass('impress', IMPRESS, c.W, c.H, std(c, cur, amt, {
+      uMat: mat ?? cur, uNrm: nrm ?? cur, uH: h, uHb: hb, uHasMat: mat && nrm ? 1 : 0, uMode: mode, uDepth: num(p.depth, 60) / 100, uSize: size,
+      uLight: num(p.light, 135) * Math.PI / 180, uScale: num(p.scale, 100) / 100, uMicro: num(p.micro, 60) / 100, uScene: num(p.scene, 60) / 100,
+      uInk: rgb(p.ink, '#1d2a6b'), uFoilA: rgb(p.c1, '#6b4a10'), uFoilB: rgb(p.c2, '#ffe9a8'), uTint: rgb(p.tint, '#ffffff'),
+    }))
+  },
   grunge: simple('grunge', GRUNGE, (_c, p) => ({ uWear: num(p.wear, 45) / 100, uScale: num(p.scale, 100) / 100, uSpeck: num(p.speck, 40) / 100 })),
   stitch: simple('stitch', STITCH, (_c, p) => ({ uThread: rgb(p.color, '#e94f37'), uStitch: rgb(p.stitch, '#fff4e0'), uUseColor: num(p.useColor), uDensity: num(p.density, 70) / 40, uInset: num(p.inset, 5) })),
   foil: simple('foil', FOIL, (_c, p) => ({ uA: rgb(p.c1, '#7a5310'), uB: rgb(p.c2, '#fff1b8'), uCrinkle: num(p.crinkle, 60) / 100, uLight: num(p.light, 220) * Math.PI / 180, uBevel: num(p.bevel, 4) })),

@@ -894,3 +894,54 @@ void main() {
   vec3 col = mix(uA, uB, clamp(dif * 0.75 + band * 0.35, 0.0, 1.0)) + spec * 0.85;
   o = mix(s, vec4(col * s.a, s.a), uAmt);
 }`
+
+/** impressione su materiale vero (carta, pietra, pelle…): a secco, in rilievo, in lamina,
+ *  a inchiostro, oppure solo superficie. Luce dal campo di distanze + normal map del materiale. */
+export const IMPRESS = FX + `uniform sampler2D uMat, uNrm, uH, uHb; uniform float uHasMat, uMode, uDepth, uSize, uLight, uScale, uMicro, uScene;
+uniform vec3 uInk, uFoilA, uFoilB, uTint;
+// rilievo morbido: la forma sfocata, come la carta che si deforma sotto il cliché
+float hgt(vec2 uv) { float h = texture(uH, uv).a; return (uMode < 0.5 || uMode > 2.5) ? -h : h; }
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  vec2 p = vUv * uRes / uZ;
+  vec2 tuv = p / (1024.0 * uScale);
+  vec3 mat = uHasMat > 0.5 ? texture(uMat, tuv).rgb * uTint : uTint * 0.92;
+  vec3 nm = uHasMat > 0.5 ? texture(uNrm, tuv).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+  vec3 L = normalize(vec3(cos(uLight), -sin(uLight), 0.9));
+  // luce di scena: più luce dal lato della lampada, caduta morbida verso i bordi
+  vec2 q = vUv - 0.5;
+  float scene = 1.0 + uScene * (dot(normalize(vec2(L.x, -L.y)), q) * 0.35 - dot(q, q) * 0.9);
+  if (uMode > 3.5) {
+    float micro = 1.0 + dot(nm.xy, L.xy) * uMicro * 0.35;
+    o = mix(s, vec4(mat * micro * scene * s.a, s.a), uAmt); return;
+  }
+  vec2 e = px() * max(1.0, uSize * uZ * 0.25);
+  float h = hgt(vUv);
+  vec2 g = vec2(hgt(vUv + vec2(e.x, 0.0)) - hgt(vUv - vec2(e.x, 0.0)), hgt(vUv + vec2(0.0, e.y)) - hgt(vUv - vec2(0.0, e.y))) / (2.0 * max(1.0, uSize * uZ * 0.25));
+  vec3 n = normalize(vec3(-g * uDepth * uSize * uZ * 1.2 + nm.xy * uMicro * 0.5, 1.0));
+  float dif = dot(n, L) - L.z;
+  float shade = 1.0 + dif * 0.9;
+  // ombra portata morbida (dal rilievo sfocato più largo) e occlusione negli angoli
+  vec2 ldir = normalize(vec2(L.x, -L.y)) * px() * uSize * uZ * 0.9;
+  float hb = texture(uHb, vUv).a, hbl = texture(uHb, vUv + ldir).a;
+  float sgn = (uMode < 0.5 || uMode > 2.5) ? -1.0 : 1.0;
+  float castSh = clamp((hbl - hb) * sgn * 2.2, 0.0, 1.0);
+  float ao = sgn < 0.0 ? clamp(texture(uH, vUv).a - hb, 0.0, 1.0) : clamp(hb - texture(uH, vUv).a, 0.0, 1.0);
+  shade *= (1.0 - castSh * 0.28 * uDepth) * (1.0 - ao * 0.35 * uDepth);
+  float inside = texture(uOrig, vUv).a;
+  vec3 col = mat * shade;
+  if (uMode > 1.5 && uMode < 2.5) {
+    vec3 nf = normalize(n + vec3(nm.xy * 0.5, 0.0));
+    float spec = pow(max(dot(reflect(-L, nf), vec3(0.0, 0.0, 1.0)), 0.0), 22.0);
+    float sweep = 0.5 + 0.5 * sin(p.x * 0.004 - p.y * 0.006 + nf.x * 2.5);
+    vec3 foil = mix(uFoilA, uFoilB, clamp(0.25 + dif * 1.4 + sweep * 0.45, 0.0, 1.0)) + spec * 0.8;
+    col = mix(col, foil * (1.0 - castSh * 0.2), inside);
+  } else if (uMode > 2.5) {
+    float ink = inside * (0.8 + 0.2 * vnoise(p * 0.35)) * smoothstep(0.15, 0.55, vnoise(p * 0.05) * 0.3 + 0.7);
+    col = mix(col, uInk * (0.5 + 0.5 * dot(mat, vec3(0.33))) * shade, ink);
+  }
+  col *= scene;
+  // copre la lettera e l'alone di carta deformata attorno
+  float a = clamp(max(inside, texture(uHb, vUv).a * 1.6), 0.0, 1.0);
+  o = mix(s, vec4(col * a, a), uAmt);
+}`
