@@ -13,7 +13,7 @@ export const SERIAL_PROPS = [
   'hasStartArrow', 'hasEndArrow', 'isConnector', 'startObjId', 'endObjId', 'vertexConnections',
   '_bzAnchors', '_isBricolage', 'isClipMask', 'textCurve', 'textCurveWidth', 'textCurveAlign',
   // forme e costruzioni vettoriali modificabili
-  'liveShape', 'repeatSpec', 'repeatSrc', 'blendSteps', 'blendSrc',
+  'liveShape', 'repeatSpec', 'repeatSrc', 'blendSteps', 'blendSrc', 'warpCorners', 'warpSrc', 'warpSize', 'warpOff',
   // video / sottotitoli
   'isVideo', 'isSubtitle', 'startTime', 'endTime',
   // effetti (motore fx) e Lab

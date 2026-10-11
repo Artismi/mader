@@ -286,6 +286,8 @@ import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
 import { TextCurveControl } from './text/TextCurveControl'
 import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
 import { runPathOp } from './vector/pathfinder'
+import { pathDoubleClick } from './vector/direct-select'
+import { isCropping, startCrop } from './image/crop'
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -1026,7 +1028,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // Double-click → bezier edit for Path, vertex edit for polylines, or video modal
     canvas.on('mouse:dblclick', e => {
       if (toolRef.current === 'pen') { finalizePenPath(); return }
-      if (e.target?.type === 'path') { enterBzEdit(e.target as fabric.Path); return }
+      // tracciati: selezione diretta dei punti (il secondo doppio clic aggiunge un punto); immagini: ritaglio nella cornice
+      if (e.target?.type === 'path') { pathDoubleClick(canvas, e.target as fabric.Path, e.scenePoint); return }
+      if (e.target?.type === 'image' && !(e.target as any).isVideo && !isCropping(canvas)) { startCrop(canvas, e.target); return }
       if (e.target?.type === 'polyline') { toggleVertexEdit(e.target as any, canvas); return }
 
       if ((e.target as any)?.isVideo) {
@@ -1819,7 +1823,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const d = anchorsToBzPath(anchors)
       fp.set({ path: (fabric.util as any).parsePath(d), selectable: true, evented: true, hasControls: true })
         ; (fp as any)._bzAnchors = anchors.map(a => ({ ...a }))
-        ; (fp as any)._setPositionDimensions?.({})
+        ; fp.setBoundingBox(true)
       fp.setCoords(); canvas.setActiveObject(fp); pushHistory()
     }
     canvas.requestRenderAll()
@@ -4133,7 +4137,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
                   anchors[idx] = { ...a, x, y, cp1x: a.cp1x + dx, cp1y: a.cp1y + dy, cp2x: a.cp2x + dx, cp2y: a.cp2y + dy }
                   const canvas = fabricRef.current
                   const fp = canvas?.getObjects().find(o => (o as any).objId === prev.pathId) as fabric.Path | undefined
-                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); (fp as any)._setPositionDimensions?.({}); fp.setCoords(); canvas.requestRenderAll() }
+                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); fp.setBoundingBox(true); fp.setCoords(); canvas.requestRenderAll() }
                   return { ...prev, anchors }
                 })
               }}
@@ -4144,7 +4148,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
                   anchors[idx] = mirrorHandle(anchors[idx], role, x, y)
                   const canvas = fabricRef.current
                   const fp = canvas?.getObjects().find(o => (o as any).objId === prev.pathId) as fabric.Path | undefined
-                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); (fp as any)._setPositionDimensions?.({}); fp.setCoords(); canvas.requestRenderAll() }
+                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); fp.setBoundingBox(true); fp.setCoords(); canvas.requestRenderAll() }
                   return { ...prev, anchors }
                 })
               }}

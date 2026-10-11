@@ -10,6 +10,9 @@
  *   Alt+Maiusc+H / V        distribuisci in orizzontale / verticale
  *   Ctrl+7 / Ctrl+Alt+7     maschera di ritaglio / rilascia (come Illustrator)
  *   Alt+I                   contagocce (I da sola resta lo strumento Immagine)
+ *   A                       selezione diretta: modifica i punti della forma
+ *   Ctrl+Maiusc+D           distorci / prospettiva a 4 angoli
+ *   doppio clic su immagine ritaglia dentro la cornice
  */
 import React, { useEffect, useState } from 'react'
 import * as fabric from 'fabric'
@@ -17,6 +20,7 @@ import {
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Crop, Pipette, Unlink, Spline,
+  MousePointer2, Frame, Replace, Move3d, Undo2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { alignObjects, canAlign, distributeObjects, isMaskGroup, makeClipMask, nudgeSelection, releaseClipMask, type AlignMode } from './align'
@@ -24,6 +28,9 @@ import { boardOf } from './artboards'
 import { boardLabel, exportBoards, listBoards, selectionToDataURL, type ExportFormat } from './export'
 import { installTextCurve } from '../text/curve'
 import { VectorPanel } from '../vector/VectorPanel'
+import { installDirectSelect, isPointEditing, startDirectSelect, exitPointEdit } from '../vector/direct-select'
+import { isCropping, pickAndReplace, resetCrop, startCrop, endCrop } from '../image/crop'
+import { endDistort, isDistorting, isWarped, resetDistort, startDistort } from '../image/distort'
 
 type EyeDropperCtor = new () => { open: () => Promise<{ sRGBHex: string }> }
 
@@ -84,6 +91,8 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
   const [masked, setMasked] = useState(false)
   const [alignable, setAlignable] = useState(false)
   const [showVector, setShowVector] = useState(false)
+  const [, setTick] = useState(0)
+  const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
     if (!canvas) return
@@ -91,13 +100,16 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
       setCount(canvas.getActiveObjects().length)
       setMasked(isMaskGroup(canvas.getActiveObject()))
       setAlignable(canAlign(canvas))
+      setTick(n => n + 1)
+      setNote(null)
     }
     const evs = ['selection:created', 'selection:updated', 'selection:cleared', 'object:modified'] as const
     evs.forEach(e => canvas.on(e, sync))
     sync()
     // il testo curvo ricalcola l'arco mentre si scrive: serve sempre, non solo con la barra visibile
     const offCurve = installTextCurve(canvas)
-    return () => { evs.forEach(e => canvas.off(e, sync)); offCurve() }
+    const offDirect = installDirectSelect(canvas)
+    return () => { evs.forEach(e => canvas.off(e, sync)); offCurve(); offDirect() }
   }, [canvas])
 
   useEffect(() => {
@@ -109,6 +121,12 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
         const s = e.shiftKey ? 10 : 1
         const d = { ArrowLeft: [-s, 0], ArrowRight: [s, 0], ArrowUp: [0, -s], ArrowDown: [0, s] }[e.key]
         if (d) { e.preventDefault(); nudgeSelection(canvas, d[0], d[1]) }
+        return
+      }
+      if (mod && e.shiftKey && e.code === 'KeyD' && canvas.getActiveObject()) {
+        e.preventDefault()
+        if (isDistorting(canvas)) endDistort(canvas)
+        else startDistort(canvas, canvas.getActiveObject()).then(m => { setNote(m); setTick(n => n + 1) }).catch(err => setNote(String(err.message ?? err)))
         return
       }
       if (mod && e.code === 'Digit7') {
@@ -153,11 +171,66 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
         ? <Btn onClick={() => releaseClipMask(canvas)} title="Rilascia maschera · Ctrl+Alt+7" active><Unlink className="w-3.5 h-3.5" /></Btn>
         : <Btn onClick={() => makeClipMask(canvas)} disabled={count < 2} title="Maschera di ritaglio: l'oggetto più in alto ritaglia gli altri · Ctrl+7"><Crop className="w-3.5 h-3.5" /></Btn>}
       <Btn onClick={() => pickColor(canvas)} title="Contagocce: prendi un colore dallo schermo · Alt+I"><Pipette className="w-3.5 h-3.5" /></Btn>
+      <TransformButtons canvas={canvas} onNote={m => { setNote(m); setTick(n => n + 1) }} />
       <div className="w-px h-4 bg-white/10 mx-1" />
       <Btn onClick={() => setShowVector(v => !v)} active={showVector} title="Vettoriale: elabora tracciati, offset, ripeti, fusione, poligoni">
         <Spline className="w-3.5 h-3.5" />
       </Btn>
+      {note && <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 rounded-lg bg-[#111]/95 border border-white/10 text-[10px] text-amber-300/90">{note}</span>}
     </div>
+  </>)
+}
+
+/**
+ * Strumenti di trasformazione per l'oggetto singolo selezionato:
+ * selezione diretta, distorsione, e per le immagini ritaglio e sostituzione.
+ */
+function TransformButtons({ canvas, onNote }: { canvas: fabric.Canvas; onNote: (m: string | null) => void }) {
+  const objs = canvas.getActiveObjects()
+  if (objs.length !== 1) return null
+  const o = canvas.getActiveObject()!
+  if ((o as fabric.FabricObject & { isArtboard?: boolean }).isArtboard) return null
+  const cropping = isCropping(canvas)
+  const frame = cropping ? undefined : o
+  const isImg = o instanceof fabric.FabricImage && !cropping
+  const isText = o instanceof fabric.FabricText
+  const vector = !isImg && !isText && !(o instanceof fabric.Group) && !cropping
+  const distorting = isDistorting(canvas)
+  const editing = isPointEditing(o)
+  const say = (m: string | null) => onNote(m)
+  return (<>
+    <div className="w-px h-4 bg-white/10 mx-1" />
+    {vector && (
+      <Btn active={editing} onClick={() => { if (editing) exitPointEdit(canvas, o); else say(startDirectSelect(canvas, o)) }}
+        title="Selezione diretta: modifica i punti · A — Alt+clic su un punto: angolo/morbido, doppio clic sul contorno: aggiungi, Canc: elimina">
+        <MousePointer2 className="w-3.5 h-3.5" />
+      </Btn>
+    )}
+    {(isImg || cropping) && (
+      <Btn active={cropping} onClick={() => { if (cropping) endCrop(canvas); else say(startCrop(canvas, frame)) }}
+        title="Ritaglia dentro la cornice · doppio clic sull'immagine — trascina la foto, gli angoli la ingrandiscono, le maniglie viola spostano i bordi">
+        <Frame className="w-3.5 h-3.5" />
+      </Btn>
+    )}
+    {isImg && !isWarped(o) && (
+      <Btn onClick={() => pickAndReplace(canvas, o, say)} title="Sostituisci immagine: stessa cornice, ritaglio, filtri e maschera">
+        <Replace className="w-3.5 h-3.5" />
+      </Btn>
+    )}
+    {isImg && !isWarped(o) && ((o as fabric.FabricImage).cropX > 0 || (o as fabric.FabricImage).cropY > 0) && (
+      <Btn onClick={() => resetCrop(canvas, o)} title="Mostra tutta la foto (annulla il ritaglio)"><Undo2 className="w-3.5 h-3.5" /></Btn>
+    )}
+    {!cropping && (
+      <Btn active={distorting} onClick={() => {
+        if (distorting) endDistort(canvas)
+        else startDistort(canvas, o).then(say).catch(e => say(String(e.message ?? e)))
+      }} title={`Distorci a 4 angoli · Ctrl+Maiusc+D — Maiusc+trascina: prospettiva${isText || o instanceof fabric.Group ? ' (testi e gruppi diventano immagine)' : ''}`}>
+        <Move3d className="w-3.5 h-3.5" />
+      </Btn>
+    )}
+    {isWarped(o) && !distorting && (
+      <Btn onClick={() => { resetDistort(canvas, o).catch(e => say(String(e.message ?? e))) }} title="Togli la distorsione"><Undo2 className="w-3.5 h-3.5" /></Btn>
+    )}
   </>)
 }
 
