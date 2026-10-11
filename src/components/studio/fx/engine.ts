@@ -17,6 +17,8 @@ import * as fabric from 'fabric'
 import { LOOKS, fxDef, migrateFx, newFx, type Adjust, type FxEntry, type FxId, type Look } from './catalog'
 import { fxPadding, fxSpeed, isActive, renderFx, type FxData } from './render'
 import { onAssetReady } from './gl'
+import { ensureFont } from '../libraries/font-loader'
+import type { TextStyle } from './text-styles'
 
 interface FxState {
   adjust?: Adjust
@@ -187,3 +189,38 @@ export function fxPreviews(obj: fabric.FabricObject, items: { key: string; entry
 }
 
 export const variantEntries = (id: FxId) => (fxDef(id)?.variants ?? []).map(v => ({ key: v.id, entry: newFx(id, v.id) }))
+
+/** anteprima di uno stile testo: parola d'esempio nel carattere dello stile, sul suo fondo */
+export async function stylePreview(st: TextStyle, sample: string, w = 168, h = 100): Promise<string> {
+  await Promise.race([ensureFont(st.family, st.weight ?? 400), new Promise(r => setTimeout(r, 4000))])
+  const txt = (st.upper ? sample.toUpperCase() : sample).slice(0, 10) || 'Aa'
+  const t = new fabric.Textbox(txt, { fontFamily: st.family, fontWeight: String(st.weight ?? 400), fill: st.fill, fontSize: 120, width: 3000, charSpacing: st.tracking ?? 0 })
+  t.initDimensions(); t.set({ width: Math.ceil(t.calcTextWidth()) + 6 }); t.initDimensions()
+  const m = Math.min(2, (w * 0.66) / t.width, (h * 0.5) / t.height)
+  const img = t.toCanvasElement({ multiplier: m })
+  const box = document.createElement('canvas'); box.width = w; box.height = h
+  box.getContext('2d')!.drawImage(img, (w - img.width) / 2, (h - img.height) / 2)
+  const out = document.createElement('canvas')
+  const stack = st.fx.map(([id, v, p]) => { const e = newFx(id as FxId, v); return { ...e, p: { ...e.p, ...(p ?? {}), speed: 0, flicker: 0, spin: 0 } } })
+  const ok = renderFx(box, out, { fx: stack }, m, 0.37)
+  const fin = document.createElement('canvas'); fin.width = w; fin.height = h
+  const fx2 = fin.getContext('2d')!
+  fx2.fillStyle = st.swatch; fx2.fillRect(0, 0, w, h)
+  fx2.drawImage(ok ? out : box, 0, 0)
+  return fin.toDataURL('image/jpeg', 0.86)
+}
+
+/** applica uno stile testo: carattere, colore e pila di effetti (poi tutto resta modificabile) */
+export async function applyTextStyle(obj: fabric.FabricObject, st: TextStyle, background?: string) {
+  if (!(obj instanceof fabric.Text)) return
+  await Promise.race([ensureFont(st.family, st.weight ?? 400), new Promise(r => setTimeout(r, 5000))])
+  // se il colore dello stile sparisce sul fondo vero (testo bianco su tavola bianca), si usa il suo opposto
+  const lum = (c: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(c); if (!m) return 0.5; const n = parseInt(m[1], 16); return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 }
+  const fill = background && Math.abs(lum(st.fill) - lum(background)) < 0.3 && Math.abs(lum(st.swatch) - lum(background)) > 0.3 ? st.swatch : st.fill
+  obj.set({ fontFamily: st.family, fontWeight: String(st.weight ?? 400), fill, charSpacing: st.tracking ?? obj.charSpacing })
+  if (st.upper && obj.text) obj.set('text', obj.text.toUpperCase())
+  ;(obj as FxObject).fx = st.fx.map(([id, v, p]) => { const e = newFx(id as FxId, v); return { ...e, p: { ...e.p, ...(p ?? {}) } } })
+  ;(fabric as unknown as { cache?: { clearFontCache?: (f?: string) => void } }).cache?.clearFontCache?.(st.family)
+  obj.initDimensions(); obj.setCoords(); obj.set('dirty', true)
+  applyFx(obj)
+}

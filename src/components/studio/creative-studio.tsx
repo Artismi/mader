@@ -4730,12 +4730,15 @@ function PropertiesPanel(props: PanelProps) {
     return tabs
   }, [sel.type, isPencil, hasSelection])
 
-  // Auto-switch propTab when available tabs change
+  // Scheda di partenza quando cambia il tipo di oggetto selezionato: testi e foto
+  // si aprono su stili/effetti, il resto sul colore. "Sperimentale" solo se scelto.
+  const lastSelType = React.useRef(sel.type)
   React.useEffect(() => {
-    if (availSubTabs.length > 0 && !availSubTabs.find(t => t.id === propTab)) {
-      setPropTab(availSubTabs[0].id)
-    }
-  }, [availSubTabs, propTab])
+    const changed = lastSelType.current !== sel.type
+    lastSelType.current = sel.type
+    if (changed && sel.type !== 'none') { setPropTab(sel.type === 'text' || sel.type === 'image' ? 'fx' : availSubTabs[0].id); return }
+    if (availSubTabs.length > 0 && !availSubTabs.find(t => t.id === propTab)) setPropTab(availSubTabs[0].id)
+  }, [availSubTabs, propTab, sel.type])
 
   const inspUpdate = (prop: string, val: number) => {
     const canvas = fabricRef.current; const obj = canvas?.getActiveObject(); if (!obj) return
@@ -4891,7 +4894,7 @@ function PropertiesPanel(props: PanelProps) {
 
               {/* Effetti: filtri pronti, regolazioni, effetti a pila (motore fx, valido per ogni oggetto) */}
               {propTab === 'fx' && hasSelection && (
-                <FxPanel fabricRef={fabricRef} selKey={sel} initialTab={sel.type === 'image' ? 'filtri' : 'effetti'} />
+                <FxPanel fabricRef={fabricRef} selKey={sel} initialTab={sel.type === 'image' ? 'filtri' : sel.type === 'text' ? 'stili' : 'effetti'} />
               )}
 
               {/* 3D Genesis Preview — inline viewer shown when 3D is active + object selected */}
