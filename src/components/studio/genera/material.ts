@@ -3,7 +3,7 @@
  * L'altezza è la maschera sfocata (più spessa al centro dei tratti); dalle sue
  * pendenze si ricavano le normali, che riflettono un ambiente da studio.
  */
-import { blurMask, hexRgb, makeCanvas, type Mask } from './raster'
+import { distance, hexRgb, makeCanvas, smoothField, type Mask } from './raster'
 
 export type Material = 'cromo' | 'nero' | 'oro' | 'gel' | 'iride' | 'perla'
 export const MATERIALS: { id: Material; label: string }[] = [
@@ -37,12 +37,15 @@ function hue(h: number): [number, number, number] {
  */
 export function shade(m: Mask, material: Material, round: number, depth = 0.7, tint = '#ff2d55') {
   const W = m.w, H = m.h
-  const hb = blurMask(m, Math.max(1, round))
-  const h = new Float32Array(W * H)
-  for (let i = 0; i < h.length; i++) h[i] = Math.sqrt(hb.a[i] / 255) * (m.a[i] / 255)
+  // profilo a quarto di cerchio di raggio R sul bordo, piano oltre: un tubo/smusso vero
+  const R = Math.max(1.5, round)
+  const dist = distance(m)
+  const raw = new Float32Array(W * H)
+  for (let i = 0; i < raw.length; i++) { const d = Math.min(dist[i], R); raw[i] = dist[i] <= 0 ? 0 : Math.sqrt(Math.max(0, R * R - (R - d) * (R - d))) }
+  const h = smoothField(raw, W, H, Math.max(1, R * 0.08), 2)
   const { c, ctx } = makeCanvas(W, H)
   const img = ctx.createImageData(W, H), d = img.data
-  const k = depth * round * 0.9
+  const k = 0.5 * (0.4 + depth)
   const L = [-0.45, -0.62, 0.64], Ll = Math.hypot(L[0], L[1], L[2]); L[0] /= Ll; L[1] /= Ll; L[2] /= Ll
   const [tr, tg, tb] = hexRgb(tint).map(v => v / 255)
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
