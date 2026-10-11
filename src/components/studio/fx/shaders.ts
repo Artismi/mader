@@ -1076,7 +1076,7 @@ void main() {
 /** ASCII: tono medio della cella, contrasto locale e caratteri orientati sui contorni.
  *  Il colore e il volume della foto restano: i caratteri si accendono con la luce,
  *  sotto rimane una velatura della fotografia. */
-export const ASCII = FX + `uniform sampler2D uAtlas, uCellTex, uLocal; uniform float uCell, uN, uMode, uColor, uUnder, uEdges, uCon, uSat, uInv; uniform vec3 uInk, uBg;
+export const ASCII = FX + `uniform sampler2D uAtlas, uCellTex, uLocal; uniform float uCell, uN, uMode, uColor, uUnder, uEdges, uCon, uSat, uInv, uStyle; uniform vec3 uInk, uBg;
 vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
 void main() {
   vec2 p = vUv * uRes / uZ;
@@ -1111,7 +1111,8 @@ void main() {
   if (uMode < 0.5) {            // foto in caratteri: la foto resta intera, i caratteri ne modulano la luce
     vec3 ph = unp(texture(uSrc, vUv)) * 0.6 + col * 0.4;
     vec3 ink = mix(uInk, ph * 1.12 + tint * 0.05, uColor);
-    res = mix(ph * (0.38 + 0.25 * uUnder), ink, g);
+    // più stile = fondo più scuro tra i caratteri, la foto la disegnano loro
+    res = mix(ph * (0.38 + 0.25 * uUnder) * (1.0 - uStyle * 0.75), ink * (1.0 + uStyle * 0.35), g);
     alpha = 1.0;
   } else if (uMode < 1.5) {     // luce su nero: caratteri luminosi, foto velata sotto
     vec3 ink = mix(uInk * (0.3 + 0.9 * t), min(col * 2.1 + tint * 0.2 * t, vec3(1.4)), uColor);

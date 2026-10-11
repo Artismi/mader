@@ -303,10 +303,10 @@ const RUN: Partial<Record<string, Run>> = {
     const cell = Math.max(3, num(p.cell, 7))
     const ct = c.g.blur(cur, cell * 0.35 * c.z), loc = c.g.blur(cur, cell * 4 * c.z)
     const mode = num(p.mode)
-    const out = c.g.pass('ascii', ASCII, c.W, c.H, std(c, cur, amt, { uAtlas: atlas, uCellTex: ct, uLocal: loc, uCell: cell, uN: n, uMode: mode, uColor: num(p.color, 100) / 100, uUnder: num(p.under, 45) / 100, uEdges: num(p.edges, 60) / 100, uCon: num(p.contrast, 50) / 100, uSat: num(p.saturation, 80) / 100 * 1.6, uInv: mode === 2 ? 1 : 0, uInk: rgb(p.ink, '#f4f1ea'), uBg: rgb(p.bg, '#07080a') }))
+    const out = c.g.pass('ascii', ASCII, c.W, c.H, std(c, cur, amt, { uAtlas: atlas, uCellTex: ct, uLocal: loc, uCell: cell, uN: n, uMode: mode, uColor: num(p.color, 100) / 100, uUnder: num(p.under, 45) / 100, uEdges: num(p.edges, 60) / 100, uCon: num(p.contrast, 50) / 100, uSat: num(p.saturation, 80) / 100 * 1.6, uInv: mode === 2 ? 1 : 0, uStyle: num(p.style, 50) / 100, uInk: rgb(p.ink, '#f4f1ea'), uBg: rgb(p.bg, '#07080a') }))
     c.g.release(ct, loc)
     // la luce della foto torna sul risultato (sul nero solo in parte, il fondo resta scuro)
-    const k = num(p.light, 85) / 100 * (mode === 1 ? 0.45 : mode === 3 ? 0 : 1)
+    const k = 0.85 * (1 - num(p.style, 50) / 100) * (mode === 1 ? 0.45 : mode === 3 ? 0 : 1)
     return k > 0 || num(p.glow, 25) > 0 ? finish(c, out, cur, cell * 2.2 * c.z, k, num(p.glow, 25) / 100 * (mode === 1 ? 0.9 : 0.45), mode === 3 ? 0 : 0.02) : out
   },
   linocut: (c, cur, p, amt) => {
@@ -314,7 +314,7 @@ const RUN: Partial<Record<string, Run>> = {
     const fl = c.g.blur(cur, lines * 3 * c.z)
     const out = c.g.pass('linocut', LINOCUT, c.W, c.H, std(c, cur, amt, { uFlowTex: fl, uInk: rgb(p.ink, '#141414'), uPaper: rgb(p.paper, '#f1ebdd'), uLines: lines, uAng: rad(num(p.angle, 30)), uFlow: num(p.flow, 55) / 100, uCross: num(p.cross, 60) / 100, uColor: num(p.color, 0) / 100, uRough: num(p.rough, 20) / 100, uTh: num(p.threshold, 50) / 100 }))
     c.g.release(fl)
-    return finish(c, out, cur, lines * 2.5 * c.z, num(p.light, 55) / 100, 0, 0.03)
+    return finish(c, out, cur, lines * 2.5 * c.z, 0.55 * (1 - num(p.style, 50) / 100), 0, 0.03)
   },
   specchi: simple('mirrortile', MIRRORTILE, (_c, p) => ({ uSize: Math.max(6, num(p.size, 26)), uRefr: num(p.refraction, 35) / 100, uGrout: num(p.grout, 6) / 100, uGloss: num(p.gloss, 50) / 100, uGroutCol: rgb(p.groutColor, '#1a1a1a') })),
   luceProiettata: simple('lightcast', LIGHTCAST, (_c, p) => ({ uMode: num(p.mode), uAng: rad(num(p.angle, 20)), uScale: num(p.scale, 100) / 100, uSoft: num(p.soft, 50) / 100, uStr: num(p.strength, 70) / 100, uWarm: rgb(p.warm, '#ffd9a0') })),
@@ -322,9 +322,9 @@ const RUN: Partial<Record<string, Run>> = {
   lowPoly: (c, cur, p, amt) => {
     const size = Math.max(4, num(p.size, 26))
     const soft = c.g.blur(cur, size * 0.06 * c.z)
-    const out = c.g.pass('lowpoly', LOWPOLY, c.W, c.H, std(c, cur, amt, { uSoft: soft, uSize: size, uEdge: num(p.edge, 12) / 100, uDetail: num(p.detail, 60) / 100, uRelief: num(p.relief, 40) / 100, uJit: num(p.jitter, 45) / 100 }))
+    const out = c.g.pass('lowpoly', LOWPOLY, c.W, c.H, std(c, cur, amt, { uSoft: soft, uSize: size, uEdge: num(p.edge, 12) / 100, uDetail: num(p.detail, 60) / 100, uRelief: num(p.relief, 40) / 100 * (1 + num(p.style, 50) / 100 * 0.8), uJit: num(p.jitter, 45) / 100 }))
     c.g.release(soft)
-    return finish(c, out, cur, size * 1.5 * c.z, 0.5, num(p.glow, 15) / 100 * 0.3, 0.02)
+    return finish(c, out, cur, size * 1.5 * c.z, 0.5 * (1 - num(p.style, 50) / 100), num(p.glow, 15) / 100 * 0.3, 0.02)
   },
   caleido: simple('kaleido', KALEIDO, (_c, p) => ({ uSeg: Math.max(2, Math.round(num(p.segments, 8))), uRot: rad(num(p.rotation, 0)), uZoom: num(p.zoom, 100) / 100, uC: [num(p.cx, 50) / 100, num(p.cy, 50) / 100] })),
   grunge: simple('grunge', GRUNGE, (_c, p) => ({ uWear: num(p.wear, 45) / 100, uScale: num(p.scale, 100) / 100, uSpeck: num(p.speck, 40) / 100 })),
