@@ -146,7 +146,8 @@ export function inkBox(m: Mask, thr = 8) {
  */
 export function stretch(m: Mask, axis: 'down' | 'up' | 'right' | 'left', at: number, len: number) {
   const o = { w: m.w, h: m.h, a: new Uint8ClampedArray(m.a) }
-  at = Math.round(at)
+  len = Math.max(0, Math.round(len))
+  at = Math.max(0, Math.min((axis === 'down' || axis === 'up' ? m.h : m.w) - 1, Math.round(at)))
   if (axis === 'down' || axis === 'up') {
     const dir = axis === 'down' ? 1 : -1
     const src = at * m.w
@@ -382,4 +383,72 @@ export function pixelSort(ctx: Ctx, w: number, h: number, lo: number, hi: number
     }
   }
   ctx.putImageData(img, 0, 0)
+}
+
+// ─── distanza esatta ─────────────────────────────────────────────────────────
+
+/** trasformata di distanza euclidea 1D (Felzenszwalb & Huttenlocher) */
+function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) {
+  let k = 0
+  v[0] = 0; z[0] = -Infinity; z[1] = Infinity
+  for (let q = 1; q < n; q++) {
+    let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k])
+    while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]) }
+    k++; v[k] = q; z[k] = s; z[k + 1] = Infinity
+  }
+  k = 0
+  for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; const dq = q - v[k]; d[q] = dq * dq + f[v[k]] }
+}
+
+/**
+ * Distanza (in pixel) di ogni punto dell'inchiostro dal bordo più vicino, con
+ * correzione sub-pixel dalla copertura dell'antialiasing.
+ */
+export function distance(m: Mask): Float32Array {
+  const W = m.w, H = m.h, N = Math.max(W, H), BIG = 1e12
+  const f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N + 1)
+  const g = new Float64Array(W * H)
+  for (let i = 0; i < g.length; i++) g[i] = m.a[i] > 127 ? BIG : 0
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) f[y] = g[y * W + x]
+    edt1d(f, H, d, v, z)
+    for (let y = 0; y < H; y++) g[y * W + x] = d[y]
+  }
+  const out = new Float32Array(W * H)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) f[x] = g[y * W + x]
+    edt1d(f, W, d, v, z)
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x, a = m.a[i] / 255
+      out[i] = a <= 0 ? 0 : Math.max(0, Math.sqrt(d[x]) - 0.5 + a * (m.a[i] > 127 ? 0.5 : 1))
+    }
+  }
+  return out
+}
+
+/** sfocatura a scatola separabile su un campo float (per levigare le normali) */
+export function smoothField(src: Float32Array, W: number, H: number, rad: number, passes = 2) {
+  let a: Float32Array = src, b: Float32Array = new Float32Array(W * H)
+  const r = Math.max(1, Math.round(rad))
+  for (let p = 0; p < passes; p++) {
+    for (let y = 0; y < H; y++) {
+      let acc = 0
+      for (let x = -r; x <= r; x++) acc += a[y * W + Math.min(W - 1, Math.max(0, x))]
+      for (let x = 0; x < W; x++) {
+        b[y * W + x] = acc / (2 * r + 1)
+        acc += a[y * W + Math.min(W - 1, x + r + 1)] - a[y * W + Math.max(0, x - r)]
+      }
+    }
+    ;[a, b] = [b, a]
+    for (let x = 0; x < W; x++) {
+      let acc = 0
+      for (let y = -r; y <= r; y++) acc += a[Math.min(H - 1, Math.max(0, y)) * W + x]
+      for (let y = 0; y < H; y++) {
+        b[y * W + x] = acc / (2 * r + 1)
+        acc += a[Math.min(H - 1, y + r + 1) * W + x] - a[Math.max(0, y - r) * W + x]
+      }
+    }
+    ;[a, b] = [b, a]
+  }
+  return a
 }
