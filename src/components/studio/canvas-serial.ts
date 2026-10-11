@@ -11,7 +11,7 @@ export const SERIAL_PROPS = [
   'objId', 'name', 'parentBoard',
   'isArtboard', 'artboardExportType',
   'hasStartArrow', 'hasEndArrow', 'isConnector', 'startObjId', 'endObjId', 'vertexConnections',
-  '_bzAnchors', '_isBricolage',
+  '_bzAnchors', '_isBricolage', 'isClipMask',
   // video / sottotitoli
   'isVideo', 'isSubtitle', 'startTime', 'endTime',
   // effetti (motore fx) e Lab

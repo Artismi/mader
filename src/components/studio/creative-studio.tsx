@@ -282,6 +282,7 @@ import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-l
 import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
 import { installArtboards } from './arrange/artboards'
+import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -3937,13 +3938,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           </button>
           {showExport && typeof document !== 'undefined' && (
             <DropdownPortal triggerRef={exportBtnRef} alignRight>
-              <div className="bg-[#141414] border border-white/10 rounded-xl shadow-2xl p-2 flex flex-col gap-0.5 min-w-[130px]">
-                <p className="text-[7px] text-white/25 uppercase tracking-widest px-2 py-1">Formato</p>
-                {([['PNG 1x', 'png', 1], ['PNG 2x', 'png', 2], ['PNG 3x', 'png', 3], ['JPG 2x', 'jpg', 2], ['SVG', 'svg', 1]] as const).map(([label, fmt, mult]) => (
-                  <button key={label} onClick={() => { exportCanvas(fmt, mult); setShowExport(false) }}
-                    className="px-2.5 py-1.5 text-left text-[9px] font-bold text-white/60 hover:bg-white/[0.06] rounded-lg transition-colors">{label}</button>
-                ))}
-              </div>
+              <ExportMenu canvas={fabricRef.current} onLegacyExport={exportCanvas} onDone={() => setShowExport(false)} />
             </DropdownPortal>
           )}
 
@@ -4196,6 +4191,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
           {/* Maniglia d'orbita per gli oggetti con materiale 3D */}
           {canvasReady && <Orbit3D fabricRef={fabricRef} />}
+          {canvasReady && <ArrangeBar canvas={fabricRef.current} />}
 
           {/* Rulers */}
           {showRulers && <Rulers zoom={zoom} canvas={fabricRef.current} />}
