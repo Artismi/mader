@@ -35,6 +35,7 @@ import { ensureFont, fontEntry, refreshTexts, watchCanvasFonts, WEIGHT_NAMES } f
 import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
 import { SHAPE_LIBRARY, ICONS_LIBRARY } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
+import { GeneratePanel } from './GeneratePanel'
 import {
   BRUSH_TYPES, createCrayonBrush, createSprayBrush,
   createMarkerBrush, createInkBrush, createGenerativeBrush,
@@ -3053,6 +3054,20 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     })
   }
 
+  /** asset procedurale (pannello Genera): SVG → gruppo vettoriale modificabile, scalato a ~320px */
+  async function addGeneratedSvg(svg: string, name: string) {
+    const canvas = fabricRef.current; if (!canvas) return
+    const { objects, options } = await fabric.loadSVGFromString(svg)
+    const parts = objects.filter((o): o is fabric.FabricObject => !!o)
+    if (!parts.length) return
+    const g = fabric.util.groupSVGElements(parts, options)
+    const k = 320 / Math.max(g.width || 1, g.height || 1)
+    const { x, y } = dropPoint(canvas)
+    g.set({ left: x, top: y, scaleX: k, scaleY: k })
+    ;(g as any).name = name
+    canvas.add(g); canvas.setActiveObject(g); canvas.requestRenderAll()
+  }
+
   // ── Subtitles & AI ───────────────────────────────────────────────────────
   async function generateSubtitles() {
     if (audioTracks.length === 0) return
@@ -4256,6 +4271,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onApplyTexture={applyTexture}
           onAddShape={addLibShape}
           onAddIcon={addLibIcon}
+          onAddGenerated={addGeneratedSvg}
           onAddBricolage={addBricolage}
           onLayerSelect={layerSelect}
           onLayerToggleVisible={layerToggleVisible}
@@ -4673,6 +4689,7 @@ interface PanelProps {
   onAddShape: (s: any) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddIcon: (s: any) => void
+  onAddGenerated: (svg: string, name: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddBricolage: (s: any) => void
   onLayerSelect: (id: string) => void
@@ -4943,6 +4960,7 @@ function PropertiesPanel(props: PanelProps) {
           <LibPanel
             onShape={props.onAddShape}
             onIcon={props.onAddIcon}
+            onGenerated={props.onAddGenerated}
             onFont={props.onApplyFont}
             onTexture={props.onApplyTexture}
             onBricolage={props.onAddBricolage}
@@ -5586,9 +5604,10 @@ function ShadowSec({ sel, onShadow }: { sel: SelState; onShadow: (u: Partial<Sel
 
 // ─── LIBRARY PANEL (Advanced Asset Explorer) ─────────────────────────────────
 
-function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
+function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
   onShape: (p: string) => void;
   onIcon: (svgPath: string) => void;
+  onGenerated: (svg: string, name: string) => void;
   onFont: (f: string) => void;
   onTexture: (tex: any) => void;
   onBricolage: (asset: any) => void;
@@ -5596,7 +5615,7 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
   onClose: () => void;
   inline?: boolean
 }) {
-  const [tab, setTab] = useState<'fonts' | 'shapes' | 'icons' | 'textures' | 'bricolage'>('shapes')
+  const [tab, setTab] = useState<'genera' | 'fonts' | 'shapes' | 'icons' | 'textures' | 'bricolage'>('genera')
   const [search, setSearch] = useState('')
 
   return (
@@ -5611,7 +5630,7 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
 
       {/* Tabs */}
       <div className="flex px-2 py-1.5 bg-black/20 gap-1 overflow-x-auto scrollbar-hide">
-        {(['fonts', 'shapes', 'icons', 'textures', 'bricolage'] as const).map(t => (
+        {(['genera', 'fonts', 'shapes', 'icons', 'textures', 'bricolage'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap',
               tab === t ? 'bg-white/10 text-accent shadow-inner' : 'text-white/30 hover:text-white/60')}>
@@ -5629,6 +5648,8 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
+        {tab === 'genera' && <GeneratePanel search={search} onInsert={onGenerated} />}
+
         {tab === 'shapes' && (
           <div className="space-y-6">
             {Object.entries(SHAPE_LIBRARY).map(([cat, items]) => (
