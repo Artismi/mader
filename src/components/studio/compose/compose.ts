@@ -278,7 +278,7 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
   const styleTitle = (t: Obj) => {
     if (textStyle && t instanceof fabric.Text) {
       // stile testo completo: effetti dello stile, colore accordato al fondo
-      t.fx = textStyle.fx.map(([id, v, p]) => fx(id, v, (p ?? {}) as Record<string, number | string>)).filter(Boolean) as FxEntry[]
+      ;(t as Obj).fx = textStyle.fx.map(([id, v, p]) => fx(id, v, (p ?? {}) as Record<string, number | string>)).filter(Boolean) as FxEntry[]
       if (Math.abs(lum(textStyle.fill) - lum(pal.bg)) > 0.3) t.set('fill', textStyle.fill)
       return t
     }
