@@ -380,6 +380,62 @@ function dropSpecks(m: Mask, minArea: number): Mask {
   return m
 }
 
+// ─── schiuma (bordi di Plateau) ──────────────────────────────────────────────
+
+/**
+ * Bolle impacchettate: contorno a spessore costante e, dove due bordi si
+ * avvicinano, l'inchiostro riempie lo spazio con lati concavi (bordi di Plateau);
+ * dove si toccano tre bolle nasce il triangolino nero. Alcune bolle stanno dentro
+ * bolle più grandi e formano lenti.
+ */
+export function foam(W: number, H: number, cx: number, cy: number, R: number, r: Rnd, o: { count: number; line: number; gap: number; nested: number; spread: number }): Mask {
+  const circles: { x: number; y: number; r: number }[] = []
+  const g = R * 0.058 * o.gap
+  const maxR = R * 0.3, minR = R * 0.05
+  const touch = R * 0.004 * o.line              // le bolle si sfiorano: tra i due contorni resta un filo
+  for (let tries = 0; circles.length < o.count && tries < o.count * 800; tries++) {
+    const rad = minR + (maxR - minR) * Math.pow(r(), 1.5)
+    let x: number, y: number
+    if (!circles.length) { x = cx; y = cy }
+    else {
+      const host = circles[Math.floor(r() * circles.length)]
+      const nest = r() < o.nested && rad < host.r * 0.55
+      if (nest) {
+        const a = r() * Math.PI * 2, d = host.r - rad - touch
+        x = host.x + Math.cos(a) * d; y = host.y + Math.sin(a) * d
+      } else {
+        // tangente a due bolle vicine: l'impacchettamento resta compatto
+        const nb = circles.filter(c => c !== host && Math.hypot(c.x - host.x, c.y - host.y) < host.r + c.r + rad * 2.2)
+        const other = nb.length ? nb[Math.floor(r() * nb.length)] : null
+        const pts = other ? intersect({ x: host.x, y: host.y, r: host.r + rad + touch, big: true }, { x: other.x, y: other.y, r: other.r + rad + touch, big: true }) : []
+        if (pts.length) { const p = pts[Math.floor(r() * pts.length)]; x = p[0]; y = p[1] }
+        else { const a = r() * Math.PI * 2, d = host.r + rad + touch; x = host.x + Math.cos(a) * d; y = host.y + Math.sin(a) * d }
+      }
+    }
+    if (Math.hypot((x - cx) / (R * 0.8 * o.spread), (y - cy) / (R * 1.05)) + rad / R > 1.05) continue
+    const ok = circles.every(c => {
+      const d = Math.hypot(c.x - x, c.y - y)
+      if (d + rad <= c.r - touch * 0.6) return true                       // dentro c, con un filo di distanza
+      if (d + c.r <= rad - touch * 0.6) return false                     // non inghiottire bolle esistenti
+      return d >= c.r + rad + touch * 0.6
+    })
+    if (ok) circles.push({ x, y, r: rad })
+  }
+  const w = R * 0.013 * o.line
+  const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
+  const x0 = Math.max(0, Math.floor(cx - R * 1.2)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.2))
+  const y0 = Math.max(0, Math.floor(cy - R * 1.2)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.2))
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    let d1 = Infinity, d2 = Infinity
+    for (const c of circles) {
+      const ad = Math.abs(Math.hypot(x - c.x, y - c.y) - c.r)
+      if (ad < d1) { d2 = d1; d1 = ad } else if (ad < d2) d2 = ad
+    }
+    if (d1 < w / 2 || d1 + d2 < g) m.a[y * W + x] = 255
+  }
+  return liquid(m, Math.max(1, w * 0.35), 0.5, 0.08)
+}
+
 // ─── rete neurale d'inchiostro ───────────────────────────────────────────────
 
 export interface NetOpts { nodes: number; links: number; tendrils: number; weight: number; reach: number }

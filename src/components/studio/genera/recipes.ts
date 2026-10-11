@@ -10,7 +10,7 @@ import {
 } from './raster'
 import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
 import { shade, type Material } from './material'
-import { coffeeRings, crescent, membrane, neuralNet } from './organic'
+import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ const darken = (hex: string, k: number) => { const v = parseInt(hex.slice(1), 16
 
 const membrana: Recipe = {
   id: 'membrana', label: 'Membrana', cat: 'Organici', hint: 'tessuto cellulare a due strati, fori grandi e minuscoli, artigli',
-  params: [P.sel('shape', 'Composizione', ['Fuso', 'Fondi di tazza', 'Falce', 'Ali']), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 34), P.range('web', 'Tessuto', 30, 220, 135),
+  params: [P.sel('shape', 'Composizione', ['Fuso', 'Fondi di tazza', 'Falce', 'Ali', 'Schiuma']), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 34), P.range('web', 'Tessuto', 30, 220, 135),
     P.range('varied', 'Varietà fori', 0, 100, 90), P.range('detail', 'Dettaglio', 0, 100, 60), P.range('claws', 'Artigli', 0, 100, 70), P.range('clawLen', 'Lunghezza artigli', 20, 200, 100),
     P.tog('depth', 'Doppio strato', true), P.tog('mirror', 'Simmetrica', true), P.range('chords', 'Cerchi grandi', 0, 6, 3), P.glow(false), P.caps(), P.grain(20)],
   render: o => {
@@ -162,7 +162,10 @@ const membrana: Recipe = {
     const base = { cells: num(o, 'cells'), web: num(o, 'web') / 100, claws: num(o, 'claws') / 100, clawLen: num(o, 'clawLen') / 100, detail: num(o, 'detail') / 100 }
     const { c, ctx } = stage(o, t)
     const mat = MATS[num(o, 'mat')] ?? null
-    if (sh === 1) {
+    if (sh === 4) {
+      const m = foam(o.W, o.H, cx, cy, S * 0.44, rng(o.seed), { count: Math.round(base.cells * 0.7), line: num(o, 'web') / 100, gap: num(o, 'web') / 100, nested: num(o, 'detail') / 250, spread: 1 })
+      paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.006)
+    } else if (sh === 1) {
       const m = coffeeRings(o.W, o.H, cx, cy, S * 0.34, rng(o.seed), S, { big: 2 + Math.round(num(o, 'chords') / 2), bubbles: Math.round(base.cells * 0.6), gap: base.web, stars: base.claws * 0.55, detail: base.detail })
       paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
     } else {
