@@ -1040,3 +1040,260 @@ void main() {
   float a = max(s.a, dust);
   o = mix(s, vec4(col * a, a), uAmt);
 }`
+
+/* ─── tendenze: ottica, stampa, segnale ─── */
+
+/** vetro scanalato: ogni costa è una lente cilindrica che rimpicciolisce e capovolge
+ *  ciò che ha dietro, con dispersione dei colori, satinatura e luce sui bordi */
+export const FLUTED = FX + `uniform sampler2D uFrostTex; uniform float uW, uStr, uAng, uHi, uShade, uDisp, uFrost;
+vec4 lens(vec2 p, float k, float s, float mag, vec2 ax, vec2 nr) {
+  // centro della costa + posizione locale ridotta/capovolta dalla lente
+  vec2 q = ax * ((k + 0.5) * uW + s * uW * mag) + nr * dot(p, nr);
+  vec2 uv = q * uZ / uRes;
+  return mix(texture(uSrc, uv), texture(uFrostTex, uv), uFrost);
+}
+void main() {
+  vec2 p = vUv * uRes / uZ;
+  vec2 ax = vec2(cos(uAng), sin(uAng)), nr = vec2(-ax.y, ax.x);
+  float u = dot(p, ax) / uW, k = floor(u), s = fract(u) - 0.5;
+  float mag = 1.0 - uStr * 4.5;   // < 0: l'immagine dietro la costa si capovolge e si comprime
+  vec4 c;
+  c.ga = lens(p, k, s, mag, ax, nr).ga;
+  c.r = lens(p, k, s, mag * (1.0 + uDisp), ax, nr).r;
+  c.b = lens(p, k, s, mag * (1.0 - uDisp), ax, nr).b;
+  // volume della costa: ombra ai lati, una luce stretta e un filo scuro di giunzione
+  float bend = s * 2.0;
+  float sh = 1.0 - uShade * 0.38 * bend * bend;
+  float hi = exp(-pow((s - 0.26) * 16.0, 2.0)) * uHi * 0.55 + exp(-pow((s + 0.33) * 26.0, 2.0)) * uHi * 0.18;
+  float seam = smoothstep(0.47, 0.5, abs(s)) * uShade * 0.35;
+  c.rgb = c.rgb * sh * (1.0 - seam) + vec3(hi) * c.a;
+  vec4 base = texture(uSrc, vUv);
+  c = vec4(c.rgb + base.rgb * (1.0 - c.a), c.a + base.a * (1.0 - c.a));   // ai bordi non entra il vuoto
+  c *= base.a / max(c.a, 1e-4);
+  o = mix(base, c, uAmt);
+}`
+
+/** ASCII: tono medio della cella, contrasto locale e caratteri orientati sui contorni.
+ *  Il colore e il volume della foto restano: i caratteri si accendono con la luce,
+ *  sotto rimane una velatura della fotografia. */
+export const ASCII = FX + `uniform sampler2D uAtlas, uCellTex, uLocal; uniform float uCell, uN, uMode, uColor, uUnder, uEdges, uCon, uSat, uInv; uniform vec3 uInk, uBg;
+vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
+void main() {
+  vec2 p = vUv * uRes / uZ;
+  vec2 cs = vec2(uCell * 0.62, uCell);
+  vec2 cell = floor(p / cs), f = fract(p / cs);
+  vec2 cuv = (cell + 0.5) * cs * uZ / uRes;
+  vec4 cc = texture(uCellTex, cuv);
+  float a = cc.a;
+  vec3 col = unp(cc);
+  float L = luma(col), Lb = luma(unp(texture(uLocal, cuv)));
+  // contrasto locale: i volumi si leggono anche nelle zone piatte
+  float t = clamp(L + (L - Lb) * uCon * 2.2, 0.0, 1.0);
+  t = mix(t, smoothstep(0.0, 1.0, t), 0.5);
+  float dens = uInv > 0.5 ? pow(1.0 - t, 0.85) : t;
+  // contorni: gradiente sul tono delle celle vicine, diventa un segno orientato
+  vec2 st = cs * uZ / uRes;
+  float gx = luma(unp(texture(uCellTex, cuv + vec2(st.x, 0.0)))) - luma(unp(texture(uCellTex, cuv - vec2(st.x, 0.0))));
+  float gy = luma(unp(texture(uCellTex, cuv + vec2(0.0, st.y)))) - luma(unp(texture(uCellTex, cuv - vec2(0.0, st.y))));
+  float gm = length(vec2(gx, gy));
+  float idx = floor(clamp(dens, 0.0, 0.999) * uN);
+  if (uEdges > 0.0 && gm > 0.2 / uEdges && dens > 0.15) {
+    float ang = atan(gy, gx);                               // direzione del gradiente
+    float e = mod(floor((ang + 3.14159) / 0.785398 + 0.5), 4.0);  // 0 orizz. grad. → contorno verticale
+    idx = uN + e;
+  }
+  float g = texture(uAtlas, vec2((idx + f.x) / (uN + 4.0), f.y)).r;
+  // colore del carattere: tinta della foto, rinforzata, con luminosità che segue il tono
+  vec3 hue = col / max(max(col.r, max(col.g, col.b)), 0.02);
+  vec3 tint = mix(vec3(luma(hue)), hue, uSat);
+  vec4 under = texture(uLocal, vUv) * 0.5 + texture(uSrc, vUv) * 0.5;
+  vec3 res; float alpha;
+  if (uMode < 0.5) {            // luce su nero: caratteri luminosi, foto velata sotto
+    // il carattere porta il colore vero della cella, schiarito: densità e colore insieme danno il volume
+    vec3 ink = mix(uInk * (0.3 + 0.9 * t), min(col * 2.1 + tint * 0.2 * t, vec3(1.4)), uColor);
+    // la foto sotto sale con la luce: le zone chiare restano piene, le scure respirano
+    res = mix(uBg, unp(under), uUnder * (0.35 + 0.9 * t)) * (1.0 - g * 0.9) + ink * g;
+    alpha = 1.0;
+  } else if (uMode < 1.5) {     // inchiostro su carta
+    vec3 ink = mix(uInk, col * 0.45 * (0.5 + 0.5 * t), uColor);
+    vec3 paper = mix(uBg, uBg * (unp(under) * 0.85 + 0.15), uUnder);
+    res = mix(paper, ink, g);
+    alpha = 1.0;
+  } else {                      // solo caratteri, fondo trasparente
+    res = mix(uInk, tint * (0.4 + 0.8 * t), uColor);
+    alpha = g;
+  }
+  alpha *= step(0.02, a);
+  o = mix(texture(uSrc, vUv), vec4(res * alpha, alpha), uAmt);
+}`
+
+/** incisione / linoleografia: linee che seguono i volumi (come le banconote), spesse nelle
+ *  ombre e sottili nelle luci, tratteggio incrociato nei neri; inchiostro anche a colori */
+export const LINOCUT = FX + `uniform sampler2D uFlowTex; uniform vec3 uInk, uPaper; uniform float uLines, uAng, uFlow, uCross, uColor, uRough, uTh;
+vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
+float lineInk(vec2 p, float ang, float dark, float phase) {
+  vec2 ax = vec2(cos(ang), sin(ang));
+  float t = dot(p, ax) / uLines + phase;
+  float tri = abs(fract(t) - 0.5) * 2.0;           // 0 al centro della linea
+  float w = fwidth(t) * 1.1 + 0.015;
+  return 1.0 - smoothstep(dark - w, dark + w, tri);
+}
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  if (s.a <= 0.0) { o = s; return; }
+  vec2 p = vUv * uRes / uZ;
+  vec3 col = unp(s), fc = unp(texture(uFlowTex, vUv));
+  float L = luma(col), Lf = luma(fc);
+  float tone = clamp((L - uTh) * 1.55 + 0.5, 0.0, 1.0);
+  float dark = pow(1.0 - tone, 1.1);
+  float rough = (vnoise(p * 0.35) - 0.5) * uRough * 0.25;
+  // le linee si piegano sul tono sfocato: avvolgono i volumi
+  float phase = Lf * uFlow * 3.0 + fbm(p * 0.008) * 0.6;
+  float ink = lineInk(p, uAng, dark * 0.95 + rough, phase);
+  if (uCross > 0.0) {
+    float d2 = clamp((dark - 0.55) / 0.45, 0.0, 1.0) * uCross;
+    ink = max(ink, lineInk(p, uAng + 1.0472, d2 * 0.9 + rough, phase * 0.6));
+    float d3 = clamp((dark - 0.8) / 0.2, 0.0, 1.0) * uCross;
+    ink = max(ink, lineInk(p, uAng - 1.0472, d3 * 0.8 + rough, phase * 0.4));
+  }
+  vec3 inkC = mix(uInk, col * 0.55 * (0.6 + 0.4 * tone) + uInk * 0.15, uColor);
+  vec3 paper = mix(uPaper, uPaper * (0.82 + 0.18 * col / max(L, 0.05)), uColor * 0.35);
+  o = mix(s, vec4(mix(paper, inkC, ink) * s.a, s.a), uAmt);
+}`
+
+/** mosaico a specchio: tessere che rifrangono e riflettono, con fughe e luce propria */
+export const MIRRORTILE = FX + `uniform float uSize, uRefr, uGrout, uGloss; uniform vec3 uGroutCol;
+void main() {
+  vec2 p = vUv * uRes / uZ;
+  vec2 cell = floor(p / uSize), f = fract(p / uSize);
+  vec2 rnd = vec2(hash12(cell), hash12(cell + 7.1)) - 0.5;
+  vec2 off = (rnd * uRefr + (f - 0.5) * uRefr * 0.6) * uSize * uZ / uRes;
+  vec4 c = texture(uSrc, vUv + off);
+  float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+  float bev = smoothstep(0.0, 0.12, e);
+  float light = 0.85 + 0.3 * dot(normalize(vec2(0.6, -0.8)), (f - 0.5) * 2.0) * (1.0 - bev) + rnd.x * 0.25;
+  c.rgb *= light;
+  // riflesso: un bagliore morbido in un angolo di ogni tessera, diverso per ognuna
+  vec2 gp = vec2(0.22 + rnd.x * 0.3, 0.2 + rnd.y * 0.3);
+  c.rgb += vec3(exp(-dot(f - gp, f - gp) * 40.0) * uGloss * 0.45) * c.a;
+  float grout = 1.0 - smoothstep(uGrout * 0.5, uGrout * 0.5 + 0.02, e);
+  c.rgb = mix(c.rgb, uGroutCol * c.a, grout);
+  o = mix(texture(uSrc, vUv), c, uAmt);
+}`
+
+/** luce proiettata: ombre di una finestra, di foglie o caustiche d'acqua sopra l'oggetto */
+export const LIGHTCAST = FX + `uniform float uMode, uAng, uScale, uSoft, uStr; uniform vec3 uWarm;
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  vec2 p = vUv * uRes / uZ / uScale;
+  float ca = cos(uAng), sa = sin(uAng);
+  vec2 q = vec2(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
+  float lit;
+  if (uMode < 0.5) {            // finestra: riquadri con montanti, prospettiva obliqua
+    q.x += q.y * 0.35;
+    vec2 g = fract(q / vec2(260.0, 330.0));
+    float bar = min(min(g.x, 1.0 - g.x) * 260.0, min(g.y, 1.0 - g.y) * 330.0);
+    lit = smoothstep(10.0, 10.0 + uSoft * 60.0, bar);
+  } else if (uMode < 1.5) {     // foglie: macchie di luce e ombra
+    float n = fbm(q * 0.006) * 0.7 + fbm(q * 0.02 + 3.0) * 0.3;
+    lit = smoothstep(0.42 - uSoft * 0.2, 0.58 + uSoft * 0.2, n);
+  } else {                      // caustiche: reticolo luminoso dell'acqua
+    vec2 w = q * 0.012;
+    float c = 0.0;
+    for (int i = 0; i < 3; i++) { w += vec2(sin(w.y * 1.7 + float(i)), cos(w.x * 1.3 - float(i))) * 0.6; c += abs(sin(w.x + w.y)); }
+    lit = pow(1.0 - c / 3.0, 3.0 - uSoft * 2.0) * 1.6;
+  }
+  vec3 col = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
+  float L = luma(col), li = clamp(lit, 0.0, 1.0);
+  // ombra fredda e profonda, luce calda che si accende di più sulle superfici chiare
+  vec3 shadow = col * mix(vec3(1.0), vec3(0.55, 0.62, 0.8) * (1.0 - uStr * 0.55), uStr);
+  vec3 shaded = mix(shadow, col, li) + uWarm * clamp(lit, 0.0, 1.5) * uStr * (0.12 + 0.35 * L) * col;
+  shaded += uWarm * pow(clamp(lit, 0.0, 1.5), 3.0) * uStr * 0.08;
+  o = mix(s, vec4(shaded * s.a, s.a), uAmt);
+}`
+
+/** pixel sorting vero: dentro ogni tratto di luminosità compresa nella soglia, i pixel
+ *  vengono ordinati per luce (scelta per rango su 32 campioni); fuori resta la foto */
+export const PIXELSORT = FX + `uniform vec2 uDir; uniform float uLo, uHi, uVar, uRev;
+float lu(vec4 c) { return luma(c.a > 0.0 ? c.rgb / c.a : vec3(0.0)); }
+bool inside(float l) { return l >= uLo && l <= uHi; }
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  float l0 = lu(s);
+  if (!inside(l0) || s.a < 0.01) { o = s; return; }
+  vec2 px = vUv * uRes;
+  vec2 dn = normalize(uDir * uRes);
+  float row = floor(dot(px, vec2(-dn.y, dn.x)) / max(1.0, uZ));
+  float maxLen = mix(1.0, 0.25 + 0.75 * hash12(vec2(row, 3.1)), uVar);
+  vec2 stp = uDir * maxLen / 64.0;
+  float b = 0.0, f = 0.0;
+  for (int k = 1; k <= 64; k++) { vec4 c = texture(uSrc, vUv - stp * float(k)); if (!inside(lu(c)) || c.a < 0.01) break; b = float(k); }
+  for (int k = 1; k <= 64; k++) { vec4 c = texture(uSrc, vUv + stp * float(k)); if (!inside(lu(c)) || c.a < 0.01) break; f = float(k); }
+  float n = b + f;
+  if (n < 2.0) { o = s; return; }
+  vec4 cs[32]; float ls[32];
+  for (int i = 0; i < 32; i++) { vec4 c = texture(uSrc, vUv + stp * (-b + n * (float(i) + 0.5) / 32.0)); cs[i] = c; ls[i] = lu(c); }
+  float t = b / n; if (uRev > 0.5) t = 1.0 - t;
+  int want = int(clamp(t * 32.0, 0.0, 31.0));
+  vec4 pick = s;
+  for (int i = 0; i < 32; i++) {
+    int r = 0;
+    for (int j = 0; j < 32; j++) r += (ls[j] < ls[i] || (ls[j] == ls[i] && j < i)) ? 1 : 0;
+    if (r == want) { pick = cs[i]; break; }
+  }
+  o = mix(s, pick, uAmt);
+}`
+
+/** low-poly adattivo: triangoli più piccoli dove c'è dettaglio, ogni faccia ha il colore
+ *  medio dei suoi vertici e una luce propria (la luminosità fa da rilievo) */
+export const LOWPOLY = FX + `uniform sampler2D uSoft; uniform float uSize, uEdge, uDetail, uRelief, uJit;
+vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
+vec2 warp(vec2 p) { return vec2(vnoise(p / (uSize * 2.3)), vnoise(p / (uSize * 2.3) + 31.7)) * uSize * uJit; }
+vec2 toPx(vec2 v, float sz) { vec2 q = vec2(v.x + v.y * 0.5, v.y * 0.866) * sz; return q - warp(q); }
+vec4 samp(vec2 q) { return texture(uSoft, q * uZ / uRes); }
+void main() {
+  vec2 p = vUv * uRes / uZ;
+  vec2 pw = p + warp(p);
+  float sz = uSize;
+  vec2 v0, v1, v2, f; float up;
+  for (int lv = 0; lv < 2; lv++) {
+    vec2 g = pw / sz;
+    vec2 sk = vec2(g.x - g.y * 0.57735, g.y * 1.1547);
+    vec2 c = floor(sk); f = fract(sk);
+    up = step(1.0, f.x + f.y);
+    v0 = up > 0.5 ? c + vec2(1.0, 1.0) : c;
+    v1 = c + vec2(1.0, 0.0); v2 = c + vec2(0.0, 1.0);
+    if (lv == 1) break;
+    vec3 a = unp(samp(toPx(v0, sz))), b = unp(samp(toPx(v1, sz))), d = unp(samp(toPx(v2, sz)));
+    vec3 m = unp(samp(toPx((v0 + v1 + v2) / 3.0, sz)));
+    float det = max(max(length(a - m), length(b - m)), length(d - m));
+    if (det < 0.3 * (1.0 - uDetail) + 0.07) break;
+    sz *= 0.5;
+  }
+  vec2 P0 = toPx(v0, sz), P1 = toPx(v1, sz), P2 = toPx(v2, sz);
+  vec4 A = samp(P0), B = samp(P1), C = samp(P2), M = samp((P0 + P1 + P2) / 3.0);
+  vec4 col = (A + B + C + M * 3.0) / 6.0;
+  // normale della faccia: la luminosità dei vertici fa da altezza
+  vec3 e1 = vec3(P1 - P0, (luma(unp(B)) - luma(unp(A))) * sz * 2.2 * uRelief);
+  vec3 e2 = vec3(P2 - P0, (luma(unp(C)) - luma(unp(A))) * sz * 2.2 * uRelief);
+  vec3 nrm = normalize(cross(e1, e2)); if (nrm.z < 0.0) nrm = -nrm;
+  float lit = dot(nrm, normalize(vec3(-0.5, -0.6, 0.62)));
+  col.rgb *= 0.78 + 0.34 * lit + 0.06 * (hash12(v0 * 7.0 + up + sz) - 0.5);
+  col.rgb += vec3(pow(max(lit, 0.0), 12.0) * 0.12 * uRelief) * col.a;
+  float e = min(min(f.x, f.y), abs(1.0 - f.x - f.y));
+  col.rgb = mix(col.rgb, col.rgb * 1.18 + 0.03 * col.a, uEdge * (1.0 - smoothstep(0.0, 0.035, e)));
+  vec4 base = texture(uSrc, vUv);
+  col = vec4(unp(col) * base.a, base.a);   // il contorno resta quello dell'immagine
+  o = mix(base, col, uAmt);
+}`
+
+/** caleidoscopio: un frammento ripetuto e specchiato attorno al centro */
+export const KALEIDO = FX + `uniform float uSeg, uRot, uZoom; uniform vec2 uC;
+void main() {
+  vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
+  float r = length(q) / uZoom, a = atan(q.y, q.x) + uRot;
+  float seg = 6.2832 / uSeg;
+  a = mod(a, seg); a = abs(a - seg * 0.5);
+  vec2 uv = uC + vec2(cos(a), sin(a)) * r * vec2(uRes.y / uRes.x, 1.0);
+  o = mix(texture(uSrc, vUv), texture(uSrc, clamp(uv, 0.0, 1.0)), uAmt);
+}`

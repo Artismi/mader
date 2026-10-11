@@ -119,6 +119,7 @@ export type FxId =
   | 'vhs' | 'crt'
   | 'material3d' | 'genFill'
   | 'grunge' | 'stitch' | 'foil' | 'impressione' | 'colata' | 'raggi' | 'glitter'
+  | 'vetro' | 'ascii' | 'linocut' | 'specchi' | 'luceProiettata' | 'pixelSort' | 'lowPoly' | 'caleido'
 
 export type PVal = number | string
 export interface FxEntry { id: FxId; on: boolean; amount: number; p: Record<string, PVal>; variant?: string }
@@ -142,7 +143,7 @@ export interface FxDef {
   pad?: (p: Record<string, PVal>) => number
 }
 
-export const FX_CATS = ['3D', 'Generativo', 'Stile', 'Testo', 'Luce', 'Stampa', 'Colore', 'Foto', 'Distorsione', 'Schermo'] as const
+export const FX_CATS = ['3D', 'Generativo', 'Stile', 'Testo', 'Luce', 'Ottica', 'Stampa', 'Colore', 'Foto', 'Distorsione', 'Schermo'] as const
 export type FxCat = typeof FX_CATS[number]
 
 export const BLENDS = ['Normale', 'Moltiplica', 'Schermo', 'Sovrapponi', 'Luce soffusa', 'Aggiungi', 'Colore scherma', 'Colore']
@@ -314,6 +315,18 @@ export const FX_DEFS: FxDef[] = [
   { id: 'stitch', label: 'Ricamo', cat: 'Testo', hint: 'fili in diagonale e punto filo lungo il bordo, come una toppa',
     params: [t('useColor', 'Colore filo proprio', 0), c('color', 'Filo', '#e94f37'), c('stitch', 'Cucitura', '#fff4e0'), r('density', 'Densità fili', 20, 140, 70), r('inset', 'Distanza cucitura', 2, 14, 5)],
     variants: [{ id: 'toppa', label: 'Toppa', p: {} }, { id: 'fine', label: 'Fine', p: { density: 120, inset: 3 } }, { id: 'denim', label: 'Denim', p: { useColor: 1, color: '#2b4a7a', stitch: '#f2b84b' } }] },
+  { id: 'vetro', label: 'Vetro scanalato', cat: 'Ottica', hint: 'ogni costa è una lente: rimpicciolisce e capovolge ciò che c’è dietro, con dispersione e satinatura',
+    params: [r('width', 'Larghezza coste', 4, 120, 22), r('strength', 'Lente', 0, 100, 45), r('angle', 'Inclinazione', -90, 90, 0), r('dispersion', 'Dispersione colori', 0, 100, 25), r('frost', 'Satinatura', 0, 100, 25), r('highlight', 'Riflesso', 0, 100, 45), r('shade', 'Volume coste', 0, 100, 55)],
+    variants: [{ id: 'porta', label: 'Porta a righe', p: {} }, { id: 'fine', label: 'Cannettato fine', p: { width: 9, strength: 60, frost: 15 } }, { id: 'larghe', label: 'Coste larghe', p: { width: 64, strength: 70, highlight: 60, dispersion: 45 } }, { id: 'satinato', label: 'Satinato', p: { width: 16, strength: 35, frost: 75, dispersion: 10 } }, { id: 'prisma', label: 'Prisma', p: { width: 30, strength: 85, dispersion: 100, angle: 20 } }] },
+  { id: 'specchi', label: 'Mosaico a specchio', cat: 'Ottica', hint: 'tessere che rifrangono e riflettono, con fughe e luce propria',
+    params: [r('size', 'Tessere', 6, 200, 26), r('refraction', 'Rifrazione', 0, 100, 35), r('grout', 'Fughe', 0, 30, 6), c('groutColor', 'Colore fughe', '#1a1a1a'), r('gloss', 'Lucentezza', 0, 100, 50)],
+    variants: [{ id: 'specchi', label: 'Specchi', p: {} }, { id: 'ceramica', label: 'Ceramica', p: { size: 22, refraction: 12, grout: 12, groutColor: '#efe9df', gloss: 70 } }, { id: 'pixel', label: 'Pixel rotti', p: { size: 14, refraction: 80, grout: 0 } }] },
+  { id: 'caleido', label: 'Caleidoscopio', cat: 'Ottica', hint: 'un frammento ripetuto e specchiato attorno al centro',
+    params: [r('segments', 'Spicchi', 2, 24, 8), r('rotation', 'Rotazione', 0, 360, 0), r('zoom', 'Zoom', 20, 300, 100), r('cx', 'Centro X', 0, 100, 50), r('cy', 'Centro Y', 0, 100, 50)],
+    variants: [{ id: 'sei', label: 'Sei spicchi', p: { segments: 6 } }, { id: 'otto', label: 'Otto', p: { segments: 8 } }, { id: 'specchio', label: 'Specchio doppio', p: { segments: 2 } }, { id: 'rosone', label: 'Rosone', p: { segments: 16, zoom: 60 } }] },
+  { id: 'luceProiettata', label: 'Luce proiettata', cat: 'Luce', hint: 'ombre di finestra, di foglie o caustiche d’acqua, come una luce vera nella stanza',
+    params: [s('mode', 'Sorgente', ['Finestra', 'Foglie', 'Caustiche'], 0), r('angle', 'Angolo', -90, 90, 20), r('scale', 'Scala', 30, 300, 100), r('soft', 'Morbidezza', 0, 100, 50), r('strength', 'Intensità', 0, 100, 70), c('warm', 'Calore luce', '#ffd9a0')],
+    variants: [{ id: 'finestra', label: 'Finestra', p: { mode: 0 } }, { id: 'foglie', label: 'Foglie', p: { mode: 1 } }, { id: 'acqua', label: 'Caustiche', p: { mode: 2, warm: '#bfe9ff', strength: 60 } }, { id: 'tramonto', label: 'Finestra al tramonto', p: { mode: 0, warm: '#ff9a4a', angle: 35, strength: 85 } }] },
   { id: 'colata', label: 'Colatura', cat: 'Luce', hint: 'il colore cola in scie lunghe che sfumano, come un liquido o un neon che scivola',
     pad: p => n(p.length, 260) + 10,
     params: [r('length', 'Lunghezza', 20, 900, 260), r('angle', 'Direzione', 0, 360, 90), r('fade', 'Dissolvenza', 5, 100, 60), r('wobble', 'Ondulazione', 0, 100, 30), r('glow', 'Bagliore', 0, 100, 50), r('spectrum', 'Spettro', 0, 100, 0)],
@@ -326,6 +339,18 @@ export const FX_DEFS: FxDef[] = [
     pad: () => 60,
     params: [t('useColor', 'Colore proprio', 1), c('color', 'Colore', '#c9ccd6'), r('size', 'Grana', 1, 12, 4), r('sparkle', 'Scintille', 0, 100, 70), r('dust', 'Polvere', 0, 100, 50)],
     variants: [{ id: 'argento', label: 'Argento', p: { color: '#c9ccd6' } }, { id: 'oro', label: 'Oro', p: { color: '#d9b45a' } }, { id: 'rosa', label: 'Rosa', p: { color: '#f2a1c7' } }, { id: 'nero', label: 'Nero', p: { color: '#3a3a44', sparkle: 90 } }] },
+  { id: 'ascii', label: 'ASCII', cat: 'Schermo', hint: 'la foto ricostruita in caratteri fini: tono, contorni orientati e colore restano',
+    params: [r('cell', 'Corpo carattere', 3, 40, 7), s('mode', 'Resa', ['Luce su nero', 'Inchiostro su carta', 'Solo caratteri'], 0), s('charset', 'Caratteri', ['Scala fine (70)', 'Denso', 'Blocchi', 'Binario', 'Punti', 'Barre', 'Classico'], 0), r('color', 'Colore della foto', 0, 100, 100), r('saturation', 'Saturazione', 0, 100, 80), r('under', 'Foto sotto', 0, 100, 45), r('contrast', 'Contrasto locale', 0, 100, 50), r('edges', 'Contorni orientati', 0, 100, 60), c('ink', 'Inchiostro', '#f4f1ea'), c('bg', 'Fondo', '#07080a')],
+    variants: [{ id: 'colore', label: 'Colore su nero', p: {} }, { id: 'carta', label: 'Stampa su carta', p: { mode: 1, color: 60, ink: '#16130f', bg: '#f1ece1', under: 60, cell: 6, contrast: 70 } }, { id: 'terminale', label: 'Terminale', p: { color: 0, ink: '#7dff9a', bg: '#020a04', under: 10, saturation: 0 } }, { id: 'micro', label: 'Micro', p: { cell: 4, under: 60, edges: 40 } }, { id: 'blocchi', label: 'Blocchi', p: { charset: 2, cell: 6, edges: 0 } }, { id: 'binario', label: 'Binario', p: { charset: 3, cell: 6, color: 60, edges: 0 } }] },
+  { id: 'linocut', label: 'Incisione', cat: 'Stampa', hint: 'linee che avvolgono i volumi come in una banconota: spesse nelle ombre, sottili nelle luci',
+    params: [r('lines', 'Passo linee', 2, 30, 4.5), r('angle', 'Direzione', 0, 180, 30), r('flow', 'Curvatura sui volumi', 0, 100, 55), r('cross', 'Tratteggio incrociato', 0, 100, 60), r('color', 'Inchiostro a colori', 0, 100, 0), r('threshold', 'Esposizione', 10, 90, 50), r('rough', 'Ruvidità', 0, 100, 20), c('ink', 'Inchiostro', '#141414'), c('paper', 'Carta', '#f1ebdd')],
+    variants: [{ id: 'banconota', label: 'Banconota', p: { lines: 3.2, flow: 85, ink: '#1f3b2c', paper: '#eef0e4', cross: 40 } }, { id: 'nero', label: 'Bulino nero', p: {} }, { id: 'colore', label: 'A colori', p: { color: 100, lines: 3.5, cross: 30 } }, { id: 'rosso', label: 'Sanguigna', p: { ink: '#8e2a1c', paper: '#f2e6d2' } }, { id: 'lino', label: 'Linoleum', p: { lines: 9, flow: 25, cross: 0, rough: 70 } }] },
+  { id: 'lowPoly', label: 'Low-poly', cat: 'Distorsione', hint: 'faccette che si infittiscono sui dettagli, ognuna con il suo colore e la sua luce',
+    params: [r('size', 'Faccette', 6, 160, 26), r('detail', 'Più fitte sui dettagli', 0, 100, 60), r('relief', 'Rilievo', 0, 100, 60), r('jitter', 'Irregolarità', 0, 100, 45), r('edge', 'Spigoli chiari', 0, 100, 25)],
+    variants: [{ id: 'cristallo', label: 'Cristallo', p: {} }, { id: 'fine', label: 'Fine', p: { size: 14, relief: 45 } }, { id: 'geometrico', label: 'Geometrico', p: { size: 44, jitter: 0, detail: 30, edge: 50 } }, { id: 'scolpito', label: 'Scolpito', p: { size: 30, relief: 100 } }] },
+  { id: 'pixelSort', label: 'Pixel sorting', cat: 'Schermo', hint: 'i pixel dentro una fascia di luce vengono ordinati in strisce, il resto della foto resta',
+    params: [r('threshold', 'Da luce', 0, 100, 45), r('upper', 'A luce', 0, 100, 100), r('length', 'Lunghezza massima', 20, 1600, 420), r('angle', 'Direzione', 0, 360, 90), r('vary', 'Strisce irregolari', 0, 100, 70), t('reverse', 'Ordine inverso', 0)],
+    variants: [{ id: 'giu', label: 'Verso il basso', p: {} }, { id: 'lato', label: 'Di lato', p: { angle: 0 } }, { id: 'mezzetinte', label: 'Mezze tinte', p: { threshold: 25, upper: 75, length: 700 } }, { id: 'forte', label: 'Forte', p: { threshold: 20, length: 1100, vary: 40 } }] },
   { id: 'grunge', label: 'Usura', cat: 'Stampa', hint: 'inchiostro consumato con macchie e puntini, più forte sui bordi',
     params: [r('wear', 'Usura', 0, 100, 45), r('scale', 'Scala', 30, 300, 100), r('speck', 'Puntini', 0, 100, 40)],
     variants: [{ id: 'leggera', label: 'Leggera', p: { wear: 30, speck: 20 } }, { id: 'timbro', label: 'Timbro', p: { wear: 50, speck: 50 } }, { id: 'rovinata', label: 'Rovinata', p: { wear: 62, speck: 70, scale: 70 } }] },

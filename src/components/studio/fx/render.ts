@@ -7,7 +7,7 @@
  */
 import { FxGL, type Tex, type UVal } from './gl'
 import {
-  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, SMEAR, RAYS, GLITTER, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
+  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, SMEAR, RAYS, GLITTER, FLUTED, ASCII, LINOCUT, MIRRORTILE, LIGHTCAST, PIXELSORT, LOWPOLY, KALEIDO, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
 } from './shaders'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
@@ -182,6 +182,34 @@ const std = (c: Ctx, cur: Tex, amt: number, extra: Record<string, UVal> = {}): R
 const simple = (key: string, frag: string, uni: (c: Ctx, p: Record<string, PVal>) => Record<string, UVal>): Run =>
   (c, cur, p, amt) => c.g.pass(key, frag, c.W, c.H, std(c, cur, amt, uni(c, p)))
 
+export const ASCII_SETS = [
+  " .'`,-_:;~^\"+=<>*rcvszxoaeunmwqpdbkhXZOQ8#%&@",
+  ' .,:;irsXA253hMHGS#9B&@', ' ░▒▓█', ' 01', ' ·•●', ' ／＼｜＿＃', ' .:-=+*#%@',
+]
+/** atlante dei caratteri: la scala viene riordinata per copertura reale (dal più vuoto
+ *  al più pieno), poi quattro segni per i contorni: | / - \ */
+function asciiAtlas(set: string) {
+  const cw = 40, ch = 64
+  const glyph = (c: string) => {
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch
+    const x = cv.getContext('2d', { willReadFrequently: true })!
+    x.fillStyle = '#000'; x.fillRect(0, 0, cw, ch)
+    x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'
+    x.font = `700 ${ch * 0.8}px "JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono", monospace`
+    x.fillText(c, cw / 2, ch / 2 + 2)
+    let sum = 0; const d = x.getImageData(0, 0, cw, ch).data
+    for (let i = 0; i < d.length; i += 4) sum += d[i]
+    return { cv, cov: sum / (cw * ch * 255) }
+  }
+  const ramp = [...new Set([...set])].map(glyph).sort((a, b) => a.cov - b.cov)
+  const edges = ['|', '/', '-', '\\'].map(glyph)
+  const all = [...ramp, ...edges]
+  const cv = document.createElement('canvas'); cv.width = cw * all.length; cv.height = ch
+  const x = cv.getContext('2d')!
+  all.forEach((g, i) => x.drawImage(g.cv, i * cw, 0))
+  return cv
+}
+
 export const MATERIALS = ['carta-bianca', 'carta-grigia', 'carta-stropicciata', 'cartoncino-avana', 'carta-kraft', 'carta-paglia', 'gesso', 'intonaco', 'cemento-scuro', 'marmo-nero', 'pelle', 'tela', 'metallo-spazzolato', 'metallo-bianco', 'lamina', 'plastica']
 
 const RUN: Partial<Record<string, Run>> = {
@@ -251,6 +279,41 @@ const RUN: Partial<Record<string, Run>> = {
       uInk: rgb(p.ink, '#1d2a6b'), uFoilA: rgb(p.c1, '#6b4a10'), uFoilB: rgb(p.c2, '#ffe9a8'), uTint: rgb(p.tint, '#ffffff'),
     }))
   },
+  vetro: (c, cur, p, amt) => {
+    const w = Math.max(4, num(p.width, 22))
+    const fr = c.g.blur(cur, w * 0.35 * c.z)
+    const out = c.g.pass('fluted', FLUTED, c.W, c.H, std(c, cur, amt, { uFrostTex: fr, uW: w, uStr: num(p.strength, 45) / 100, uAng: rad(num(p.angle, 0)), uHi: num(p.highlight, 45) / 100, uShade: num(p.shade, 55) / 100, uDisp: num(p.dispersion, 25) / 100 * 0.12, uFrost: num(p.frost, 25) / 100 }))
+    c.g.release(fr)
+    return out
+  },
+  ascii: (c, cur, p, amt) => {
+    const set = ASCII_SETS[num(p.charset)] ?? ASCII_SETS[0]
+    const n = new Set([...set]).size
+    const atlas = c.g.canvasTex(`ascii3|${set}`, () => asciiAtlas(set))
+    const cell = Math.max(3, num(p.cell, 7))
+    const ct = c.g.blur(cur, cell * 0.35 * c.z), loc = c.g.blur(cur, cell * 4 * c.z)
+    const out = c.g.pass('ascii', ASCII, c.W, c.H, std(c, cur, amt, { uAtlas: atlas, uCellTex: ct, uLocal: loc, uCell: cell, uN: n, uMode: num(p.mode), uColor: num(p.color, 100) / 100, uUnder: num(p.under, 45) / 100, uEdges: num(p.edges, 60) / 100, uCon: num(p.contrast, 50) / 100, uSat: num(p.saturation, 80) / 100 * 1.6, uInv: num(p.mode) === 1 ? 1 : 0, uInk: rgb(p.ink, '#f4f1ea'), uBg: rgb(p.bg, '#07080a') }))
+    c.g.release(ct, loc)
+    return out
+  },
+  linocut: (c, cur, p, amt) => {
+    const lines = Math.max(2, num(p.lines, 4.5))
+    const fl = c.g.blur(cur, lines * 3 * c.z)
+    const out = c.g.pass('linocut', LINOCUT, c.W, c.H, std(c, cur, amt, { uFlowTex: fl, uInk: rgb(p.ink, '#141414'), uPaper: rgb(p.paper, '#f1ebdd'), uLines: lines, uAng: rad(num(p.angle, 30)), uFlow: num(p.flow, 55) / 100, uCross: num(p.cross, 60) / 100, uColor: num(p.color, 0) / 100, uRough: num(p.rough, 20) / 100, uTh: num(p.threshold, 50) / 100 }))
+    c.g.release(fl)
+    return out
+  },
+  specchi: simple('mirrortile', MIRRORTILE, (_c, p) => ({ uSize: Math.max(6, num(p.size, 26)), uRefr: num(p.refraction, 35) / 100, uGrout: num(p.grout, 6) / 100, uGloss: num(p.gloss, 50) / 100, uGroutCol: rgb(p.groutColor, '#1a1a1a') })),
+  luceProiettata: simple('lightcast', LIGHTCAST, (_c, p) => ({ uMode: num(p.mode), uAng: rad(num(p.angle, 20)), uScale: num(p.scale, 100) / 100, uSoft: num(p.soft, 50) / 100, uStr: num(p.strength, 70) / 100, uWarm: rgb(p.warm, '#ffd9a0') })),
+  pixelSort: simple('pixelsort', PIXELSORT, (c, p) => ({ uDir: dirUv(c, num(p.angle, 90), num(p.length, 420)), uLo: num(p.threshold, 45) / 100, uHi: num(p.upper, 100) / 100, uVar: num(p.vary, 70) / 100, uRev: num(p.reverse) })),
+  lowPoly: (c, cur, p, amt) => {
+    const size = Math.max(4, num(p.size, 26))
+    const soft = c.g.blur(cur, size * 0.06 * c.z)
+    const out = c.g.pass('lowpoly', LOWPOLY, c.W, c.H, std(c, cur, amt, { uSoft: soft, uSize: size, uEdge: num(p.edge, 25) / 100, uDetail: num(p.detail, 60) / 100, uRelief: num(p.relief, 60) / 100, uJit: num(p.jitter, 45) / 100 }))
+    c.g.release(soft)
+    return out
+  },
+  caleido: simple('kaleido', KALEIDO, (_c, p) => ({ uSeg: Math.max(2, Math.round(num(p.segments, 8))), uRot: rad(num(p.rotation, 0)), uZoom: num(p.zoom, 100) / 100, uC: [num(p.cx, 50) / 100, num(p.cy, 50) / 100] })),
   grunge: simple('grunge', GRUNGE, (_c, p) => ({ uWear: num(p.wear, 45) / 100, uScale: num(p.scale, 100) / 100, uSpeck: num(p.speck, 40) / 100 })),
   stitch: simple('stitch', STITCH, (_c, p) => ({ uThread: rgb(p.color, '#e94f37'), uStitch: rgb(p.stitch, '#fff4e0'), uUseColor: num(p.useColor), uDensity: num(p.density, 70) / 40, uInset: num(p.inset, 5) })),
   foil: simple('foil', FOIL, (_c, p) => ({ uA: rgb(p.c1, '#7a5310'), uB: rgb(p.c2, '#fff1b8'), uCrinkle: num(p.crinkle, 60) / 100, uLight: num(p.light, 220) * Math.PI / 180, uBevel: num(p.bevel, 4) })),
