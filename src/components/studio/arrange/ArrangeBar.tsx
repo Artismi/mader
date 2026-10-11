@@ -16,13 +16,14 @@ import * as fabric from 'fabric'
 import {
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Crop, Pipette, Unlink,
+  AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Crop, Pipette, Unlink, Spline,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { alignObjects, canAlign, distributeObjects, isMaskGroup, makeClipMask, nudgeSelection, releaseClipMask, type AlignMode } from './align'
 import { boardOf } from './artboards'
 import { boardLabel, exportBoards, listBoards, selectionToDataURL, type ExportFormat } from './export'
 import { installTextCurve } from '../text/curve'
+import { VectorPanel } from '../vector/VectorPanel'
 
 type EyeDropperCtor = new () => { open: () => Promise<{ sRGBHex: string }> }
 
@@ -82,6 +83,7 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
   const [count, setCount] = useState(0)
   const [masked, setMasked] = useState(false)
   const [alignable, setAlignable] = useState(false)
+  const [showVector, setShowVector] = useState(false)
 
   useEffect(() => {
     if (!canvas) return
@@ -128,9 +130,11 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
 
   if (!canvas || count === 0) return null
 
-  return (
+  return (<>
+    {/* pannello al bordo destro dell'area di lavoro: non copre l'oggetto che si sta modificando */}
+    {showVector && <div className="absolute right-4 bottom-20 z-[60]"><VectorPanel canvas={canvas} /></div>}
     <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-0.5 p-1 bg-[#111]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200"
-      onMouseDown={e => e.preventDefault()}>
+      onMouseDown={e => { if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault() }}>
       {ALIGN.map(a => (
         <Btn key={a.mode} onClick={() => alignObjects(canvas, a.mode)} disabled={!alignable}
           title={`${a.label}${count === 1 ? ' (alla tavola)' : ''} · ${a.key}`}>
@@ -149,8 +153,12 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
         ? <Btn onClick={() => releaseClipMask(canvas)} title="Rilascia maschera · Ctrl+Alt+7" active><Unlink className="w-3.5 h-3.5" /></Btn>
         : <Btn onClick={() => makeClipMask(canvas)} disabled={count < 2} title="Maschera di ritaglio: l'oggetto più in alto ritaglia gli altri · Ctrl+7"><Crop className="w-3.5 h-3.5" /></Btn>}
       <Btn onClick={() => pickColor(canvas)} title="Contagocce: prendi un colore dallo schermo · Alt+I"><Pipette className="w-3.5 h-3.5" /></Btn>
+      <div className="w-px h-4 bg-white/10 mx-1" />
+      <Btn onClick={() => setShowVector(v => !v)} active={showVector} title="Vettoriale: elabora tracciati, offset, ripeti, fusione, poligoni">
+        <Spline className="w-3.5 h-3.5" />
+      </Btn>
     </div>
-  )
+  </>)
 }
 
 // ─── MENU ESPORTA ────────────────────────────────────────────────────────────

@@ -12,6 +12,8 @@ export const SERIAL_PROPS = [
   'isArtboard', 'artboardExportType',
   'hasStartArrow', 'hasEndArrow', 'isConnector', 'startObjId', 'endObjId', 'vertexConnections',
   '_bzAnchors', '_isBricolage', 'isClipMask', 'textCurve', 'textCurveWidth', 'textCurveAlign',
+  // forme e costruzioni vettoriali modificabili
+  'liveShape', 'repeatSpec', 'repeatSrc', 'blendSteps', 'blendSrc',
   // video / sottotitoli
   'isVideo', 'isSubtitle', 'startTime', 'endTime',
   // effetti (motore fx) e Lab

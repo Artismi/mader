@@ -10,7 +10,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Link2, Sparkles, Trash2, ChevronDown, ChevronLeft, Layers,
   ArrowRight, ArrowLeft, ArrowLeftRight, Library,
-  LassoSelect, Zap, Star, Scissors, PenTool,
+  LassoSelect, Zap, Star, Scissors, PenTool, Hexagon,
   Eye, EyeOff, Lock, Unlock, GripVertical, Sliders, X, Palette,
   Search, Cpu, Highlighter, Play, Merge, Ghost, Maximize2, Heart, Droplets,
   Waves, Cloud, Triangle, LayoutList, LayoutGrid, Magnet,
@@ -106,7 +106,7 @@ interface Props {
   imageUrlQueue?: string | null
 }
 
-type Tool = 'select' | 'lasso' | 'text' | 'rect' | 'circle' | 'line' | 'pen' | 'pencil' | 'eraser' | 'image' | 'scissors'
+type Tool = 'select' | 'lasso' | 'text' | 'rect' | 'circle' | 'polygon' | 'star' | 'line' | 'pen' | 'pencil' | 'eraser' | 'image' | 'scissors'
 
 // ─── FONTS ───────────────────────────────────────────────────────────────────
 
@@ -284,6 +284,8 @@ import { composeBoard, boardSize } from './compose/compose'
 import { installArtboards } from './arrange/artboards'
 import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
 import { TextCurveControl } from './text/TextCurveControl'
+import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
+import { runPathOp } from './vector/pathfinder'
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -1542,7 +1544,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (tool === 'eraser') { canvas.selection = false; canvas.defaultCursor = 'cell' }
     if (tool === 'lasso') { canvas.selection = false; canvas.defaultCursor = 'crosshair' }
     if (tool === 'scissors') { canvas.selection = false; canvas.defaultCursor = 'crosshair' }
-    if (['text', 'rect', 'circle', 'line', 'pen', 'image'].includes(tool)) { canvas.defaultCursor = 'crosshair'; canvas.selection = false }
+    if (['text', 'rect', 'circle', 'polygon', 'star', 'line', 'pen', 'image'].includes(tool)) { canvas.defaultCursor = 'crosshair'; canvas.selection = false }
   }, [tool, sel.brushType, sel.brushWidth, sel.brushColor, sel.brushThinning, sel.brushSmoothing, sel.brushStreamline, sel.brushTaperStart, sel.brushTaperEnd, sel.brushJitter])
 
 
@@ -1672,6 +1674,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (t === 'circle') {
       const el = new fabric.Ellipse({ left: p.x, top: p.y, rx: 100, ry: 100, fill: SHAPE_FILL, strokeWidth: 0 })
       canvas.add(el); canvas.setActiveObject(el); setTool('select'); return
+    }
+    if (t === 'polygon' || t === 'star') {
+      // forma viva: lati, punte e arrotondamento si cambiano poi dal pannello Vettoriale
+      const sh = makeLiveShape(t === 'star' ? DEFAULT_STAR : DEFAULT_POLYGON, { x: p.x, y: p.y }, { fill: SHAPE_FILL })
+      canvas.add(sh); canvas.setActiveObject(sh); setTool('select'); return
     }
     if (t === 'line') {
       const snap = findSnapPoint(canvas, p.x, p.y)
@@ -3519,46 +3526,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   function doBoolean(op: 'union' | 'subtract' | 'intersect') {
+    // stesso motore del pannello Vettoriale: ordine per livello, buchi e più contorni
     const canvas = fabricRef.current; if (!canvas) return
-    const active = canvas.getActiveObject()
-    if (!active || active.type !== 'activeSelection') {
-      alert("Seleziona almeno 2 forme per le operazioni booleane.")
-      return
-    }
-    const objs = (active as fabric.ActiveSelection).getObjects()
-    if (objs.length < 2) return
-
-    try {
-      const polys = objs.map(o => flattenFabricObj(o))
-      if (polys.some(p => p.length < 4)) {
-        alert("Uno degli oggetti non è convertibile in poligono.")
-        return
-      }
-
-      // polygon-clipping expects MultiPolygon = Polygon[][], Polygon = Ring[][], Ring = Pair[]
-      const toMP = (ring: polygonClipping.Pair[]): polygonClipping.MultiPolygon => [[[...ring]]]
-      let result: polygonClipping.MultiPolygon
-      if (op === 'union') result = polygonClipping.union(toMP(polys[0])[0], ...polys.slice(1).map(p => toMP(p)[0]))
-      else if (op === 'subtract') result = polygonClipping.difference(toMP(polys[0])[0], ...polys.slice(1).map(p => toMP(p)[0]))
-      else result = polygonClipping.intersection(toMP(polys[0])[0], ...polys.slice(1).map(p => toMP(p)[0]))
-
-      if (!result || result.length === 0) { alert('Nessuna intersezione trovata.'); return }
-
-      const d = multiPolyToSVGPath(result)
-      const src = objs[0]
-      const newPath = new fabric.Path(d, {
-        fill: (src as any).fill || '#ffffff',
-        stroke: (src as any).stroke || '',
-        strokeWidth: (src as any).strokeWidth || 0,
-        objectCaching: false,
-      })
-      canvas.remove(...objs)
-      canvas.discardActiveObject()
-      canvas.add(newPath)
-      canvas.setActiveObject(newPath)
-      canvas.requestRenderAll()
-      pushHistory()
-    } catch (e) { console.error('[doBoolean]', e) }
+    const msg = runPathOp(canvas, op)
+    if (msg) alert(msg)
   }
 
   // 2. Text on Path
@@ -4014,6 +3985,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
               tool === 'circle' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
             <Circle className="w-4 h-4" />
+          </button>
+          <button onClick={() => changeTool('polygon')} title="Poligono (lati e angoli dal pannello Vettoriale)"
+            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
+              tool === 'polygon' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
+            <Hexagon className="w-4 h-4" />
+          </button>
+          <button onClick={() => changeTool('star')} title="Stella (punte e rientro dal pannello Vettoriale)"
+            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
+              tool === 'star' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
+            <Star className="w-4 h-4" />
           </button>
           <button onClick={() => changeTool('line')} title="Linea [L]"
             className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
