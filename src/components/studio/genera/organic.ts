@@ -390,7 +390,7 @@ function dropSpecks(m: Mask, minArea: number): Mask {
  */
 export function foam(W: number, H: number, cx: number, cy: number, R: number, r: Rnd, o: { count: number; line: number; gap: number; nested: number; spread: number }): Mask {
   const circles: { x: number; y: number; r: number }[] = []
-  const g = R * 0.032 * o.gap
+  const g = R * 0.05 * o.gap
   const maxR = R * 0.3, minR = R * 0.05
   const touch = R * 0.004 * o.line              // le bolle si sfiorano: tra i due contorni resta un filo
   for (let tries = 0; circles.length < o.count && tries < o.count * 800; tries++) {
@@ -422,18 +422,25 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     if (ok) circles.push({ x, y, r: rad })
   }
   const w = R * 0.011 * o.line
+  // unione morbida (smooth-min esponenziale) di tutti i contorni: dove due linee si
+  // avvicinano l'inchiostro si gonfia in un menisco curvo e si richiude ad ago lungo
+  // ciascuna linea. Copertura calcolata al sub-pixel: bordi netti, niente tremolio.
+  const k = g * 0.19
   const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
   const x0 = Math.max(0, Math.floor(cx - R * 1.2)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.2))
   const y0 = Math.max(0, Math.floor(cy - R * 1.2)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.2))
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    let d1 = Infinity, d2 = Infinity
-    for (const c of circles) {
-      const ad = Math.abs(Math.hypot(x - c.x, y - c.y) - c.r)
-      if (ad < d1) { d2 = d1; d1 = ad } else if (ad < d2) d2 = ad
-    }
-    if (d1 < w / 2 || d1 + d2 < g) m.a[y * W + x] = 255
+    let dmin = Infinity
+    const ds: number[] = []
+    for (const c of circles) { const ad = Math.abs(Math.hypot(x - c.x, y - c.y) - c.r); ds.push(ad); if (ad < dmin) dmin = ad }
+    if (dmin > k * 8 + w) continue
+    let sum = 0
+    for (const d of ds) sum += Math.exp(-(d - dmin) / k)
+    const f = dmin - k * Math.log(sum) - w / 2
+    const cov = Math.max(0, Math.min(1, 0.5 - f))
+    if (cov > 0) m.a[y * W + x] = cov * 255
   }
-  return liquid(m, Math.max(1, w * 0.35), 0.5, 0.08)
+  return m
 }
 
 // ─── rete neurale d'inchiostro ───────────────────────────────────────────────
