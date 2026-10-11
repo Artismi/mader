@@ -6,6 +6,7 @@
 import { FORMATS, LAYOUTS, STYLES } from './compose-spec'
 import { FX_DEFS, LOOKS } from '@/components/studio/fx/catalog'
 import { FONTS, FONT_CATS } from '@/components/studio/libraries/font-catalog'
+import { TEXT_STYLES } from '@/components/studio/fx/text-styles'
 
 const TITLE_FX = ['material3d', 'genFill', 'neon', 'extrude', 'longShadow', 'echo', 'splice', 'hollow', 'gradientOverlay', 'stroke', 'dropShadow', 'glitch', 'riso', 'halftone', 'outerGlow', 'bevel', 'textureOverlay']
 const IMAGE_FX = ['gradientMap', 'halftone', 'riso', 'screenprint', 'dither', 'posterize', 'tiltShift', 'chroma', 'vhs', 'lightLeak', 'bloom', 'mosaic']
@@ -21,7 +22,7 @@ export function composeToolDescription() {
   const formats = Object.entries(FORMATS).map(([k, f]) => `${k} ${f.w}×${f.h} (${f.label})`).join(', ')
   const looks = LOOKS.map(l => l.id).join(', ')
   const genFill = FX_DEFS.find(f => f.id === 'genFill')!.variants.map(v => v.id).join(', ')
-  const fonts = FONT_CATS.map(c => `${c.label}: ${FONTS.filter(f => f.cat === c.id && f.source === 'google').slice(0, 9).map(f => f.family).join(', ')}`).join('\n')
+  const fonts = FONT_CATS.map(c => `${c.label}: ${FONTS.filter(f => f.cat === c.id && f.source !== 'fontshare').slice(0, 10).map(f => f.family).join(', ')}`).join('\n')
 
   return `Crea grafiche impaginate da professionista. TU scegli formato, direzione artistica, impaginazione e scrivi i contenuti; lo Studio calcola margini, griglia a 12 colonne, scala tipografica, adattamento del titolo, contrasto, decorazioni ed effetti. Ogni pezzo resta modificabile dall'utente. Preferisci SEMPRE questo tool a createDesignBoards per creare grafiche nuove (post, storie, poster, copertine, slide, banner, inviti, caroselli).
 
@@ -49,7 +50,9 @@ ${layouts}
 
 IMMAGINI: content.image.url (da generateAIImage) oppure content.image.prompt (prompt fotografico in inglese, generata in automatico). Senza immagine non usare diviso/copertina/galleria.
 
-EFFETTO TITOLO (titleEffect): "stile" | "nessuno" | "id:variante" tra
+STILI TESTO COMPLETI (titleEffect "stile-testo:id", il titolo prende gli effetti calibrati dello stile; conviene usare anche displayFont dello stile): ${TEXT_STYLES.map(t => `${t.id} (${t.label}, carattere ${t.family})`).join('; ')}
+
+EFFETTO TITOLO (titleEffect): "stile" | "nessuno" | "stile-testo:id" | "id:variante" tra
 ${TITLE_FX.map(fxLine).filter(Boolean).join('\n')}
 
 FILTRI FOTO (imageLook): ${looks}

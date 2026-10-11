@@ -15,6 +15,7 @@ import { ensureFont, fontEntry } from '../libraries/font-loader'
 import { applyFx } from '../fx/engine'
 import { fxDef, newFx, LOOKS, type FxEntry, type FxId } from '../fx/catalog'
 import { ORNAMENTS } from './ornaments'
+import { TEXT_STYLES } from '../fx/text-styles'
 import { FORMATS, layoutOf, styleOf, type ComposeBoard, type DecorId, type Palette, type StyleDef } from '@/lib/design/compose-spec'
 
 type Obj = fabric.FabricObject & { fx?: FxEntry[]; look?: { id: string; amount: number }; parentBoard?: string }
@@ -128,6 +129,7 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
   }
   const parseFx = (v?: string, fallback?: { id: string; variant?: string }) => {
     if (v === 'nessuno') return null
+    if (v?.startsWith('stile-testo:')) return null
     if (v && v !== 'stile') { const [id, variant] = v.split(':'); return fxDef(id) ? { id, variant } : fallback ?? null }
     return fallback ?? null
   }
@@ -272,7 +274,14 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
 
   /* ── pezzi di testo ricorrenti ── */
   const titleFx = parseFx(spec.titleEffect, S.titleFx)
+  const textStyle = spec.titleEffect?.startsWith('stile-testo:') ? TEXT_STYLES.find(x => x.id === spec.titleEffect!.slice(12)) : undefined
   const styleTitle = (t: Obj) => {
+    if (textStyle && t instanceof fabric.Text) {
+      // stile testo completo: effetti dello stile, colore accordato al fondo
+      ;(t as Obj).fx = textStyle.fx.map(([id, v, p]) => fx(id, v, (p ?? {}) as Record<string, number | string>)).filter(Boolean) as FxEntry[]
+      if (Math.abs(lum(textStyle.fill) - lum(pal.bg)) > 0.3) t.set('fill', textStyle.fill)
+      return t
+    }
     if (!titleFx) return t
     const def = fxDef(titleFx.id); if (!def) return t
     const p: Record<string, number | string> = {}
