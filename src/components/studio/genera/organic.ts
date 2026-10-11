@@ -5,7 +5,7 @@
  * artigli ricurvi.
  */
 import { Delaunay } from 'd3-delaunay'
-import { distance, drawMask, liquid, noise2, range, type Ctx, type Mask, type Rnd } from './raster'
+import { distance, drawMask, liquid, noise2, range, rng, type Ctx, type Mask, type Rnd } from './raster'
 import { taper, whip, type Pt } from './strokes'
 
 // ─── sagome ──────────────────────────────────────────────────────────────────
@@ -259,80 +259,100 @@ function intersect(a: Circle, b: Circle): Pt[] {
 export function coffeeRings(W: number, H: number, cx: number, cy: number, R: number, r: Rnd, S: number, o: { big: number; bubbles: number; gap: number; stars: number; detail: number }): Mask {
   const circles: Circle[] = []
   for (let k = 0; k < o.big; k++) {
-    const a = r() * Math.PI * 2, off = R * range(r, 0.05, 0.38)
-    circles.push({ x: cx + Math.cos(a) * off, y: cy + Math.sin(a) * off, r: R * range(r, 0.55, 0.95), big: true })
+    const a = r() * Math.PI * 2, off = R * range(r, 0.05, 0.35)
+    circles.push({ x: cx + Math.cos(a) * off, y: cy + Math.sin(a) * off, r: R * range(r, 0.6, 0.95), big: true })
   }
-  // bolle raccolte in uno o due grappoli, appoggiate ai contorni dei cerchi grandi
-  const clusters = 1 + Math.floor(r() * 2)
-  const centers = Array.from({ length: clusters }, () => { const c = circles[Math.floor(r() * circles.length)]; const a = r() * Math.PI * 2; return { c, a } })
-  for (let i = 0, tries = 0; i < o.bubbles && tries < o.bubbles * 200; tries++) {
-    const { c, a } = centers[i % clusters]
-    const aa = a + range(r, -0.7, 0.7), rr = c.r + range(r, -0.28, 0.2) * R
-    const b: Circle = { x: c.x + Math.cos(aa) * rr, y: c.y + Math.sin(aa) * rr, r: R * Math.pow(r(), 1.6) * 0.2 + R * 0.035, big: false }
-    // le bolle si sfiorano senza compenetrarsi troppo
-    if (circles.some(q => !q.big && Math.hypot(q.x - b.x, q.y - b.y) < (q.r + b.r) * 0.92)) continue
-    circles.push(b); i++
+  // la massa: una membrana (pareti sottili, nodi pieni a stella) che cresce lungo un arco
+  // di un cerchio grande e si assottiglia a lente alle estremità
+  const arcMass = (host: Circle, mid: number, span: number, thick: number, cells: number, seed: number) => {
+    const hx = (host.x - cx) / R, hy = (host.y - cy) / R, hr = host.r / R
+    return membrane(W, H, cx, cy, R, rng(seed), {
+      shape: 0, cells, web: 1.15 * o.gap, holes: 0.97, claws: o.stars, clawLen: 0.5, mirror: false, detail: o.detail * 0.6, varied: 0.9,
+      inside: (x, y) => {
+        let a = Math.atan2(y - hy, x - hx) - mid
+        a = Math.atan2(Math.sin(a), Math.cos(a))
+        if (Math.abs(a) > span / 2) return false
+        const w = thick * Math.pow(Math.cos((a / span) * Math.PI), 0.7)
+        return Math.abs(Math.hypot(x - hx, y - hy) - hr) < w / 2
+      },
+    })
   }
-  const gap = R * 0.05 * o.gap
-  const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    let d1 = Infinity, d2 = Infinity, hole = false
-    for (const c of circles) {
-      const sd = Math.hypot(x - c.x, y - c.y) - c.r
-      if (!c.big && sd < 0) { hole = true; break }
-      const ad = Math.abs(sd)
-      if (ad < d1) { d2 = d1; d1 = ad } else if (ad < d2) d2 = ad
-    }
-    if (hole) continue
-    // canale tra due bordi vicini: l'inchiostro sta al centro del canale e la sua
-    // larghezza va a zero man mano che i bordi si separano (estremità a lente, non squadrate)
-    const sep = d1 + d2
-    if (sep < gap && Math.abs(d1 - d2) < (gap - sep) * 0.9 + sep * 0.25) m.a[y * W + x] = 255
+  const host = circles[Math.floor(r() * circles.length)]
+  const ink = arcMass(host, r() * Math.PI * 2, range(r, 1.3, 2), range(r, 0.5, 0.66), Math.round(o.bubbles * 2.2), Math.floor(r() * 1e6))
+  if (false && circles.length > 1) {   // secondo grumo disattivato: produceva frammenti casuali
+    const other = circles.find(c => c !== host)!
+    const small = arcMass(other, r() * Math.PI * 2, range(r, 0.6, 0.9), range(r, 0.3, 0.38), Math.max(6, Math.round(o.bubbles * 0.4)), Math.floor(r() * 1e6))
+    for (let k = 0; k < ink.a.length; k++) if (small.a[k] > ink.a[k]) ink.a[k] = small.a[k]
   }
-  const ink = liquid(m, gap * 0.18, 0.5, 0.04)
   const lines = drawMask(W, H, ctx => {
-    const hair = S * 0.0026
-    // contorni dei cerchi grandi: archi lunghi spezzati
+    const hair = Math.max(1, S * 0.0022)
+    ctx.lineWidth = hair; ctx.lineCap = 'butt'
+    // contorni netti: pieni, doppi o con poche pause volute
     for (const c of circles) {
       if (!c.big) continue
-      let a = r() * Math.PI * 2
-      const end = a + Math.PI * 2 * range(r, 0.6, 1)
-      while (a < end) {
-        const len = range(r, 0.5, 2.2), pts: Pt[] = []
-        for (let q = 0; q <= 90; q++) { const t = a + Math.min(len, end - a) * (q / 90); pts.push([c.x + Math.cos(t) * c.r, c.y + Math.sin(t) * c.r]) }
-        taper(ctx, pts, t => hair * (0.3 + 0.7 * Math.pow(Math.sin(Math.PI * t), 0.2)))
-        a += len + range(r, 0.04, 0.3)
-      }
+      const style = r()
+      const gaps = style < 0.35 ? 0 : 1 + Math.floor(r() * 3)
+      const a0 = r() * Math.PI * 2
+      const cuts = Array.from({ length: gaps }, () => range(r, 0.15, 0.5))
+      let a = a0
+      const seg = (Math.PI * 2 - cuts.reduce((p, q) => p + q, 0)) / Math.max(1, gaps)
+      if (gaps === 0) { ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.stroke() }
+      else for (let g = 0; g < gaps; g++) { ctx.beginPath(); ctx.arc(c.x, c.y, c.r, a, a + seg); ctx.stroke(); a += seg + cuts[g] }
+      if (style > 0.7) { ctx.beginPath(); ctx.arc(c.x + R * 0.01, c.y, c.r + R * 0.035, a0, a0 + Math.PI * range(r, 0.6, 1.4)); ctx.stroke() }
     }
-    // nodi sugli incroci dei contorni: aghi lungo le due tangenti
-    const pts: { p: Pt; ta: number; tb: number }[] = []
-    for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) {
-      if (!circles[i].big && !circles[j].big) continue
-      for (const p of intersect(circles[i], circles[j])) {
-        const ta = Math.atan2(p[1] - circles[i].y, p[0] - circles[i].x) + Math.PI / 2
-        const tb = Math.atan2(p[1] - circles[j].y, p[0] - circles[j].x) + Math.PI / 2
-        pts.push({ p, ta, tb })
+    // nodi sugli incroci tra contorni grandi, aghi dritti lungo le tangenti
+    const nodes: Pt[] = []
+    const big = circles.filter(c => c.big)
+    for (let i = 0; i < big.length; i++) for (let j = i + 1; j < big.length; j++) for (const p of intersect(big[i], big[j])) {
+      if (r() > o.stars || nodes.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < R * 0.12)) continue
+      nodes.push(p)
+      const ta = Math.atan2(p[1] - big[i].y, p[0] - big[i].x) + Math.PI / 2, tb = Math.atan2(p[1] - big[j].y, p[0] - big[j].x) + Math.PI / 2
+      const L = S * range(r, 0.035, 0.07), W0 = S * 0.012
+      // sei punte: lungo le due tangenti e sulle bisettrici (quelle si staccano dalle linee)
+      const bis = (ta + tb) / 2
+      for (const [a, k] of [[ta, 0.6], [ta + Math.PI, 0.6], [tb, 0.6], [tb + Math.PI, 0.6], [bis + Math.PI / 2, 1.3], [bis - Math.PI / 2, 1.1]] as [number, number][]) {
+        const { pts } = whip(p[0], p[1], a, L * k * range(r, 0.7, 1.2), 0, 0, 1)
+        taper(ctx, pts, t => W0 * Math.pow(1 - t, 1.8))
       }
+      ctx.beginPath(); ctx.arc(p[0], p[1], W0 * 0.75, 0, Math.PI * 2); ctx.fill()
     }
-    for (const n of pts) {
-      if (r() > o.stars) continue
-      const L = S * range(r, 0.03, 0.09), W0 = S * 0.011
-      for (const a of [n.ta, n.ta + Math.PI, n.tb, n.tb + Math.PI]) {
-        const { pts: nd } = whip(n.p[0], n.p[1], a, L * range(r, 0.5, 1.3), 0, range(r, -0.6, 0.6), 2)
-        taper(ctx, nd, t => W0 * Math.pow(1 - t, 1.6))
-      }
-      ctx.beginPath(); ctx.arc(n.p[0], n.p[1], W0 * 0.8, 0, Math.PI * 2); ctx.fill()
-    }
-    // dettaglio: aghi che escono dalle macchie lungo i contorni
-    if (o.detail > 0) for (const c of circles) {
-      if (c.big || r() > o.detail) continue
-      const a = r() * Math.PI * 2
-      const { pts: nd } = whip(c.x + Math.cos(a) * (c.r + gap * 0.3), c.y + Math.sin(a) * (c.r + gap * 0.3), a + Math.PI / 2 * (r() < 0.5 ? 1 : -1), c.r * range(r, 0.6, 1.4), 0.3, range(r, -2, 2), 2)
-      taper(ctx, nd, t => S * 0.008 * Math.pow(1 - t, 1.4))
+    // corde dritte tra alcuni nodi: triangoli dentro il cerchio
+    if (nodes.length >= 2 && o.detail > 0) {
+      ctx.lineWidth = hair
+      const k = Math.min(nodes.length - 1, 1 + Math.round(o.detail * 3))
+      for (let i = 0; i < k; i++) { const A = nodes[i], B = nodes[(i + 1 + Math.floor(r() * (nodes.length - 1))) % nodes.length]; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke() }
     }
   })
   for (let k = 0; k < ink.a.length; k++) ink.a[k] = Math.max(ink.a[k], lines.a[k])
   return ink
+}
+
+/** elimina le macchioline isolate più piccole di minArea (pixel) */
+function dropSpecks(m: Mask, minArea: number): Mask {
+  const { w, h, a } = m
+  const lab = new Int32Array(w * h).fill(-1)
+  const stack: number[] = []
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < 128 || lab[i] >= 0) continue
+    const comp: number[] = []
+    stack.push(i); lab[i] = i
+    while (stack.length) {
+      const k = stack.pop()!; comp.push(k)
+      const x = k % w, y = (k / w) | 0
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+        const n = ny * w + nx
+        if (a[n] >= 128 && lab[n] < 0) { lab[n] = i; stack.push(n) }
+      }
+    }
+    if (comp.length < minArea) for (const k of comp) {
+      a[k] = 0
+      const x = k % w, y = (k / w) | 0
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < w && ny < h) { const n = ny * w + nx; if (a[n] < 128) a[n] = 0 } }
+    }
+  }
+  return m
 }
 
 // ─── rete neurale d'inchiostro ───────────────────────────────────────────────
