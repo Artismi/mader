@@ -222,11 +222,11 @@ app.whenReady().then(async () => {
       ? [
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com",
           "connect-src 'self' blob: ws://localhost:* http://localhost:* https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.openai.com",
           "img-src 'self' data: blob: https:",
           "media-src 'self' blob: data:",
-          "font-src 'self' data: https://fonts.gstatic.com",
+          "font-src 'self' data: https://fonts.gstatic.com https://cdn.fontshare.com https://api.fontshare.com",
           "frame-src 'self' https://www.figma.com https://www.canva.com",
           "worker-src 'self' blob:",
         ].join('; ')
@@ -234,11 +234,11 @@ app.whenReady().then(async () => {
       : [
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline'",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com",
           "connect-src 'self' blob: http://127.0.0.1:8765 https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.openai.com",
           "img-src 'self' data: blob: https:",
           "media-src 'self' blob: data:",
-          "font-src 'self' data: https://fonts.gstatic.com",
+          "font-src 'self' data: https://fonts.gstatic.com https://cdn.fontshare.com https://api.fontshare.com",
           "frame-src 'self' https://www.figma.com https://www.canva.com",
           "worker-src 'self' blob:",
         ].join('; ')

@@ -29,7 +29,9 @@ import * as Matter from 'matter-js'
 import { SpringIntegrator } from '@/lib/motion/spring-physics'
 
 // Libraries
-import { ALL_FONTS, FONT_CATEGORIES, injectGoogleFont } from './libraries/font-library'
+import { injectGoogleFont } from './libraries/font-library'
+import { FontPicker } from './FontPicker'
+import { ensureFont, fontEntry, refreshTexts, watchCanvasFonts, WEIGHT_NAMES } from './libraries/font-loader'
 import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
 import { SHAPE_LIBRARY, ICONS_LIBRARY } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
@@ -686,6 +688,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     })
     fabricRef.current = canvas
     const detachFx = attachFx(canvas)   // effetti su qualsiasi oggetto, ricostruiti da JSON/annulla
+    const detachFonts = watchCanvasFonts(canvas)   // ogni testo carica il suo carattere
     ;(canvas as any)._springIntegrator = springIntegratorRef.current
     ;(canvasRef.current as any)._fabric = canvas
 
@@ -896,7 +899,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const t = obj as fabric.Textbox
         setSel({
           ...D, ...base, type: 'text', fontFamily: t.fontFamily || 'Inter', fontSize: t.fontSize || 24,
-          bold: t.fontWeight === 'bold', italic: t.fontStyle === 'italic', underline: !!t.underline, linethrough: !!t.linethrough,
+          bold: t.fontWeight === 'bold' || Number(t.fontWeight) >= 600, fontWeight: String(t.fontWeight ?? 400), italic: t.fontStyle === 'italic', underline: !!t.underline, linethrough: !!t.linethrough,
           textAlign: t.textAlign || 'left', lineHeight: t.lineHeight || 1.2, charSpacing: t.charSpacing || 0,
           fillColor: (t.fill as string) || '#ffffff', strokeText: !!t.stroke && (t.strokeWidth || 0) > 0,
           strokeTextColor: (t.stroke as string) || '#000000', strokeTextWidth: t.strokeWidth || 1
@@ -1340,6 +1343,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     return () => {
       clearTimeout(initTimer)
       detachFx()
+      detachFonts()
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
@@ -1833,11 +1837,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     }
     canvas!.requestRenderAll()
     canvas!.fire('object:modified', { target: obj })
+    if (props.fontFamily || props.fontWeight) {
+      const fam = String(props.fontFamily ?? (obj as fabric.Textbox).fontFamily)
+      ensureFont(fam, props.fontWeight ?? (obj as fabric.Textbox).fontWeight ?? 400).then(ok => { if (ok) refreshTexts(canvas, fam) })
+    }
     setSel(prev => ({
       ...prev,
+      ...(props.fontWeight !== undefined && { fontWeight: String(props.fontWeight) }),
       ...(props.fontFamily !== undefined && { fontFamily: props.fontFamily }),
       ...(props.fontSize !== undefined && { fontSize: props.fontSize as number }),
-      ...(props.fontWeight !== undefined && { bold: props.fontWeight === 'bold' }),
+      ...(props.fontWeight !== undefined && { bold: props.fontWeight === 'bold' || Number(props.fontWeight) >= 600 }),
       ...(props.fontStyle !== undefined && { italic: props.fontStyle === 'italic' }),
       ...(props.underline !== undefined && { underline: !!props.underline }),
       ...(props.linethrough !== undefined && { linethrough: !!props.linethrough }),
@@ -3727,13 +3736,24 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   function applyFont(font: string) {
-    const canvas = fabricRef.current; if (!canvas) return;
-    injectGoogleFont(font);
-    const obj = canvas.getActiveObject();
-    if (obj && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
-      (obj as fabric.Textbox).set({ fontFamily: font });
-      canvas.requestRenderAll();
-    }
+    const canvas = fabricRef.current; if (!canvas) return
+    const texts = canvas.getActiveObjects().filter(o => o instanceof fabric.Text) as fabric.Textbox[]
+    texts.forEach(t => { t.set({ fontFamily: font }); canvas.fire('object:modified', { target: t }) })
+    ensureFont(font).then(ok => { if (ok) refreshTexts(canvas, font) })
+    if (texts.length) setSel(p => ({ ...p, fontFamily: font }))
+    canvas.requestRenderAll()
+  }
+
+  /** abbinamento: il testo più grande prende il carattere del titolo, gli altri quello del testo */
+  function applyPairing(title: string, body: string) {
+    const canvas = fabricRef.current; if (!canvas) return
+    const texts = canvas.getActiveObjects().filter(o => o instanceof fabric.Text) as fabric.Textbox[]
+    if (!texts.length) return
+    const max = Math.max(...texts.map(t => (t.fontSize ?? 0) * (t.scaleY ?? 1)))
+    texts.forEach(t => { t.set({ fontFamily: (t.fontSize ?? 0) * (t.scaleY ?? 1) >= max ? title : body }); canvas.fire('object:modified', { target: t }) })
+    Promise.all([ensureFont(title), ensureFont(body)]).then(() => refreshTexts(canvas))
+    setSel(p => ({ ...p, fontFamily: texts.length === 1 ? title : p.fontFamily }))
+    canvas.requestRenderAll()
   }
 
   // ── Client canvas load ────────────────────────────────────────────────────
@@ -4195,6 +4215,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onApplyPresetFilter={applyPresetFilter}
           onResetImgFilters={resetImgFilters}
           onApplyFont={applyFont}
+          onApplyPairing={applyPairing}
           onApplyTexture={applyTexture}
           onAddShape={addLibShape}
           onAddIcon={addLibIcon}
@@ -4608,6 +4629,7 @@ interface PanelProps {
   onApplyPresetFilter: (f: any) => void
   onResetImgFilters: () => void
   onApplyFont: (f: string) => void
+  onApplyPairing: (title: string, body: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onApplyTexture: (t: any) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -4795,7 +4817,7 @@ function PropertiesPanel(props: PanelProps) {
 
               {/* Testo */}
               {propTab === 'text' && sel.type === 'text' && (
-                <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink}
+                <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink} onPair={props.onApplyPairing}
                   showFP={props.showFP} setShowFP={props.setShowFP}
                   showFX={false} setShowFX={() => setPropTab('fx')}
                   onShadow={props.onApplyShadow} onPreset={props.onApplyPreset} onUpdate={props.onUpdateFx}
@@ -5019,18 +5041,14 @@ function BlendModeDrop({ value, onChange, onClose }: { value: string; onChange: 
 
 // ─── FONT PICKER ─────────────────────────────────────────────────────────────
 
-function FontDrop({ value, onChange, onClose }: { value: string; onChange: (f: string) => void; onClose: () => void }) {
-  return (
-    <div className="bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl p-2 w-52 max-h-72 overflow-y-auto scrollbar-hide">
-      {ALL_FONTS.map((f, i) => <button key={`${i}-${f}`} onClick={() => { onChange(f); onClose() }} className={cn('w-full text-left px-3 py-1.5 rounded-lg text-sm hover:bg-white/10', value === f ? 'text-accent' : 'text-white/70')} style={{ fontFamily: f }}>{f}</button>)}
-    </div>
-  )
+function FontDrop({ value, onChange, onPair, onClose }: { value: string; onChange: (f: string) => void; onPair?: (t: string, b: string) => void; onClose: () => void }) {
+  return <FontPicker value={value} onChange={f => { onChange(f); onClose() }} onPair={onPair && ((t, b) => { onPair(t, b); onClose() })} />
 }
 
 // ─── TEXT BAR ────────────────────────────────────────────────────────────────
 
-function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, onShadow, onPreset, onUpdate }: {
-  sel: SelState; onApply: (p: Partial<fabric.Textbox>) => void; onLink: () => void
+function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, onShadow, onPreset, onUpdate, onPair }: {
+  sel: SelState; onApply: (p: Partial<fabric.Textbox>) => void; onLink: () => void; onPair?: (title: string, body: string) => void
   showFP: boolean; setShowFP: (v: boolean) => void; showFX: boolean; setShowFX: (v: boolean) => void
   onShadow: (u: Partial<SelState>) => void; onPreset: (p: any) => void; onUpdate: (evt: string, p: string, v: any) => void
 }) {
@@ -5046,10 +5064,16 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
         <button ref={fontBtnRef} onClick={() => setShowFP(!showFP)} className="flex items-center gap-2 h-9 px-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white/80 hover:bg-white/10 min-w-[130px]" style={{ fontFamily: sel.fontFamily }}>
           {sel.fontFamily}<ChevronDown className="w-4 h-4 ml-auto opacity-40" />
         </button>
-        {showFP && typeof document !== 'undefined' && <DropdownPortal triggerRef={fontBtnRef}>
-          <FontDrop value={sel.fontFamily} onChange={f => onApply({ fontFamily: f })} onClose={() => setShowFP(false)} />
+        {showFP && typeof document !== 'undefined' && <DropdownPortal triggerRef={fontBtnRef} alignRight>
+          <FontDrop value={sel.fontFamily} onChange={f => onApply({ fontFamily: f })} onPair={onPair} onClose={() => setShowFP(false)} />
         </DropdownPortal>}
       </div>
+      {(fontEntry(sel.fontFamily)?.weights.length ?? 0) > 1 && (
+        <select value={String(sel.fontWeight === 'bold' ? 700 : sel.fontWeight === 'normal' ? 400 : sel.fontWeight || 400)} onChange={e => onApply({ fontWeight: Number(e.target.value) as never })}
+          className="h-9 px-2 bg-white/5 border border-white/10 rounded-xl text-[11px] text-white/80 focus:outline-none" aria-label="Peso del carattere">
+          {fontEntry(sel.fontFamily)!.weights.map(w => <option key={w} value={w} className="bg-[#141414]">{WEIGHT_NAMES[w] ?? w}</option>)}
+        </select>
+      )}
       <input type="number" value={sel.fontSize} min={6} max={400} onChange={e => onApply({ fontSize: parseInt(e.target.value) || 24 })} className="w-16 h-9 px-2 bg-white/5 border border-white/10 rounded-xl text-xs text-white uppercase font-black text-center focus:outline-none flex-shrink-0" />
       <div className="hidden" />
       <div className="flex items-center gap-1">
@@ -5599,25 +5623,7 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
           </div>
         )}
 
-        {tab === 'fonts' && (
-          <div className="space-y-6">
-            {Object.entries(FONT_CATEGORIES).map(([cat, fonts]) => (
-              <div key={cat}>
-                <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 ml-1">{cat}</p>
-                <div className="flex flex-col gap-1.5">
-                  {fonts.filter(f => f.toLowerCase().includes(search.toLowerCase())).map((f, i) => (
-                    <button key={`${cat}-${f}-${i}`} onClick={() => onFont(f)}
-                      onMouseEnter={() => injectGoogleFont(f)}
-                      className="group flex flex-col px-4 py-3 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all text-left">
-                      <span className="text-lg text-white/80 group-hover:text-white transition-colors" style={{ fontFamily: f }}>{f}</span>
-                      <span className="text-[7px] font-bold uppercase tracking-widest text-white/20">{f}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {tab === 'fonts' && <FontPicker value="" onChange={onFont} className="w-full max-h-none border-0 bg-transparent shadow-none" />}
 
         {tab === 'textures' && (
           <div className="space-y-6">
