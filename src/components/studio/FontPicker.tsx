@@ -116,7 +116,7 @@ export function FontPicker({ value, sample, onChange, onPair, className }: {
                   <div className={cn('group flex items-center gap-1 rounded-lg', value === f.family ? 'bg-violet-500/15' : 'hover:bg-white/[0.06]')}>
                     <button onClick={() => pick(f.family)} className="flex-1 min-w-0 text-left px-2.5 py-1.5">
                       <span className="block text-[18px] leading-snug text-white/90 truncate" style={{ fontFamily: `"${f.family}", system-ui` }}>{sample?.trim() ? text : f.family}</span>
-                      <span className="block text-[8px] text-white/30 truncate">{f.family} · {f.weights.length > 1 ? `${f.weights.length} pesi` : '1 peso'}{f.source === 'fontshare' ? ' · Fontshare' : ''}</span>
+                      <span className="block text-[8px] text-white/30 truncate">{f.family} · {f.weights.length > 1 ? `${f.weights.length} pesi` : '1 peso'}{f.source === 'fontshare' ? ' · Fontshare' : f.source === 'local' ? ' · Velvetyne' : ''}</span>
                     </button>
                     <button onClick={() => toggleFav(f.family)} title={fav.includes(f.family) ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'}
                       className={cn('p-1.5 mr-1 rounded-md', fav.includes(f.family) ? 'text-amber-300' : 'text-white/15 opacity-0 group-hover:opacity-100 hover:text-white/60')}>

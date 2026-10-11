@@ -43,6 +43,10 @@ export function ensureFont(family: string, weight: number | string = 400): Promi
   const e = fontEntry(family)
   if (!e) return Promise.resolve(document.fonts.check(`${weight} 16px "${family}"`))
   const key = `${family}|${weight}`
+  if (e.source === 'local') {
+    if (!pending.has(key)) pending.set(key, loadLocal(e))
+    return pending.get(key)!
+  }
   if (!pending.has(key)) {
     pending.set(key, (async () => {
       await addCss(`font-full-${slug(family)}`, fullHref(e))   // il foglio CSS deve prima arrivare
@@ -57,6 +61,16 @@ export function ensureFont(family: string, weight: number | string = 400): Promi
   return pending.get(key)!
 }
 
+/** caratteri serviti dall'app: FontFace diretti, file piccoli */
+const localDone = new Map<string, Promise<boolean>>()
+function loadLocal(e: FontEntry): Promise<boolean> {
+  if (!localDone.has(e.family)) localDone.set(e.family, Promise.all((e.files ?? []).map(f => {
+    const ff = new FontFace(e.family, `url(${f.url})`, { weight: String(f.weight), style: f.style })
+    return ff.load().then(x => { document.fonts.add(x); return true }).catch(() => false)
+  })).then(r => r.some(Boolean)))
+  return localDone.get(e.family)!
+}
+
 /** anteprime leggere: le famiglie Google in un unico foglio, solo con le lettere necessarie */
 export function loadPreviews(entries: FontEntry[], sample: string) {
   const google = entries.filter(e => e.source === 'google')
@@ -67,6 +81,7 @@ export function loadPreviews(entries: FontEntry[], sample: string) {
       `https://fonts.googleapis.com/css2?${chunk.map(c => `family=${gq(c.family)}`).join('&')}&text=${text}&display=swap`)
   }
   for (const e of entries.filter(e => e.source === 'fontshare')) addCss(`font-full-${slug(e.family)}`, fullHref(e))
+  for (const e of entries.filter(e => e.source === 'local')) loadLocal(e)
 }
 
 /** dopo il caricamento: misure nuove per i testi che usano il carattere */
@@ -122,4 +137,9 @@ export const PAIRINGS: { title: string; body: string; mood: string }[] = [
   { title: 'Tanker', body: 'Supreme', mood: 'poster urlato' },
   { title: 'Krona One', body: 'Inter Tight', mood: 'tech largo' },
   { title: 'Italiana', body: 'Jost', mood: 'boutique' },
+  { title: 'Basteleur', body: 'Sligoil', mood: 'esoterico contemporaneo' },
+  { title: 'Le Murmure', body: 'Velvetyne Grotesk', mood: 'galleria d’arte' },
+  { title: 'Ouroboros', body: 'Compagnon', mood: 'controcultura' },
+  { title: 'Happy Times', body: 'Lineal', mood: 'editoriale sperimentale' },
+  { title: 'Kaeru Kaeru', body: 'Sporting Grotesque', mood: 'giocoso d’autore' },
 ]

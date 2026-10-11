@@ -1,3 +1,5 @@
+import { LOCAL_FONTS } from './font-local'
+
 /**
  * Catalogo dei caratteri dello Studio, scelti tra quelli che usano gli studi di
  * design: grotesk contemporanei, serif editoriali, display, avanguardia, mono…
@@ -6,8 +8,8 @@
  * un carattere non arriva, il selettore lo nasconde.
  * File generato con verifica dei pesi: per aggiungere caratteri, rigenerarlo.
  */
-export type FontSource = 'google' | 'fontshare'
-export interface FontEntry { family: string; cat: string; source: FontSource; weights: number[] }
+export type FontSource = 'google' | 'fontshare' | 'local'
+export interface FontEntry { family: string; cat: string; source: FontSource; weights: number[]; files?: { url: string; weight: number; style: string }[] }
 
 export const FONT_CATS: { id: string; label: string }[] = [
   { id: 'grotesk', label: "Grotesk contemporanei" },
@@ -376,3 +378,6 @@ export const FONTS: FontEntry[] = [
   { family: "Grenze Gotisch", cat: 'gotici', source: 'google', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
   { family: "Jacquarda Bastarda 9", cat: 'gotici', source: 'google', weights: [400] },
 ]
+
+// caratteri liberi serviti dall'app (Velvetyne, OFL)
+FONTS.push(...LOCAL_FONTS)
