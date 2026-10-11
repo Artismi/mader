@@ -235,6 +235,9 @@ function QuoteView({ node }: { node: NodeDetail }) {
       {!rows && (
         <div className="qacts">
           <a className="legacy" href={pdf} target="_blank" rel="noreferrer">vedi il PDF ↗</a>
+          {q.drive_pdf_url
+            ? <a className="legacy" href={q.drive_pdf_url} target="_blank" rel="noreferrer">su Drive ↗</a>
+            : <button className="legacy" disabled={busy} onClick={() => run({ action: 'quote-drive' }, 'Copia salvata su Drive')}>salva su Drive</button>}
           {q.status === 'bozza' && <button className="legacy" onClick={() => setRows(q.items.map(i => ({ ...i })))}>modifica le voci</button>}
           {q.status === 'inviato' && <>
             <button className="legacy" disabled={busy} onClick={() => run({ action: 'quote-status', status: 'accettato' }, isInvoice ? 'Segnata come pagata' : 'Accettato: ora puoi fare la fattura')}>{isInvoice ? 'segna pagata' : 'il cliente ha accettato'}</button>
@@ -286,8 +289,8 @@ function QuoteSend({ node }: { node: NodeDetail }) {
   const send = async () => {
     setBusy(true)
     try {
-      await call({ action: 'quote-send', ref: node.ref, to, subject, text })
-      clearDraft(node.ref); invalidate(); say(`Inviato a ${to} con il PDF allegato`); back()
+      const j = await call({ action: 'quote-send', ref: node.ref, to, subject, text })
+      clearDraft(node.ref); invalidate(); say(`Inviato a ${to} con il PDF allegato${j.drive ? ' · copia su Drive' : ''}`); back()
     } catch (e) { say((e as Error).message, true) } finally { setBusy(false) }
   }
   return (

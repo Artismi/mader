@@ -6,6 +6,7 @@ import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/l
 import { googleStatus } from '@/lib/google/auth'
 import { sendMail } from '@/lib/google/gmail'
 import { getProfile, pdfName, quotePdf, setProfile } from '@/lib/finance/quote-pdf'
+import { archiveQuotePdf } from '@/lib/finance/quote-drive'
 import { upcomingEvents } from '@/lib/google/calendar'
 
 /**
@@ -14,6 +15,7 @@ import { upcomingEvents } from '@/lib/google/calendar'
  * POST { action: 'reply', ref, text } → invia via Gmail e segna come risposto
  * POST { action: 'draft', ref }       → bozza scritta dall'AI (solo su richiesta esplicita)
  * POST { action: 'quote-send', ref, to, subject, text } → PDF del preventivo allegato e inviato via Gmail
+ * POST { action: 'quote-drive', ref } → copia del PDF nella cartella documenti del cliente su Drive
  * POST { action: 'quote-status' | 'quote-items' | 'quote-invoice' | 'profile', … }
  */
 export async function GET(req: Request) {
@@ -164,15 +166,27 @@ export async function POST(req: Request) {
     const to = String(body.to ?? '').trim()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return NextResponse.json({ error: 'Indirizzo email non valido' }, { status: 400 })
     if (!String(body.text ?? '').trim()) return NextResponse.json({ error: 'Scrivi due righe di accompagnamento' }, { status: 400 })
+    const pdf = await quotePdf(q)
     try {
       const sent = await sendMail({
         to, subject: String(body.subject ?? '').trim() || `${q.type === 'fattura' ? 'Fattura' : 'Preventivo'} ${q.number} · ${q.title}`,
-        htmlBody: toHtml(body.text), attachments: [{ filename: pdfName(q), mimeType: 'application/pdf', data: await quotePdf(q) }],
+        htmlBody: toHtml(body.text), attachments: [{ filename: pdfName(q), mimeType: 'application/pdf', data: pdf }],
       })
       quotes.update(q.id, { status: q.status === 'bozza' ? 'inviato' : q.status, gmail_thread_id: sent.threadId, issued_at: q.issued_at ?? new Date().toISOString().split('T')[0] })
-      return NextResponse.json({ ok: true })
     } catch (e) {
       return NextResponse.json({ error: `Invio non riuscito: ${(e as Error).message}` }, { status: 502 })
+    }
+    // la copia su Drive non deve mai bloccare un invio già fatto
+    const drive = await archiveQuotePdf(q, pdf).then(() => true, () => false)
+    return NextResponse.json({ ok: true, drive })
+  }
+
+  if (body.action === 'quote-drive') {
+    if (!q) return NextResponse.json({ error: 'Preventivo non trovato' }, { status: 404 })
+    try {
+      return NextResponse.json({ url: await archiveQuotePdf(q, await quotePdf(q)) })
+    } catch (e) {
+      return NextResponse.json({ error: `Drive non raggiungibile: ${(e as Error).message}` }, { status: 502 })
     }
   }
 

@@ -230,4 +230,6 @@ La direzione approvata è il **guscio circolare e intelligente** (`docs/ux/PROGE
 | Finanze nel guscio: preventivo come nodo (voci, stato, PDF `pdf-lib`, invio Gmail con allegato, fattura "nata da" preventivo accettato); preventivi in Cliente, Lavori, Oggi (da sollecitare dopo 7 giorni) e `Ctrl+K`; intestazione del PDF in `system_config.studio_profile` | ✅ (l'invio richiede Google collegato) |
 | Funzioni non ancora rifatte | raggiungibili da "vista completa ↗" e da `Ctrl+K` |
 
-**Prossimi passi:** login Google dell'utente → sincronizzazione mail e prova di invio di un preventivo; copia del PDF su Drive (oggi `lib/google/drive.ts` dipende ancora da Supabase); restyle e divisione del canvas (Fase 5); installer (Fase 6).
+| Drive senza Supabase (`lib/google/drive.ts` usa i token SQLite); PDF del preventivo copiato in `/_CLIENTI/[Nome]/documenti` all'invio o con "salva su Drive" | ✅ codice · ⏳ da provare dopo il login Google |
+
+**Prossimi passi:** login Google dell'utente → sincronizzazione mail, prova di invio di un preventivo e della copia su Drive; restyle e divisione del canvas (Fase 5); installer (Fase 6).

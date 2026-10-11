@@ -41,7 +41,7 @@ export interface NodeDetail extends NodeSummary {
   done?: boolean
   events?: { ref: string; title: string; start: string; end: string; allDay: boolean }[]   // per l'anello del giorno
   next?: { label: string; status: string }   // prossimo passo di stato (post editoriali)
-  quote?: Pick<Quote, 'id' | 'number' | 'type' | 'status' | 'items' | 'total' | 'notes' | 'issued_at'> & { to?: string }
+  quote?: Pick<Quote, 'id' | 'number' | 'type' | 'status' | 'items' | 'total' | 'notes' | 'issued_at' | 'drive_pdf_url'> & { to?: string }
 }
 
 // ───────── utilità ─────────
@@ -296,7 +296,7 @@ export async function getNode(ref: string): Promise<NodeDetail | null> {
     const c = q.client_id ? cm.get(q.client_id) : undefined
     return { ...quoteSummary(q), origin: originOf(id, cm), clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name ?? q.client_name,
       lead: `${q.type === 'fattura' ? 'Fattura' : 'Preventivo'} n. ${q.number} · ${q.status}`, legacy: '/finanze',
-      quote: { id: q.id, number: q.number, type: q.type, status: q.status, items: q.items, total: q.total, notes: q.notes, issued_at: q.issued_at, to: c?.email },
+      quote: { id: q.id, number: q.number, type: q.type, status: q.status, items: q.items, total: q.total, notes: q.notes, issued_at: q.issued_at, drive_pdf_url: q.drive_pdf_url, to: c?.email },
       sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [{ label: 'Task', icon: 'check', kind: 'task' }] }
   }
 
