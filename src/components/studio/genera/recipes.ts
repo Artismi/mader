@@ -10,7 +10,7 @@ import {
 } from './raster'
 import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
 import { shade, type Material } from './material'
-import { SHAPES, crescent, membrane, neuralNet } from './organic'
+import { coffeeRings, crescent, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ export const TONES: Tone[] = [
   { id: 'cobalto', label: 'Cobalto', bg: '#1630ff', ink: '#f2efe8', acc: '#ff5b1f', dark: true },
   { id: 'cenere', label: 'Cenere', bg: '#aaa9a4', ink: '#111111', acc: '#f4f3ee', dark: false },
   { id: 'livido', label: 'Livido', bg: '#1a0f24', ink: '#e9dcff', acc: '#9dff6a', dark: true },
+  { id: 'rosanotte', label: 'Rosa notte', bg: '#151214', ink: '#f3e7ef', acc: '#ff5fb4', dark: true },
 ]
 
 const MATS: (Material | null)[] = [null, 'cromo', 'nero', 'oro', 'iride', 'gel', 'perla']
@@ -147,33 +148,39 @@ function wordSize(s: string, f: typeof FACES[FaceId], width: number) {
 
 // ─── ORGANICI (cyber-gotico) ─────────────────────────────────────────────────
 
-/** anelli concentrici spezzati, come nei disegni a mano attorno alle membrane */
-function brokenRings(ctx: Ctx, r: Rnd, cx: number, cy: number, R: number, S: number, n: number) {
-  for (let k = 0; k < n; k++) {
-    const rr = R * (1.08 + k * 0.09 + range(r, -0.02, 0.03)), ox = range(r, -0.04, 0.04) * R, oy = range(r, -0.04, 0.04) * R
-    let a = r() * Math.PI * 2
-    const end = a + Math.PI * 2
-    while (a < end) {
-      const len = range(r, 0.25, 1.4), gap = range(r, 0.06, 0.35)
-      const pts: Pt[] = []
-      for (let q = 0; q <= 60; q++) { const t = a + Math.min(len, end - a) * (q / 60); pts.push([cx + ox + Math.cos(t) * rr, cy + oy + Math.sin(t) * rr]) }
-      taper(ctx, pts, t => S * 0.0028 * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * t), 0.3)))
-      a += len + gap
-    }
-  }
-}
+/** schiarisce/scurisce un colore esadecimale verso il nero */
+const darken = (hex: string, k: number) => { const v = parseInt(hex.slice(1), 16); const f = (c: number) => Math.round(c * (1 - k)).toString(16).padStart(2, '0'); return '#' + f(v >> 16) + f((v >> 8) & 255) + f(v & 255) }
 
 const membrana: Recipe = {
-  id: 'membrana', label: 'Membrana', cat: 'Organici', hint: 'tessuto cellulare con fori tondi, incroci raccordati e artigli sul bordo',
-  params: [P.sel('shape', 'Sagoma', SHAPES.map(x => x.label)), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 30), P.range('web', 'Tessuto', 30, 220, 100), P.range('holes', 'Fori', 30, 100, 90),
-    P.range('claws', 'Artigli', 0, 100, 70), P.range('clawLen', 'Lunghezza artigli', 20, 200, 100), P.tog('mirror', 'Simmetrica', true), P.tog('skin', 'Pelle', false), P.tog('rings', 'Anelli', false), P.glow(false), P.caps(), P.grain(20)],
+  id: 'membrana', label: 'Membrana', cat: 'Organici', hint: 'tessuto cellulare a due strati, fori grandi e minuscoli, artigli',
+  params: [P.sel('shape', 'Composizione', ['Fuso', 'Fondi di tazza', 'Falce', 'Ali']), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 34), P.range('web', 'Tessuto', 30, 220, 135),
+    P.range('varied', 'Varietà fori', 0, 100, 90), P.range('detail', 'Dettaglio', 0, 100, 60), P.range('claws', 'Artigli', 0, 100, 70), P.range('clawLen', 'Lunghezza artigli', 20, 200, 100),
+    P.tog('depth', 'Doppio strato', true), P.tog('mirror', 'Simmetrica', true), P.range('chords', 'Cerchi grandi', 0, 6, 3), P.glow(false), P.caps(), P.grain(20)],
   render: o => {
-    const t = tone(o), S = SS(o), r = rng(o.seed), sh = num(o, 'shape')
-    const R = S * (sh === 0 ? 0.46 : 0.4), cx = o.W / 2, cy = o.H / 2 - S * 0.01
-    let m = membrane(o.W, o.H, cx, cy, R, r, { shape: sh, cells: num(o, 'cells'), web: num(o, 'web') / 100, holes: num(o, 'holes') / 100, claws: num(o, 'claws') / 100, clawLen: num(o, 'clawLen') / 100, mirror: on(o, 'mirror'), skin: on(o, 'skin') })
-    if (on(o, 'rings')) m = combine(m, drawMask(o.W, o.H, ctx => brokenRings(ctx, rng(o.seed + 3), cx, cy, R * 0.86, S, 3)), 'max')
+    const t = tone(o), S = SS(o), sh = num(o, 'shape')
+    const cx = o.W / 2, cy = o.H / 2 - S * 0.01
+    const base = { cells: num(o, 'cells'), web: num(o, 'web') / 100, claws: num(o, 'claws') / 100, clawLen: num(o, 'clawLen') / 100, detail: num(o, 'detail') / 100 }
     const { c, ctx } = stage(o, t)
-    paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.012)
+    const mat = MATS[num(o, 'mat')] ?? null
+    if (sh === 1) {
+      const m = coffeeRings(o.W, o.H, cx, cy, S * 0.34, rng(o.seed), S, { big: 2 + Math.round(num(o, 'chords') / 2), bubbles: Math.round(base.cells * 0.6), gap: base.web, stars: base.claws, detail: base.detail })
+      paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
+    } else {
+      const shape = [0, 0, 2, 3][sh]
+      const R = S * (shape === 0 ? 0.46 : 0.4)
+      const opts = { ...base, shape, holes: 0.9, mirror: on(o, 'mirror'), varied: num(o, 'varied') / 100 }
+      if (on(o, 'depth')) {
+        // strato di fondo: un altro tessuto, più grande e più scuro, visto attraverso i fori
+        const back = membrane(o.W, o.H, cx + S * 0.008, cy - S * 0.012, R * 1.05, rng(o.seed + 77), { ...opts, detail: 0, claws: opts.claws * 0.6, web: opts.web * 0.8 })
+        const tint = darken(t.acc, 0.55)
+        ctx.drawImage(mat ? shade(back, mat === 'gel' ? 'gel' : mat, S * 0.008, 0.7, tint) : maskToCanvas(back, t.ink, 0.28), 0, 0)
+        if (mat && mat !== 'gel') { ctx.save(); ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, o.W, o.H); ctx.restore() }
+        // ombra portata del tessuto davanti su quello dietro
+        const front = membrane(o.W, o.H, cx, cy, R, rng(o.seed), opts)
+        ctx.save(); ctx.globalCompositeOperation = 'source-atop'; ctx.drawImage(maskToCanvas(blurMask(front, S * 0.01), '#000000', 0.6), S * 0.006, S * 0.01); ctx.restore()
+        paint(ctx, front, o, t, num(o, 'mat'), on(o, 'glow'), 0.012)
+      } else paint(ctx, membrane(o.W, o.H, cx, cy, R, rng(o.seed), opts), o, t, num(o, 'mat'), on(o, 'glow'), 0.012)
+    }
     return finish(c, o, t, 'membrana', ['CELLULA', code(o, 'cell'), ROMAN_YEAR, 'BIO—GOTHIC'])
   },
 }
