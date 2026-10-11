@@ -3068,18 +3068,15 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     })
   }
 
-  /** asset procedurale (pannello Genera): SVG → gruppo vettoriale modificabile, scalato a ~320px */
-  async function addGeneratedSvg(svg: string, name: string) {
+  /** grafica del laboratorio (pannello Genera): immagine ad alta risoluzione, larga circa metà tavola */
+  async function addGeneratedImage(url: string, name: string) {
     const canvas = fabricRef.current; if (!canvas) return
-    const { objects, options } = await fabric.loadSVGFromString(svg)
-    const parts = objects.filter((o): o is fabric.FabricObject => !!o)
-    if (!parts.length) return
-    const g = fabric.util.groupSVGElements(parts, options)
-    const k = 320 / Math.max(g.width || 1, g.height || 1)
+    const img = await fabric.FabricImage.fromURL(url)
+    const k = 640 / Math.max(img.width || 1, img.height || 1)
     const { x, y } = dropPoint(canvas)
-    g.set({ left: x, top: y, scaleX: k, scaleY: k })
-    ;(g as any).name = name
-    canvas.add(g); canvas.setActiveObject(g); canvas.requestRenderAll()
+    img.set({ left: x, top: y, scaleX: k, scaleY: k })
+    ;(img as any).name = name
+    canvas.add(img); canvas.setActiveObject(img); canvas.requestRenderAll()
   }
 
   // ── Subtitles & AI ───────────────────────────────────────────────────────
@@ -4254,7 +4251,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onApplyTexture={applyTexture}
           onAddShape={addLibShape}
           onAddIcon={addLibIcon}
-          onAddGenerated={addGeneratedSvg}
+          onAddGenerated={addGeneratedImage}
           onAddBricolage={addBricolage}
           onLayerSelect={layerSelect}
           onLayerToggleVisible={layerToggleVisible}
@@ -4672,7 +4669,7 @@ interface PanelProps {
   onAddShape: (s: any, filled?: boolean) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddIcon: (s: any) => void
-  onAddGenerated: (svg: string, name: string) => void
+  onAddGenerated: (url: string, name: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddBricolage: (s: any) => void
   onLayerSelect: (id: string) => void
@@ -5594,7 +5591,7 @@ function ShadowSec({ sel, onShadow }: { sel: SelState; onShadow: (u: Partial<Sel
 function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
   onShape: (p: string, filled?: boolean) => void;
   onIcon: (svgPath: string) => void;
-  onGenerated: (svg: string, name: string) => void;
+  onGenerated: (url: string, name: string) => void;
   onFont: (f: string) => void;
   onTexture: (tex: any) => void;
   onBricolage: (asset: any) => void;

@@ -6,7 +6,7 @@
  * Tutte le misure sono in frazioni di S (lato corto della tavola): la stessa
  * ricetta regge qualsiasi risoluzione.
  */
-import { fbm, noise2, range, type Ctx, type Rnd } from './raster'
+import { fbm, noise2, noise3, range, type Ctx, type Rnd } from './raster'
 
 export type Pt = [number, number]
 
@@ -54,10 +54,10 @@ export const needle = (base: number, attack = 0.08, power = 1.1) => (t: number) 
   base * Math.min(1, t / attack) * Math.pow(1 - t, power)
 export const spindle = (base: number, power = 0.7) => (t: number) => base * Math.pow(Math.sin(Math.PI * t), power)
 
-/** spina: triangolo curvo che parte dal tratto e finisce in punta */
+/** spina: triangolo curvo che parte dal tratto e finisce in punta; bend = curvatura totale in radianti */
 function thorn(ctx: Ctx, x: number, y: number, ang: number, len: number, w: number, bend: number) {
-  const { pts } = walk(x, y, ang, len, () => bend / len, Math.max(1, len / 30))
-  taper(ctx, pts, t => w * Math.pow(1 - t, 1.3))
+  const { pts } = walk(x, y, ang, len, t => (bend / len) * 2 * t, Math.max(0.75, len / 40))
+  taper(ctx, pts, t => w * Math.pow(1 - t, 1.15))
 }
 
 /** esegue il disegno anche specchiato attorno all'asse verticale cx */
@@ -69,99 +69,253 @@ export function mirrored(ctx: Ctx, cx: number, draw: () => void, on = true) {
 
 // ─── cybersigilism ───────────────────────────────────────────────────────────
 
-export interface SigilOpts { strokes: number; spikes: number; hook: number; weight: number; spine: boolean; arcs: boolean }
+export interface SigilOpts { strokes: number; spikes: number; hook: number; weight: number; spine: boolean; arcs: boolean; silhouette?: number }
+
+export const PHI = 1.618
+
+/** sagome: larghezza relativa della figura in funzione dell'altezza (0 = cima, 1 = fondo) */
+export const SILHOUETTES: { label: string; e: (u: number) => number }[] = [
+  { label: 'Diamante', e: u => Math.pow(Math.sin(Math.PI * u), 0.9) },
+  { label: 'Calice', e: u => 1 - 0.72 * Math.pow(u, 0.8) },
+  { label: 'Corona', e: u => (u < 0.34 ? 1 : 0.42 + 0.3 * (1 - u)) },
+  { label: 'Ali', e: u => 0.35 + 0.65 * Math.exp(-Math.pow((u - 0.42) / 0.16, 2)) },
+  { label: 'Fuso', e: u => 0.5 * Math.pow(Math.sin(Math.PI * u), 0.6) },
+  { label: 'Radice', e: u => 0.32 + 0.68 * Math.pow(u, 1.1) },
+]
+
+/** grammatiche: che tipo di braccio va in cima, al centro e in fondo */
+const GRAMMARS: ('flame' | 'blade' | 'recurve' | 'drip')[][] = [
+  ['flame', 'blade', 'blade', 'drip'],
+  ['blade', 'recurve', 'blade', 'drip'],
+  ['flame', 'recurve', 'recurve', 'blade'],
+  ['blade', 'blade', 'blade', 'blade'],
+]
+
+/** Bézier cubica campionata con passo regolare (circa 1.5 px) */
+export function bezier(p0: Pt, p1: Pt, p2: Pt, p3: Pt, step = 1.5): Pt[] {
+  const est = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) + Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) + Math.hypot(p3[0] - p2[0], p3[1] - p2[1])
+  const n = Math.max(8, Math.ceil(est / step))
+  const out: Pt[] = []
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t
+    out.push([
+      u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+      u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1],
+    ])
+  }
+  return out
+}
+
+const dirv = (a: number): Pt => [Math.cos(a), Math.sin(a)]
+const add = (p: Pt, d: Pt, k: number): Pt => [p[0] + d[0] * k, p[1] + d[1] * k]
+const angleAt = (pts: Pt[], i: number) => {
+  const a = pts[Math.max(0, i - 2)], b = pts[Math.min(pts.length - 1, i + 2)]
+  return Math.atan2(b[1] - a[1], b[0] - a[0])
+}
 
 /**
- * Sigillo neo-tribale: spina centrale, tratti ad ago che escono dall'asse e si
- * arricciano in uncini, spine affilate rivolte all'esterno, archi che incrociano.
- * Si disegna metà e si specchia: la simmetria è ciò che lo rende "emblema".
+ * Spina "a rosa": la base si fonde con il bordo del tratto, i fianchi sono
+ * concavi e la punta è spazzata nella direzione del moto. Disegnata come parte
+ * del tratto, non appoggiata sopra: niente grumi alle giunzioni.
  */
-export function sigil(ctx: Ctx, r: Rnd, cx: number, cy: number, S: number, o: SigilOpts) {
-  const wt = o.weight
-  const strokes: { pts: Pt[]; angles: number[]; prof: (t: number) => number }[] = []
-  // tratti laterali distribuiti in altezza per un equilibrio verticale
-  for (let i = 0; i < o.strokes; i++) {
-    const band = (i + 0.2 + r() * 0.6) / o.strokes
-    const y0 = cy + (band - 0.5) * S * 0.78
-    const x0 = cx + range(r, 0.004, 0.05) * S
-    const out = range(r, -1.05, 1.05) + (band - 0.5) * 0.9 // in alto verso l'alto, in basso verso il basso
-    const len = range(r, 0.16, 0.42) * S
-    const k1 = range(r, -3.2, 3.2) / S, ph = r() * Math.PI * 2, freq = range(r, 0.6, 1.8)
-    const hookDir = r() < 0.5 ? -1 : 1, hook = o.hook * range(r, 6, 16) / S * hookDir
-    const curv = (t: number) => k1 * Math.sin(t * Math.PI * freq + ph) + hook * Math.pow(t, 3.2)
-    const { pts, angles } = walk(x0, y0, out, len, curv, Math.max(1.5, S / 600))
-    const base = range(r, 0.016, 0.034) * S * wt
-    const prof = r() < 0.7 ? needle(base, 0.06, 1.05) : spindle(base * 0.85, 0.6)
-    strokes.push({ pts, angles, prof })
+export function roseThorn(ctx: Ctx, pts: Pt[], i: number, side: number, halfAt: (j: number) => number, h: number, base: number, sweep = 0.55) {
+  const n = pts.length
+  const ia = Math.max(1, i - Math.round(base)), ib = Math.min(n - 2, i + Math.round(base * 0.45))
+  const edge = (j: number): Pt => { const a = angleAt(pts, j); return add(pts[j], [-Math.sin(a) * side, Math.cos(a) * side], halfAt(j) * 0.92) }
+  const ta: Pt = dirv(angleAt(pts, ia)), tb: Pt = dirv(angleAt(pts, ib)), ti: Pt = dirv(angleAt(pts, i))
+  const nrm: Pt = [-ti[1] * side, ti[0] * side]
+  const Ba = edge(ia), Bb = edge(ib), Ei = edge(i)
+  // asse della spina: fuori dal bordo e spazzato in avanti
+  const ax: Pt = [nrm[0] + ti[0] * sweep, nrm[1] + ti[1] * sweep]
+  const al = Math.hypot(ax[0], ax[1]); ax[0] /= al; ax[1] /= al
+  const T = add(Ei, ax, h * Math.sqrt(1 + sweep * sweep))
+  const dA = Math.hypot(T[0] - Ba[0], T[1] - Ba[1]), dB = Math.hypot(T[0] - Bb[0], T[1] - Bb[1])
+  ctx.beginPath()
+  ctx.moveTo(Ba[0], Ba[1])
+  // fianco posteriore: esce tangente al bordo e si inarca fino alla punta
+  const a1 = add(Ba, ta, dA * 0.45), a2 = add(T, ax, -dA * 0.42)
+  ctx.bezierCurveTo(a1[0], a1[1], a2[0], a2[1], T[0], T[1])
+  // fianco anteriore: corto e concavo, rientra tangente al bordo
+  const b1 = add(T, ax, -dB * 0.5), b2 = add(Bb, tb, -dB * 0.35)
+  ctx.bezierCurveTo(b1[0], b1[1], b2[0], b2[1], Bb[0], Bb[1])
+  ctx.lineTo(pts[ib][0], pts[ib][1]); ctx.lineTo(pts[ia][0], pts[ia][1])
+  ctx.closePath()
+  ctx.fill()
+}
+
+/** lunghezza in punti di un tratto pari a una distanza in px (campioni ~1.5 px) */
+const ptsFor = (px: number) => Math.max(2, px / 1.5)
+
+/**
+ * Frusta (curva estetica): la curvatura cresce in modo monotono e accelerato,
+ * κ(t) = k0 + (k1 − k0)·tᵞ. Con k0 di segno opposto a k1 la linea parte con una
+ * leggera controcurva, corre tesa e si arrotola alla fine: la "coup de fouet".
+ * c0 e c1 sono curvature adimensionali (radianti per lunghezza del tratto).
+ */
+export function whip(x: number, y: number, angle: number, L: number, c0: number, c1: number, gamma = 2.6, step = 1.25) {
+  const n = Math.max(6, Math.ceil(L / step)), ds = L / n
+  const pts: Pt[] = [[x, y]], angles = [angle]
+  for (let i = 1; i <= n; i++) {
+    const t = i / n
+    angle += ((c0 + (c1 - c0) * Math.pow(t, gamma)) / L) * ds
+    x += Math.cos(angle) * ds; y += Math.sin(angle) * ds
+    pts.push([x, y]); angles.push(angle)
   }
-  mirrored(ctx, cx, () => {
-    for (const s of strokes) {
+  return { pts, angles }
+}
+
+/** profilo a pennellata: pieno appena dopo l'attacco, poi un assottigliamento lunghissimo */
+export const flick = (W: number, attack = 0.07, tail = 1.35) => (t: number) =>
+  W * Math.pow(Math.min(1, t / attack), 0.55) * Math.pow(1 - t, tail)
+
+/** simmetrie: specchio sull'asse verticale o rotazione di 180° (una S dinamica) */
+export function symmetric(ctx: Ctx, cx: number, cy: number, mode: number, draw: () => void) {
+  draw()
+  ctx.save()
+  if (mode === 1) { ctx.translate(cx * 2, cy * 2); ctx.scale(-1, -1) }
+  else { ctx.translate(cx * 2, 0); ctx.scale(-1, 1) }
+  draw()
+  ctx.restore()
+}
+
+/**
+ * Sigillo neo-tribale con slancio:
+ * - nucleo a mandorla fatto di due fruste che si toccano in punta (niente rette);
+ * - bracci a frusta che partono dal bordo del nucleo, corrono tesi e si arrotolano;
+ * - la sagoma decide le lunghezze, la sezione aurea i pesi (primario, 1/φ, 1/φ²);
+ * - specchio oppure rotazione di 180°; i bracci possono incrociare l'asse;
+ * - il seme sceglie solo tra decisioni discrete.
+ */
+export function sigil(ctx: Ctx, r: Rnd, cx: number, cy: number, S: number, o: SigilOpts & { symmetry?: number }) {
+  const wt = o.weight
+  const arms = Math.max(3, Math.min(5, Math.round(o.strokes / 2.2)))
+  const sil = SILHOUETTES[o.silhouette != null && o.silhouette >= 0 ? o.silhouette % SILHOUETTES.length : Math.floor(r() * SILHOUETTES.length)]
+  const tension = [0.55, 0.8, 1.05][Math.floor(r() * 3)]       // controcurva iniziale (slancio)
+  const curl = [6.5, 8, 9.5][Math.floor(r() * 3)]               // ricciolo finale
+  const spread = [0.9, 1, 1.12][Math.floor(r() * 3)]
+  const H = S * 0.47, coreW = S * 0.028 * wt
+  type Shape = { pts: Pt[]; prof: (t: number) => number; thorns: { i: number; side: number; h: number; base: number }[] }
+  const shapes: Shape[] = []
+
+  // nucleo: due fruste lunghe dall'alto in basso, tese, che si chiudono in punta
+  // nucleo a mandorla: arco a curvatura costante che si richiude esattamente sull'asse
+  const bulge = [0.1, 0.13, 0.16][Math.floor(r() * 3)] * (0.8 + 0.4 * wt)
+  const core = whip(cx, cy - H, Math.PI / 2 - bulge, H * 2 / (Math.sin(bulge) / bulge), bulge * 2, bulge * 2, 1)
+  void coreW
+  const coreAt = (u: number) => { const i = Math.min(core.pts.length - 1, Math.round(u * (core.pts.length - 1))); return { p: core.pts[i], a: core.angles[i] } }
+
+  const specs = Array.from({ length: arms }, (_, k) => { const u = (k + 0.5) / arms; return { k, u, len: Math.max(0.3, sil.e(u)) } })
+  const order = [...specs].sort((a, b) => b.len - a.len)
+  const rank = new Map(order.map((sp, i) => [sp.k, i === 0 ? 0 : i <= 2 ? 1 : 2]))
+
+  for (const sp of specs) {
+    const { k, u } = sp
+    const rk = rank.get(k)!, scale = Math.pow(PHI, -rk)
+    const vert = (u - 0.5) * 2
+    // attacco sul nucleo (o sull'asse), tangente al flusso: in alto verso l'alto, in basso verso il basso
+    const at = o.spine ? coreAt(0.12 + u * 0.76) : { p: [cx, cy - H * 0.76 + u * H * 1.52] as Pt, a: Math.PI / 2 }
+    const up = vert < 0 || (Math.abs(vert) < 0.2 && r() < 0.5)
+    const L = S * 0.52 * sp.len * (0.72 + 0.28 * scale)
+    const peel = (0.2 + Math.abs(vert) * 0.25) * spread
+    // angolo iniziale: quasi parallelo al nucleo, appena staccato verso l'esterno
+    const a0 = up ? -Math.PI / 2 + peel : Math.PI / 2 - peel
+    // curvatura: prima apre verso l'esterno (c0), poi si arrotola di ritorno verso l'asse (c1)
+    const sgn = up ? 1 : -1
+    const open = (1.6 + (1 - Math.abs(vert)) * 1.6) * tension * spread
+    const { pts, angles } = whip(at.p[0], at.p[1], a0, L, sgn * open, -sgn * curl * (0.75 + 0.25 * scale), 2.3)
+    const dir = -sgn
+    const W = Math.min(L * 0.075, S * 0.032) * wt * (0.6 + 0.4 * scale)
+    const prof = (t: number) => W * Math.pow(Math.min(1, t / 0.22), 0.8) * Math.pow(1 - t, 1.3)   // attacco graduale: niente bulbi
+    const thorns: Shape['thorns'] = []
+    const nT = rk === 0 ? o.spikes : rk === 1 ? Math.max(0, o.spikes - 1) : 0
+    const golden = [0.3, 0.42, 0.54]
+    for (let q = 0; q < Math.min(nT, golden.length); q++) {
+      const t = golden[q]
+      thorns.push({ i: Math.floor(t * (pts.length - 1)), side: dir, h: S * 0.042 * wt * scale * Math.pow(PHI, -q * 0.5), base: ptsFor(S * 0.045 * wt * scale) })
+    }
+    shapes.push({ pts, prof, thorns })
+    // contro-frusta dal punto aureo: si stacca dal lato esterno e si arrotola al contrario
+    if (rk <= 1) {
+      const tb = 0.382, ib = Math.floor(tb * (pts.length - 1))
+      const lb = L / PHI / (rk === 0 ? 1.15 : PHI)
+      const b = whip(pts[ib][0], pts[ib][1], angles[ib] - sgn * 0.12, lb, -sgn * 0.6 * tension, sgn * curl * 0.85, 2.2)
+      shapes.push({ pts: b.pts, prof: t => prof(tb) * 0.62 * Math.pow(1 - t, 1.2), thorns: [] })
+    }
+  }
+
+  if (o.spine) {
+    // lama piena: le due metà dell'arco chiudono un fuso affilato, con una fessura interna
+    const blade = (pts: Pt[], k: number, sy: number) => {
+      ctx.beginPath()
+      pts.forEach(([x, y], i) => { const X = cx + (x - cx) * k, Y = cy + (y - cy) * sy; if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y) })
+      for (let i = pts.length - 1; i >= 0; i--) { const [x, y] = pts[i]; ctx.lineTo(cx - (x - cx) * k, cy + (y - cy) * sy) }
+      ctx.closePath(); ctx.fill()
+    }
+    blade(core.pts, 1, 1)
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; blade(core.pts, 0.28, 0.6); ctx.restore()
+  }
+  symmetric(ctx, cx, cy, o.symmetry ?? 0, () => {
+    for (const s of shapes) {
       taper(ctx, s.pts, s.prof)
-      // spine verso l'esterno della curva
-      const nT = Math.floor(o.spikes * range(r, 0.4, 1.4) + 0.3)
-      for (let k = 0; k < nT; k++) {
-        const t = range(r, 0.15, 0.75), i = Math.floor(t * (s.pts.length - 1))
-        const [x, y] = s.pts[i], a = s.angles[i]
-        const side = r() < 0.65 ? -1 : 1
-        const ang = a + side * range(r, 0.45, 1.05)
-        thorn(ctx, x, y, ang, range(r, 0.035, 0.11) * S, s.prof(t) * 0.95, side * range(r, 0.02, 0.09) * S)
-      }
+      for (const th of s.thorns) roseThorn(ctx, s.pts, th.i, th.side, j => s.prof(j / (s.pts.length - 1)) / 2, th.h, th.base, 0.9)
     }
   })
-  if (o.spine) {
-    // asse centrale: fuso lungo con punte in alto e in basso, nodi a rombo
-    const top = cy - S * 0.47, bot = cy + S * 0.47
-    const pts: Pt[] = []
-    for (let i = 0; i <= 200; i++) pts.push([cx, top + (bot - top) * (i / 200)])
-    taper(ctx, pts, t => S * 0.022 * wt * (Math.pow(Math.sin(Math.PI * t), 0.45) * (0.55 + 0.45 * Math.abs(Math.cos(t * Math.PI * 3)))))
-    for (let k = 0; k < 3; k++) {
-      const yy = cy + (k - 1) * S * 0.2, d = S * (0.022 + r() * 0.02) * wt
-      ctx.beginPath(); ctx.moveTo(cx, yy - d * 2.4); ctx.lineTo(cx + d, yy); ctx.lineTo(cx, yy + d * 2.4); ctx.lineTo(cx - d, yy); ctx.closePath(); ctx.fill()
-    }
-  }
   if (o.arcs) {
-    // archi ad ago che tagliano la figura: il "circuito" del sigillo
-    const n = 1 + Math.floor(r() * 2)
-    for (let k = 0; k < n; k++) {
-      const R = S * range(r, 0.18, 0.36), a0 = range(r, -2.6, -1.9), sweep = range(r, 1.6, 2.6)
-      const pts: Pt[] = []
-      for (let i = 0; i <= 160; i++) { const a = a0 + sweep * (i / 160); pts.push([cx + Math.cos(a) * R * 1.08, cy + Math.sin(a) * R + S * range(r, -0.03, 0.03) * 0]) }
-      mirrored(ctx, cx, () => taper(ctx, pts, spindle(S * 0.011 * wt, 0.8)))
-    }
+    const { pts } = whip(cx, cy - S * 0.3, -0.2, S * 0.62, 1.2, 4.2, 1.6)
+    symmetric(ctx, cx, cy, o.symmetry ?? 0, () => taper(ctx, pts, flick(S * 0.012 * wt, 0.1, 1.2)))
   }
 }
 
-/** corona di spine attorno a un cerchio (per incorniciare una parola) */
+/** corona: anello sottile con spine a rosa regolari, spazzate nello stesso verso */
 export function thornRing(ctx: Ctx, r: Rnd, cx: number, cy: number, R: number, S: number, count: number, weight: number) {
   const pts: Pt[] = []
-  for (let i = 0; i <= 400; i++) { const a = (i / 400) * Math.PI * 2; pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R * 0.92]) }
-  taper(ctx, pts, t => S * 0.008 * weight * (0.5 + 0.5 * Math.abs(Math.sin(t * Math.PI * count / 2))))
-  const half: { a: number; len: number; bend: number; w: number }[] = []
-  for (let i = 0; i < count / 2; i++) half.push({ a: -Math.PI / 2 + (i + 0.5) / (count / 2) * Math.PI, len: range(r, 0.05, 0.16) * S, bend: range(r, -0.06, 0.06) * S, w: range(r, 0.012, 0.024) * S * weight })
-  mirrored(ctx, cx, () => {
-    for (const h of half) {
-      const x = cx + Math.cos(h.a) * R, y = cy + Math.sin(h.a) * R * 0.92
-      thorn(ctx, x, y, h.a + range(r, -0.35, 0.35), h.len, h.w, h.bend)
-    }
-  })
+  const n = 1200
+  for (let i = 0; i <= n; i++) { const a = -Math.PI / 2 + (i / n) * Math.PI * 2; pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R]) }
+  const W = S * 0.009 * weight
+  taper(ctx, pts, () => W)
+  const inner: Pt[] = pts.map(([x, y]) => [cx + (x - cx) * 0.93, cy + (y - cy) * 0.93])
+  taper(ctx, inner, () => W * 0.28)
+  for (let k = 0; k < count; k++) {
+    const i = Math.round(((k + 0.5) / count) * n)
+    const big = k % 2 === 0
+    roseThorn(ctx, pts, i, -1, () => W / 2, S * (big ? 0.05 : 0.03) * weight * range(r, 0.9, 1.1), ptsFor(W * (big ? 4.5 : 3.2)), 0.9)
+  }
 }
 
-/** fascia neo-tribale orizzontale (tipo bracciale): onda centrale con uncini */
+/** fascia neo-tribale orizzontale (bracciale): asse a fuso con lame a uncino e spine a rosa */
 export function band(ctx: Ctx, r: Rnd, cx: number, cy: number, Wd: number, S: number, weight: number) {
-  const pts: Pt[] = []
-  const amp = S * 0.035, f = 2 + Math.floor(r() * 3)
-  for (let i = 0; i <= 400; i++) { const t = i / 400; pts.push([cx - Wd / 2 + Wd * t, cy + Math.sin(t * Math.PI * 2 * f) * amp * Math.sin(Math.PI * t)]) }
-  taper(ctx, pts, t => S * 0.02 * weight * Math.pow(Math.sin(Math.PI * t), 0.35))
-  const hooks = 3 + Math.floor(r() * 4)
-  const specs: { t: number; up: number; len: number; k: number; w: number }[] = []
-  for (let i = 0; i < hooks; i++) specs.push({ t: (i + 0.5) / hooks * 0.5, up: r() < 0.5 ? -1 : 1, len: range(r, 0.08, 0.2) * S, k: range(r, 5, 14) / S, w: range(r, 0.014, 0.026) * S * weight })
+  const half = Wd / 2
+  const axis: Pt[] = []
+  for (let i = 0; i <= 600; i++) axis.push([cx - half + Wd * (i / 600), cy])
+  taper(ctx, axis, t => S * 0.014 * weight * Math.pow(Math.sin(Math.PI * t), 0.5))
+  const blade = (W: number) => (t: number) => W * (0.22 * Math.pow(1 - t, 3) + Math.pow(Math.sin(Math.PI * Math.pow(t, 0.6)), 1.1))
+  type Arm = { pts: Pt[]; prof: (t: number) => number; thorn: number; side: number }
+  const arms: Arm[] = []
+  const count = 3 + Math.floor(r() * 3)
+  for (let k = 0; k < count; k++) {
+    const x0 = cx + half * (0.04 + 0.9 * (k + 0.5) / count) * 0.98
+    const up = k % 2 === 0 ? -1 : 1
+    const P0: Pt = [x0, cy]
+    const L = S * range(r, 0.12, 0.2) * weight * (k === 0 ? 1.25 : 1) * (1 - k / (count * 2.2))
+    const a0 = up * Math.PI / 2 + range(r, 0.35, 0.75)          // si piega verso l'esterno
+    const turn = -up * range(r, 0.8, 1.3), a1 = a0 + turn
+    const P3 = add(P0, dirv(a0 + turn * 0.4), L)
+    const body = bezier(P0, add(P0, dirv(a0), L * 0.5), add(P3, dirv(a1), -L * 0.4), P3)
+    const hl = L * 0.3
+    const { pts: hook } = walk(P3[0], P3[1], angleAt(body, body.length - 1), hl, t => (Math.sign(turn) * Math.PI * 1.1 / hl) * 2 * t, 1.5)
+    const pts = body.concat(hook.slice(1))
+    arms.push({ pts, prof: blade(S * range(r, 0.016, 0.024) * weight), thorn: Math.floor(range(r, 0.25, 0.45) * pts.length), side: -Math.sign(turn) })
+  }
   mirrored(ctx, cx, () => {
-    for (const h of specs) {
-      const i = Math.floor(h.t * 400), [x, y] = pts[i]
-      const { pts: hp } = walk(x, y, h.up * Math.PI / 2 + range(r, -0.5, 0.5), h.len, t => h.k * h.up * Math.pow(t, 2) * 3, Math.max(1.5, S / 600))
-      taper(ctx, hp, needle(h.w, 0.05, 1.1))
+    for (const a of arms) {
+      taper(ctx, a.pts, a.prof)
+      roseThorn(ctx, a.pts, a.thorn, a.side, j => a.prof(j / (a.pts.length - 1)) / 2, S * 0.03 * weight, ptsFor(S * 0.04 * weight), 0.9)
     }
   })
+  // nodo centrale a rombo affilato
+  const d = S * 0.022 * weight
+  ctx.beginPath(); ctx.moveTo(cx, cy - d * 2.4); ctx.quadraticCurveTo(cx + d * 0.3, cy - d * 0.3, cx + d, cy); ctx.quadraticCurveTo(cx + d * 0.3, cy + d * 0.3, cx, cy + d * 2.4)
+  ctx.quadraticCurveTo(cx - d * 0.3, cy + d * 0.3, cx - d, cy); ctx.quadraticCurveTo(cx - d * 0.3, cy - d * 0.3, cx, cy - d * 2.4); ctx.fill()
 }
 
 // ─── calligrafia gotica ──────────────────────────────────────────────────────
@@ -206,7 +360,7 @@ export function growth(ctx: Ctx, r: Rnd, seed: number, x: number, y: number, ang
     // spine laterali sul ramo
     if (r() < 0.6) {
       const i = Math.floor(range(r, 0.3, 0.8) * (pts.length - 1)), side = r() < 0.5 ? -1 : 1
-      thorn(ctx, pts[i][0], pts[i][1], angles[i] + side * range(r, 0.5, 1.1), len * range(r, 0.25, 0.5), w * 0.8, side * len * 0.05)
+      thorn(ctx, pts[i][0], pts[i][1], angles[i] + side * range(r, 0.5, 1.1), len * range(r, 0.25, 0.5), w * 0.8, side * range(r, 0.15, 0.5))
     }
   }
   branch(x, y, angle, S * 0.035 * opts.weight, S * 0.2, opts.depth)
@@ -255,6 +409,40 @@ export function inkSmoke(ctx: Ctx, seed: number, r: Rnd, cx: number, cy: number,
       const ox = (x - cx) / R, oy = (y - cy) / R
       x += (nx * 900 / R + ox * 0.9) * (R / 260)
       y += (ny * 900 / R + oy * 0.9 - 0.15) * (R / 260)
+      ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+}
+
+/**
+ * Pennacchio d'inchiostro che cade in acqua: migliaia di filamenti partono dal
+ * punto d'impatto, scendono per gravità e vengono avvolti da un flusso curl che
+ * cresce con la profondità (in alto il getto è compatto, in basso si apre a fungo).
+ */
+export function inkPlume(ctx: Ctx, seed: number, cx: number, top: number, S: number, depth: number, count: number, opts: { turb: number; spread: number; alpha: number }) {
+  const n = noise3(seed), r = (() => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } })()
+  const sc = 2.4 / S, h = 0.02, step = S * 0.0032
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  for (let i = 0; i < count; i++) {
+    let x = cx + (r() - 0.5) * S * 0.03 * opts.spread, y = top + r() * S * 0.03
+    const life = Math.floor((depth / step) * (0.35 + r() * 0.75))
+    ctx.globalAlpha = opts.alpha * (0.5 + r())
+    ctx.lineWidth = Math.max(0.5, S * 0.0011 * (0.4 + r() * 1.6))
+    ctx.beginPath(); ctx.moveTo(x, y)
+    const side = r() < 0.5 ? -1 : 1
+    // ogni famiglia di filamenti vive in una "fetta" diversa del rumore: il getto si divide in veli
+    const z = Math.floor(r() * 7) * 0.37 + r() * 0.08
+    for (let k = 0; k < life; k++) {
+      const prog = Math.min(1, (y - top) / depth)
+      const X = x * sc, Y = y * sc
+      const cxv = (n(X, Y + h, z) - n(X, Y - h, z)) / (2 * h), cyv = -(n(X + h, Y, z) - n(X - h, Y, z)) / (2 * h)
+      const tw = opts.turb * (0.15 + prog * prog * 2.2)
+      // a metà caduta il getto si allarga a fungo
+      const bloom = Math.max(0, prog - 0.35) * side * 0.9 * opts.spread
+      x += (cxv * tw * 0.35 + bloom + (r() - 0.5) * 0.25 * prog) * step
+      y += (1 - prog * 0.55 + cyv * tw * 0.25) * step
       ctx.lineTo(x, y)
     }
     ctx.stroke()
