@@ -833,3 +833,64 @@ void main() {
 
 export const MIX_AMT = LIB + `uniform sampler2D uA, uB; uniform float uK;
 void main() { o = mix(texture(uA, vUv), texture(uB, vUv), uK); }`
+
+/* ─── effetti testo da "stile Photoshop" ─── */
+
+/** usura: l'inchiostro si consuma con macchie e puntini, più sui bordi */
+export const GRUNGE = FX + `uniform float uWear, uScale, uSpeck;
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  if (s.a <= 0.0) { o = s; return; }
+  vec2 p = vUv * uRes / (uZ * uScale);
+  float n = fbm(p * 0.018) * 0.55 + fbm(p * 0.085 + 7.0) * 0.3 + vnoise(p * 0.6) * 0.15;
+  float d = -sd(vUv) / uZ;
+  float edge = smoothstep(0.0, 7.0, d);
+  float keep = smoothstep(uWear - 0.06, uWear + 0.06, n + edge * 0.22);
+  float spk = step(1.0 - uSpeck * 0.12, hash12(floor(p * 0.55)));
+  keep *= 1.0 - spk;
+  o = mix(s, s * keep, uAmt);
+}`
+
+/** ricamo: fili in diagonale, rilievo morbido, punto filo lungo il bordo */
+export const STITCH = FX + `uniform vec3 uThread, uStitch; uniform float uUseColor, uDensity, uInset;
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  if (s.a <= 0.0) { o = s; return; }
+  vec2 p = vUv * uRes / uZ;
+  vec2 e = px();
+  float d = -sd(vUv) / uZ;
+  vec2 gr = vec2(sd(vUv + vec2(e.x, 0.0)) - sd(vUv - vec2(e.x, 0.0)), sd(vUv + vec2(0.0, e.y)) - sd(vUv - vec2(0.0, e.y)));
+  vec2 tg = normalize(vec2(-gr.y, gr.x) + 1e-5);
+  vec3 base = uUseColor > 0.5 ? uThread : s.rgb / s.a;
+  float t = (p.x + p.y) * 0.7071;
+  float fiber = 0.5 + 0.5 * sin(t * uDensity + vnoise(p * 0.12) * 4.0);
+  float grain = vnoise(p * vec2(0.9, 0.25));
+  vec3 col = base * (0.72 + 0.22 * fiber + 0.12 * grain);
+  col *= 0.78 + 0.32 * smoothstep(0.0, 4.0, d);                 // il filo si arrotonda verso il bordo
+  float band = 1.0 - smoothstep(0.7, 1.5, abs(d - uInset));
+  float dash = smoothstep(0.35, 0.45, fract(dot(p, tg) / 6.0)) * (1.0 - smoothstep(0.85, 0.95, fract(dot(p, tg) / 6.0)));
+  col = mix(col, uStitch, band * dash * 0.95);
+  o = mix(s, vec4(col * s.a, s.a), uAmt);
+}`
+
+/** lamina metallica: superficie stropicciata, smusso sui bordi, riflessi */
+export const FOIL = FX + `uniform vec3 uA, uB; uniform float uCrinkle, uLight, uBevel;
+float hgt(vec2 p) { return fbm(p * 0.03) * 0.6 + vnoise(p * 0.2) * 0.4 * uCrinkle; }
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  if (s.a <= 0.0) { o = s; return; }
+  vec2 p = vUv * uRes / uZ;
+  vec2 e = px();
+  float h = hgt(p);
+  vec2 g = vec2(hgt(p + vec2(1.0, 0.0)) - h, hgt(p + vec2(0.0, 1.0)) - h) * 26.0;
+  float di = -sd(vUv) / uZ;
+  vec2 sg = vec2(sd(vUv + vec2(e.x, 0.0)) - sd(vUv - vec2(e.x, 0.0)), sd(vUv + vec2(0.0, e.y)) - sd(vUv - vec2(0.0, e.y)));
+  float bev = 1.0 - smoothstep(0.0, uBevel, di);
+  vec3 n = normalize(vec3(-g + normalize(sg + 1e-5) * bev * 1.6, 1.0));
+  vec3 L = normalize(vec3(cos(uLight), sin(uLight), 0.75));
+  float dif = max(dot(n, L), 0.0);
+  float spec = pow(max(dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)), 0.0), 28.0);
+  float band = 0.5 + 0.5 * sin((p.x * 0.6 + p.y) * 0.012 + dif * 3.0);
+  vec3 col = mix(uA, uB, clamp(dif * 0.75 + band * 0.35, 0.0, 1.0)) + spec * 0.85;
+  o = mix(s, vec4(col * s.a, s.a), uAmt);
+}`

@@ -51,6 +51,23 @@ function measure(str: string, family: string, weight: number, size: number, trac
 const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T) =>
   Promise.race([p, new Promise<T>(r => setTimeout(() => r(fallback), ms))])
 
+/* ───────────── testo ricco ───────────── */
+/** converte **grassetto** e *corsivo* in stili per carattere di Fabric (righe separate da \n) */
+export function rich(src: string, boldWeight: number | string = 700) {
+  const styles: Record<number, Record<number, Record<string, string>>> = {}
+  let plain = '', bold = false, ital = false, line = 0, col = 0
+  for (let i = 0; i < src.length; i++) {
+    if (src[i] === '*' && src[i + 1] === '*') { bold = !bold; i++; continue }
+    if (src[i] === '*' && /\S/.test(src[i + 1] ?? '') !== /\S/.test(src[i - 1] ?? ' ') ) { ital = !ital; continue }
+    const ch = src[i]
+    plain += ch
+    if (ch === '\n') { line++; col = 0; continue }
+    if (bold || ital) (styles[line] ??= {})[col] = { ...(bold ? { fontWeight: String(boldWeight) } : {}), ...(ital ? { fontStyle: 'italic' } : {}) }
+    col++
+  }
+  return { plain, styles }
+}
+
 /* ───────────── composizione ───────────── */
 export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.FabricObject, spec: ComposeBoard, index = 0, total = 1) {
   const S: StyleDef = styleOf(spec.style)
@@ -121,11 +138,14 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
     const upper = role === 'display' ? !!S.display.upper : role === 'label' ? labF.upper !== false : false
     const tracking = role === 'display' ? (S.display.tracking ?? 0) : role === 'label' ? (labF.tracking ?? 0.08) : 0
     const lh = role === 'display' ? (S.display.leading ?? 0.95) : role === 'label' ? 1.3 : 1.42
-    return new fabric.Textbox(upper ? str.toUpperCase() : str, {
+    // **grassetto** e *corsivo* scritti nel testo diventano stili veri, il testo resta modificabile
+    const { plain, styles } = rich(upper ? str.toUpperCase() : str, pickWeight(f.family, Math.max(700, f.weight + 300)))
+    return new fabric.Textbox(plain, {
       fontFamily: f.family, fontWeight: String(f.weight), fontSize: Math.round(size),
       fontStyle: role === 'display' && S.display.italic ? 'italic' : 'normal',
       charSpacing: Math.round(tracking * 1000), lineHeight: lh,
       textAlign: align, fill: role === 'label' ? muted : ink, splitByGrapheme: false,
+      styles,
       ...opts,
     }) as fabric.Textbox & Obj
   }

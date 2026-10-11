@@ -7,7 +7,7 @@
  */
 import { FxGL, type Tex, type UVal } from './gl'
 import {
-  MASK, MASK_A, ADJUST, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
+  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
 } from './shaders'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
@@ -117,6 +117,9 @@ function sdfReach(stack: FxEntry[]): number {
       case 'neon': m = Math.max(m, num(p.size, 18) * 0.15 + 3); break
       case 'hollow': case 'splice': m = Math.max(m, num(p.thickness, 3) + 2); break
       case 'material3d': m = Math.max(m, 100000); break
+      case 'grunge': m = Math.max(m, 10); break
+      case 'stitch': m = Math.max(m, num(p.inset, 5) + 6); break
+      case 'foil': m = Math.max(m, num(p.bevel, 4) + 4); break
     }
   }
   return m
@@ -230,6 +233,9 @@ const RUN: Partial<Record<string, Run>> = {
     return out
   },
   echo: simple('echo', ECHO, (c, p) => ({ uCount: Math.round(num(p.count, 4)), uOff: dirUv(c, num(p.angle, 315), num(p.distance, 8)), uUse: num(p.useColor), uCol: rgb(p.color), uFade: num(p.fade, 70) / 100 })),
+  grunge: simple('grunge', GRUNGE, (_c, p) => ({ uWear: num(p.wear, 45) / 100, uScale: num(p.scale, 100) / 100, uSpeck: num(p.speck, 40) / 100 })),
+  stitch: simple('stitch', STITCH, (_c, p) => ({ uThread: rgb(p.color, '#e94f37'), uStitch: rgb(p.stitch, '#fff4e0'), uUseColor: num(p.useColor), uDensity: num(p.density, 70) / 40, uInset: num(p.inset, 5) })),
+  foil: simple('foil', FOIL, (_c, p) => ({ uA: rgb(p.c1, '#7a5310'), uB: rgb(p.c2, '#fff1b8'), uCrinkle: num(p.crinkle, 60) / 100, uLight: num(p.light, 220) * Math.PI / 180, uBevel: num(p.bevel, 4) })),
   hollow: simple('hollow', HOLLOW, (c, p) => ({ uW: num(p.thickness, 3) * c.z })),
   splice: simple('splice', SPLICE, (c, p) => ({ uW: num(p.thickness, 3) * c.z, uOff: dirUv(c, num(p.angle, 315), num(p.distance, 8)), uCol: rgb(p.color) })),
   longShadow: simple('longShadow', LONG_SHADOW, (c, p) => ({ uDir: dirUv(c, num(p.angle, 45), num(p.length, 120)), uCol: rgb(p.color), uOp: num(p.opacity, 35) / 100, uFade: num(p.fade, 60) / 100 })),

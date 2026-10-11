@@ -118,6 +118,7 @@ export type FxId =
   | 'wave' | 'ripple' | 'twirl' | 'bulge' | 'mosaic' | 'chroma'
   | 'vhs' | 'crt'
   | 'material3d' | 'genFill'
+  | 'grunge' | 'stitch' | 'foil'
 
 export type PVal = number | string
 export interface FxEntry { id: FxId; on: boolean; amount: number; p: Record<string, PVal>; variant?: string }
@@ -295,6 +296,15 @@ export const FX_DEFS: FxDef[] = [
       { id: 'colore', label: 'Colorata', p: { count: 3, distance: 10, useColor: 1, color: '#ff5a5f', fade: 40 } },
       { id: 'pop', label: 'Pop', p: { count: 2, distance: 14, useColor: 1, color: '#00c2ff', fade: 0, angle: 45 } },
     ] },
+  { id: 'foil', label: 'Lamina', cat: 'Testo', hint: 'lamina metallica stropicciata con smusso e riflessi',
+    params: [c('c1', 'Ombra metallo', '#7a5310'), c('c2', 'Luce metallo', '#fff1b8'), r('crinkle', 'Stropicciatura', 0, 100, 60), r('bevel', 'Smusso', 0, 20, 4), r('light', 'Luce', 0, 360, 220)],
+    variants: [{ id: 'oro', label: 'Oro', p: { c1: '#6b4a10', c2: '#ffe9a8' } }, { id: 'argento', label: 'Argento', p: { c1: '#4c4f57', c2: '#f4f6fa' } }, { id: 'rame', label: 'Rame', p: { c1: '#5a2412', c2: '#ffc29a' } }, { id: 'rosa', label: 'Oro rosa', p: { c1: '#6e3b3b', c2: '#ffd9cf' } }, { id: 'olografico', label: 'Olografica', p: { c1: '#5b6cff', c2: '#ffd1f4', crinkle: 80 } }] },
+  { id: 'stitch', label: 'Ricamo', cat: 'Testo', hint: 'fili in diagonale e punto filo lungo il bordo, come una toppa',
+    params: [t('useColor', 'Colore filo proprio', 0), c('color', 'Filo', '#e94f37'), c('stitch', 'Cucitura', '#fff4e0'), r('density', 'Densità fili', 20, 140, 70), r('inset', 'Distanza cucitura', 2, 14, 5)],
+    variants: [{ id: 'toppa', label: 'Toppa', p: {} }, { id: 'fine', label: 'Fine', p: { density: 120, inset: 3 } }, { id: 'denim', label: 'Denim', p: { useColor: 1, color: '#2b4a7a', stitch: '#f2b84b' } }] },
+  { id: 'grunge', label: 'Usura', cat: 'Stampa', hint: 'inchiostro consumato con macchie e puntini, più forte sui bordi',
+    params: [r('wear', 'Usura', 0, 100, 45), r('scale', 'Scala', 30, 300, 100), r('speck', 'Puntini', 0, 100, 40)],
+    variants: [{ id: 'leggera', label: 'Leggera', p: { wear: 30, speck: 20 } }, { id: 'timbro', label: 'Timbro', p: { wear: 50, speck: 50 } }, { id: 'rovinata', label: 'Rovinata', p: { wear: 62, speck: 70, scale: 70 } }] },
   { id: 'hollow', label: 'Vuoto', cat: 'Testo', hint: 'solo il contorno, interno trasparente',
     params: [r('thickness', 'Spessore', 1, 30, 3)],
     variants: [{ id: 'fine', label: 'Fine', p: { thickness: 2 } }, { id: 'medio', label: 'Medio', p: { thickness: 4 } }, { id: 'spesso', label: 'Spesso', p: { thickness: 8 } }] },
