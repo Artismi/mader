@@ -33,7 +33,7 @@ import { injectGoogleFont } from './libraries/font-library'
 import { FontPicker } from './FontPicker'
 import { ensureFont, fontEntry, refreshTexts, watchCanvasFonts, WEIGHT_NAMES } from './libraries/font-loader'
 import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
-import { SHAPE_LIBRARY, ICONS_LIBRARY, FILLED_SHAPE_CATEGORIES } from './libraries/shape-library'
+import { SHAPE_LIBRARY, ICONS_LIBRARY, FILLED_SHAPE_CATEGORIES, FILLED_ICONS } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
 import { GeneratePanel } from './GeneratePanel'
 import {
@@ -3057,9 +3057,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const p = new fabric.Path(path, { left: x, top: y, ...look, scaleX: 1.5, scaleY: 1.5 })
     canvas.add(p); canvas.setActiveObject(p); canvas.requestRenderAll()
   }
-  function addLibIcon(svgPath: string) {
+  function addLibIcon(svgPath: string, filled = false) {
     const canvas = fabricRef.current; if (!canvas) return
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${svgPath}"/></svg>`
+    const paint = filled ? 'fill="white" stroke="none"' : 'fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" ${paint}><path d="${svgPath}"/></svg>`
     fabric.loadSVGFromString(svg).then(({ objects }) => {
       const g = new fabric.Group(objects as fabric.FabricObject[], {
         left: 200, top: 200, scaleX: 3, scaleY: 3
@@ -4668,7 +4669,7 @@ interface PanelProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddShape: (s: any, filled?: boolean) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAddIcon: (s: any) => void
+  onAddIcon: (s: any, filled?: boolean) => void
   onAddGenerated: (url: string, name: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddBricolage: (s: any) => void
@@ -5590,7 +5591,7 @@ function ShadowSec({ sel, onShadow }: { sel: SelState; onShadow: (u: Partial<Sel
 
 function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
   onShape: (p: string, filled?: boolean) => void;
-  onIcon: (svgPath: string) => void;
+  onIcon: (svgPath: string, filled?: boolean) => void;
   onGenerated: (url: string, name: string) => void;
   onFont: (f: string) => void;
   onTexture: (tex: any) => void;
@@ -5658,9 +5659,11 @@ function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage
         {tab === 'icons' && (
           <div className="grid grid-cols-3 gap-2.5">
             {ICONS_LIBRARY.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(ic => (
-              <button key={ic.name} onClick={() => onIcon(ic.path)}
+              <button key={ic.name} onClick={() => onIcon(ic.path, FILLED_ICONS.has(ic.name))}
                 className="aspect-square flex flex-col items-center justify-center gap-1.5 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all group">
-                <svg viewBox="0 0 24 24" className="w-8 h-8 drop-shadow-lg"><path d={ic.path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 group-hover:text-white transition-colors" /></svg>
+                <svg viewBox="0 0 24 24" className="w-8 h-8 drop-shadow-lg">{FILLED_ICONS.has(ic.name)
+                  ? <path d={ic.path} fill="currentColor" className="text-white/40 group-hover:text-white transition-colors" />
+                  : <path d={ic.path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 group-hover:text-white transition-colors" />}</svg>
                 <span className="text-[7px] font-bold uppercase tracking-widest text-white/20 group-hover:text-white/50">{ic.name}</span>
               </button>
             ))}

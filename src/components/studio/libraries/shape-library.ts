@@ -2,6 +2,8 @@ import { CELESTIAL_CATEGORY, CELESTIAL_SHAPES, CELESTIAL_ICONS } from './celesti
 
 // Categorie con forme piene (fill invece di tratto): anteprima e inserimento pieni.
 export const FILLED_SHAPE_CATEGORIES = new Set<string>([CELESTIAL_CATEGORY])
+// Icone piene (linework a inchiostro): vanno disegnate con fill, non con tratto.
+export const FILLED_ICONS = new Set<string>(CELESTIAL_ICONS.map(i => i.name))
 
 export const SHAPE_LIBRARY = {
   [CELESTIAL_CATEGORY]: CELESTIAL_SHAPES,
