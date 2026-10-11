@@ -59,7 +59,7 @@ export function Row({ n }: { n: NodeSummary }) {
     <button className={`row${was ? ' was' : ''}`} onClick={() => go(n.ref)}>
       <span className="av">{n.ini ?? <I n={KIND_ICON[n.kind] ?? 'file'} />}</span>
       <span className="mn"><span className="t">{n.title}</span><span className="m">{n.sub}</span></span>
-      {n.urgent ? <span className="pill">{n.kind === 'mail' ? 'da rispondere' : n.kind === 'post' ? 'doveva uscire' : 'in ritardo'}</span> : <span className="w">{n.when}</span>}
+      {n.urgent ? <span className="pill">{n.kind === 'mail' ? 'da rispondere' : n.kind === 'post' ? 'doveva uscire' : n.kind === 'quote' ? 'da sollecitare' : 'in ritardo'}</span> : <span className="w">{n.when}</span>}
     </button>
   )
 }

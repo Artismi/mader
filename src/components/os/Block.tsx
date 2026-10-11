@@ -134,6 +134,8 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
 
   if (kind === 'post') return <PostView node={node} />
 
+  if (kind === 'quote') return mode === 'reply' ? <QuoteSend node={node} /> : <QuoteView node={node} />
+
   if (kind === 'idea') return (
     <>
       <Head kicker={`idea${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} action={<PlusButton node={node} />} />
@@ -166,6 +168,137 @@ function TaskView({ node }: { node: NodeDetail }) {
         </>
       )}
       {node.done && <p className="why">già fatto</p>}
+    </>
+  )
+}
+
+const call = async (body: object) => {
+  const r = await fetch('/api/os', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error ?? 'Non riuscito')
+  return j
+}
+const eur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+type QItem = { desc: string; qty: number; unit_price: number }
+
+/* Preventivo / fattura: voci, PDF, invio; lo stato avanza di un passo alla volta */
+function QuoteView({ node }: { node: NodeDetail }) {
+  const { go, say, invalidate } = useOs.getState()
+  const q = node.quote!
+  const [rows, setRows] = useState<QItem[] | null>(null)       // non null = sto modificando
+  const [busy, setBusy] = useState(false)
+  const run = async (body: object, ok: string) => {
+    setBusy(true)
+    try { const j = await call({ ref: node.ref, ...body }); invalidate(); say(ok); return j } catch (e) { say((e as Error).message, true) } finally { setBusy(false) }
+  }
+  const set = (i: number, patch: Partial<QItem>) => setRows(r => r!.map((x, k) => k === i ? { ...x, ...patch } : x))
+  const pdf = `/api/os/quote-pdf?id=${q.id}`
+  const isInvoice = q.type === 'fattura'
+
+  const action = q.status === 'bozza'
+    ? <button className="primary" onClick={() => go(node.ref, 'reply')} disabled={!!rows}><span className="dot"><I n="send" /></span>Invia al cliente</button>
+    : q.status === 'accettato' && !isInvoice
+      ? <button className="primary" disabled={busy} onClick={async () => { const j = await run({ action: 'quote-invoice' }, 'Fattura creata in bozza'); if (j?.ref) go(j.ref) }}><span className="dot"><I n="file" /></span>Crea la fattura</button>
+      : null
+
+  return (
+    <>
+      <Head kicker={`${q.type}${node.clientName ? ` · ${node.clientName}` : ''}`} title={node.title} lead={node.lead} action={<><PlusButton node={node} />{action}</>} />
+      {rows ? (
+        <>
+          {rows.map((r, i) => (
+            <div className="qrow" key={i}>
+              <input className="fld" value={r.desc} onChange={e => set(i, { desc: e.target.value })} placeholder="Voce" aria-label={`Voce ${i + 1}`} autoFocus={i === rows.length - 1 && !r.desc} />
+              <input className="fld num" type="number" min={1} value={r.qty} onChange={e => set(i, { qty: +e.target.value })} aria-label="Quantità" />
+              <input className="fld num" type="number" min={0} step={10} value={r.unit_price || ''} onChange={e => set(i, { unit_price: +e.target.value })} placeholder="€" aria-label="Prezzo unitario" />
+            </div>
+          ))}
+          <p style={{ marginTop: 10, display: 'flex', gap: 18, alignItems: 'center' }}>
+            <button className="legacy" onClick={() => setRows(r => [...r!, { desc: '', qty: 1, unit_price: 0 }])}>+ aggiungi voce</button>
+            <span className="why" style={{ margin: 0 }}>totale {eur(rows.reduce((s, r) => s + r.qty * r.unit_price, 0))}</span>
+          </p>
+          <p style={{ marginTop: 18, display: 'flex', gap: 12 }}>
+            <button className="primary" disabled={busy || !rows.some(r => r.desc.trim())} onClick={async () => { if (await run({ action: 'quote-items', items: rows }, 'Voci salvate')) setRows(null) }}><span className="dot"><I n="check" /></span>Salva</button>
+            <button className="legacy" onClick={() => setRows(null)}>annulla</button>
+          </p>
+        </>
+      ) : (
+        <>
+          <table className="lines big"><tbody>
+            {q.items.map((it, i) => <tr key={i}><td>{it.desc}{it.qty > 1 ? ` × ${it.qty}` : ''}</td><td>{eur(it.qty * it.unit_price)}</td></tr>)}
+            <tr><td>Totale</td><td>{eur(q.total)}</td></tr>
+          </tbody></table>
+          {q.notes && <p className="why" style={{ whiteSpace: 'pre-line' }}>{q.notes}</p>}
+        </>
+      )}
+
+      {!rows && (
+        <div className="qacts">
+          <a className="legacy" href={pdf} target="_blank" rel="noreferrer">vedi il PDF ↗</a>
+          {q.status === 'bozza' && <button className="legacy" onClick={() => setRows(q.items.map(i => ({ ...i })))}>modifica le voci</button>}
+          {q.status === 'inviato' && <>
+            <button className="legacy" disabled={busy} onClick={() => run({ action: 'quote-status', status: 'accettato' }, isInvoice ? 'Segnata come pagata' : 'Accettato: ora puoi fare la fattura')}>{isInvoice ? 'segna pagata' : 'il cliente ha accettato'}</button>
+            {!isInvoice && <button className="legacy" disabled={busy} onClick={() => run({ action: 'quote-status', status: 'rifiutato' }, 'Segnato come rifiutato')}>ha rifiutato</button>}
+            <button className="legacy" onClick={() => go(node.ref, 'reply')}>invia di nuovo</button>
+          </>}
+        </div>
+      )}
+
+      {node.origin && (
+        <>
+          <h2>Nato da</h2>
+          <button className="origin" onClick={() => go(node.origin!.ref)}><span className="av">{node.origin.ini ?? <I n={node.origin.kind === 'quote' ? 'euro' : 'inbox'} />}</span>{node.origin.title}{node.origin.when && <span style={{ color: 'var(--t3)', fontSize: 13 }}>· {node.origin.when}</span>}</button>
+        </>
+      )}
+      {q.status === 'bozza' && <Profile />}
+    </>
+  )
+}
+
+/* Chi emette il documento: compare nell'intestazione del PDF */
+function Profile() {
+  const say = useOs(s => s.say)
+  const [p, setP] = useState<{ name: string; details: string } | null>(null)
+  useEffect(() => { fetch('/api/os?profile').then(r => r.json()).then(setP).catch(() => setP(null)) }, [])
+  if (!p) return null
+  const save = async () => { try { setP(await call({ action: 'profile', ...p })); say('Intestazione salvata') } catch (e) { say((e as Error).message, true) } }
+  return (
+    <details className="profile" open={!p.details}>
+      <summary>Intestazione del PDF{!p.details && <span className="pill">da completare</span>}</summary>
+      <input className="fld" value={p.name} onChange={e => setP({ ...p, name: e.target.value })} aria-label="Nome o studio" placeholder="Nome o studio" />
+      <textarea className="fld" value={p.details} onChange={e => setP({ ...p, details: e.target.value })} aria-label="Dati fiscali"
+        placeholder={'Indirizzo\nP.IVA / Codice fiscale\nIBAN\nemail · telefono'} rows={4} />
+      <button className="legacy" onClick={save}>salva intestazione</button>
+    </details>
+  )
+}
+
+/* Stesso preventivo, funzione diversa: inviarlo */
+function QuoteSend({ node }: { node: NodeDetail }) {
+  const q = node.quote!
+  const draft = useOs(s => s.drafts[node.ref])
+  const { setDraft, clearDraft, say, back, invalidate } = useOs.getState()
+  const label = q.type === 'fattura' ? 'la fattura' : 'il preventivo'
+  const text = draft ?? `Buongiorno,\n\nin allegato ${label} n. ${q.number} per “${node.title}”, per un totale di ${eur(q.total)}.\n\nResto a disposizione per qualsiasi domanda.\n\nUn saluto`
+  const [to, setTo] = useState(q.to ?? '')
+  const [subject, setSubject] = useState(`${q.type === 'fattura' ? 'Fattura' : 'Preventivo'} ${q.number} · ${node.title}`)
+  const [busy, setBusy] = useState(false)
+  const send = async () => {
+    setBusy(true)
+    try {
+      await call({ action: 'quote-send', ref: node.ref, to, subject, text })
+      clearDraft(node.ref); invalidate(); say(`Inviato a ${to} con il PDF allegato`); back()
+    } catch (e) { say((e as Error).message, true) } finally { setBusy(false) }
+  }
+  return (
+    <>
+      <Head kicker={<><span className="tag">stesso {q.type} · ora invialo</span>{draft && <span className="saved">● bozza salvata</span>}</>}
+        title={`Invia a ${node.clientName ?? 'cliente'}`}
+        action={<button className="primary" onClick={send} disabled={busy || !to.trim() || !text.trim()}><span className="dot"><I n="send" /></span>{busy ? 'Invio…' : 'Invia'}</button>} />
+      <input className="fld" type="email" value={to} onChange={e => setTo(e.target.value)} placeholder="email del cliente" aria-label="Destinatario" autoFocus={!to} />
+      <input className="fld" value={subject} onChange={e => setSubject(e.target.value)} aria-label="Oggetto" style={{ marginTop: 8 }} />
+      <textarea id="os-draft" value={text} onChange={e => setDraft(node.ref, e.target.value)} aria-label="Messaggio" style={{ marginTop: 22 }} />
+      <p className="why"><a className="legacy" href={`/api/os/quote-pdf?id=${q.id}`} target="_blank" rel="noreferrer">📎 {q.type} {q.number}.pdf</a> · {eur(q.total)} · parte dal tuo Gmail</p>
     </>
   )
 }

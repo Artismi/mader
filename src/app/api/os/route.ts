@@ -4,6 +4,8 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { editorialPosts, messages, quotes, tasks } from '@/lib/db'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 import { googleStatus } from '@/lib/google/auth'
+import { sendMail } from '@/lib/google/gmail'
+import { getProfile, pdfName, quotePdf, setProfile } from '@/lib/finance/quote-pdf'
 import { upcomingEvents } from '@/lib/google/calendar'
 
 /**
@@ -11,6 +13,8 @@ import { upcomingEvents } from '@/lib/google/calendar'
  * GET  ?list=oggi | ?ref=mail:id | ?q=testo | ?quote=clientId
  * POST { action: 'reply', ref, text } → invia via Gmail e segna come risposto
  * POST { action: 'draft', ref }       → bozza scritta dall'AI (solo su richiesta esplicita)
+ * POST { action: 'quote-send', ref, to, subject, text } → PDF del preventivo allegato e inviato via Gmail
+ * POST { action: 'quote-status' | 'quote-items' | 'quote-invoice' | 'profile', … }
  */
 export async function GET(req: Request) {
   const u = new URL(req.url)
@@ -27,6 +31,7 @@ export async function GET(req: Request) {
     }
     if (u.searchParams.has('q')) return NextResponse.json(search(u.searchParams.get('q')!))
     if (u.searchParams.has('google')) return NextResponse.json(googleStatus())
+    if (u.searchParams.has('profile')) return NextResponse.json(getProfile())
     if (u.searchParams.has('quote')) return NextResponse.json(quoteFor(u.searchParams.get('quote') || undefined, u.searchParams.get('from') || undefined))
     return NextResponse.json({ error: 'Parametro mancante' }, { status: 400 })
   } catch (e) {
@@ -35,6 +40,11 @@ export async function GET(req: Request) {
 }
 
 const findMail = (ref: string) => messages.getAll({ limit: 1000 }).find(m => `mail:${m.id}` === ref)
+type Item = { desc: string; qty: number; unit_price: number }
+const cleanItems = (raw: unknown): Item[] => (Array.isArray(raw) ? raw : [])
+  .map((i: Partial<Item>) => ({ desc: String(i.desc ?? '').trim(), qty: Number(i.qty) || 1, unit_price: Number(i.unit_price) || 0 }))
+  .filter(i => i.desc)
+const totalOf = (items: Item[]) => items.reduce((s, i) => s + i.qty * i.unit_price, 0)
 const toHtml = (text: string) => text.split(/\n{2,}/).map(p => `<p>${p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`).join('')
 
 export async function POST(req: Request) {
@@ -110,18 +120,65 @@ export async function POST(req: Request) {
   // Preventivo in bozza, collegato al cliente del nodo da cui nasce
   if (body.action === 'quote') {
     const client = body.fromRef ? clientOfRef(body.fromRef) : undefined
-    const items = (Array.isArray(body.items) ? body.items : [])
-      .map((i: { desc?: string; qty?: number; unit_price?: number }) => ({ desc: String(i.desc ?? '').trim(), qty: Number(i.qty) || 1, unit_price: Number(i.unit_price) || 0 }))
-      .filter((i: { desc: string }) => i.desc)
+    const items = cleanItems(body.items)
     if (!items.length) return NextResponse.json({ error: 'Aggiungi almeno una voce' }, { status: 400 })
-    const year = new Date().getFullYear()
     const q = quotes.create({
       client_id: client?.id, client_name: client?.name ?? body.clientName ?? 'Senza cliente', title: String(body.title ?? 'Preventivo'),
-      number: `${year}-${String(quotes.getAll().length + 1).padStart(3, '0')}`, type: 'preventivo', status: 'bozza', items,
-      total: items.reduce((s: number, i: { qty: number; unit_price: number }) => s + i.qty * i.unit_price, 0),
+      number: quotes.nextNumber('preventivo'), type: 'preventivo', status: 'bozza', items, total: totalOf(items),
+      issued_at: new Date().toISOString().split('T')[0],
     })
     if (body.fromRef) linkOrigin(body.fromRef, 'quote', q.id)
-    return NextResponse.json({ id: q.id, number: q.number })
+    return NextResponse.json({ id: q.id, number: q.number, ref: `quote:${q.id}` })
+  }
+
+  // ───── preventivo come nodo: voci, stato, invio, fattura ─────
+  const q = String(body.ref ?? '').startsWith('quote:') ? quotes.getById(body.ref.slice(6)) : undefined
+
+  if (body.action === 'quote-items') {
+    if (!q) return NextResponse.json({ error: 'Preventivo non trovato' }, { status: 404 })
+    if (q.status !== 'bozza') return NextResponse.json({ error: 'Si modifica solo finché è in bozza' }, { status: 400 })
+    const items = cleanItems(body.items)
+    if (!items.length) return NextResponse.json({ error: 'Aggiungi almeno una voce' }, { status: 400 })
+    quotes.update(q.id, { items, total: totalOf(items), title: String(body.title ?? q.title).trim() || q.title, notes: body.notes ?? q.notes })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (body.action === 'quote-status') {
+    if (!q) return NextResponse.json({ error: 'Preventivo non trovato' }, { status: 404 })
+    if (!['bozza', 'inviato', 'accettato', 'rifiutato'].includes(body.status)) return NextResponse.json({ error: 'Stato non valido' }, { status: 400 })
+    quotes.update(q.id, { status: body.status })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (body.action === 'quote-invoice') {
+    if (!q) return NextResponse.json({ error: 'Preventivo non trovato' }, { status: 404 })
+    if (q.status !== 'accettato') return NextResponse.json({ error: 'La fattura nasce da un preventivo accettato' }, { status: 400 })
+    const f = quotes.convertToInvoice(q.id)
+    if (!f) return NextResponse.json({ error: 'Fattura non creata' }, { status: 500 })
+    linkOrigin(`quote:${q.id}`, 'quote', f.id)
+    return NextResponse.json({ ref: `quote:${f.id}`, number: f.number })
+  }
+
+  if (body.action === 'quote-send') {
+    if (!q) return NextResponse.json({ error: 'Preventivo non trovato' }, { status: 404 })
+    const to = String(body.to ?? '').trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return NextResponse.json({ error: 'Indirizzo email non valido' }, { status: 400 })
+    if (!String(body.text ?? '').trim()) return NextResponse.json({ error: 'Scrivi due righe di accompagnamento' }, { status: 400 })
+    try {
+      const sent = await sendMail({
+        to, subject: String(body.subject ?? '').trim() || `${q.type === 'fattura' ? 'Fattura' : 'Preventivo'} ${q.number} · ${q.title}`,
+        htmlBody: toHtml(body.text), attachments: [{ filename: pdfName(q), mimeType: 'application/pdf', data: await quotePdf(q) }],
+      })
+      quotes.update(q.id, { status: q.status === 'bozza' ? 'inviato' : q.status, gmail_thread_id: sent.threadId, issued_at: q.issued_at ?? new Date().toISOString().split('T')[0] })
+      return NextResponse.json({ ok: true })
+    } catch (e) {
+      return NextResponse.json({ error: `Invio non riuscito: ${(e as Error).message}` }, { status: 502 })
+    }
+  }
+
+  if (body.action === 'profile') {
+    setProfile({ name: String(body.name ?? ''), details: String(body.details ?? '') })
+    return NextResponse.json(getProfile())
   }
 
   return NextResponse.json({ error: 'Azione sconosciuta' }, { status: 400 })
