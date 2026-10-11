@@ -280,6 +280,7 @@ import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
 import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
+import { installArtboards } from './arrange/artboards'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -692,6 +693,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     fabricRef.current = canvas
     const detachFx = attachFx(canvas)   // effetti su qualsiasi oggetto, ricostruiti da JSON/annulla
     const detachFonts = watchCanvasFonts(canvas)   // ogni testo carica il suo carattere
+    const detachBoards = installArtboards(canvas)   // le tavole tagliano il contenuto e lo portano con sé
     ;(canvas as any)._springIntegrator = springIntegratorRef.current
     ;(canvasRef.current as any)._fabric = canvas
 
@@ -1347,6 +1349,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       clearTimeout(initTimer)
       detachFx()
       detachFonts()
+      detachBoards()
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
@@ -2417,7 +2420,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const { w, h } = boardSize(b)
         const name = addArtboard(w, h, b.name || (b.content?.title || b.content?.quote)?.slice(0, 32) || `Tavola ${i + 1}`, 'social', x + w / 2, 100 + h / 2)
         const ab = canvas.getObjects().find(o => o.get('name') === name)
-        if (ab) await composeBoard(canvas, ab, b, i)
+        if (ab) await composeBoard(canvas, ab, b, i, boards.length)
         x += w + 160
       }
       fitToArtboards()

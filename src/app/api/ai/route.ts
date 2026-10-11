@@ -10,7 +10,7 @@ import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { buildContext } from '@/lib/ai/context'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
-import { FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
+import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
 
@@ -174,6 +174,7 @@ const composeBoardSchema = z.object({
     items: z.array(z.string()).optional(),
     brand: z.string().optional(),
     badge: z.string().optional(),
+    tags: z.array(z.string()).optional(),
     image: z.object({ url: z.string().optional(), prompt: z.string().optional(), alt: z.string().optional() }).optional(),
   }),
   titleEffect: z.string().optional(),
@@ -183,8 +184,9 @@ const composeBoardSchema = z.object({
   displayFont: z.string().optional(),
   textFont: z.string().optional(),
   align: z.enum(['left', 'center']).optional(),
-  decor: z.array(z.enum(['folio', 'columns', 'crop', 'frame', 'bauhaus', 'blob', 'ticker', 'index', 'badge', 'orbs', 'dots', 'bars'])).optional(),
+  decor: z.array(z.enum(DECOR_IDS as [string, ...string[]])).optional().describe('Interventi in più rispetto a quelli dello stile'),
   noDecor: z.boolean().optional(),
+  density: z.enum(['essenziale', 'ricco', 'massimo']).optional(),
 })
 
 // ── Crew pipeline helpers ──────────────────────────────────────────────────
@@ -758,7 +760,7 @@ export async function POST(req: Request) {
         ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements. Per modifiche chirurgiche NON usare clearBoard.\n---`
         : '',
       isCreativeQuery
-        ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro.'
+        ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
         : '',
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
