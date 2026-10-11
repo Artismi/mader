@@ -148,14 +148,14 @@ function wordSize(s: string, f: typeof FACES[FaceId], width: number) {
 
 const sigillo: Recipe = {
   id: 'sigillo', label: 'Sigillo cyber', cat: 'Sigilli', hint: 'emblema neo-tribale simmetrico: aghi, uncini, spine',
-  params: [P.tone(0), P.mat(1), P.sel('sil', 'Sagoma', ['Dal seme', ...SILHOUETTES.map(x => x.label)]), P.range('strokes', 'Bracci', 6, 11, 9), P.range('spikes', 'Spine', 0, 3, 2), P.range('hook', 'Uncini', 0, 100, 60),
-    P.range('weight', 'Peso', 40, 170, 100), P.tog('spine', 'Asse', true), P.tog('arcs', 'Falce', false), P.glow(false), P.text('', 'Titolo'), P.face('gotico'), P.caps(), P.grain(25)],
+  params: [P.tone(0), P.mat(1), P.sel('sil', 'Sagoma', ['Dal seme', ...SILHOUETTES.map(x => x.label)]), P.sel('sym', 'Simmetria', ['Specchio', 'Rotazione']), P.range('strokes', 'Bracci', 6, 11, 9), P.range('spikes', 'Spine', 0, 3, 2), P.range('hook', 'Uncini', 0, 100, 60),
+    P.range('weight', 'Peso', 40, 170, 100), P.tog('spine', 'Nucleo', true), P.tog('arcs', 'Falce', false), P.glow(false), P.text('', 'Titolo'), P.face('gotico'), P.caps(), P.grain(25)],
   render: o => {
     const t = tone(o), S = SS(o), r = rng(o.seed), title = str(o, 'text')
     // centro ottico: un poco sopra il centro geometrico
     const cy = o.H / 2 - S * 0.02 - (title ? S * 0.05 : 0)
     const m = drawMask(o.W, o.H, ctx => sigil(ctx, r, o.W / 2, cy, S * (title ? 0.74 : 0.84), {
-      strokes: num(o, 'strokes'), spikes: num(o, 'spikes'), hook: num(o, 'hook') / 100, weight: num(o, 'weight') / 100, spine: on(o, 'spine'), arcs: on(o, 'arcs'), silhouette: num(o, 'sil') - 1,
+      strokes: num(o, 'strokes'), spikes: num(o, 'spikes'), hook: num(o, 'hook') / 100, weight: num(o, 'weight') / 100, spine: on(o, 'spine'), arcs: on(o, 'arcs'), silhouette: num(o, 'sil') - 1, symmetry: num(o, 'sym'),
     }))
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'))

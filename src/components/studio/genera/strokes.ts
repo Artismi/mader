@@ -147,116 +147,122 @@ export function roseThorn(ctx: Ctx, pts: Pt[], i: number, side: number, halfAt: 
 const ptsFor = (px: number) => Math.max(2, px / 1.5)
 
 /**
- * Sigillo neo-tribale progettato con regole, non a caso:
- * - la sagoma decide la lunghezza di ogni braccio;
- * - gerarchia a sezione aurea: primario, secondari (1/φ), terziari (1/φ²) per
- *   spessore, spine e rami;
- * - ritmo: bracci a intervalli regolari, uncini tutti nello stesso verso,
- *   spine nei punti aurei del tratto;
- * - il seme sceglie solo tra decisioni discrete (sagoma, grammatica, curvatura).
+ * Frusta (curva estetica): la curvatura cresce in modo monotono e accelerato,
+ * κ(t) = k0 + (k1 − k0)·tᵞ. Con k0 di segno opposto a k1 la linea parte con una
+ * leggera controcurva, corre tesa e si arrotola alla fine: la "coup de fouet".
+ * c0 e c1 sono curvature adimensionali (radianti per lunghezza del tratto).
  */
-export function sigil(ctx: Ctx, r: Rnd, cx: number, cy: number, S: number, o: SigilOpts) {
+export function whip(x: number, y: number, angle: number, L: number, c0: number, c1: number, gamma = 2.6, step = 1.25) {
+  const n = Math.max(6, Math.ceil(L / step)), ds = L / n
+  const pts: Pt[] = [[x, y]], angles = [angle]
+  for (let i = 1; i <= n; i++) {
+    const t = i / n
+    angle += ((c0 + (c1 - c0) * Math.pow(t, gamma)) / L) * ds
+    x += Math.cos(angle) * ds; y += Math.sin(angle) * ds
+    pts.push([x, y]); angles.push(angle)
+  }
+  return { pts, angles }
+}
+
+/** profilo a pennellata: pieno appena dopo l'attacco, poi un assottigliamento lunghissimo */
+export const flick = (W: number, attack = 0.07, tail = 1.35) => (t: number) =>
+  W * Math.pow(Math.min(1, t / attack), 0.55) * Math.pow(1 - t, tail)
+
+/** simmetrie: specchio sull'asse verticale o rotazione di 180° (una S dinamica) */
+export function symmetric(ctx: Ctx, cx: number, cy: number, mode: number, draw: () => void) {
+  draw()
+  ctx.save()
+  if (mode === 1) { ctx.translate(cx * 2, cy * 2); ctx.scale(-1, -1) }
+  else { ctx.translate(cx * 2, 0); ctx.scale(-1, 1) }
+  draw()
+  ctx.restore()
+}
+
+/**
+ * Sigillo neo-tribale con slancio:
+ * - nucleo a mandorla fatto di due fruste che si toccano in punta (niente rette);
+ * - bracci a frusta che partono dal bordo del nucleo, corrono tesi e si arrotolano;
+ * - la sagoma decide le lunghezze, la sezione aurea i pesi (primario, 1/φ, 1/φ²);
+ * - specchio oppure rotazione di 180°; i bracci possono incrociare l'asse;
+ * - il seme sceglie solo tra decisioni discrete.
+ */
+export function sigil(ctx: Ctx, r: Rnd, cx: number, cy: number, S: number, o: SigilOpts & { symmetry?: number }) {
   const wt = o.weight
   const arms = Math.max(3, Math.min(5, Math.round(o.strokes / 2.2)))
   const sil = SILHOUETTES[o.silhouette != null && o.silhouette >= 0 ? o.silhouette % SILHOUETTES.length : Math.floor(r() * SILHOUETTES.length)]
-  const grammar = GRAMMARS[Math.floor(r() * GRAMMARS.length)]
-  const curl = [0.7, 0.95, 1.2][Math.floor(r() * 3)]           // curvatura unica per tutta la figura
-  const spread = [0.85, 1, 1.15][Math.floor(r() * 3)]          // apertura unica
-  const spineW = S * 0.015 * wt
-  const Lmax = S * 0.44
-  const blade = (W: number) => (t: number) => W * (0.22 * Math.pow(1 - t, 3) + Math.pow(Math.sin(Math.PI * Math.pow(t, 0.6)), 1.1))
+  const tension = [0.55, 0.8, 1.05][Math.floor(r() * 3)]       // controcurva iniziale (slancio)
+  const curl = [6.5, 8, 9.5][Math.floor(r() * 3)]               // ricciolo finale
+  const spread = [0.9, 1, 1.12][Math.floor(r() * 3)]
+  const H = S * 0.47, coreW = S * 0.028 * wt
   type Shape = { pts: Pt[]; prof: (t: number) => number; thorns: { i: number; side: number; h: number; base: number }[] }
   const shapes: Shape[] = []
 
-  // posizioni regolari e lunghezze dalla sagoma
-  const specs = Array.from({ length: arms }, (_, k) => { const u = (k + 0.5) / arms; return { k, u, len: Math.max(0.28, sil.e(u)) } })
+  // nucleo: due fruste lunghe dall'alto in basso, tese, che si chiudono in punta
+  // nucleo a mandorla: arco a curvatura costante che si richiude esattamente sull'asse
+  const bulge = [0.1, 0.13, 0.16][Math.floor(r() * 3)] * (0.8 + 0.4 * wt)
+  const core = whip(cx, cy - H, Math.PI / 2 - bulge, H * 2 / (Math.sin(bulge) / bulge), bulge * 2, bulge * 2, 1)
+  void coreW
+  const coreAt = (u: number) => { const i = Math.min(core.pts.length - 1, Math.round(u * (core.pts.length - 1))); return { p: core.pts[i], a: core.angles[i] } }
+
+  const specs = Array.from({ length: arms }, (_, k) => { const u = (k + 0.5) / arms; return { k, u, len: Math.max(0.3, sil.e(u)) } })
   const order = [...specs].sort((a, b) => b.len - a.len)
   const rank = new Map(order.map((sp, i) => [sp.k, i === 0 ? 0 : i <= 2 ? 1 : 2]))
-  const Wp = S * 0.036 * wt
 
   for (const sp of specs) {
     const { k, u } = sp
-    const rk = rank.get(k)!
-    const scale = Math.pow(PHI, -rk)
+    const rk = rank.get(k)!, scale = Math.pow(PHI, -rk)
     const vert = (u - 0.5) * 2
-    const y0 = cy + vert * S * 0.31
-    const P0: Pt = [cx + spineW * 0.3, y0]
-    const kind = grammar[Math.min(grammar.length - 1, Math.floor(u * grammar.length))]
-    const L = Lmax * sp.len * (kind === 'drip' ? 0.9 : 1)
-    const W = Wp * (0.55 + 0.45 * scale)
-    let body: Pt[], turn: number
-    if (kind === 'flame') {
-      const a0 = -Math.PI / 2 + 0.55 * spread; turn = -0.7 * curl
-      const P3 = add(P0, dirv(a0 + turn * 0.45), L * 0.75)
-      body = bezier(P0, add(P0, dirv(a0), L * 0.38), add(P3, dirv(a0 + turn), -L * 0.28), P3)
-    } else if (kind === 'drip') {
-      const a0 = Math.PI / 2 - 0.5 * spread; turn = 0.4 * curl
-      const P3 = add(P0, dirv(a0 + turn * 0.5), L)
-      body = bezier(P0, add(P0, dirv(a0), L * 0.4), add(P3, dirv(a0 + turn), -L * 0.45), P3)
-    } else if (kind === 'recurve') {
-      const up = vert <= 0 ? -1 : 1
-      const a0 = up * 0.55 * spread; turn = -up * 2.3 * Math.min(1.1, curl)
-      const P3 = add(P0, dirv(a0 + turn * 0.5), L * 0.62)
-      body = bezier(P0, add(P0, dirv(a0), L * 0.62), add(P3, dirv(a0 + turn), -L * 0.45), P3)
-    } else {
-      const a0 = vert * 1.05 * spread
-      turn = (Math.abs(vert) < 0.15 ? -1 : -Math.sign(vert)) * 0.9 * curl
-      const P3 = add(P0, dirv(a0 + turn * 0.35), L)
-      body = bezier(P0, add(P0, dirv(a0), L * 0.45), add(P3, dirv(a0 + turn), -L * 0.4), P3)
-    }
-    let pts = body
-    if (kind !== 'drip') {
-      const hookLen = L * (0.08 + 0.22 * o.hook) * scale, hookTurn = Math.sign(turn) * Math.PI * (0.6 + 0.8 * o.hook)
-      const end = body[body.length - 1]
-      const { pts: hook } = walk(end[0], end[1], angleAt(body, body.length - 1), hookLen, t => (hookTurn / hookLen) * 2 * t, 1.5)
-      pts = body.concat(hook.slice(1))
-    }
-    const prof = blade(W)
-    // spine: solo dove c'è peso, nei punti aurei del tratto, decrescenti
+    // attacco sul nucleo (o sull'asse), tangente al flusso: in alto verso l'alto, in basso verso il basso
+    const at = o.spine ? coreAt(0.12 + u * 0.76) : { p: [cx, cy - H * 0.76 + u * H * 1.52] as Pt, a: Math.PI / 2 }
+    const up = vert < 0 || (Math.abs(vert) < 0.2 && r() < 0.5)
+    const L = S * 0.52 * sp.len * (0.72 + 0.28 * scale)
+    const peel = (0.2 + Math.abs(vert) * 0.25) * spread
+    // angolo iniziale: quasi parallelo al nucleo, appena staccato verso l'esterno
+    const a0 = up ? -Math.PI / 2 + peel : Math.PI / 2 - peel
+    // curvatura: prima apre verso l'esterno (c0), poi si arrotola di ritorno verso l'asse (c1)
+    const sgn = up ? 1 : -1
+    const open = (1.6 + (1 - Math.abs(vert)) * 1.6) * tension * spread
+    const { pts, angles } = whip(at.p[0], at.p[1], a0, L, sgn * open, -sgn * curl * (0.75 + 0.25 * scale), 2.3)
+    const dir = -sgn
+    const W = Math.min(L * 0.075, S * 0.032) * wt * (0.6 + 0.4 * scale)
+    const prof = (t: number) => W * Math.pow(Math.min(1, t / 0.22), 0.8) * Math.pow(1 - t, 1.3)   // attacco graduale: niente bulbi
     const thorns: Shape['thorns'] = []
     const nT = rk === 0 ? o.spikes : rk === 1 ? Math.max(0, o.spikes - 1) : 0
-    const golden = [0.236, 0.382, 0.5, 0.618]
+    const golden = [0.3, 0.42, 0.54]
     for (let q = 0; q < Math.min(nT, golden.length); q++) {
-      const t = golden[q] * 0.85
-      thorns.push({ i: Math.floor(t * (pts.length - 1)), side: -Math.sign(turn) || 1, h: S * 0.05 * wt * scale * Math.pow(PHI, -q * 0.6), base: ptsFor(S * 0.05 * wt * scale) })
+      const t = golden[q]
+      thorns.push({ i: Math.floor(t * (pts.length - 1)), side: dir, h: S * 0.042 * wt * scale * Math.pow(PHI, -q * 0.5), base: ptsFor(S * 0.045 * wt * scale) })
     }
     shapes.push({ pts, prof, thorns })
-    // ramo: solo sul primario, staccato tangente nel punto aureo
-    if (rk === 0 && kind !== 'drip') {
-      const tb = 0.382, ib = Math.floor(tb * (body.length - 1))
-      const Pb = body[ib], ab = angleAt(body, ib)
-      const lb = L / PHI / PHI * 1.3, ae = ab - Math.sign(turn) * 1.2 * curl
-      const Pe = add(Pb, dirv(ab - Math.sign(turn) * 0.45 * curl), lb)
-      const bpts = bezier(Pb, add(Pb, dirv(ab), lb * 0.45), add(Pe, dirv(ae), -lb * 0.35), Pe)
-      const w0 = prof(tb) / PHI
-      shapes.push({ pts: bpts, prof: t => w0 * Math.pow(1 - t, 0.85), thorns: [] })
+    // contro-frusta dal punto aureo: si stacca dal lato esterno e si arrotola al contrario
+    if (rk <= 1) {
+      const tb = 0.382, ib = Math.floor(tb * (pts.length - 1))
+      const lb = L / PHI / (rk === 0 ? 1.15 : PHI)
+      const b = whip(pts[ib][0], pts[ib][1], angles[ib] - sgn * 0.12, lb, -sgn * 0.6 * tension, sgn * curl * 0.85, 2.2)
+      shapes.push({ pts: b.pts, prof: t => prof(tb) * 0.62 * Math.pow(1 - t, 1.2), thorns: [] })
     }
   }
 
-  mirrored(ctx, cx, () => {
+  if (o.spine) {
+    // lama piena: le due metà dell'arco chiudono un fuso affilato, con una fessura interna
+    const blade = (pts: Pt[], k: number, sy: number) => {
+      ctx.beginPath()
+      pts.forEach(([x, y], i) => { const X = cx + (x - cx) * k, Y = cy + (y - cy) * sy; if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y) })
+      for (let i = pts.length - 1; i >= 0; i--) { const [x, y] = pts[i]; ctx.lineTo(cx - (x - cx) * k, cy + (y - cy) * sy) }
+      ctx.closePath(); ctx.fill()
+    }
+    blade(core.pts, 1, 1)
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; blade(core.pts, 0.28, 0.6); ctx.restore()
+  }
+  symmetric(ctx, cx, cy, o.symmetry ?? 0, () => {
     for (const s of shapes) {
       taper(ctx, s.pts, s.prof)
       for (const th of s.thorns) roseThorn(ctx, s.pts, th.i, th.side, j => s.prof(j / (s.pts.length - 1)) / 2, th.h, th.base, 0.9)
     }
   })
-
-  if (o.spine) {
-    const top = cy - S * 0.47, bot = cy + S * 0.47
-    const pts: Pt[] = []
-    for (let i = 0; i <= 400; i++) pts.push([cx, top + (bot - top) * (i / 400)])
-    taper(ctx, pts, t => spineW * Math.pow(Math.sin(Math.PI * t), 0.55))
-    // nodi sugli attacchi dei bracci: il ritmo si legge sull'asse
-    for (const sp of specs) {
-      const yy = cy + ((sp.u - 0.5) * 2) * S * 0.31, d = spineW * (rank.get(sp.k) === 0 ? 1.5 : 1.1)
-      ctx.beginPath(); ctx.moveTo(cx, yy - d * 2.6); ctx.quadraticCurveTo(cx + d * 0.35, yy - d * 0.35, cx + d, yy); ctx.quadraticCurveTo(cx + d * 0.35, yy + d * 0.35, cx, yy + d * 2.6)
-      ctx.quadraticCurveTo(cx - d * 0.35, yy + d * 0.35, cx - d, yy); ctx.quadraticCurveTo(cx - d * 0.35, yy - d * 0.35, cx, yy - d * 2.6); ctx.fill()
-    }
-  }
   if (o.arcs) {
-    const R = S * 0.3, a0 = -Math.PI / 2 + 0.35, a1 = Math.PI / 2 - 0.35
-    const pts: Pt[] = []
-    for (let i = 0; i <= 300; i++) { const a = a0 + (a1 - a0) * (i / 300); pts.push([cx + Math.cos(a) * R * 1.05, cy + Math.sin(a) * R]) }
-    mirrored(ctx, cx, () => taper(ctx, pts, spindle(S * 0.011 * wt, 0.7)))
+    const { pts } = whip(cx, cy - S * 0.3, -0.2, S * 0.62, 1.2, 4.2, 1.6)
+    symmetric(ctx, cx, cy, o.symmetry ?? 0, () => taper(ctx, pts, flick(S * 0.012 * wt, 0.1, 1.2)))
   }
 }
 
