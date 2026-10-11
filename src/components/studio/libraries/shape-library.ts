@@ -1,4 +1,10 @@
+import { CELESTIAL_CATEGORY, CELESTIAL_SHAPES, CELESTIAL_ICONS } from './celestial-library'
+
+// Categorie con forme piene (fill invece di tratto): anteprima e inserimento pieni.
+export const FILLED_SHAPE_CATEGORIES = new Set<string>([CELESTIAL_CATEGORY])
+
 export const SHAPE_LIBRARY = {
+  [CELESTIAL_CATEGORY]: CELESTIAL_SHAPES,
   'STILE BRUTALIST (Acid Thorns)': [
     { name:'Thorn A',     path:'M 50 0 L 53 47 L 100 50 L 53 53 L 50 100 L 47 53 L 0 50 L 47 47 Z' },
     { name:'Thorn B',     path:'M 50 5 L 55 45 L 95 50 L 55 55 L 50 95 L 45 55 L 5 50 L 45 45 Z' },
@@ -110,5 +116,6 @@ export const ICONS_LIBRARY = [
   { name:'User',    path:'M 20 21 V 19 A 4 4 0 0 0 16 15 H 8 A 4 4 0 0 0 4 19 V 21 M 12 11 A 4 4 0 1 0 12 3 A 4 4 0 1 0 12 11 Z' },
   { name:'Mail',    path:'M 4 4 H 20 C 21.1 4 22 4.9 22 6 V 18 C 22 19.1 21.1 20 20 20 H 4 C 2.9 20 2 19.1 2 18 V 6 C 2 4.9 2.9 4 4 4 Z M 22 6 L 12 13 L 2 6' },
   { name:'Search',  path:'M 11 19 A 8 8 0 1 0 11 3 A 8 8 0 1 0 11 19 Z M 21 21 L 16.65 16.65' },
-  { name:'Grid',    path:'M 3 3 H 10 V 10 H 3 Z M 14 3 H 21 V 10 H 14 Z M 3 14 H 10 V 21 H 3 Z M 14 14 H 21 V 21 H 14 Z' }
+  { name:'Grid',    path:'M 3 3 H 10 V 10 H 3 Z M 14 3 H 21 V 10 H 14 Z M 3 14 H 10 V 21 H 3 Z M 14 14 H 21 V 21 H 14 Z' },
+  ...CELESTIAL_ICONS
 ];
