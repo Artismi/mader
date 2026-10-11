@@ -259,31 +259,56 @@ function intersect(a: Circle, b: Circle): Pt[] {
 export function coffeeRings(W: number, H: number, cx: number, cy: number, R: number, r: Rnd, S: number, o: { big: number; bubbles: number; gap: number; stars: number; detail: number }): Mask {
   const circles: Circle[] = []
   for (let k = 0; k < o.big; k++) {
-    const a = r() * Math.PI * 2, off = R * range(r, 0.05, 0.35)
-    circles.push({ x: cx + Math.cos(a) * off, y: cy + Math.sin(a) * off, r: R * range(r, 0.6, 0.95), big: true })
+    // centri distribuiti attorno al centro della tavola: i cerchi si tagliano ad angoli netti
+    const a = (k / o.big) * Math.PI * 2 + range(r, -0.5, 0.5), off = R * range(r, 0.3, 0.55)
+    circles.push({ x: cx + Math.cos(a) * off, y: cy + Math.sin(a) * off, r: R * range(r, 0.55, 0.8), big: true })
   }
-  // la massa: una membrana (pareti sottili, nodi pieni a stella) che cresce lungo un arco
-  // di un cerchio grande e si assottiglia a lente alle estremità
-  const arcMass = (host: Circle, mid: number, span: number, thick: number, cells: number, seed: number) => {
-    const hx = (host.x - cx) / R, hy = (host.y - cy) / R, hr = host.r / R
-    return membrane(W, H, cx, cy, R, rng(seed), {
-      shape: 0, cells, web: 1.15 * o.gap, holes: 0.97, claws: o.stars, clawLen: 0.5, mirror: false, detail: o.detail * 0.6, varied: 0.9,
-      inside: (x, y) => {
-        let a = Math.atan2(y - hy, x - hx) - mid
-        a = Math.atan2(Math.sin(a), Math.cos(a))
-        if (Math.abs(a) > span / 2) return false
-        const w = thick * Math.pow(Math.cos((a / span) * Math.PI), 0.7)
-        return Math.abs(Math.hypot(x - hx, y - hy) - hr) < w / 2
-      },
-    })
+  // macchie d'incrocio: in ogni intersezione scelta partono quattro steli (due per
+  // cerchio, nei due versi) che si assottigliano lungo il cerchio; nella giunzione
+  // tra i due archi l'inchiostro si allarga come un menisco
+  const big0 = circles.filter(c => c.big)
+  type Junction = { p: Pt; A: Circle; B: Circle; stems: [number, number, number, number]; W0: number; Lj: number }
+  const junctions: Junction[] = []
+  const allX: { p: Pt; i: number; j: number }[] = []
+  for (let i = 0; i < big0.length; i++) for (let j = i + 1; j < big0.length; j++) for (const p of intersect(big0[i], big0[j])) allX.push({ p, i, j })
+  // le macchie: le intersezioni più "aperte" (angolo stretto = giunzione lunga e bella), al massimo tre
+  const order = allX.map(x => ({ ...x, k: r() })).sort((p, q) => p.k - q.k)
+  for (const x of order) {
+    if (junctions.length >= Math.max(1, Math.round(o.gap * 2))) break
+    if (junctions.some(q => Math.hypot(q.p[0] - x.p[0], q.p[1] - x.p[1]) < R * 0.45)) continue
+    const big = junctions.length === 0
+    const L = R * (big ? range(r, 0.55, 0.9) : range(r, 0.3, 0.55))
+    junctions.push({ p: x.p, A: big0[x.i], B: big0[x.j], stems: [L * range(r, 0.6, 1.2), L * range(r, 0.6, 1.2), L * range(r, 0.6, 1.2), L * range(r, 0.6, 1.2)], W0: R * (big ? 0.085 : 0.055) * o.gap, Lj: R * (big ? 0.22 : 0.14) })
   }
-  const host = circles[Math.floor(r() * circles.length)]
-  const ink = arcMass(host, r() * Math.PI * 2, range(r, 1.3, 2), range(r, 0.5, 0.66), Math.round(o.bubbles * 2.2), Math.floor(r() * 1e6))
-  if (false && circles.length > 1) {   // secondo grumo disattivato: produceva frammenti casuali
-    const other = circles.find(c => c !== host)!
-    const small = arcMass(other, r() * Math.PI * 2, range(r, 0.6, 0.9), range(r, 0.3, 0.38), Math.max(6, Math.round(o.bubbles * 0.4)), Math.floor(r() * 1e6))
-    for (let k = 0; k < ink.a.length; k++) if (small.a[k] > ink.a[k]) ink.a[k] = small.a[k]
+  const ink: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
+  const angDiff = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b))
+  for (const J of junctions) {
+    const reach = Math.max(...J.stems) + J.W0
+    const x0 = Math.max(0, Math.floor(J.p[0] - reach)), x1 = Math.min(W - 1, Math.ceil(J.p[0] + reach))
+    const y0 = Math.max(0, Math.floor(J.p[1] - reach)), y1 = Math.min(H - 1, Math.ceil(J.p[1] + reach))
+    const aA = Math.atan2(J.p[1] - J.A.y, J.p[0] - J.A.x), aB = Math.atan2(J.p[1] - J.B.y, J.p[0] - J.B.x)
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      // stelo sul cerchio A e sul cerchio B: distanza dal filo e lunghezza d'arco dall'incrocio
+      const stem = (C: Circle, a0: number, Lp: number, Lm: number) => {
+        const d = Math.abs(Math.hypot(x - C.x, y - C.y) - C.r)
+        const s = angDiff(Math.atan2(y - C.y, x - C.x), a0) * C.r
+        const L = s >= 0 ? Lp : Lm, t = Math.abs(s) / L
+        if (t >= 1) return false
+        const w = J.W0 * Math.pow(1 - t, 1.6) * (1 - 0.35 * Math.exp(-Math.pow(t / 0.06, 2)))   // un filo di strozzatura all'incrocio
+        return d < w / 2
+      }
+      const k = y * W + x
+      if (stem(J.A, aA, J.stems[0], J.stems[1]) || stem(J.B, aB, J.stems[2], J.stems[3])) { ink.a[k] = 255; continue }
+      // menisco: lo spazio tra i due archi vicino all'incrocio si riempie, sempre meno lontano
+      const dA = Math.abs(Math.hypot(x - J.A.x, y - J.A.y) - J.A.r), dB = Math.abs(Math.hypot(x - J.B.x, y - J.B.y) - J.B.r)
+      const dp = Math.hypot(x - J.p[0], y - J.p[1])
+      if (dp < J.Lj && dA + dB < J.W0 * 2.4 * Math.pow(1 - dp / J.Lj, 1.4)) ink.a[k] = 255
+    }
   }
+  // raccordi morbidi tra steli e menisco
+  const soft = liquid(ink, R * 0.008, 0.5, 0.05)
+  ink.a.set(soft.a)
+  const stained = junctions.map(j => j.p)
   const lines = drawMask(W, H, ctx => {
     const hair = Math.max(1, S * 0.0022)
     ctx.lineWidth = hair; ctx.lineCap = 'butt'
@@ -304,7 +329,7 @@ export function coffeeRings(W: number, H: number, cx: number, cy: number, R: num
     const nodes: Pt[] = []
     const big = circles.filter(c => c.big)
     for (let i = 0; i < big.length; i++) for (let j = i + 1; j < big.length; j++) for (const p of intersect(big[i], big[j])) {
-      if (r() > o.stars || nodes.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < R * 0.12)) continue
+      if (r() > o.stars || nodes.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < R * 0.12) || stained.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < 2)) continue
       nodes.push(p)
       const ta = Math.atan2(p[1] - big[i].y, p[0] - big[i].x) + Math.PI / 2, tb = Math.atan2(p[1] - big[j].y, p[0] - big[j].x) + Math.PI / 2
       const L = S * range(r, 0.035, 0.07), W0 = S * 0.012

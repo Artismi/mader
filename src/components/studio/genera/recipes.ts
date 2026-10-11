@@ -163,7 +163,7 @@ const membrana: Recipe = {
     const { c, ctx } = stage(o, t)
     const mat = MATS[num(o, 'mat')] ?? null
     if (sh === 1) {
-      const m = coffeeRings(o.W, o.H, cx, cy, S * 0.34, rng(o.seed), S, { big: 2 + Math.round(num(o, 'chords') / 2), bubbles: Math.round(base.cells * 0.6), gap: base.web, stars: base.claws, detail: base.detail })
+      const m = coffeeRings(o.W, o.H, cx, cy, S * 0.34, rng(o.seed), S, { big: 2 + Math.round(num(o, 'chords') / 2), bubbles: Math.round(base.cells * 0.6), gap: base.web, stars: base.claws * 0.55, detail: base.detail })
       paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
     } else {
       const shape = [0, 0, 2, 3][sh]
