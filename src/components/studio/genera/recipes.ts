@@ -154,9 +154,16 @@ const sigillo: Recipe = {
     const t = tone(o), S = SS(o), r = rng(o.seed), title = str(o, 'text')
     // centro ottico: un poco sopra il centro geometrico
     const cy = o.H / 2 - S * 0.02 - (title ? S * 0.05 : 0)
-    const m = drawMask(o.W, o.H, ctx => sigil(ctx, r, o.W / 2, cy, S * (title ? 0.74 : 0.84), {
-      strokes: num(o, 'strokes'), spikes: num(o, 'spikes'), hook: num(o, 'hook') / 100, weight: num(o, 'weight') / 100, spine: on(o, 'spine'), arcs: on(o, 'arcs'), silhouette: num(o, 'sil') - 1, symmetry: num(o, 'sym'),
-    }))
+    const opts = { strokes: num(o, 'strokes'), spikes: num(o, 'spikes'), hook: num(o, 'hook') / 100, weight: num(o, 'weight') / 100, spine: on(o, 'spine'), arcs: on(o, 'arcs'), silhouette: num(o, 'sil') - 1, symmetry: num(o, 'sym') }
+    const draw = (k: number) => drawMask(o.W, o.H, ctx => sigil(ctx, rng(o.seed), o.W / 2, cy, S * (title ? 0.74 : 0.84) * k, opts))
+    let m = draw(1)
+    // la figura resta dentro l'area di sicurezza: se sborda, si ridisegna in scala
+    const b = inkBox(m), safeX = o.W * 0.09, safeTop = o.H * 0.08, safeBot = o.H * (title ? 0.8 : 0.92)
+    if (b) {
+      const k = Math.min(1, (o.W / 2 - safeX) / Math.max(o.W / 2 - b.x0, b.x1 - o.W / 2), (cy - safeTop) / Math.max(1, cy - b.y0), (safeBot - cy) / Math.max(1, b.y1 - cy))
+      if (k < 0.995) m = draw(k * 0.98)
+    }
+    void r
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'))
     if (title) {

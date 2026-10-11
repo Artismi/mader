@@ -387,8 +387,8 @@ export function pixelSort(ctx: Ctx, w: number, h: number, lo: number, hi: number
 
 // ─── distanza esatta ─────────────────────────────────────────────────────────
 
-/** trasformata di distanza euclidea 1D (Felzenszwalb & Huttenlocher) */
-function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) {
+/** trasformata di distanza euclidea 1D (Felzenszwalb & Huttenlocher), con indice del sito più vicino */
+function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array, arg: Int32Array) {
   let k = 0
   v[0] = 0; z[0] = -Infinity; z[1] = Infinity
   for (let q = 1; q < n; q++) {
@@ -397,30 +397,36 @@ function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Fl
     k++; v[k] = q; z[k] = s; z[k + 1] = Infinity
   }
   k = 0
-  for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; const dq = q - v[k]; d[q] = dq * dq + f[v[k]] }
+  for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; const dq = q - v[k]; d[q] = dq * dq + f[v[k]]; arg[q] = v[k] }
 }
 
 /**
- * Distanza (in pixel) di ogni punto dell'inchiostro dal bordo più vicino, con
- * correzione sub-pixel dalla copertura dell'antialiasing.
+ * Distanza (in pixel) di ogni punto dell'inchiostro dal bordo, al sub-pixel: si
+ * trova il pixel esterno più vicino e si corregge con la sua copertura
+ * (quanto del bordo cade dentro quel pixel). Senza correzione, sui bordi quasi
+ * dritti la distanza avanza a scalini e i riflessi del cromo si increspano.
  */
 export function distance(m: Mask): Float32Array {
   const W = m.w, H = m.h, N = Math.max(W, H), BIG = 1e12
-  const f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N + 1)
-  const g = new Float64Array(W * H)
-  for (let i = 0; i < g.length; i++) g[i] = m.a[i] > 127 ? BIG : 0
+  const f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N + 1), arg = new Int32Array(N)
+  const g = new Float64Array(W * H), colArg = new Int32Array(W * H)
   for (let x = 0; x < W; x++) {
-    for (let y = 0; y < H; y++) f[y] = g[y * W + x]
-    edt1d(f, H, d, v, z)
-    for (let y = 0; y < H; y++) g[y * W + x] = d[y]
+    for (let y = 0; y < H; y++) f[y] = m.a[y * W + x] > 127 ? BIG : 0
+    edt1d(f, H, d, v, z, arg)
+    for (let y = 0; y < H; y++) { g[y * W + x] = d[y]; colArg[y * W + x] = arg[y] }
   }
   const out = new Float32Array(W * H)
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) f[x] = g[y * W + x]
-    edt1d(f, W, d, v, z)
+    edt1d(f, W, d, v, z, arg)
     for (let x = 0; x < W; x++) {
       const i = y * W + x, a = m.a[i] / 255
-      out[i] = a <= 0 ? 0 : Math.max(0, Math.sqrt(d[x]) - 0.5 + a * (m.a[i] > 127 ? 0.5 : 1))
+      if (a <= 0) continue
+      if (m.a[i] <= 127) { out[i] = a; continue }
+      const sx = arg[x], sy = colArg[y * W + sx]
+      if (d[x] >= BIG) { out[i] = N; continue }
+      const sa = m.a[sy * W + sx] / 255
+      out[i] = Math.max(0, Math.sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy)) - 0.5 + sa)
     }
   }
   return out
