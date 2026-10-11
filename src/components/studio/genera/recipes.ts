@@ -10,6 +10,7 @@ import {
 } from './raster'
 import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
 import { shade, type Material } from './material'
+import { SHAPES, crescent, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -142,6 +143,75 @@ function wordSize(s: string, f: typeof FACES[FaceId], width: number) {
   const { ctx } = makeCanvas(4, 4)
   const str2 = 'upper' in f && f.upper ? s.toUpperCase() : s
   return fitSize(ctx, str2, f, width)
+}
+
+// ─── ORGANICI (cyber-gotico) ─────────────────────────────────────────────────
+
+/** anelli concentrici spezzati, come nei disegni a mano attorno alle membrane */
+function brokenRings(ctx: Ctx, r: Rnd, cx: number, cy: number, R: number, S: number, n: number) {
+  for (let k = 0; k < n; k++) {
+    const rr = R * (1.08 + k * 0.09 + range(r, -0.02, 0.03)), ox = range(r, -0.04, 0.04) * R, oy = range(r, -0.04, 0.04) * R
+    let a = r() * Math.PI * 2
+    const end = a + Math.PI * 2
+    while (a < end) {
+      const len = range(r, 0.25, 1.4), gap = range(r, 0.06, 0.35)
+      const pts: Pt[] = []
+      for (let q = 0; q <= 60; q++) { const t = a + Math.min(len, end - a) * (q / 60); pts.push([cx + ox + Math.cos(t) * rr, cy + oy + Math.sin(t) * rr]) }
+      taper(ctx, pts, t => S * 0.0028 * (0.35 + 0.65 * Math.pow(Math.sin(Math.PI * t), 0.3)))
+      a += len + gap
+    }
+  }
+}
+
+const membrana: Recipe = {
+  id: 'membrana', label: 'Membrana', cat: 'Organici', hint: 'tessuto cellulare con fori tondi, incroci raccordati e artigli sul bordo',
+  params: [P.sel('shape', 'Sagoma', SHAPES.map(x => x.label)), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 30), P.range('web', 'Tessuto', 30, 220, 100), P.range('holes', 'Fori', 30, 100, 90),
+    P.range('claws', 'Artigli', 0, 100, 70), P.range('clawLen', 'Lunghezza artigli', 20, 200, 100), P.tog('mirror', 'Simmetrica', true), P.tog('skin', 'Pelle', false), P.tog('rings', 'Anelli', false), P.glow(false), P.caps(), P.grain(20)],
+  render: o => {
+    const t = tone(o), S = SS(o), r = rng(o.seed), sh = num(o, 'shape')
+    const R = S * (sh === 0 ? 0.46 : 0.4), cx = o.W / 2, cy = o.H / 2 - S * 0.01
+    let m = membrane(o.W, o.H, cx, cy, R, r, { shape: sh, cells: num(o, 'cells'), web: num(o, 'web') / 100, holes: num(o, 'holes') / 100, claws: num(o, 'claws') / 100, clawLen: num(o, 'clawLen') / 100, mirror: on(o, 'mirror'), skin: on(o, 'skin') })
+    if (on(o, 'rings')) m = combine(m, drawMask(o.W, o.H, ctx => brokenRings(ctx, rng(o.seed + 3), cx, cy, R * 0.86, S, 3)), 'max')
+    const { c, ctx } = stage(o, t)
+    paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.012)
+    return finish(c, o, t, 'membrana', ['CELLULA', code(o, 'cell'), ROMAN_YEAR, 'BIO—GOTHIC'])
+  },
+}
+
+const rete: Recipe = {
+  id: 'rete', label: 'Rete neurale', cat: 'Organici', hint: 'nodi d\'inchiostro a stella uniti da curve sottili come capelli',
+  params: [P.tone(1), P.mat(0), P.range('nodes', 'Nodi', 4, 30, 14), P.range('links', 'Legami', 1, 5, 3), P.range('tendrils', 'Tentacoli', 0, 5, 2), P.range('weight', 'Peso', 40, 200, 100), P.range('reach', 'Allungo', 30, 200, 100), P.glow(false), P.caps(), P.grain(15)],
+  render: o => {
+    const t = tone(o), S = SS(o), r = rng(o.seed)
+    const m = drawMask(o.W, o.H, ctx => neuralNet(ctx, r, o.W * 0.12, o.H * 0.1, o.W * 0.76, o.H * 0.8, S, { nodes: num(o, 'nodes'), links: num(o, 'links'), tendrils: num(o, 'tendrils'), weight: num(o, 'weight') / 100, reach: num(o, 'reach') / 100 }))
+    const { c, ctx } = stage(o, t)
+    paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.008)
+    return finish(c, o, t, 'rete', ['SYNAPSE', code(o, 'nrn'), ROMAN_YEAR, 'INK NETWORK'])
+  },
+}
+
+const falce: Recipe = {
+  id: 'falce', label: 'Falce gotica', cat: 'Organici', hint: 'falci ad ala con smerli concavi, punte interne e artigli',
+  params: [P.tone(0), P.mat(0), P.sel('layout', 'Composizione', ['Coppia', 'Singola', 'Corona']), P.range('scallops', 'Smerli', 3, 9, 5), P.range('depth', 'Profondità', 10, 90, 55),
+    P.range('thick', 'Spessore', 10, 60, 30), P.range('claws', 'Artigli', 0, 100, 50), P.glow(false), P.caps(), P.grain(20)],
+  render: o => {
+    const t = tone(o), S = SS(o), lay = num(o, 'layout')
+    const opts = { scallops: num(o, 'scallops'), depth: num(o, 'depth') / 100, thickness: num(o, 'thick') / 100, sweep: 2.3, claws: num(o, 'claws') / 100 }
+    const m = drawMask(o.W, o.H, ctx => {
+      const cx = o.W / 2, cy = o.H / 2
+      if (lay === 1) crescent(ctx, rng(o.seed), cx - S * 0.08, cy, S * 0.4, Math.PI, { ...opts, sweep: 2.5 })
+      else if (lay === 0) {
+        // coppia speculare: due ali che si guardano
+        crescent(ctx, rng(o.seed), cx - S * 0.04, cy, S * 0.4, Math.PI, opts)
+        ctx.save(); ctx.translate(2 * cx, 0); ctx.scale(-1, 1); crescent(ctx, rng(o.seed), cx - S * 0.04, cy, S * 0.4, Math.PI, opts); ctx.restore()
+      } else {
+        for (let k = 0; k < 3; k++) crescent(ctx, rng(o.seed + k), cx, cy, S * 0.38, -Math.PI / 2 + k * Math.PI * 2 / 3, { ...opts, sweep: 1.9 })
+      }
+    })
+    const { c, ctx } = stage(o, t)
+    paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
+    return finish(c, o, t, 'falce', ['FALX', code(o, 'falx'), ROMAN_YEAR, 'NOX'])
+  },
 }
 
 // ─── SIGILLI (cybersigilism) ─────────────────────────────────────────────────
@@ -506,11 +576,11 @@ const vortice: Recipe = {
 
 const bit: Recipe = {
   id: 'bit', label: 'Cromo 1-bit', cat: 'Distorsioni', hint: 'una forma cromata ridotta a pixel bianchi e neri',
-  params: [P.sel('shape', 'Forma', ['Sigillo', 'Crescita', 'Scritta']), P.text('VOID'), P.face('espanso'), P.tone(0), P.range('px', 'Pixel', 1, 10, 3), P.sel('mode', 'Trama', ['Atkinson', 'Bayer']), P.caps(), P.grain(0)],
+  params: [P.sel('shape', 'Forma', ['Membrana', 'Crescita', 'Scritta']), P.text('VOID'), P.face('espanso'), P.tone(0), P.range('px', 'Pixel', 1, 10, 3), P.sel('mode', 'Trama', ['Atkinson', 'Bayer']), P.caps(), P.grain(0)],
   render: o => {
     const t = tone(o), S = SS(o), sh = num(o, 'shape')
     let m: Mask
-    if (sh === 0) m = drawMask(o.W, o.H, ctx => sigil(ctx, rng(o.seed), o.W / 2, o.H / 2, S * 0.84, { strokes: 7, spikes: 2, hook: 0.6, weight: 1.5, spine: true, arcs: true }))
+    if (sh === 0) m = membrane(o.W, o.H, o.W / 2, o.H / 2, S * 0.44, rng(o.seed), { shape: 0, cells: 34, web: 1.2, holes: 0.85, claws: 0.7, clawLen: 1, mirror: true })
     else if (sh === 1) m = drawMask(o.W, o.H, ctx => mirrored(ctx, o.W / 2, () => growth(ctx, rng(o.seed), o.seed, o.W / 2, o.H * 0.84, -Math.PI / 2 - 0.25, S, { depth: 5, spread: 0.45, weight: 1.5, nodes: true })))
     else { const f = face(o), w = str(o, 'text') || ' ', size = Math.min(wordSize(w, f, o.W * 0.84), S * 0.4); m = liquid(drawMask(o.W, o.H, ctx => text(ctx, w, o.W / 2, o.H / 2 + size * 0.35, f, size, 'center')), S * 0.006, 0.5, 0.1) }
     const chrome = shade(m, 'cromo', S * 0.016, 0.9)
@@ -716,7 +786,7 @@ const simbolo: Recipe = {
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
-  sigillo, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
+  membrana, rete, falce, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
 ]
