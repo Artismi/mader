@@ -186,6 +186,7 @@ const simple = (key: string, frag: string, uni: (c: Ctx, p: Record<string, PVal>
 export const ASCII_SETS = [
   " .'`,-_:;~^\"+=<>*rcvszxoaeunmwqpdbkhXZOQ8#%&@",
   ' .,:;irsXA253hMHGS#9B&@', ' ░▒▓█', ' 01', ' ·•●', ' ／＼｜＿＃', ' .:-=+*#%@',
+  ' ⠁⠂⠃⠅⠇⠋⠏⠟⠿⡿⣟⣯⣷⣿', ' .·:-=≡▪■█',
 ]
 /** atlante dei caratteri: la scala viene riordinata per copertura reale (dal più vuoto
  *  al più pieno), poi quattro segni per i contorni: | / - \ */
@@ -196,7 +197,7 @@ function asciiAtlas(set: string) {
     const x = cv.getContext('2d', { willReadFrequently: true })!
     x.fillStyle = '#000'; x.fillRect(0, 0, cw, ch)
     x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'
-    x.font = `700 ${ch * 0.8}px "JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono", monospace`
+    x.font = `700 ${ch * 0.8}px "JetBrains Mono", "IBM Plex Mono", "DejaVu Sans Mono", "Noto Sans Symbols 2", "Segoe UI Symbol", monospace`
     x.fillText(c, cw / 2, ch / 2 + 2)
     let sum = 0; const d = x.getImageData(0, 0, cw, ch).data
     for (let i = 0; i < d.length; i += 4) sum += d[i]
@@ -299,20 +300,27 @@ const RUN: Partial<Record<string, Run>> = {
   ascii: (c, cur, p, amt) => {
     const set = ASCII_SETS[num(p.charset)] ?? ASCII_SETS[0]
     const n = new Set([...set]).size
-    const atlas = c.g.canvasTex(`ascii3|${set}`, () => asciiAtlas(set))
+    const atlas = c.g.canvasTex(`ascii4|${set}`, () => asciiAtlas(set))
     const cell = Math.max(3, num(p.cell, 7))
-    const ct = c.g.blur(cur, cell * 0.35 * c.z), loc = c.g.blur(cur, cell * 4 * c.z)
-    const mode = num(p.mode)
-    const out = c.g.pass('ascii', ASCII, c.W, c.H, std(c, cur, amt, { uAtlas: atlas, uCellTex: ct, uLocal: loc, uCell: cell, uN: n, uMode: mode, uColor: num(p.color, 100) / 100, uUnder: num(p.under, 45) / 100, uEdges: num(p.edges, 60) / 100, uCon: num(p.contrast, 50) / 100, uSat: num(p.saturation, 80) / 100 * 1.6, uInv: mode === 2 ? 1 : 0, uStyle: num(p.style, 65) / 100, uGrid: num(p.detail, 40) / 100, uAccent: rgb(p.accent, '#ff4d2e'), uInk: rgb(p.ink, '#f4f1ea'), uBg: rgb(p.bg, '#07080a') }))
-    c.g.release(ct, loc)
-    // la luce della foto torna sul risultato (sul nero solo in parte, il fondo resta scuro)
-    const k = 0.85 * (1 - num(p.style, 65) / 100) * (mode === 1 ? 0.45 : mode === 3 ? 0 : 1)
-    return k > 0 || num(p.glow, 25) > 0 ? finish(c, out, cur, cell * 2.2 * c.z, k, num(p.glow, 25) / 100 * (mode === 1 ? 0.9 : 0.45), mode === 3 ? 0 : 0.02) : out
+    const ct = c.g.blur(cur, cell * 0.35 * c.z), wide = c.g.blur(cur, cell * 1.1 * c.z)
+    const loc = c.g.blur(cur, Math.max(cell * 2, num(p.backBlur, 14)) * c.z)
+    const mode = num(p.mode), style = num(p.style, 65) / 100
+    const out = c.g.pass('ascii', ASCII, c.W, c.H, std(c, cur, amt, {
+      uAtlas: atlas, uCellTex: ct, uWide: wide, uLocal: loc, uCell: cell, uN: n, uMode: mode,
+      uColor: num(p.color, 100) / 100, uUnder: num(p.under, 55) / 100, uEdges: num(p.edges, 60) / 100, uCon: num(p.contrast, 50) / 100,
+      uSat: num(p.saturation, 60) / 100, uInv: mode === 2 ? 1 : 0, uStyle: style, uGrid: num(p.detail, 30) / 100, uCut: num(p.cutoff, 18) / 100,
+      uSplit: num(p.split, 0) / 10, uBright: num(p.brightness, 0) / 100, uAccent: rgb(p.accent, '#ff4d2e'), uInk: rgb(p.ink, '#f4f1ea'), uBg: rgb(p.bg, '#07080a'),
+    }))
+    c.g.release(ct, wide, loc)
+    // bagliore dei caratteri (sul fondo scuro più forte), poca luce della foto restituita
+    const glow = num(p.glow, 45) / 100 * (mode === 2 ? 0.15 : mode === 3 ? 0 : 0.7)
+    const k = 0.5 * (1 - style) * (mode === 0 ? 1 : mode === 1 ? 0.3 : mode === 2 ? 1 : 0)
+    return k > 0 || glow > 0 ? finish(c, out, cur, cell * 1.4 * c.z, k, glow, mode === 3 ? 0 : 0.018) : out
   },
   linocut: (c, cur, p, amt) => {
     const lines = Math.max(2, num(p.lines, 4.5))
     const fl = c.g.blur(cur, lines * 3 * c.z)
-    const out = c.g.pass('linocut', LINOCUT, c.W, c.H, std(c, cur, amt, { uFlowTex: fl, uInk: rgb(p.ink, '#141414'), uPaper: rgb(p.paper, '#f1ebdd'), uLines: lines, uAng: rad(num(p.angle, 30)), uFlow: num(p.flow, 55) / 100, uCross: num(p.cross, 60) / 100, uColor: num(p.color, 0) / 100, uRough: num(p.rough, 20) / 100, uTh: num(p.threshold, 50) / 100, uMass: num(p.mass, 50) / 100, uDetail: num(p.detail, 70) / 100 }))
+    const out = c.g.pass('linocut', LINOCUT, c.W, c.H, std(c, cur, amt, { uFlowTex: fl, uInk: rgb(p.ink, '#1d1915'), uPaper: rgb(p.paper, '#f3ecdc'), uLines: lines, uAng: rad(num(p.angle, 30)), uFlow: num(p.flow, 55) / 100, uCross: num(p.cross, 60) / 100, uColor: num(p.color, 0) / 100, uRough: num(p.rough, 20) / 100, uTh: num(p.threshold, 50) / 100, uMass: num(p.mass, 50) / 100, uDetail: num(p.detail, 70) / 100, uWave: num(p.wave, 35) / 100 }))
     c.g.release(fl)
     return out
   },

@@ -1073,11 +1073,14 @@ void main() {
   o = mix(base, c, uAmt);
 }`
 
-/** ASCII: tono medio della cella, contrasto locale e caratteri orientati sui contorni.
- *  Il colore e il volume della foto restano: i caratteri si accendono con la luce,
- *  sotto rimane una velatura della fotografia. */
-export const ASCII = FX + `uniform sampler2D uAtlas, uCellTex, uLocal; uniform float uCell, uN, uMode, uColor, uUnder, uEdges, uCon, uSat, uInv, uStyle, uGrid; uniform vec3 uInk, uBg, uAccent;
+/** ASCII come negli strumenti da designer: la cella prende il tono medio, i contorni
+ *  arrivano da una differenza di gaussiane (DoG) e diventano segni orientati, sotto la
+ *  soglia del nero la cella resta vuota; i caratteri hanno il colore della foto, con
+ *  contrasto colore, sdoppiamento RGB e (nel passo dopo) bagliore. Fondo: foto sfocata,
+ *  foto, tinta piena o trasparente. */
+export const ASCII = FX + `uniform sampler2D uAtlas, uCellTex, uWide, uLocal; uniform float uCell, uN, uMode, uColor, uUnder, uEdges, uCon, uSat, uInv, uStyle, uGrid, uCut, uSplit, uBright; uniform vec3 uInk, uBg, uAccent;
 vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
+float glyph(float idx, vec2 f) { return texture(uAtlas, vec2((idx + clamp(f.x, 0.0, 1.0)) / (uN + 4.0), f.y)).r; }
 void main() {
   vec2 p = vUv * uRes / uZ;
   vec2 cs = vec2(uCell * 0.62, uCell);
@@ -1087,54 +1090,49 @@ void main() {
   float a = cc.a;
   vec3 col = unp(cc);
   float L = luma(col), Lb = luma(unp(texture(uLocal, cuv)));
-  // contrasto locale: i volumi si leggono anche nelle zone piatte
-  float t = clamp(L + (L - Lb) * uCon * 2.2, 0.0, 1.0);
-  t = clamp((t - 0.5) * (1.0 + uStyle * 0.6) + 0.5, 0.0, 1.0);   // più stile = più contrasto grafico
-  t = mix(t, smoothstep(0.0, 1.0, t), 0.5);
+  float t = clamp(L + (L - Lb) * uCon * 2.2 + uBright, 0.0, 1.0);
+  t = clamp((t - 0.5) * (1.0 + uStyle * 0.6) + 0.5, 0.0, 1.0);
   float dens = uInv > 0.5 ? pow(1.0 - t, 0.85) : t;
-  // contorni: gradiente sul tono delle celle vicine, diventa un segno orientato
-  vec2 st = cs * uZ / uRes;
-  float gx = luma(unp(texture(uCellTex, cuv + vec2(st.x, 0.0)))) - luma(unp(texture(uCellTex, cuv - vec2(st.x, 0.0))));
-  float gy = luma(unp(texture(uCellTex, cuv + vec2(0.0, st.y)))) - luma(unp(texture(uCellTex, cuv - vec2(0.0, st.y))));
-  float gm = length(vec2(gx, gy));
   float idx = floor(clamp(dens, 0.0, 0.999) * uN);
-  if (uEdges > 0.0 && gm > 0.2 / uEdges && dens > 0.15) {
-    float ang = atan(gy, gx);                               // direzione del gradiente
-    float e = mod(floor((ang + 3.14159) / 0.785398 + 0.5), 4.0);  // 0 orizz. grad. → contorno verticale
+  // contorni: differenza di gaussiane sul tono, direzione dal gradiente della versione morbida
+  float dog = luma(col) - luma(unp(texture(uWide, cuv)));
+  vec2 st = cs * uZ / uRes;
+  float gx = luma(unp(texture(uWide, cuv + vec2(st.x, 0.0)))) - luma(unp(texture(uWide, cuv - vec2(st.x, 0.0))));
+  float gy = luma(unp(texture(uWide, cuv + vec2(0.0, st.y)))) - luma(unp(texture(uWide, cuv - vec2(0.0, st.y))));
+  if (uEdges > 0.0 && abs(dog) > 0.075 / uEdges && length(vec2(gx, gy)) > 0.02 && dens > 0.12) {
+    float e = mod(floor((atan(gy, gx) + 3.14159) / 0.785398 + 0.5), 4.0);
     idx = uN + e;
   }
-  float g = texture(uAtlas, vec2((idx + f.x) / (uN + 4.0), f.y)).r;
-  // dettagli: le luci più forti diventano caratteri accento, una griglia capillare tiene il ritmo
+  // soglia del nero: la cella resta vuota, lo spazio negativo disegna
+  float on = uInv > 0.5 ? step(uCut, 1.0 - t) : step(uCut, t);
+  vec2 sp = vec2(uSplit / cs.x, 0.0);
+  float g = glyph(idx, f) * on;
+  vec3 gs = vec3(glyph(idx, f - sp), g / max(on, 1e-4), glyph(idx, f + sp)) * on;
+  // dettagli: accenti nelle luci più forti, griglia capillare
   float accent = step(0.9, t) * step(0.55, hash12(cell)) * uGrid;
   vec2 fe = min(f, 1.0 - f) * cs * uZ;
-  float grid = (1.0 - smoothstep(0.0, 0.9, min(fe.x, fe.y))) * uGrid * 0.22;
-  // colore del carattere: tinta della foto, rinforzata, con luminosità che segue il tono
-  vec3 hue = col / max(max(col.r, max(col.g, col.b)), 0.02);
-  vec3 tint = mix(vec3(luma(hue)), hue, uSat);
-  vec4 under = texture(uLocal, vUv) * 0.5 + texture(uSrc, vUv) * 0.5;
-  vec3 res; float alpha;
-  if (uMode < 0.5) {            // foto in caratteri: la foto resta intera, i caratteri ne modulano la luce
-    vec3 ph = unp(texture(uSrc, vUv)) * 0.6 + col * 0.4;
-    vec3 ink = mix(uInk, ph * 1.12 + tint * 0.05, uColor);
-    // più stile = fondo più scuro tra i caratteri, la foto la disegnano loro
-    res = mix(ph * (0.38 + 0.25 * uUnder) * (1.0 - uStyle * 0.75), ink * (1.0 + uStyle * 0.35), g);
-    alpha = 1.0;
-  } else if (uMode < 1.5) {     // luce su nero: caratteri luminosi, foto velata sotto
-    vec3 ink = mix(uInk * (0.3 + 0.9 * t), min(col * 2.1 + tint * 0.2 * t, vec3(1.4)), uColor);
-    res = mix(uBg, unp(under), uUnder * (0.35 + 0.9 * t)) * (1.0 - g * 0.9) + ink * g;
-    alpha = 1.0;
+  float grid = (1.0 - smoothstep(0.0, 0.9, min(fe.x, fe.y))) * uGrid * 0.18;
+  // colore del carattere: la foto con contrasto di colore (saturazione) e luce propria
+  vec3 sat = clamp(mix(vec3(L), col, 1.0 + uSat * 0.6), 0.0, 1.0);
+  vec3 lit = sat * (0.75 + 0.75 * t) + 0.08 * t;
+  vec3 ink = mix(uInk * (0.35 + 0.8 * t), lit, uColor);
+  ink = mix(ink, uAccent, accent);
+  vec3 res; float alpha = 1.0;
+  if (uMode < 0.5) {            // foto sfocata sotto, caratteri luminosi sopra
+    vec3 back = unp(texture(uLocal, vUv)) * uUnder * (1.0 - uStyle * 0.45);
+    res = back * (1.0 - g * 0.85) + ink * gs;
+  } else if (uMode < 1.5) {     // tinta piena (nero)
+    vec3 back = mix(uBg, unp(texture(uLocal, vUv)) * 0.6, uUnder * 0.35);
+    res = back * (1.0 - g * 0.9) + ink * gs;
   } else if (uMode < 2.5) {     // inchiostro su carta
-    vec3 ink = mix(uInk, col * 0.45 * (0.5 + 0.5 * t), uColor);
-    vec3 paper = mix(uBg, uBg * (unp(under) * 0.85 + 0.15), uUnder);
+    vec3 inkP = mix(uInk, col * 0.45 * (0.5 + 0.5 * t), uColor);
+    vec3 paper = mix(uBg, uBg * (unp(texture(uLocal, vUv)) * 0.85 + 0.15), uUnder);
     paper *= 0.965 + 0.05 * fbm(p * 0.6);
-    res = mix(paper, ink, g * (0.82 + 0.18 * vnoise(p * 1.7)));
-    alpha = 1.0;
-  } else {                      // solo caratteri, fondo trasparente
-    res = mix(uInk, tint * (0.4 + 0.8 * t), uColor);
-    alpha = g;
+    res = mix(paper, mix(inkP, uAccent, accent), g * (0.85 + 0.15 * vnoise(p * 1.7)));
+  } else {                      // solo caratteri
+    res = ink; alpha = max(max(gs.r, gs.g), gs.b);
   }
-  res = mix(res, uAccent, accent * g);
-  res = mix(res, uMode > 1.5 && uMode < 2.5 ? res * 0.8 : res + 0.25 * (1.0 - res), grid * (1.0 - g));
+  res = mix(res, uMode > 1.5 && uMode < 2.5 ? res * 0.8 : res + 0.22 * (1.0 - res), grid * (1.0 - g));
   alpha = max(alpha, uMode > 2.5 ? grid * 0.5 : 0.0);
   alpha *= step(0.02, a);
   o = mix(texture(uSrc, vUv), vec4(res * alpha, alpha), uAmt);
@@ -1142,7 +1140,7 @@ void main() {
 
 /** incisione / linoleografia: linee che seguono i volumi (come le banconote), spesse nelle
  *  ombre e sottili nelle luci, tratteggio incrociato nei neri; inchiostro anche a colori */
-export const LINOCUT = FX + `uniform sampler2D uFlowTex; uniform vec3 uInk, uPaper; uniform float uLines, uAng, uFlow, uCross, uColor, uRough, uTh, uMass, uDetail;
+export const LINOCUT = FX + `uniform sampler2D uFlowTex; uniform vec3 uInk, uPaper; uniform float uLines, uAng, uFlow, uCross, uColor, uRough, uTh, uMass, uDetail, uWave;
 vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
 // una famiglia di linee: x = copertura, y = distanza normalizzata dal bordo della linea
 vec2 lineInk(vec2 p, float ang, float dark, float phase) {
@@ -1168,6 +1166,8 @@ void main() {
   float rough = (vnoise(p * 0.35) - 0.5) * uRough * 0.25;
   // le linee si piegano sul tono sfocato: avvolgono i volumi
   float phase = Lf * uFlow * 3.0 + fbm(p * 0.008) * 0.6;
+  // le due onde lente delle banconote, incrociate, che fanno ondeggiare tutto il retino
+  phase += (sin(dot(p, vec2(0.0061, 0.0023)) * 6.2832) * 0.6 + sin(dot(p, vec2(-0.0019, 0.0047)) * 6.2832 + 1.3) * 0.4) * uWave * 1.6;
   vec2 l1 = lineInk(p, uAng, dark * 0.95 + rough, phase);
   float ink = l1.x, edge = l1.y;
   if (uCross > 0.0) {
