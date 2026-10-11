@@ -279,6 +279,8 @@ import { LabPanel } from './lab/LabPanel'
 import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
 import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
+import { composeBoard, boardSize } from './compose/compose'
+import type { ComposeBoard } from '@/lib/design/compose-spec'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
@@ -2403,6 +2405,26 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const canvas = fabricRef.current; if (!canvas) return
     if (!command || !command.toolName) return
 
+    // ─── 0. composeDesign: l'AI sceglie stile e contenuti, lo Studio impagina ──
+    if (command.toolName === 'composeDesign') {
+      const payload = command.result ?? command.args ?? {}
+      const boards: ComposeBoard[] = Array.isArray(payload.boards) ? payload.boards : []
+      if (!boards.length) return
+      let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
+      x = Number.isFinite(x) ? x + 160 : 100
+      for (let i = 0; i < boards.length; i++) {
+        const b = boards[i]
+        const { w, h } = boardSize(b)
+        const name = addArtboard(w, h, b.name || (b.content?.title || b.content?.quote)?.slice(0, 32) || `Tavola ${i + 1}`, 'social', x + w / 2, 100 + h / 2)
+        const ab = canvas.getObjects().find(o => o.get('name') === name)
+        if (ab) await composeBoard(canvas, ab, b, i)
+        x += w + 160
+      }
+      fitToArtboards()
+      pushSnapshot()
+      return
+    }
+
     // ─── 1. createDesignBoards ─────────────────────────────────────────────
     if (command.toolName === 'createDesignBoards') {
       const payload = command.result ?? command.args ?? {}
@@ -2809,6 +2831,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // Always push a snapshot after any tool was (at least tried to be) executed
     pushSnapshot()
   }
+
+  // in sviluppo: comandi AI eseguibili dalla console e dai test
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') (window as unknown as { __aiCommand?: unknown }).__aiCommand = handleAICommand
+  })
 
   // Handle aiCommands queue sequentially
   useEffect(() => {

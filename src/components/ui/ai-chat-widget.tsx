@@ -40,6 +40,7 @@ function userMessageDisplayText(m: UIMessage): string {
 // Solo i tool che modificano il canvas — generateAIImage è un passo intermedio,
 // non viene mostrato in chat come conferma finale.
 const CANVAS_TOOL_LABELS: Record<string, string> = {
+    composeDesign: 'Grafica impaginata nel canvas',
     createDesignBoards: 'Tavola creata nel canvas',
     updateCanvasElements: 'Canvas aggiornato',
     clearBoard: 'Tavola svuotata',
@@ -298,7 +299,7 @@ function GenerativeUI({ data }: { data: any }) {
 
 // Canvas tools are client-side (no execute on the server). Their UI state is
 // 'input-available' (not 'output-available') so they need a dedicated check.
-const CANVAS_TOOLS = new Set(['createDesignBoards', 'updateCanvasElements', 'clearBoard', 'deleteElements', 'getCanvasState']);
+const CANVAS_TOOLS = new Set(['composeDesign', 'createDesignBoards', 'updateCanvasElements', 'clearBoard', 'deleteElements', 'getCanvasState']);
 
 function QuickActions({ lastMessage, onAction, disabled, inputRef }: { 
     lastMessage?: UIMessage, 

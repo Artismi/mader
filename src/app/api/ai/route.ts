@@ -9,6 +9,8 @@ import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { buildContext } from '@/lib/ai/context'
+import { composeToolDescription } from '@/lib/design/compose-prompt'
+import { FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
 
@@ -145,6 +147,44 @@ const canvasUpdateSchema = z.object({
     effects: z.array(z.string()).optional(),
     effectProps: z.record(z.string(), z.unknown()).optional(),
   }),
+})
+
+
+// ── composeDesign: l'AI descrive, lo Studio impagina ───────────────────────
+const composeBoardSchema = z.object({
+  name: z.string().optional().describe('Nome della tavola'),
+  format: z.enum(Object.keys(FORMATS) as [string, ...string[]]).optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  style: z.enum(STYLES.map(s => s.id) as [string, ...string[]]),
+  layout: z.enum(LAYOUTS.map(l => l.id) as [string, ...string[]]),
+  palette: z.number().int().min(0).max(4).optional(),
+  colors: z.object({ bg: z.string(), ink: z.string(), accent: z.string(), muted: z.string(), surface: z.string() }).partial().optional()
+    .describe('Colori del brand del cliente, se noti (hex)'),
+  content: z.object({
+    title: z.string(),
+    eyebrow: z.string().optional(),
+    subtitle: z.string().optional(),
+    body: z.string().optional(),
+    cta: z.string().optional(),
+    meta: z.array(z.string()).optional(),
+    quote: z.string().optional(),
+    author: z.string().optional(),
+    stats: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+    items: z.array(z.string()).optional(),
+    brand: z.string().optional(),
+    badge: z.string().optional(),
+    image: z.object({ url: z.string().optional(), prompt: z.string().optional(), alt: z.string().optional() }).optional(),
+  }),
+  titleEffect: z.string().optional(),
+  imageLook: z.string().optional(),
+  imageEffect: z.string().optional(),
+  background: z.string().optional(),
+  displayFont: z.string().optional(),
+  textFont: z.string().optional(),
+  align: z.enum(['left', 'center']).optional(),
+  decor: z.array(z.enum(['folio', 'columns', 'crop', 'frame', 'bauhaus', 'blob', 'ticker', 'index', 'badge', 'orbs', 'dots', 'bars'])).optional(),
+  noDecor: z.boolean().optional(),
 })
 
 // ── Crew pipeline helpers ──────────────────────────────────────────────────
@@ -717,6 +757,9 @@ export async function POST(req: Request) {
       canvasSnapshot
         ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements. Per modifiche chirurgiche NON usare clearBoard.\n---`
         : '',
+      isCreativeQuery
+        ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro.'
+        : '',
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
       ctx.clientVaults.length > 0
@@ -964,8 +1007,15 @@ export async function POST(req: Request) {
         // Canvas tools: hanno execute stub per permettere il chaining multi-step
         // (stopWhen: stepCountIs). L'esecuzione reale avviene client-side via handleAICommand;
         // il server ritorna solo una conferma immediata.
+        composeDesign: tool({
+          description: composeToolDescription(),
+          inputSchema: z.object({ boards: z.array(composeBoardSchema).min(1) }),
+          execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
+        }),
+
         createDesignBoards: tool({
-          description: `Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
+          description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
+Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
 DIMENSIONI STANDARD — scegli in base al contenuto:
 - Social Square: width:1080, height:1080

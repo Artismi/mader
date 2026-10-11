@@ -305,16 +305,17 @@ void main() {
 
 export const EXTRUDE = FX + `uniform vec2 uDir; uniform vec3 uCol; uniform float uShade;
 void main() {
-  vec4 lay = vec4(0.0);
+  // la copia più vicina che copre davvero il pixel: fermarsi al primo bordo
+  // sfumato (alfa bassa) dava un volume pallido e a righe
+  float best = 0.0, bf = 0.0;
   for (int k = 1; k <= 96; k++) {
     float f = float(k) / 96.0;
     float a = texture(uOrig, vUv - uDir * f).a;
-    if (a > 0.02) {
-      vec3 col = uCol * (1.0 - uShade * 0.55 * f) + vec3(0.06) * (1.0 - f);
-      lay = vec4(col * a, a);
-      break;
-    }
+    if (a > best + 0.01) { best = a; bf = f; }
+    if (best > 0.97) break;
   }
+  vec3 col = uCol * (1.0 - uShade * 0.55 * bf) + vec3(0.06) * (1.0 - bf);
+  vec4 lay = vec4(col * best, best);
   vec4 s = texture(uSrc, vUv);
   o = mix(s, over(s, lay), uAmt);
 }`

@@ -14,12 +14,21 @@ export const fontEntry = (family: string): FontEntry | undefined => byFamily.get
 const slug = (f: string) => f.toLowerCase().replace(/\s+/g, '-')
 const gq = (f: string) => f.replace(/ /g, '+')
 
-function addCss(id: string, href: string) {
-  if (typeof document === 'undefined' || document.getElementById(id)) return
-  const l = document.createElement('link')
-  l.id = id; l.rel = 'stylesheet'; l.href = href
-  document.head.appendChild(l)
+function addCss(id: string, href: string): Promise<void> {
+  if (typeof document === 'undefined') return Promise.resolve()
+  let l = document.getElementById(id) as HTMLLinkElement | null
+  if (!l) {
+    l = document.createElement('link')
+    l.id = id; l.rel = 'stylesheet'; l.href = href
+    document.head.appendChild(l)
+  }
+  if (l.sheet) return Promise.resolve()
+  const link = l
+  return new Promise(res => { link.addEventListener('load', () => res(), { once: true }); link.addEventListener('error', () => res(), { once: true }); setTimeout(res, 8000) })
 }
+
+/** il carattere è davvero arrivato? (`fonts.check` dice sì anche quando il foglio CSS non c'è ancora) */
+const hasFace = (family: string) => [...document.fonts].some(f => f.family.replace(/["']/g, '') === family && f.status === 'loaded')
 
 function fullHref(e: FontEntry) {
   if (e.source === 'fontshare') return `https://api.fontshare.com/v2/css?f[]=${slug(e.family)}@${e.weights.join(',')}&display=swap`
@@ -35,11 +44,11 @@ export function ensureFont(family: string, weight: number | string = 400): Promi
   if (!e) return Promise.resolve(document.fonts.check(`${weight} 16px "${family}"`))
   const key = `${family}|${weight}`
   if (!pending.has(key)) {
-    addCss(`font-full-${slug(family)}`, fullHref(e))
     pending.set(key, (async () => {
-      for (let i = 0; i < 40; i++) {           // il foglio CSS deve prima arrivare
+      await addCss(`font-full-${slug(family)}`, fullHref(e))   // il foglio CSS deve prima arrivare
+      for (let i = 0; i < 40; i++) {
         try { await document.fonts.load(`${weight} 40px "${family}"`) } catch { /* riprova */ }
-        if (document.fonts.check(`${weight} 40px "${family}"`)) return true
+        if (hasFace(family) && document.fonts.check(`${weight} 40px "${family}"`)) return true
         await new Promise(r => setTimeout(r, 150))
       }
       return false
