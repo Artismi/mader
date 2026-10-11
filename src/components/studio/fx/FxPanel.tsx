@@ -17,10 +17,12 @@ import {
   ADJUST_GROUPS, CURVES, FX_CATS, FX_DEFS, GRADE_ZONES, HSL_BANDS, LOOKS, fxDef, newFx,
   type Adjust, type FxCat, type FxEntry, type FxId, type Look, type Param,
 } from './catalog'
-import { applyFx, fxPreviews, lookPreviews, variantEntries } from './engine'
+import { applyFx, applyTextStyle, fxPreviews, lookPreviews, stylePreview, variantEntries } from './engine'
+import { TEXT_STYLES } from './text-styles'
+import { onAssetReady } from './gl'
 
 type FxTarget = fabric.FabricObject & { adjust?: Adjust; look?: Look; fx?: FxEntry[] }
-type Tab = 'filtri' | 'regola' | 'effetti'
+type Tab = 'stili' | 'filtri' | 'regola' | 'effetti'
 type Mutate = (fn: (o: FxTarget) => void) => void
 
 export function FxPanel({ fabricRef, selKey, initialTab = 'filtri' }: {
@@ -56,7 +58,7 @@ export function FxPanel({ fabricRef, selKey, initialTab = 'filtri' }: {
   return (
     <div className="space-y-3">
       <div className="flex p-0.5 rounded-xl bg-white/[0.04] border border-white/[0.06] sticky top-0 z-10 backdrop-blur">
-        {(['filtri', 'regola', 'effetti'] as Tab[]).map(t => (
+        {((isText(obj) ? ['stili', 'filtri', 'regola', 'effetti'] : ['filtri', 'regola', 'effetti']) as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('flex-1 h-7 rounded-[10px] text-[10px] font-bold capitalize transition-colors',
               tab === t ? 'bg-white/[0.12] text-white' : 'text-white/40 hover:text-white/70')}>
@@ -65,9 +67,70 @@ export function FxPanel({ fabricRef, selKey, initialTab = 'filtri' }: {
           </button>
         ))}
       </div>
+      {tab === 'stili' && isText(obj) && <TextStyles obj={obj} fabricRef={fabricRef} targets={targets} onDone={refresh} />}
       {tab === 'filtri' && <Looks obj={obj} selKey={selKey} mutate={mutate} />}
       {tab === 'regola' && <Adjustments obj={obj} mutate={mutate} />}
       {tab === 'effetti' && <Effects obj={obj} selKey={selKey} mutate={mutate} />}
+    </div>
+  )
+}
+
+const isText = (o: fabric.FabricObject) => o.type === 'textbox' || o.type === 'i-text' || o.type === 'text'
+
+/* ═════════ Stili testo pronti ═════════ */
+const styleCache = new Map<string, string>()
+function TextStyles({ obj, fabricRef, targets, onDone }: { obj: FxTarget; fabricRef: React.RefObject<fabric.Canvas | null>; targets: () => FxTarget[]; onDone: () => void }) {
+  const sample = String((obj as unknown as { text?: string }).text ?? '').trim().split(/\s+/)[0] || 'Aa'
+  const [thumbs, setThumbs] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState('')
+  const [tick, setTick] = useState(0)
+  // le anteprime con materiali si rifanno quando arrivano le texture
+  useEffect(() => onAssetReady(() => { TEXT_STYLES.forEach(st => { if (st.fx.some(f => f[0] === 'impressione')) styleCache.delete(`${st.id}|${sample}`) }); setTick(t => t + 1) }), [sample])
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      for (const st of TEXT_STYLES) {
+        const k = `${st.id}|${sample}`
+        if (!styleCache.has(k)) { try { styleCache.set(k, await stylePreview(st, sample)) } catch { /* anteprima non disponibile */ } }
+        if (!alive) return
+        setThumbs(t => (t[st.id] === styleCache.get(k) ? t : { ...t, [st.id]: styleCache.get(k)! }))
+        await new Promise(r => requestAnimationFrame(r))
+      }
+    })()
+    return () => { alive = false }
+  }, [sample, tick])
+  const apply = async (id: string) => {
+    const st = TEXT_STYLES.find(s => s.id === id); const c = fabricRef.current; if (!st || !c) return
+    setBusy(id)
+    for (const o of targets()) {
+      // fondo reale sotto il testo: la tavola che contiene il suo centro
+      const p = o.getCenterPoint()
+      const ab = c.getObjects().filter(x => (x as { isArtboard?: boolean }).isArtboard).reverse().find(x => { const r = x.getBoundingRect(); return p.x >= r.left && p.x <= r.left + r.width && p.y >= r.top && p.y <= r.top + r.height })
+      await applyTextStyle(o, st, typeof ab?.fill === 'string' ? ab.fill : undefined)
+      c.fire('object:modified', { target: o })
+    }
+    c.requestRenderAll(); setBusy(''); onDone()
+  }
+  const groups = [...new Set(TEXT_STYLES.map(s => s.group))]
+  return (
+    <div className="space-y-4">
+      <p className="text-[10px] text-white/35 leading-relaxed">Carattere, colore ed effetti già calibrati. Dopo l&apos;applicazione si ritoccano da «Effetti».</p>
+      {groups.map(g => (
+        <div key={g}>
+          <SectionTitle>{g}</SectionTitle>
+          <div className="grid grid-cols-2 gap-2">
+            {TEXT_STYLES.filter(s => s.group === g).map(st => (
+              <button key={st.id} onClick={() => apply(st.id)} title={st.label}
+                className={cn('group rounded-xl overflow-hidden border text-left transition-colors', busy === st.id ? 'border-violet-400' : 'border-white/[0.06] hover:border-white/25')}>
+                <div className="aspect-[168/100] w-full" style={{ background: st.swatch }}>
+                  {thumbs[st.id] && <img src={thumbs[st.id]} alt="" className="w-full h-full object-cover" />}
+                </div>
+                <span className="block px-2 py-1.5 text-[9px] font-bold text-white/60 group-hover:text-white truncate">{st.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

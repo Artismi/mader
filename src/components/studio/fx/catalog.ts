@@ -118,7 +118,7 @@ export type FxId =
   | 'wave' | 'ripple' | 'twirl' | 'bulge' | 'mosaic' | 'chroma'
   | 'vhs' | 'crt'
   | 'material3d' | 'genFill'
-  | 'grunge' | 'stitch' | 'foil' | 'impressione'
+  | 'grunge' | 'stitch' | 'foil' | 'impressione' | 'colata' | 'raggi' | 'glitter'
 
 export type PVal = number | string
 export interface FxEntry { id: FxId; on: boolean; amount: number; p: Record<string, PVal>; variant?: string }
@@ -314,6 +314,18 @@ export const FX_DEFS: FxDef[] = [
   { id: 'stitch', label: 'Ricamo', cat: 'Testo', hint: 'fili in diagonale e punto filo lungo il bordo, come una toppa',
     params: [t('useColor', 'Colore filo proprio', 0), c('color', 'Filo', '#e94f37'), c('stitch', 'Cucitura', '#fff4e0'), r('density', 'Densità fili', 20, 140, 70), r('inset', 'Distanza cucitura', 2, 14, 5)],
     variants: [{ id: 'toppa', label: 'Toppa', p: {} }, { id: 'fine', label: 'Fine', p: { density: 120, inset: 3 } }, { id: 'denim', label: 'Denim', p: { useColor: 1, color: '#2b4a7a', stitch: '#f2b84b' } }] },
+  { id: 'colata', label: 'Colatura', cat: 'Luce', hint: 'il colore cola in scie lunghe che sfumano, come un liquido o un neon che scivola',
+    pad: p => n(p.length, 260) + 10,
+    params: [r('length', 'Lunghezza', 20, 900, 260), r('angle', 'Direzione', 0, 360, 90), r('fade', 'Dissolvenza', 5, 100, 60), r('wobble', 'Ondulazione', 0, 100, 30), r('glow', 'Bagliore', 0, 100, 50), r('spectrum', 'Spettro', 0, 100, 0)],
+    variants: [{ id: 'giu', label: 'Cola giù', p: { angle: 90, length: 320 } }, { id: 'lunga', label: 'Scia lunga', p: { angle: 90, length: 700, fade: 35 } }, { id: 'spettro', label: 'Spettro', p: { angle: 90, length: 520, fade: 45, spectrum: 85, glow: 80, wobble: 20 } }, { id: 'su', label: 'Fiamma su', p: { angle: 270, length: 300, wobble: 70 } }, { id: 'lato', label: 'Velocità', p: { angle: 180, length: 420, wobble: 0, fade: 50 } }] },
+  { id: 'raggi', label: 'Raggi di luce', cat: 'Luce', hint: 'fasci di luce che escono dalle lettere, radiali o orizzontali',
+    pad: () => 220,
+    params: [s('mode', 'Tipo', ['Radiali', 'Orizzontali'], 0), c('color', 'Colore', '#7ab8ff'), r('intensity', 'Intensità', 0, 100, 70), r('length', 'Lunghezza', 5, 100, 60), r('cx', 'Centro X', 0, 100, 50), r('cy', 'Centro Y', 0, 100, 50)],
+    variants: [{ id: 'blu', label: 'Blu', p: { color: '#5aa2ff' } }, { id: 'oro', label: 'Oro', p: { color: '#ffb547' } }, { id: 'acido', label: 'Esplosione acida', p: { mode: 0, color: '#9dff3c', length: 75, intensity: 85 } }, { id: 'scia', label: 'Scia orizzontale', p: { mode: 1, color: '#ffffff', length: 70 } }, { id: 'fuoco', label: 'Fuoco', p: { color: '#ff5a1f', intensity: 85 } }] },
+  { id: 'glitter', label: 'Glitter', cat: 'Testo', hint: 'lettere fatte di scaglie che brillano, con polvere attorno',
+    pad: () => 60,
+    params: [t('useColor', 'Colore proprio', 1), c('color', 'Colore', '#c9ccd6'), r('size', 'Grana', 1, 12, 4), r('sparkle', 'Scintille', 0, 100, 70), r('dust', 'Polvere', 0, 100, 50)],
+    variants: [{ id: 'argento', label: 'Argento', p: { color: '#c9ccd6' } }, { id: 'oro', label: 'Oro', p: { color: '#d9b45a' } }, { id: 'rosa', label: 'Rosa', p: { color: '#f2a1c7' } }, { id: 'nero', label: 'Nero', p: { color: '#3a3a44', sparkle: 90 } }] },
   { id: 'grunge', label: 'Usura', cat: 'Stampa', hint: 'inchiostro consumato con macchie e puntini, più forte sui bordi',
     params: [r('wear', 'Usura', 0, 100, 45), r('scale', 'Scala', 30, 300, 100), r('speck', 'Puntini', 0, 100, 40)],
     variants: [{ id: 'leggera', label: 'Leggera', p: { wear: 30, speck: 20 } }, { id: 'timbro', label: 'Timbro', p: { wear: 50, speck: 50 } }, { id: 'rovinata', label: 'Rovinata', p: { wear: 62, speck: 70, scale: 70 } }] },
@@ -334,8 +346,10 @@ export const FX_DEFS: FxDef[] = [
     ] },
   { id: 'extrude', label: 'Estrusione 3D', cat: 'Testo', hint: 'volume solido dietro l’oggetto, stile retrò',
     pad: p => n(p.depth, 24) + 2,
-    params: [r('depth', 'Profondità', 2, 120, 24), r('angle', 'Direzione', 0, 360, 45), c('color', 'Colore', '#2d1b69'), r('shade', 'Ombreggiatura', 0, 100, 60), t('outline', 'Bordo scuro', 1)],
+    params: [r('depth', 'Profondità', 2, 120, 24), r('angle', 'Direzione', 0, 360, 45), c('color', 'Colore', '#2d1b69'), r('shade', 'Ombreggiatura', 0, 100, 60), t('outline', 'Bordo scuro', 1), r('bands', 'Strisce', 0, 8, 0), c('c2', 'Striscia 2', '#ffb000'), c('c3', 'Striscia 3', '#ff3d00'), c('c4', 'Striscia 4', '#7a1fa2')],
     variants: [
+      { id: 'arcobaleno', label: 'Strisce anni 70', p: { depth: 70, angle: 60, bands: 4, color: '#f2e7c4', c2: '#ffb000', c3: '#ff5a1f', c4: '#c2185b', shade: 10 } },
+      { id: 'party', label: 'Strisce party', p: { depth: 90, angle: 90, bands: 5, color: '#e63946', c2: '#f4a261', c3: '#2a9d8f', c4: '#264653', shade: 0 } },
       { id: 'retro', label: 'Retrò', p: { color: '#2d1b69', depth: 24, angle: 45 } },
       { id: 'arancio', label: 'Arancio', p: { color: '#ff7a00', depth: 18, angle: 135 } },
       { id: 'profondo', label: 'Profondo', p: { color: '#111111', depth: 60, angle: 60, shade: 80 } },

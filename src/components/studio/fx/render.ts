@@ -7,7 +7,7 @@
  */
 import { FxGL, type Tex, type UVal } from './gl'
 import {
-  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
+  MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, SMEAR, RAYS, GLITTER, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
 } from './shaders'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
@@ -118,6 +118,8 @@ function sdfReach(stack: FxEntry[]): number {
       case 'hollow': case 'splice': m = Math.max(m, num(p.thickness, 3) + 2); break
       case 'material3d': m = Math.max(m, 100000); break
       case 'grunge': m = Math.max(m, 10); break
+      case 'glitter': m = Math.max(m, 60); break
+      case 'raggi': m = Math.max(m, 400); break
       case 'impressione': break
       case 'stitch': m = Math.max(m, num(p.inset, 5) + 6); break
       case 'foil': m = Math.max(m, num(p.bevel, 4) + 4); break
@@ -255,7 +257,10 @@ const RUN: Partial<Record<string, Run>> = {
   hollow: simple('hollow', HOLLOW, (c, p) => ({ uW: num(p.thickness, 3) * c.z })),
   splice: simple('splice', SPLICE, (c, p) => ({ uW: num(p.thickness, 3) * c.z, uOff: dirUv(c, num(p.angle, 315), num(p.distance, 8)), uCol: rgb(p.color) })),
   longShadow: simple('longShadow', LONG_SHADOW, (c, p) => ({ uDir: dirUv(c, num(p.angle, 45), num(p.length, 120)), uCol: rgb(p.color), uOp: num(p.opacity, 35) / 100, uFade: num(p.fade, 60) / 100 })),
-  extrude: simple('extrude', EXTRUDE, (c, p) => ({ uDir: dirUv(c, num(p.angle, 45), num(p.depth, 24)), uCol: rgb(p.color), uShade: num(p.shade, 60) / 100 })),
+  extrude: simple('extrude', EXTRUDE, (c, p) => ({ uDir: dirUv(c, num(p.angle, 45), num(p.depth, 24)), uCol: rgb(p.color), uShade: num(p.shade, 60) / 100, uBands: num(p.bands), uC2: rgb(p.c2, '#ffb000'), uC3: rgb(p.c3, '#ff3d00'), uC4: rgb(p.c4, '#7a1fa2') })),
+  colata: simple('smear', SMEAR, (c, p) => ({ uDir: dirUv(c, num(p.angle, 90), num(p.length, 260)), uFade: Math.max(0.3, num(p.fade, 60) / 25), uWobble: num(p.wobble, 30) / 100, uGlow: num(p.glow, 50) / 100, uSpectrum: num(p.spectrum) / 100 })),
+  raggi: simple('rays', RAYS, (_c, p) => ({ uCenter: [num(p.cx, 50) / 100, num(p.cy, 50) / 100], uLen: num(p.length, 60) / 100, uInt: num(p.intensity, 70) / 100, uMode: num(p.mode), uCol: rgb(p.color, '#7ab8ff') })),
+  glitter: simple('glitter', GLITTER, (_c, p) => ({ uBase: rgb(p.color, '#c9ccd6'), uUse: num(p.useColor, 1), uSize: Math.max(0.5, num(p.size, 4)), uSpark: num(p.sparkle, 70) / 100, uDust: num(p.dust, 50) / 100 })),
   glitch: simple('glitch', GLITCH, (_c, p) => ({ uPow: num(p.power, 50) / 100, uSplit: num(p.split, 30) / 100, uSlices: num(p.slices, 18), uNoise: num(p.noise, 20) / 100 })),
   bloom: (c, cur, p, amt) => {
     const bright = c.g.pass('bloomMask', BLOOM_MASK, c.W, c.H, { uSrc: cur, uTh: num(p.threshold, 60) / 100 })

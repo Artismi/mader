@@ -303,7 +303,7 @@ void main() {
   o = mix(s, over(s, vec4(uCol * a, a)), uAmt);
 }`
 
-export const EXTRUDE = FX + `uniform vec2 uDir; uniform vec3 uCol; uniform float uShade;
+export const EXTRUDE = FX + `uniform vec2 uDir; uniform vec3 uCol, uC2, uC3, uC4; uniform float uShade, uBands;
 void main() {
   // la copia più vicina che copre davvero il pixel: fermarsi al primo bordo
   // sfumato (alfa bassa) dava un volume pallido e a righe
@@ -315,6 +315,13 @@ void main() {
     if (best > 0.97) break;
   }
   vec3 col = uCol * (1.0 - uShade * 0.55 * bf) + vec3(0.06) * (1.0 - bf);
+  if (uBands > 0.5) {
+    // strisce di colore lungo il volume, con un filo scuro tra una fascia e l'altra
+    float b = bf * uBands; int bi = int(floor(b)) % 4;
+    vec3 bc = bi == 0 ? uCol : bi == 1 ? uC2 : bi == 2 ? uC3 : uC4;
+    float edge = smoothstep(0.0, 0.08, fract(b)) * smoothstep(1.0, 0.92, fract(b));
+    col = bc * mix(0.25, 1.0, edge) * (1.0 - uShade * 0.25 * bf);
+  }
   vec4 lay = vec4(col * best, best);
   vec4 s = texture(uSrc, vUv);
   o = mix(s, over(s, lay), uAmt);
@@ -943,5 +950,93 @@ void main() {
   col *= scene;
   // copre la lettera e l'alone di carta deformata attorno
   float a = clamp(max(inside, texture(uHb, vUv).a * 1.6), 0.0, 1.0);
+  o = mix(s, vec4(col * a, a), uAmt);
+}`
+
+/* ─── luce e movimento (stile poster) ─── */
+
+/** colatura: il colore delle lettere scende in scie lunghe che sfumano, con leggera ondulazione */
+export const SMEAR = FX + `uniform vec2 uDir; uniform float uFade, uWobble, uGlow, uSpectrum;
+// distanza (in frazione della scia) dalla lettera più vicina risalendo controcorrente, con rifinitura
+float reach(vec2 uv0, out vec4 hit) {
+  float lo = 0.0, hi = -1.0;
+  for (int k = 1; k <= 96; k++) {
+    float f = float(k) / 96.0;
+    if (texture(uOrig, uv0 - uDir * f).a > 0.5) { hi = f; lo = float(k - 1) / 96.0; break; }
+  }
+  if (hi < 0.0) { hit = vec4(0.0); return 1.0; }
+  for (int i = 0; i < 6; i++) { float m = (lo + hi) * 0.5; if (texture(uOrig, uv0 - uDir * m).a > 0.5) hi = m; else lo = m; }
+  hit = texture(uSrc, uv0 - uDir * (hi + 1.5 / 96.0));
+  return hi;
+}
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  vec2 p = vUv * uRes / uZ;
+  vec2 perp = normalize(vec2(-uDir.y, uDir.x) + 1e-6);
+  float wob = (vnoise(vec2(dot(p, perp) * 0.03, 5.0)) - 0.5) * uWobble;
+  vec3 col = vec3(0.0); float a = 0.0;
+  // tre campioni affiancati: la scia è morbida, non a righe
+  for (int j = -1; j <= 1; j++) {
+    vec2 uv = vUv + perp * px() * (float(j) * 1.5 + wob * 40.0);
+    vec4 hit; float f = reach(uv, hit);
+    float w = hit.a * pow(1.0 - f, uFade);
+    vec3 c = hit.a > 0.0 ? hit.rgb / hit.a : vec3(0.0);
+    // dispersione: ogni colonna prende una tinta dello spettro che scorre lungo la scia
+    float hue = fract(vnoise(vec2(dot(p, perp) * 0.018, 1.0)) * 1.4 + f * 0.35);
+    c = mix(c, hsv2rgb(vec3(hue, 0.9, 1.0)), uSpectrum * smoothstep(0.0, 0.25, f));
+    c = mix(c, vec3(1.0), uGlow * pow(1.0 - f, 8.0) * 0.7);
+    col += c * w; a += w;
+  }
+  col /= 3.0; a /= 3.0;
+  vec4 tr = vec4(col, a);
+  o = mix(s, over(s, tr), uAmt);
+}`
+
+/** raggi di luce: le lettere proiettano fasci verso l'esterno (radiali o orizzontali) */
+export const RAYS = FX + `uniform vec2 uCenter; uniform float uLen, uInt, uMode; uniform vec3 uCol;
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  vec2 dir = uMode < 0.5 ? (vUv - uCenter) : vec2(sign(vUv.x - uCenter.x) * 0.5, 0.0);
+  float acc = 0.0, w = 1.0, tot = 0.0;
+  for (int k = 0; k < 64; k++) {
+    float f = float(k) / 64.0;
+    vec2 uv = vUv - dir * f * uLen;
+    acc += texture(uOrig, uv).a * w; tot += w;
+    w *= 0.965;
+  }
+  float r = acc / tot;
+  float n = 0.7 + 0.3 * vnoise(vec2(atan(vUv.y - uCenter.y, vUv.x - uCenter.x) * 40.0, 1.0));
+  // scie orizzontali: ogni riga ha la sua intensità, come luce che scorre
+  float row = vnoise(vec2(3.0, vUv.y * uRes.y / uZ * 0.12)) * 0.6 + vnoise(vec2(9.0, vUv.y * uRes.y / uZ * 0.5)) * 0.4;
+  float m = uMode < 0.5 ? n : pow(row, 2.2) * 2.4;
+  float dd = max(sd(vUv) / uZ, 0.0);
+  float i = clamp(r * uInt * m * 2.2, 0.0, 1.0) * exp(-dd / (uLen * (uMode < 0.5 ? 700.0 : 380.0)));
+  vec3 col = mix(uCol, vec3(1.0), pow(i, 2.0) * 0.8);
+  vec4 glow = vec4(col * i, i * 0.9);
+  // i raggi stanno dietro; sopra, le lettere restano piene (con un lieve alone chiaro)
+  vec4 over1 = over(s, glow);
+  o = mix(s, vec4(over1.rgb + uCol * i * 0.25 * s.a, over1.a), uAmt);
+}`
+
+/** glitter: lettere fatte di scaglie che brillano, con polvere attorno */
+export const GLITTER = FX + `uniform vec3 uBase; uniform float uUse, uSize, uSpark, uDust;
+vec2 cellRnd(vec2 c) { return vec2(hash12(c), hash12(c + 17.3)); }
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  vec2 p = vUv * uRes / (uZ * uSize);
+  vec2 c = floor(p), f = fract(p);
+  float md = 9.0; vec2 mc = c;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j)); vec2 o2 = cellRnd(c + g);
+    float d = length(g + o2 - f); if (d < md) { md = d; mc = c + g; }
+  }
+  float h = hash12(mc * 1.7);
+  float bright = pow(h, 6.0) * uSpark * 3.0 + 0.35 + 0.65 * h;
+  vec3 base = uUse > 0.5 ? uBase : (s.a > 0.0 ? s.rgb / s.a : uBase);
+  vec3 col = base * bright + vec3(pow(h, 18.0) * uSpark * 2.0);
+  float dust = 0.0;
+  float d = sd(vUv) / uZ;
+  if (d > 0.0) { float r = hash12(floor(vUv * uRes / 2.0)); dust = step(1.0 - uDust * 0.06 * exp(-d / 40.0), r); }
+  float a = max(s.a, dust);
   o = mix(s, vec4(col * a, a), uAmt);
 }`
