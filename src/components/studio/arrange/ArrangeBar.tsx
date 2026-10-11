@@ -11,6 +11,7 @@
  *   Ctrl+7 / Ctrl+Alt+7     maschera di ritaglio / rilascia (come Illustrator)
  *   Alt+I                   contagocce (I da sola resta lo strumento Immagine)
  *   A                       selezione diretta: modifica i punti della forma
+ *   Alt (tenuto) + passa sopra un oggetto: distanze in px, come in Figma
  *   Ctrl+Maiusc+D           distorci / prospettiva a 4 angoli
  *   doppio clic su immagine ritaglia dentro la cornice
  */
@@ -20,7 +21,7 @@ import {
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Crop, Pipette, Unlink, Spline,
-  MousePointer2, Frame, Replace, Move3d, Undo2,
+  MousePointer2, Frame, Replace, Move3d, Undo2, Palette,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { alignObjects, canAlign, distributeObjects, isMaskGroup, makeClipMask, nudgeSelection, releaseClipMask, type AlignMode } from './align'
@@ -30,6 +31,8 @@ import { installTextCurve } from '../text/curve'
 import { VectorPanel } from '../vector/VectorPanel'
 import { installDirectSelect, isPointEditing, startDirectSelect, exitPointEdit } from '../vector/direct-select'
 import { isCropping, pickAndReplace, resetCrop, startCrop, endCrop } from '../image/crop'
+import { ColorPanel } from '../color/ColorPanel'
+import { installMeasure } from './measure'
 import { endDistort, isDistorting, isWarped, resetDistort, startDistort } from '../image/distort'
 
 type EyeDropperCtor = new () => { open: () => Promise<{ sRGBHex: string }> }
@@ -90,7 +93,7 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
   const [count, setCount] = useState(0)
   const [masked, setMasked] = useState(false)
   const [alignable, setAlignable] = useState(false)
-  const [showVector, setShowVector] = useState(false)
+  const [panel, setPanel] = useState<'vector' | 'color' | null>(null)
   const [, setTick] = useState(0)
   const [note, setNote] = useState<string | null>(null)
 
@@ -109,7 +112,8 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
     // il testo curvo ricalcola l'arco mentre si scrive: serve sempre, non solo con la barra visibile
     const offCurve = installTextCurve(canvas)
     const offDirect = installDirectSelect(canvas)
-    return () => { evs.forEach(e => canvas.off(e, sync)); offCurve(); offDirect() }
+    const offMeasure = installMeasure(canvas)
+    return () => { evs.forEach(e => canvas.off(e, sync)); offCurve(); offDirect(); offMeasure() }
   }, [canvas])
 
   useEffect(() => {
@@ -150,7 +154,7 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
 
   return (<>
     {/* pannello al bordo destro dell'area di lavoro: non copre l'oggetto che si sta modificando */}
-    {showVector && <div className="absolute right-4 bottom-20 z-[60]"><VectorPanel canvas={canvas} /></div>}
+    {panel && <div className="absolute right-4 bottom-20 z-[60]">{panel === 'vector' ? <VectorPanel canvas={canvas} /> : <ColorPanel canvas={canvas} />}</div>}
     <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-0.5 p-1 bg-[#111]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200"
       onMouseDown={e => { if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault() }}>
       {ALIGN.map(a => (
@@ -173,7 +177,10 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
       <Btn onClick={() => pickColor(canvas)} title="Contagocce: prendi un colore dallo schermo · Alt+I"><Pipette className="w-3.5 h-3.5" /></Btn>
       <TransformButtons canvas={canvas} onNote={m => { setNote(m); setTick(n => n + 1) }} />
       <div className="w-px h-4 bg-white/10 mx-1" />
-      <Btn onClick={() => setShowVector(v => !v)} active={showVector} title="Vettoriale: elabora tracciati, offset, ripeti, fusione, poligoni">
+      <Btn onClick={() => setPanel(v => (v === 'color' ? null : 'color'))} active={panel === 'color'} title="Colore: ricolora grafica, campioni, colori del documento, palette da foto, armonie">
+        <Palette className="w-3.5 h-3.5" />
+      </Btn>
+      <Btn onClick={() => setPanel(v => (v === 'vector' ? null : 'vector'))} active={panel === 'vector'} title="Vettoriale: elabora tracciati, offset, ripeti, fusione, poligoni">
         <Spline className="w-3.5 h-3.5" />
       </Btn>
       {note && <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 rounded-lg bg-[#111]/95 border border-white/10 text-[10px] text-amber-300/90">{note}</span>}
