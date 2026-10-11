@@ -208,6 +208,58 @@ const getObjId = (obj: any): string => {
   return obj.objId
 }
 import { type SelState, D } from './extensions/canvas-types'
+import { attachFx, applyFx } from './fx/engine'
+import { fxDef, newFx, type FxId } from './fx/catalog'
+import { FxPanel } from './fx/FxPanel'
+
+// ─── Colori e posizioni di default ────────────────────────────────────────────
+// Un oggetto nuovo deve vedersi: scuro su una tavola chiara, chiaro sul fondo scuro.
+const SHAPE_FILL = '#c7c2f6'
+const artboardAt = (canvas: fabric.Canvas, x: number, y: number) =>
+  canvas.getObjects().filter(o => (o as any).isArtboard).reverse().find(o => {
+    const b = o.getBoundingRect(); return x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height
+  })
+const isLight = (c: unknown) => {
+  if (typeof c !== 'string') return true
+  const m = c.match(/^#?([0-9a-f]{6})$/i) ?? c.match(/^#?([0-9a-f]{3})$/i)
+  if (!m) return !/^(black|#000)/i.test(c)
+  const h = m[1].length === 3 ? m[1].split('').map(x => x + x).join('') : m[1]
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16))
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55
+}
+function inkAt(canvas: fabric.Canvas, x: number, y: number) {
+  const ab = artboardAt(canvas, x, y)
+  return ab ? (isLight(ab.fill) ? '#1a1a1a' : '#ffffff') : '#ffffff'
+}
+/** centro della vista (in coordinate della scena), dove compaiono gli oggetti dalla libreria */
+function dropPoint(canvas: fabric.Canvas) {
+  const v = canvas.viewportTransform, z = canvas.getZoom()
+  return { x: (canvas.getWidth() / 2 - v[4]) / z - 100, y: (canvas.getHeight() / 2 - v[5]) / z - 100 }
+}
+
+// ─── Gruppi (Fabric 7: niente più toGroup()) ─────────────────────────────────
+function groupSelection(canvas: fabric.Canvas) {
+  const a = canvas.getActiveObject()
+  if (!(a instanceof fabric.ActiveSelection)) return
+  const objs = a.getObjects().filter(o => !(o as any).isArtboard)
+  if (objs.length < 2) return
+  canvas.discardActiveObject()
+  objs.forEach(o => canvas.remove(o))
+  const g = new fabric.Group(objs)
+  getObjId(g)
+  canvas.add(g); canvas.setActiveObject(g); canvas.requestRenderAll()
+}
+function ungroupSelection(canvas: fabric.Canvas) {
+  const g = canvas.getActiveObject()
+  if (!(g instanceof fabric.Group) || g instanceof fabric.ActiveSelection) return
+  const idx = canvas.getObjects().indexOf(g)
+  const objs = g.removeAll()
+  canvas.remove(g)
+  objs.forEach((o, i) => { canvas.insertAt(idx + i, o); o.setCoords() })
+  canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas }))
+  canvas.requestRenderAll()
+}
+
 import { useCanvasHistory } from './hooks/use-canvas-history'
 import { useCanvasLayers } from './hooks/use-canvas-layers'
 import { useProjectSync } from './hooks/use-project-sync'
@@ -449,7 +501,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
-  const { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory } =
+  const { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory, restoring, restoringRef } =
     useCanvasHistory(fabricRef, activeArtboardIdRef, setActiveArtboardId)
 
   const { layers, refreshLayers, layerSelect, layerToggleVisible, layerToggleLock, layerMoveUp, layerMoveDown, layerBringToFront, layerSendToBack, layerDelete } =
@@ -471,6 +523,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     setShowProjectList,
     setActiveArtboardId,
     getManifest: buildSemanticManifest,
+    restoring,
+    pushHistory,
+    onNewProject: () => { addArtboard(1080, 1080, 'Social Square', 'social'); fitToArtboards() },
   })
 
   useEffect(() => { activeArtboardIdRef.current = activeArtboardId }, [activeArtboardId])
@@ -630,6 +685,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       selection: true,
     })
     fabricRef.current = canvas
+    const detachFx = attachFx(canvas)   // effetti su qualsiasi oggetto, ricostruiti da JSON/annulla
     ;(canvas as any)._springIntegrator = springIntegratorRef.current
     ;(canvasRef.current as any)._fabric = canvas
 
@@ -658,6 +714,18 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     canvas.on('object:removed', () => syncManifest())
     canvas.on('path:created', () => syncManifest())
     
+    // ── Cronologia e salvataggio automatico: ogni modifica reale lascia un passo ──
+    // (gli oggetti temporanei, come il lazo o l'anteprima della penna, sono excludeFromExport)
+    const onChange = (e: { target?: fabric.FabricObject }) => {
+      if (restoringRef.current || e?.target?.excludeFromExport) return
+      pushHistory(); scheduleAutoSave(); refreshLayers()
+    }
+    canvas.on('object:added', onChange)
+    canvas.on('object:removed', onChange)
+    canvas.on('object:modified', onChange)
+    canvas.on('text:changed', onChange)
+    canvas.on('history:restored' as never, () => refreshLayers())
+
     // Initial sync
     syncManifest()
     setCanvasReady(true)
@@ -1082,18 +1150,12 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       }
       // Ctrl+0 — fit to screen
       if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-        // No preventDefault to allow global UI zoom reset in RootShell
-        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]); canvas.setZoom(1); setZoom(1)
-        canvas.requestRenderAll(); return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
         e.preventDefault()
-        const a = canvas.getActiveObject()
-        if (a?.type === 'activeSelection') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const g = (a as any).toGroup?.() ?? (a as any).group?.()
-          if (g) { canvas.setActiveObject(g); canvas.requestRenderAll() }
-        }
+        fitToArtboards(); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        if (e.shiftKey) ungroupSelection(canvas); else groupSelection(canvas)
         return
       }
       if (e.key === 'Enter') {
@@ -1135,16 +1197,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const tm: Record<string, Tool> = { v: 'select', a: 'lasso', t: 'text', r: 'rect', c: 'circle', l: 'line', f: 'pen', p: 'pencil', e: 'eraser', i: 'image', x: 'scissors' }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && tm[e.key.toLowerCase()]) changeTool(tm[e.key.toLowerCase()])
     }
-    // Initial action: Load first project or create artboard
-    setTimeout(() => {
+    // Initial action: Load first project or create artboard.
+    // Il timer va annullato allo smontaggio: in sviluppo React monta due volte
+    // e senza pulizia nascevano due tavole sovrapposte.
+    const initTimer = setTimeout(() => {
+      if (fabricRef.current !== canvas) return
       if (canvas.getObjects().filter(o => !(o as any).isArtboard).length === 0) {
         if (designProjects.length > 0) {
           loadProject(designProjects[0]).then(() => {
             cleanupOrphanedLabels(canvas)
+            fitToArtboards()
           })
         } else {
           // Default artboard if totally empty
-          addArtboard(1080, 1080, 'Social Square', 'social')
+          restoring(async () => { addArtboard(1080, 1080, 'Social Square', 'social') })
+          fitToArtboards()
+          pushHistory(true)
         }
       } else {
         cleanupOrphanedLabels(canvas)
@@ -1270,6 +1338,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     fxAnimRafRef.current = requestAnimationFrame(fxTick)
 
     return () => {
+      clearTimeout(initTimer)
+      detachFx()
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
@@ -1522,7 +1592,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     if (t === 'lasso') {
       lassoPoints.current = [{ x: p.x, y: p.y }]
-      const poly = new fabric.Polyline([{ x: p.x, y: p.y }], { fill: 'rgba(99,102,241,0.08)', stroke: '#6366f1', strokeWidth: 1.5, strokeDashArray: [5, 3], selectable: false, evented: false })
+      const poly = new fabric.Polyline([{ x: p.x, y: p.y }], { fill: 'rgba(99,102,241,0.08)', stroke: '#6366f1', strokeWidth: 1.5, strokeDashArray: [5, 3], selectable: false, evented: false, excludeFromExport: true })
       lassoLine.current = poly; canvas.add(poly); return
     }
 
@@ -1567,7 +1637,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (t === 'text') {
       const txt = new fabric.Textbox('Scrivi qualcosa...', {
         left: p.x, top: p.y, width: 350,
-        fill: '#ffffff', fontSize: 28, fontFamily: 'Inter',
+        fill: inkAt(canvas, p.x, p.y), fontSize: 28, fontFamily: 'Inter',
         editable: true, textAlign: 'left'
       })
       canvas.add(txt)
@@ -1582,17 +1652,17 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       return
     }
     if (t === 'rect') {
-      const r = new fabric.Rect({ left: p.x, top: p.y, width: 200, height: 200, fill: 'rgba(255,255,255,0.1)', stroke: '#ffffff', strokeWidth: 2, rx: 8, ry: 8 })
+      const r = new fabric.Rect({ left: p.x, top: p.y, width: 200, height: 200, fill: SHAPE_FILL, strokeWidth: 0, rx: 0, ry: 0 })
       canvas.add(r); canvas.setActiveObject(r); setTool('select'); return
     }
     if (t === 'circle') {
-      const el = new fabric.Ellipse({ left: p.x, top: p.y, rx: 80, ry: 80, fill: 'rgba(255,255,255,0.1)', stroke: '#ffffff', strokeWidth: 2 })
+      const el = new fabric.Ellipse({ left: p.x, top: p.y, rx: 100, ry: 100, fill: SHAPE_FILL, strokeWidth: 0 })
       canvas.add(el); canvas.setActiveObject(el); setTool('select'); return
     }
     if (t === 'line') {
       const snap = findSnapPoint(canvas, p.x, p.y)
       const sx = snap ? snap.x : p.x, sy = snap ? snap.y : p.y
-      const line = new ArrowLine([sx, sy, sx, sy], { stroke: '#ffffff', strokeWidth: 2, selectable: false, evented: false })
+      const line = new ArrowLine([sx, sy, sx, sy], { stroke: inkAt(canvas, sx, sy), strokeWidth: 2, selectable: false, evented: false, excludeFromExport: true })
       line.isConnector = snapRef.current; line.startObjId = snap ? snap.objId : null
       canvas.add(line); tempLine.current = line; lineStart.current = { x: sx, y: sy }; drawingLine.current = true; return
     }
@@ -1673,7 +1743,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const ex = snap ? snap.x : p.x, ey = snap ? snap.y : p.y
       const start = lineStart.current!, d = Math.hypot(ex - start.x, ey - start.y)
       if (d < 5) { canvas.remove(line) }
-      else { line.set({ x2: ex, y2: ey, selectable: true, evented: true, endObjId: snap ? snap.objId : null }); line.setCoords(); canvas.setActiveObject(line) }
+      else { line.set({ x2: ex, y2: ey, selectable: true, evented: true, excludeFromExport: false, endObjId: snap ? snap.objId : null }); line.setCoords(); canvas.setActiveObject(line); canvas.fire('object:modified', { target: line }) }
       drawingLine.current = false; tempLine.current = null; lineStart.current = null
       canvas.requestRenderAll(); setTool('select')
     }
@@ -1686,7 +1756,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const previewAnchors = [...anchors, makeAnchor(cursorX, cursorY)]
     const d = anchorsToBzPath(previewAnchors)
     if (penFabricPath.current) canvas.remove(penFabricPath.current)
-    const fp = new fabric.Path(d, { stroke: '#ffffff', strokeWidth: 2, fill: 'transparent', selectable: false, evented: false, objectCaching: false })
+    const fp = new fabric.Path(d, { stroke: inkAt(canvas, cursorX, cursorY), strokeWidth: 2, fill: 'transparent', selectable: false, evented: false, objectCaching: false, excludeFromExport: true })
     canvas.add(fp); penFabricPath.current = fp
     canvas.requestRenderAll()
   }
@@ -1698,7 +1768,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (anchors.length >= 2) {
       const d = anchorsToBzPath(anchors)
       const fp = new fabric.Path(d, {
-        stroke: '#ffffff', strokeWidth: 2, fill: 'transparent',
+        stroke: inkAt(canvas, anchors[0].x, anchors[0].y), strokeWidth: 2, fill: 'transparent',
         selectable: true, evented: true, objectCaching: false,
         lockScalingX: true, lockScalingY: true,
       })
@@ -1762,6 +1832,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       Object.assign((obj as any)._baseProps, props)
     }
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
     setSel(prev => ({
       ...prev,
       ...(props.fontFamily !== undefined && { fontFamily: props.fontFamily }),
@@ -1789,6 +1860,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       Object.assign((obj as any)._baseProps, props)
     }
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
     setSel(prev => ({
       ...prev,
       ...(props.fill !== undefined && { fillColor: props.fill as string }),
@@ -1811,6 +1883,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     obj.set('fill', grad)
     if ((obj as any)._baseProps) (obj as any)._baseProps.fill = grad
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
   }
 
   // ── Shadow ────────────────────────────────────────────────────────────────
@@ -1821,6 +1894,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     obj.set('shadow', shadow)
     if ((obj as any)._baseProps) (obj as any)._baseProps.shadow = shadow
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
   }
 
   // ── Effect presets ────────────────────────────────────────────────────────
@@ -2228,6 +2302,21 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
 
 
+  /** Adatta la vista alle tavole (Ctrl+0 o clic sulla percentuale) */
+  function fitToArtboards() {
+    const canvas = fabricRef.current; if (!canvas) return
+    const abs = canvas.getObjects().filter(o => (o as any).isArtboard)
+    const list = abs.length ? abs : canvas.getObjects()
+    if (!list.length) { canvas.setViewportTransform([1, 0, 0, 1, 0, 0]); setZoom(1); return }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    list.forEach(o => { o.setCoords(); const r = o.getBoundingRect(); minX = Math.min(minX, r.left); minY = Math.min(minY, r.top); maxX = Math.max(maxX, r.left + r.width); maxY = Math.max(maxY, r.top + r.height) })
+    // getBoundingRect è in coordinate della scena: si annulla prima lo zoom corrente
+    const w = maxX - minX, h = maxY - minY
+    const z = Math.min((canvas.getWidth() * 0.86) / w, (canvas.getHeight() * 0.86) / h, 2)
+    canvas.setViewportTransform([z, 0, 0, z, (canvas.getWidth() - w * z) / 2 - minX * z, (canvas.getHeight() - h * z) / 2 - minY * z])
+    canvas.requestRenderAll(); setZoom(z); updateArtboardBadges()
+  }
+
   function renameArtboard(oldName: string, newName: string) {
     const canvas = fabricRef.current; if (!canvas) return
     const all = canvas.getObjects()
@@ -2484,7 +2573,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           }
 
           if (obj) {
-            if (el.effects) { (obj as any)._appliedFX = el.effects; (obj as any).fxProps = el.effectProps; reapplyAllEffects(obj) }
+            if (Array.isArray(el.effects)) {
+              // l'AI chiede effetti per nome: si usano quelli del motore fx che esistono davvero
+              ;(obj as any).fx = (el.effects as string[]).filter(id => fxDef(id)).map(id => ({ ...newFx(id as FxId), p: { ...newFx(id as FxId).p, ...(el.effectProps?.[id] ?? {}) } }))
+              applyFx(obj)
+            }
             canvas.add(obj)
           }
         })
@@ -2902,7 +2995,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // ── Library ───────────────────────────────────────────────────────────────
   function addLibShape(path: string) {
     const canvas = fabricRef.current; if (!canvas) return
-    const p = new fabric.Path(path, { left: 200, top: 200, fill: 'rgba(255,255,255,0.15)', stroke: '#ffffff', strokeWidth: 2, scaleX: 1.5, scaleY: 1.5 })
+    const { x, y } = dropPoint(canvas)
+    const p = new fabric.Path(path, { left: x, top: y, fill: SHAPE_FILL, strokeWidth: 0, scaleX: 1.5, scaleY: 1.5 })
     canvas.add(p); canvas.setActiveObject(p); canvas.requestRenderAll()
   }
   function addLibIcon(svgPath: string) {
@@ -4138,16 +4232,6 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
       </div>{/* end WORKSPACE ROW */}
 
-      {showSaveDialog && (
-        <SaveDialog
-          initialName={currentProjectName}
-          initialClientId={currentClientId}
-          initialDescription={currentUserDescription}
-          clients={clients}
-          onClose={() => setShowSaveDialog(false)}
-          onSave={saveProject}
-        />
-      )}
 
       {/* ── BOTTOM BAR ─────────────────────────────────────────────────────────
           Due categorie separate, due pillole.
@@ -4224,7 +4308,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             className="h-6 w-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors">
             <ZoomOut className="w-3 h-3" />
           </button>
-          <button onClick={() => { const c = fabricRef.current; if (!c) return; c.setViewportTransform([1, 0, 0, 1, 0, 0]); c.setZoom(1); setZoom(1) }}
+          <button onClick={() => fitToArtboards()}
             className="h-6 px-2 rounded-md text-[9px] font-black text-white/40 hover:text-white/70 hover:bg-white/[0.05] transition-colors w-14 text-center"
             title="Fit [Ctrl+0]">
             {Math.round(zoom * 100)}%
@@ -4270,15 +4354,6 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         </div>
       )}
 
-      {/* Universal Launch Hub Overlay */}
-      {showLaunchHub && (
-        <UniversalLaunchHub 
-          onClose={() => setShowLaunchHub(false)} 
-          data={universalLaunchData}
-          fabricCanvasEl={fabricRef.current?.lowerCanvasEl as HTMLCanvasElement | null}
-          artboardRects={(universalLaunchData as any)?._artboardRects}
-        />
-      )}
 
       {/* --- SHADER LAB OVERLAY --- */}
       {showFX && (
@@ -4321,10 +4396,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onBringToFront={() => { layerBringToFront(); setCtxMenu(null) }}
           onSendToBack={() => { layerSendToBack(); setCtxMenu(null) }}
           onGroup={() => {
-            const canvas = fabricRef.current, objs = canvas?.getActiveObjects(); if (!objs?.length) return
-            const a = canvas!.getActiveObject() as any
-            const g = a.toGroup?.() ?? a.group?.()
-            if (g) { canvas!.setActiveObject(g); canvas!.requestRenderAll() }
+            const canvas = fabricRef.current; if (canvas) groupSelection(canvas)
             setCtxMenu(null)
           }}
           onClose={() => setCtxMenu(null)}
@@ -4594,7 +4666,8 @@ function PropertiesPanel(props: PanelProps) {
     if (sel.type === 'line') tabs.push({ id: 'line', icon: <Minus className="w-3.5 h-3.5" />, label: 'Linea' })
     if (sel.type === 'image') tabs.push({ id: 'img', icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'Immagine' })
     if (sel.type === 'group') tabs.push({ id: 'group', icon: <Layers className="w-3.5 h-3.5" />, label: 'Gruppo' })
-    tabs.push({ id: 'lab', icon: <FlaskConical className={cn("w-3.5 h-3.5", store.labActive ? "text-accent" : "text-white/20")} />, label: 'Studio Lab' })
+    if (hasSelection) tabs.push({ id: 'fx', icon: <Sparkles className="w-3.5 h-3.5" />, label: sel.type === 'image' ? 'Modifica foto' : 'Effetti' })
+    tabs.push({ id: 'lab', icon: <FlaskConical className={cn("w-3.5 h-3.5", store.labActive ? "text-accent" : "text-white/20")} />, label: 'Sperimentale' })
     return tabs
   }, [sel.type, isPencil, hasSelection])
 
@@ -4611,12 +4684,14 @@ function PropertiesPanel(props: PanelProps) {
     else if (prop === 'height') { obj.scaleY = (val || 1) / obj.height!; obj.setCoords() }
     else if (prop === 'angle') { obj.set({ angle: val }); obj.setCoords() }
     else obj.set({ [prop]: val })
+    obj.setCoords()
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
     setInsp(p => p ? { ...p, [prop === 'left' ? 'x' : prop === 'top' ? 'y' : prop === 'width' ? 'w' : prop === 'height' ? 'h' : 'r']: val } : p)
   }
 
   return (
-    <div className="w-[240px] flex-shrink-0 flex flex-col border-l border-white/[0.05] bg-[#070707]/80 z-[20] overflow-hidden">
+    <div className="w-[300px] flex-shrink-0 flex flex-col border-l border-white/[0.05] bg-[#070707]/80 z-[20] overflow-hidden">
 
       {/* Tab bar */}
       <div className="h-9 flex-shrink-0 flex items-center border-b border-white/[0.05]">
@@ -4722,7 +4797,7 @@ function PropertiesPanel(props: PanelProps) {
               {propTab === 'text' && sel.type === 'text' && (
                 <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink}
                   showFP={props.showFP} setShowFP={props.setShowFP}
-                  showFX={false} setShowFX={() => { setPropTab('lab'); if (!store.labActive) store.set({ labActive: true }) }}
+                  showFX={false} setShowFX={() => setPropTab('fx')}
                   onShadow={props.onApplyShadow} onPreset={props.onApplyPreset} onUpdate={props.onUpdateFx}
                 />
               )}
@@ -4730,7 +4805,7 @@ function PropertiesPanel(props: PanelProps) {
               {/* Forma */}
               {propTab === 'shape' && sel.type === 'shape' && (
                 <ShapeBar sel={sel} onApply={props.onApplyShape} onShadow={props.onApplyShadow}
-                  onGrad={props.onApplyGradient} showFX={false} setShowFX={() => setPropTab('lab')}
+                  onGrad={props.onApplyGradient} showFX={false} setShowFX={() => setPropTab('fx')}
                   onBoolean={props.onDoBoolean} onBindTextToPath={() => { }} onPreset={props.onApplyPreset}
                   onUpdate={props.onUpdateFx}
                 />
@@ -4745,43 +4820,19 @@ function PropertiesPanel(props: PanelProps) {
               {/* Immagine */}
               {propTab === 'img' && sel.type === 'image' && (
                 <ImageBar sel={sel} onApply={props.onApplyShape} onRemoveBg={props.onRemoveBg}
-                  loading={props.bgRemoving} showFx={false} setShowFx={() => setPropTab('lab')}
+                  loading={props.bgRemoving} showFx={false} setShowFx={() => setPropTab('fx')}
                   onTraceImage={props.onTraceImage} onApplyAnimation={props.onApplyAnimation}
                 />
               )}
 
               {/* Gruppo */}
               {propTab === 'group' && sel.type === 'group' && (
-                <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v })} />
+                <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v / 100 })} />
               )}
 
-              {/* Effetti + Filtri immagine */}
-              {propTab === 'fx' && (
-                <div className="space-y-4">
-                  <div>
-                    <button onClick={() => setShowFX(true)}
-                      className="w-full mb-4 py-2 bg-accent/80 hover:bg-accent text-black text-[8px] font-black uppercase tracking-widest rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-accent/10">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Apri Shader Lab
-                    </button>
-                    <p className="text-[7px] font-black uppercase tracking-widest text-white/20 mb-2">Effetti Rapidi</p>
-                    <div className="space-y-1">
-                      {UNIFIED_FX_LIST.map(fx => (
-                        <FXRow key={fx.key} fx={fx} active={sel.appliedFX.includes(fx.key)} fxProps={sel.fxProps}
-                          onToggle={() => props.onApplyPreset(fx.key)}
-                          onUpdate={(k, p, v) => props.onUpdateFx(k, p, v)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {sel.type === 'image' && (
-                    <div>
-                      <p className="text-[7px] font-black uppercase tracking-widest text-white/20 mb-2">Filtri immagine</p>
-                      <ImgFxPanel onFilter={props.onApplyImgFilter} onPreset={props.onApplyPresetFilter}
-                        onReset={props.onResetImgFilters} onClose={() => { }} />
-                    </div>
-                  )}
-                </div>
+              {/* Effetti: filtri pronti, regolazioni, effetti a pila (motore fx, valido per ogni oggetto) */}
+              {propTab === 'fx' && hasSelection && (
+                <FxPanel fabricRef={fabricRef} selKey={sel} initialTab={sel.type === 'image' ? 'filtri' : 'effetti'} />
               )}
 
               {/* 3D Genesis Preview — inline viewer shown when 3D is active + object selected */}
@@ -4990,7 +5041,7 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
   const ib = (a: boolean) => cn('w-9 h-9 flex items-center justify-center rounded-lg transition-colors border-2 border-transparent', a ? 'bg-accent text-black' : 'text-white/40 hover:bg-white/10 hover:text-white')
   const PS = [{ l: 'H1', sz: 48, fw: 'bold' as const }, { l: 'H2', sz: 32, fw: 'bold' as const }, { l: 'H3', sz: 24, fw: 'bold' as const }, { l: 'CP', sz: 16, fw: 'normal' as const }, { l: 'C', sz: 12, fw: 'normal' as const }]
   return (
-    <div className="flex items-center gap-4 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex-shrink-0">
         <button ref={fontBtnRef} onClick={() => setShowFP(!showFP)} className="flex items-center gap-2 h-9 px-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white/80 hover:bg-white/10 min-w-[130px]" style={{ fontFamily: sel.fontFamily }}>
           {sel.fontFamily}<ChevronDown className="w-4 h-4 ml-auto opacity-40" />
@@ -5000,23 +5051,23 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
         </DropdownPortal>}
       </div>
       <input type="number" value={sel.fontSize} min={6} max={400} onChange={e => onApply({ fontSize: parseInt(e.target.value) || 24 })} className="w-16 h-9 px-2 bg-white/5 border border-white/10 rounded-xl text-xs text-white uppercase font-black text-center focus:outline-none flex-shrink-0" />
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={() => onApply({ fontWeight: sel.bold ? 'normal' : 'bold' })} className={ib(sel.bold)}><Bold className="w-4 h-4" /></button>
         <button onClick={() => onApply({ fontStyle: sel.italic ? 'normal' : 'italic' })} className={ib(sel.italic)}><Italic className="w-4 h-4" /></button>
         <button onClick={() => onApply({ underline: !sel.underline })} className={ib(sel.underline)}><Underline className="w-4 h-4" /></button>
         <button onClick={() => onApply({ linethrough: !sel.linethrough })} className={ib(sel.linethrough)}><Strikethrough className="w-4 h-4" /></button>
       </div>
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={() => onApply({ textAlign: 'left' })} className={ib(sel.textAlign === 'left')}><AlignLeft className="w-4 h-4" /></button>
         <button onClick={() => onApply({ textAlign: 'center' })} className={ib(sel.textAlign === 'center')}><AlignCenter className="w-4 h-4" /></button>
         <button onClick={() => onApply({ textAlign: 'right' })} className={ib(sel.textAlign === 'right')}><AlignRight className="w-4 h-4" /></button>
         <button onClick={() => onApply({ textAlign: 'justify' })} className={ib(sel.textAlign === 'justify')}><AlignJustify className="w-4 h-4" /></button>
       </div>
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <CP value={sel.fillColor} onChange={c => onApply({ fill: c })} label="A" />
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       {/* Paragrafo — hover espande i preset */}
       <div className="relative flex-shrink-0"
         onMouseEnter={() => { clearTimeout(paraTimer.current); setShowPara(true) }}
@@ -5031,7 +5082,7 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
           </div>
         )}
       </div>
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <button onClick={onLink} className={ib(false)} title="Aggiungi link"><Link2 className="w-4 h-4" /></button>
       <div className="flex-shrink-0">
         <button ref={fxBtnRef} onClick={() => setShowFX(!showFX)} className={cn('h-8 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 relative transition-all', showFX || sel.appliedFX?.length ? 'bg-accent/20 text-accent border border-accent/40' : 'bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20')}>
@@ -5062,18 +5113,18 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
   const bmBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const [showBM, setShowBM] = useState(false)
   return (
-    <div className="flex items-center gap-5 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <CP value={sel.fillColor} onChange={c => onApply({ fill: c })} label="Fill" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <CP value={sel.strokeColor} onChange={c => onApply({ stroke: c })} label="Bordo" />
       <input type="number" min={0} max={50} value={sel.strokeWidth} onChange={e => onApply({ strokeWidth: parseInt(e.target.value) || 0 })} className="w-14 h-8 px-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/80 text-center focus:outline-none flex-shrink-0" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-xl border border-white/5">
         <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Opacità</span>
         <input type="range" min={0} max={100} value={sel.opacity} onChange={e => onApply({ opacity: parseInt(e.target.value) / 100 })} className="w-24 accent-accent opacity-70 hover:opacity-100 transition-opacity" />
         <span className="text-[10px] font-black text-white/60 w-8">{sel.opacity}%</span>
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex-shrink-0">
         <button ref={fxBtnRef} onClick={() => setShowFX(!showFX)} className={cn('h-8 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all relative', showFX || sel.appliedFX?.length ? 'bg-accent/20 text-accent border border-accent/40' : 'bg-white/5 border border-white/10 text-white/40 hover:bg-white/10')}>
           <Sparkles className="w-3.5 h-3.5" /> Effetti
@@ -5083,7 +5134,7 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
           <ShapeFXPanel sel={sel} onShadow={onShadow} onGrad={onGrad} onPreset={onPreset} onUpdate={onUpdate} onClose={() => setShowFX(false)} />
         </DropdownPortal>}
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex-shrink-0 relative">
         <button ref={bmBtnRef} onClick={() => setShowBM(!showBM)}
           className={cn('h-8 px-3 rounded-xl text-[10px] font-black border uppercase tracking-widest flex items-center gap-2 transition-all',
@@ -5098,7 +5149,7 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
           </DropdownPortal>
         )}
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={() => onBoolean('union')} title="Unione" className="w-8 h-8 flex items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-emerald-400"><Merge className="w-4 h-4" /></button>
         <button onClick={() => onBoolean('subtract')} title="Sottrai" className="w-8 h-8 flex items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-red-400"><Scissors className="w-4 h-4" /></button>
@@ -5114,16 +5165,16 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
 function LineBar({ sel, onApply, onStart, onEnd, onConn }: { sel: SelState; onApply: (p: Partial<fabric.Object>) => void; onStart: () => void; onEnd: () => void; onConn: () => void }) {
   const ib = (a: boolean) => cn('w-9 h-9 flex items-center justify-center rounded-xl border-2 transition-colors', a ? 'bg-accent text-black border-accent' : 'border-white/10 text-white/40 hover:bg-white/10 hover:text-white')
   return (
-    <div className="flex items-center gap-4 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <CP value={sel.strokeColor} onChange={c => onApply({ stroke: c })} label="Linea" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <input type="number" min={1} max={50} value={sel.strokeWidth} onChange={e => onApply({ strokeWidth: parseInt(e.target.value) || 1 })} className="w-14 h-8 px-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/80 text-center focus:outline-none flex-shrink-0" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={onStart} className={ib(sel.hasStartArrow)} title="Ancoraggio Inizio"><ArrowLeft className="w-4 h-4" /></button>
         <button onClick={onEnd} className={ib(sel.hasEndArrow)} title="Ancoraggio Fine"><ArrowRight className="w-4 h-4" /></button>
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <button onClick={onConn}
         className={cn('h-8 px-4 rounded-xl border-2 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2', sel.isConnector ? 'bg-accent text-black border-accent' : 'border-white/10 text-white/40 hover:bg-white/10 hover:border-white/20')}>
         <ArrowLeftRight className="w-3.5 h-3.5" /> Aggancio
@@ -5139,13 +5190,13 @@ function ImageBar({ sel, onApply, onRemoveBg, loading, showFx, setShowFx, onTrac
   showFx: boolean; setShowFx: (v: boolean) => void; onTraceImage: () => void; onApplyAnimation: (a: string | null) => void
 }) {
   return (
-    <div className="flex items-center gap-6 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-xl border border-white/5">
         <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Opacità</span>
         <input type="range" min={0} max={100} value={sel.opacity} onChange={e => onApply({ opacity: parseInt(e.target.value) / 100 })} className="w-24 accent-accent opacity-70 hover:opacity-100 transition-opacity" />
         <span className="text-[10px] font-black text-white/60 w-8">{sel.opacity}%</span>
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       {/* Filtri button — opens ImgFxPanel via portal (managed by parent via showImgFx state) */}
       <button onClick={() => setShowFx(!showFx)}
         className={cn('flex items-center gap-2 h-8 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors',
@@ -5158,7 +5209,7 @@ function ImageBar({ sel, onApply, onRemoveBg, loading, showFx, setShowFx, onTrac
       <button onClick={onTraceImage} className="flex items-center gap-2 h-8 px-4 rounded-xl bg-emerald-600/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all">
         <Zap className="w-3.5 h-3.5" /> Vettorializza
       </button>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <button onClick={() => onApplyAnimation(sel.animation ? null : 'pulse')} className={cn('h-8 px-3 rounded-xl text-[10px] font-black border uppercase tracking-widest flex items-center gap-2 transition-all', sel.animation ? 'bg-amber-500 text-black border-amber-500' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10')}>
         <Play className={cn('w-3.5 h-3.5', sel.animation && 'animate-spin')} /> Animazione
       </button>
@@ -5191,8 +5242,8 @@ function PencilBar({ sel, onApply }: { sel: SelState; onApply: (p: Partial<SelSt
   ]
 
   return (
-    <div className="flex items-center gap-5 flex-shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="flex bg-white/5 rounded-xl border border-white/10 p-1">
+    <div className="flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="flex flex-wrap bg-white/5 rounded-xl border border-white/10 p-1">
         {brushes.map(b => (
           <button key={b.id} onClick={() => onApply({ brushType: b.id })} title={b.label}
             className={cn('w-9 h-8 flex items-center justify-center rounded-lg transition-all',
@@ -5202,7 +5253,7 @@ function PencilBar({ sel, onApply }: { sel: SelState; onApply: (p: Partial<SelSt
         ))}
       </div>
 
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
 
       <div className="flex items-center gap-3">
         <span className="text-[9px] text-white/30 uppercase tracking-widest">Peso</span>
@@ -5212,7 +5263,7 @@ function PencilBar({ sel, onApply }: { sel: SelState; onApply: (p: Partial<SelSt
         <span className="text-[10px] font-black text-white/60 w-6">{sel.brushWidth}</span>
       </div>
 
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
 
       <CP value={sel.brushColor || '#ffffff'} onChange={c => onApply({ brushColor: c })} label="TRATTO" />
     </div>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import * as fabric from 'fabric'
 import { sanitizeCanvasJSON } from './use-canvas-history'
+import { serializeCanvas } from '../canvas-serial'
 
 interface SavePayload {
   id: string | null
@@ -37,6 +38,12 @@ export function useProjectSync(
     setActiveArtboardId: (id: string | null) => void
     getManifest?: () => string
     onAfterLoad?: (canvas: fabric.Canvas) => void
+    /** carica senza registrare passi di cronologia */
+    restoring?: <T>(fn: () => Promise<T>) => Promise<T>
+    /** primo stato della cronologia, da cui "annulla" può tornare */
+    pushHistory?: (immediate?: boolean) => void
+    /** progetto nuovo: per esempio una prima tavola */
+    onNewProject?: (canvas: fabric.Canvas) => void
   },
 ) {
   const [saving, setSaving]                         = useState(false)
@@ -62,12 +69,7 @@ export function useProjectSync(
 
   function getCanvasState(): string {
     const canvas = fabricRef.current; if (!canvas) return '{}'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return JSON.stringify((canvas as any).toJSON([
-      'objId', 'name', 'hasStartArrow', 'hasEndArrow', 'isConnector',
-      'startObjId', 'endObjId', 'vertexConnections', 'artboardExportType', 'isArtboard',
-      'parentBoard',
-    ]))
+    return serializeCanvas(canvas)
   }
 
   // ── Autosave — debounced 2500ms ─────────────────────────────────────────────
@@ -165,7 +167,8 @@ export function useProjectSync(
     callbacks.setShowProjectList(false)
     if (project.canvas_state) {
       try {
-        await canvas.loadFromJSON(JSON.parse(sanitizeCanvasJSON(project.canvas_state)))
+        const json = JSON.parse(sanitizeCanvasJSON(project.canvas_state))
+        await (callbacks.restoring ?? (f => f()))(() => canvas.loadFromJSON(json))
         // Purge any video placeholder objects — blob: URLs stored in canvas_state
         // have expired.  Video elements cannot be restored from JSON; the user
         // must re-add videos manually.
@@ -183,6 +186,7 @@ export function useProjectSync(
       callbacks.setActiveArtboardId(null)
     }
     callbacks.resetHistory()
+    callbacks.pushHistory?.(true)
     setIsDirty(false)
     if (project.client_id) onClientChange?.(project.client_id)
   }
@@ -198,6 +202,8 @@ export function useProjectSync(
     callbacks.setShowProjectList(false)
     canvas.clear(); canvas.backgroundColor = '#111111'; canvas.renderAll()
     callbacks.resetHistory()
+    callbacks.onNewProject?.(canvas)
+    callbacks.pushHistory?.(true)
     setIsDirty(false)
   }
 
