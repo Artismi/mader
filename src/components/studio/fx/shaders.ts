@@ -1108,16 +1108,20 @@ void main() {
   vec3 tint = mix(vec3(luma(hue)), hue, uSat);
   vec4 under = texture(uLocal, vUv) * 0.5 + texture(uSrc, vUv) * 0.5;
   vec3 res; float alpha;
-  if (uMode < 0.5) {            // luce su nero: caratteri luminosi, foto velata sotto
-    // il carattere porta il colore vero della cella, schiarito: densità e colore insieme danno il volume
+  if (uMode < 0.5) {            // foto in caratteri: la foto resta intera, i caratteri ne modulano la luce
+    vec3 ph = unp(texture(uSrc, vUv)) * 0.6 + col * 0.4;
+    vec3 ink = mix(uInk, ph * 1.12 + tint * 0.05, uColor);
+    res = mix(ph * (0.38 + 0.25 * uUnder), ink, g);
+    alpha = 1.0;
+  } else if (uMode < 1.5) {     // luce su nero: caratteri luminosi, foto velata sotto
     vec3 ink = mix(uInk * (0.3 + 0.9 * t), min(col * 2.1 + tint * 0.2 * t, vec3(1.4)), uColor);
-    // la foto sotto sale con la luce: le zone chiare restano piene, le scure respirano
     res = mix(uBg, unp(under), uUnder * (0.35 + 0.9 * t)) * (1.0 - g * 0.9) + ink * g;
     alpha = 1.0;
-  } else if (uMode < 1.5) {     // inchiostro su carta
+  } else if (uMode < 2.5) {     // inchiostro su carta
     vec3 ink = mix(uInk, col * 0.45 * (0.5 + 0.5 * t), uColor);
     vec3 paper = mix(uBg, uBg * (unp(under) * 0.85 + 0.15), uUnder);
-    res = mix(paper, ink, g);
+    paper *= 0.965 + 0.05 * fbm(p * 0.6);
+    res = mix(paper, ink, g * (0.82 + 0.18 * vnoise(p * 1.7)));
     alpha = 1.0;
   } else {                      // solo caratteri, fondo trasparente
     res = mix(uInk, tint * (0.4 + 0.8 * t), uColor);
@@ -1135,7 +1139,7 @@ float lineInk(vec2 p, float ang, float dark, float phase) {
   vec2 ax = vec2(cos(ang), sin(ang));
   float t = dot(p, ax) / uLines + phase;
   float tri = abs(fract(t) - 0.5) * 2.0;           // 0 al centro della linea
-  float w = fwidth(t) * 1.1 + 0.015;
+  float w = fwidth(t) * 1.5 + 0.035;
   return 1.0 - smoothstep(dark - w, dark + w, tri);
 }
 void main() {
@@ -1158,6 +1162,8 @@ void main() {
   }
   vec3 inkC = mix(uInk, col * 0.55 * (0.6 + 0.4 * tone) + uInk * 0.15, uColor);
   vec3 paper = mix(uPaper, uPaper * (0.82 + 0.18 * col / max(L, 0.05)), uColor * 0.35);
+  paper *= 0.955 + 0.07 * fbm(p * 0.45);                         // fibra della carta
+  ink *= 0.86 + 0.14 * vnoise(p * 1.3 + 7.0);                      // l'inchiostro non copre mai uguale
   o = mix(s, vec4(mix(paper, inkC, ink) * s.a, s.a), uAmt);
 }`
 
@@ -1296,4 +1302,25 @@ void main() {
   a = mod(a, seg); a = abs(a - seg * 0.5);
   vec2 uv = uC + vec2(cos(a), sin(a)) * r * vec2(uRes.y / uRes.x, 1.0);
   o = mix(texture(uSrc, vUv), texture(uSrc, clamp(uv, 0.0, 1.0)), uAmt);
+}`
+
+/** rifinitura comune agli effetti foto: riporta la luce media della foto originale
+ *  (niente più risultati scuri), bagliore morbido, spalla dolce sulle luci, grana fine */
+export const TONEMATCH = LIB + `uniform sampler2D uSrc, uRef, uResB, uGlow; uniform float uK, uBloom, uGrain, uT;
+vec3 unp(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : vec3(0.0); }
+float shoulder(float x) { return x < 0.78 ? x : 0.78 + 0.22 * (1.0 - exp(-(x - 0.78) / 0.22)); }
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  if (s.a <= 0.0) { o = s; return; }
+  vec3 c = s.rgb / s.a;
+  vec3 rc = unp(texture(uRef, vUv)), bc = unp(texture(uResB, vUv));
+  float f = clamp((luma(rc) + 0.03) / (luma(bc) + 0.03), 0.6, 1.9);
+  c *= mix(1.0, f, uK);
+  // anche il colore medio torna quello della foto
+  c += (rc - bc * f) * uK * 0.35;
+  c += unp(texture(uGlow, vUv)) * uBloom;
+  c = max(c, 0.0);
+  c = vec3(shoulder(c.r), shoulder(c.g), shoulder(c.b));
+  c += (hash12(vUv * uRes + fract(uT) * 91.0) - 0.5) * uGrain;
+  o = vec4(clamp(c, 0.0, 1.0) * s.a, s.a);
 }`
