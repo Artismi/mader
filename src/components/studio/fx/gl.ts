@@ -138,6 +138,24 @@ export class FxGL {
   /** libera tutto ciò che non è stato rilasciato (fine di un render) */
   releaseAll() { this.release(...this.live) }
 
+  /** texture persistente costruita al volo da una tela (es. atlante di caratteri) */
+  canvasTex(key: string, make: () => HTMLCanvasElement): Tex {
+    let e = images.get(key)
+    if (!e?.tex) {
+      const cv = make(), gl = this.gl, t = gl.createTexture()!
+      gl.bindTexture(gl.TEXTURE_2D, t)
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, cv)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      e = { tex: { t, f: null as unknown as WebGLFramebuffer, w: cv.width, h: cv.height, fmt: 'rgba8' } }
+      images.set(key, e)
+    }
+    return e.tex!
+  }
+
   /** texture ripetibile da un'immagine (materiali): null finché non è arrivata */
   image(url: string): Tex | null {
     let e = images.get(url)
