@@ -21,9 +21,25 @@ function env(rx: number, ry: number, rz: number): [number, number, number] {
   if (t > 0.08) v = mix(0.78, 1.0, Math.pow(sat((t - 0.08) / 0.92), 0.6))
   else if (t > -0.06) v = mix(0.08, 0.55, sat((t + 0.06) / 0.14))           // l'orizzonte netto: il segreto del cromo
   else v = mix(0.18, 0.5, Math.pow(sat(-t), 1.4))
-  v += 0.06 * Math.sin(rx * 9 + rz * 3)                                       // softbox laterali
+  v += 0.05 * Math.sin(rx * 2.6 + 0.6)                                       // softbox laterali, larghi
   const cool = 0.03 * t
   return [v - cool, v, v + cool * 2]
+}
+
+/** massimo su una finestra quadrata (separabile): dilatazione in scala di grigi */
+function maxFilter(src: Float32Array, W: number, H: number, rad: number) {
+  const tmp = new Float32Array(W * H), out = new Float32Array(W * H)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let m = 0
+    for (let k = Math.max(0, x - rad); k <= Math.min(W - 1, x + rad); k++) { const v = src[y * W + k]; if (v > m) m = v }
+    tmp[y * W + x] = m
+  }
+  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) {
+    let m = 0
+    for (let k = Math.max(0, y - rad); k <= Math.min(H - 1, y + rad); k++) { const v = tmp[k * W + x]; if (v > m) m = v }
+    out[y * W + x] = m
+  }
+  return out
 }
 
 function hue(h: number): [number, number, number] {
@@ -40,9 +56,17 @@ export function shade(m: Mask, material: Material, round: number, depth = 0.7, t
   // profilo a quarto di cerchio di raggio R sul bordo, piano oltre: un tubo/smusso vero
   const R = Math.max(1.5, round)
   const dist = distance(m)
+  // mezza larghezza locale: dove il tratto è più stretto del raggio, il tubo diventa un
+  // semicerchio pieno (cima piatta) invece di un arco interrotto con la cresta a spigolo
+  const half = maxFilter(dist, W, H, Math.ceil(R))
   const raw = new Float32Array(W * H)
-  for (let i = 0; i < raw.length; i++) { const d = Math.min(dist[i], R); raw[i] = dist[i] <= 0 ? 0 : Math.sqrt(Math.max(0, R * R - (R - d) * (R - d))) }
-  const h = smoothField(raw, W, H, Math.max(1, R * 0.08), 2)
+  for (let i = 0; i < raw.length; i++) {
+    const dd = dist[i]
+    if (dd <= 0) continue
+    const Re = Math.max(0.75, Math.min(R, half[i])), d = Math.min(dd, Re)
+    raw[i] = Math.sqrt(Math.max(0, Re * Re - (Re - d) * (Re - d))) * (R / Math.max(R, Re * 1.0))
+  }
+  const h = smoothField(raw, W, H, Math.max(1, R * 0.15), 2)
   const { c, ctx } = makeCanvas(W, H)
   const img = ctx.createImageData(W, H), d = img.data
   const k = 0.5 * (0.4 + depth)
