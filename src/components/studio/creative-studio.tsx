@@ -33,7 +33,7 @@ import { injectGoogleFont } from './libraries/font-library'
 import { FontPicker } from './FontPicker'
 import { ensureFont, fontEntry, refreshTexts, watchCanvasFonts, WEIGHT_NAMES } from './libraries/font-loader'
 import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
-import { SHAPE_LIBRARY, ICONS_LIBRARY } from './libraries/shape-library'
+import { SHAPE_LIBRARY, ICONS_LIBRARY, FILLED_SHAPE_CATEGORIES } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
 import { GeneratePanel } from './GeneratePanel'
 import {
@@ -3050,10 +3050,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   // ── Library ───────────────────────────────────────────────────────────────
-  function addLibShape(path: string) {
+  function addLibShape(path: string, filled = false) {
     const canvas = fabricRef.current; if (!canvas) return
     const { x, y } = dropPoint(canvas)
-    const p = new fabric.Path(path, { left: x, top: y, fill: SHAPE_FILL, strokeWidth: 0, scaleX: 1.5, scaleY: 1.5 })
+    const look = filled ? { fill: '#ffffff', stroke: null, strokeWidth: 0 } : { fill: SHAPE_FILL, strokeWidth: 0 }
+    const p = new fabric.Path(path, { left: x, top: y, ...look, scaleX: 1.5, scaleY: 1.5 })
     canvas.add(p); canvas.setActiveObject(p); canvas.requestRenderAll()
   }
   function addLibIcon(svgPath: string) {
@@ -4668,7 +4669,7 @@ interface PanelProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onApplyTexture: (t: any) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAddShape: (s: any) => void
+  onAddShape: (s: any, filled?: boolean) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddIcon: (s: any) => void
   onAddGenerated: (svg: string, name: string) => void
@@ -5591,7 +5592,7 @@ function ShadowSec({ sel, onShadow }: { sel: SelState; onShadow: (u: Partial<Sel
 // ─── LIBRARY PANEL (Advanced Asset Explorer) ─────────────────────────────────
 
 function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
-  onShape: (p: string) => void;
+  onShape: (p: string, filled?: boolean) => void;
   onIcon: (svgPath: string) => void;
   onGenerated: (svg: string, name: string) => void;
   onFont: (f: string) => void;
@@ -5642,13 +5643,15 @@ function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage
               <div key={cat}>
                 <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 ml-1">{cat}</p>
                 <div className="grid grid-cols-3 gap-2.5">
-                  {items.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(sh => (
-                    <button key={sh.name} onClick={() => onShape(sh.path)}
+                  {items.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(sh => {
+                    const filled = FILLED_SHAPE_CATEGORIES.has(cat)
+                    return (
+                    <button key={sh.name} onClick={() => onShape(sh.path, filled)}
                       className="aspect-square flex flex-col items-center justify-center gap-1.5 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all group">
-                      <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-lg"><path d={sh.path} fill="none" stroke="currentColor" strokeWidth="3" className="text-white/40 group-hover:text-white transition-colors" /></svg>
+                      <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-lg"><path d={sh.path} fill={filled ? 'currentColor' : 'none'} stroke={filled ? 'none' : 'currentColor'} strokeWidth="3" className="text-white/40 group-hover:text-white transition-colors" /></svg>
                       <span className="text-[7px] font-bold uppercase tracking-widest text-white/20 group-hover:text-white/50">{sh.name}</span>
                     </button>
-                  ))}
+                  )})}
                 </div>
               </div>
             ))}
