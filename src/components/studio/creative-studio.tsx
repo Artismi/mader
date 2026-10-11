@@ -283,6 +283,7 @@ import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
 import { installArtboards } from './arrange/artboards'
 import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
+import { TextCurveControl } from './text/TextCurveControl'
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -4866,13 +4867,14 @@ function PropertiesPanel(props: PanelProps) {
               )}
 
               {/* Testo */}
-              {propTab === 'text' && sel.type === 'text' && (
+              {propTab === 'text' && sel.type === 'text' && (<>
                 <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink} onPair={props.onApplyPairing}
                   showFP={props.showFP} setShowFP={props.setShowFP}
                   showFX={false} setShowFX={() => setPropTab('fx')}
                   onShadow={props.onApplyShadow} onPreset={props.onApplyPreset} onUpdate={props.onUpdateFx}
                 />
-              )}
+                <TextCurveControl canvas={props.fabricRef.current} />
+              </>)}
 
               {/* Forma */}
               {propTab === 'shape' && sel.type === 'shape' && (

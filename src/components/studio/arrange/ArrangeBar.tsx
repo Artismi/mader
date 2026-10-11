@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { alignObjects, canAlign, distributeObjects, isMaskGroup, makeClipMask, nudgeSelection, releaseClipMask, type AlignMode } from './align'
 import { boardOf } from './artboards'
 import { boardLabel, exportBoards, listBoards, selectionToDataURL, type ExportFormat } from './export'
+import { installTextCurve } from '../text/curve'
 
 type EyeDropperCtor = new () => { open: () => Promise<{ sRGBHex: string }> }
 
@@ -92,7 +93,9 @@ export function ArrangeBar({ canvas }: { canvas: fabric.Canvas | null }) {
     const evs = ['selection:created', 'selection:updated', 'selection:cleared', 'object:modified'] as const
     evs.forEach(e => canvas.on(e, sync))
     sync()
-    return () => { evs.forEach(e => canvas.off(e, sync)) }
+    // il testo curvo ricalcola l'arco mentre si scrive: serve sempre, non solo con la barra visibile
+    const offCurve = installTextCurve(canvas)
+    return () => { evs.forEach(e => canvas.off(e, sync)); offCurve() }
   }, [canvas])
 
   useEffect(() => {
