@@ -1140,7 +1140,7 @@ float lineInk(vec2 p, float ang, float dark, float phase) {
   vec2 ax = vec2(cos(ang), sin(ang));
   float t = dot(p, ax) / uLines + phase;
   float tri = abs(fract(t) - 0.5) * 2.0;           // 0 al centro della linea
-  float w = fwidth(t) * 1.5 + 0.035;
+  float w = fwidth(t) * 1.1 + 0.015;
   return 1.0 - smoothstep(dark - w, dark + w, tri);
 }
 void main() {
@@ -1163,8 +1163,6 @@ void main() {
   }
   vec3 inkC = mix(uInk, col * 0.55 * (0.6 + 0.4 * tone) + uInk * 0.15, uColor);
   vec3 paper = mix(uPaper, uPaper * (0.82 + 0.18 * col / max(L, 0.05)), uColor * 0.35);
-  paper *= 0.955 + 0.07 * fbm(p * 0.45);                         // fibra della carta
-  ink *= 0.86 + 0.14 * vnoise(p * 1.3 + 7.0);                      // l'inchiostro non copre mai uguale
   o = mix(s, vec4(mix(paper, inkC, ink) * s.a, s.a), uAmt);
 }`
 

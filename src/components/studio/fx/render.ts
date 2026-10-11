@@ -314,7 +314,7 @@ const RUN: Partial<Record<string, Run>> = {
     const fl = c.g.blur(cur, lines * 3 * c.z)
     const out = c.g.pass('linocut', LINOCUT, c.W, c.H, std(c, cur, amt, { uFlowTex: fl, uInk: rgb(p.ink, '#141414'), uPaper: rgb(p.paper, '#f1ebdd'), uLines: lines, uAng: rad(num(p.angle, 30)), uFlow: num(p.flow, 55) / 100, uCross: num(p.cross, 60) / 100, uColor: num(p.color, 0) / 100, uRough: num(p.rough, 20) / 100, uTh: num(p.threshold, 50) / 100 }))
     c.g.release(fl)
-    return finish(c, out, cur, lines * 2.5 * c.z, 0.55 * (1 - num(p.style, 50) / 100), 0, 0.03)
+    return out
   },
   specchi: simple('mirrortile', MIRRORTILE, (_c, p) => ({ uSize: Math.max(6, num(p.size, 26)), uRefr: num(p.refraction, 35) / 100, uGrout: num(p.grout, 6) / 100, uGloss: num(p.gloss, 50) / 100, uGroutCol: rgb(p.groutColor, '#1a1a1a') })),
   luceProiettata: simple('lightcast', LIGHTCAST, (_c, p) => ({ uMode: num(p.mode), uAng: rad(num(p.angle, 20)), uScale: num(p.scale, 100) / 100, uSoft: num(p.soft, 50) / 100, uStr: num(p.strength, 70) / 100, uWarm: rgb(p.warm, '#ffd9a0') })),
