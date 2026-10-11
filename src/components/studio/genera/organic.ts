@@ -390,7 +390,7 @@ function dropSpecks(m: Mask, minArea: number): Mask {
  */
 export function foam(W: number, H: number, cx: number, cy: number, R: number, r: Rnd, o: { count: number; line: number; gap: number; nested: number; spread: number }): Mask {
   const circles: { x: number; y: number; r: number }[] = []
-  const g = R * 0.058 * o.gap
+  const g = R * 0.032 * o.gap
   const maxR = R * 0.3, minR = R * 0.05
   const touch = R * 0.004 * o.line              // le bolle si sfiorano: tra i due contorni resta un filo
   for (let tries = 0; circles.length < o.count && tries < o.count * 800; tries++) {
@@ -421,7 +421,7 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     })
     if (ok) circles.push({ x, y, r: rad })
   }
-  const w = R * 0.013 * o.line
+  const w = R * 0.011 * o.line
   const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
   const x0 = Math.max(0, Math.floor(cx - R * 1.2)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.2))
   const y0 = Math.max(0, Math.floor(cy - R * 1.2)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.2))
