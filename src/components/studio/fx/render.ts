@@ -8,6 +8,7 @@
 import { FxGL, type Tex, type UVal } from './gl'
 import {
   MASK, MASK_A, ADJUST, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
+  MAT3D, GENFILL, MIX_AMT,
 } from './shaders'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
 
@@ -115,6 +116,7 @@ function sdfReach(stack: FxEntry[]): number {
       case 'stroke': m = Math.max(m, num(p.size, 6) + 2); break
       case 'neon': m = Math.max(m, num(p.size, 18) * 0.15 + 3); break
       case 'hollow': case 'splice': m = Math.max(m, num(p.thickness, 3) + 2); break
+      case 'material3d': m = Math.max(m, 100000); break
     }
   }
   return m
@@ -264,6 +266,23 @@ const RUN: Partial<Record<string, Run>> = {
   mosaic: simple('mosaic', MOSAIC, (_c, p) => ({ uShape: num(p.shape), uSize: num(p.size, 12), uGap: num(p.gap) / 100 })),
   chroma: simple('chroma', CHROMA, (_c, p) => ({ uPx: num(p.amount, 6), uDist: num(p.distortion) / 100, uRadial: num(p.radial, 1) })),
   vhs: simple('vhs', VHS, (_c, p) => ({ uPow: num(p.power, 55) / 100, uBleed: num(p.bleed, 50) / 100, uLines: num(p.lines, 40) / 100 })),
+  material3d: (c, cur, p, amt) => {
+    if (!c.sdf) return cur
+    // campo di distanze ammorbidito: superfici lisce, niente striature sulle forme gonfie
+    const s3 = c.g.blur(c.sdf, (num(p.shape) > 0 ? 3 : 1.6) * Math.max(1, c.z))
+    const spin = num(p.spin) > 0 ? c.t * num(p.spin) * 0.04 : 0
+    const out = c.g.pass('mat3d', MAT3D, c.W, c.H, {
+      uSrc: cur, uS3: s3, uZ: c.z, uDepth: num(p.depth, 40) * c.z, uBevel: num(p.bevel, 6) * c.z,
+      uRx: rad(num(p.rx, 18)), uRy: rad(num(p.ry, -24)) + spin, uPersp: num(p.persp, 40) / 100, uMat: num(p.material),
+      uShape: num(p.shape), uUseCol: num(p.useColor), uCol: rgb(p.color, '#ff5a36'), uEnv: num(p.env), uLightA: rad(num(p.light, 220)), uRough: num(p.rough, 30) / 100,
+    })
+    c.g.release(s3)
+    if (amt >= 1) return out
+    const mixd = c.g.pass('mixAmt', MIX_AMT, c.W, c.H, { uA: cur, uB: out, uK: amt })
+    c.g.release(out)
+    return mixd
+  },
+  genFill: simple('genFill', GENFILL, (_c, p) => ({ uMode: num(p.mode), uScale: num(p.scale, 100) / 100, uWarp: num(p.warp, 50) / 100, uGrain: num(p.grain, 20) / 100, uMix: num(p.keep) / 100, uC1: rgb(p.c1), uC2: rgb(p.c2), uC3: rgb(p.c3), uC4: rgb(p.c4) })),
   crt: (c, cur, p, amt) => {
     const b = c.g.blur(cur, 3 * c.z)
     const out = c.g.pass('crt', CRT, c.W, c.H, std(c, cur, amt, { uB: b, uScan: num(p.scan, 55) / 100, uMask: num(p.mask, 45) / 100, uCurve: num(p.curve, 25) / 100, uGlow: num(p.glow, 35) / 100, uFlick: num(p.speed) / 100 }))

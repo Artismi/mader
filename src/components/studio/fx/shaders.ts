@@ -642,3 +642,193 @@ void main() {
   c *= mix(1.0, v, uCurve);
   o = mix(texture(uSrc, vUv), vec4(clamp(c, 0.0, 1.0) * s.a, s.a), uAmt);
 }`
+
+/* ───────── Materiali 3D ─────────
+   La forma (testo, vettore, sagoma) diventa un solido: estruso con smusso o
+   gonfiato, ruotato in prospettiva, illuminato e con riflessi di un ambiente.
+   Raymarching sul campo di distanze 2D: d3 = estrusione arrotondata di sd2. */
+export const MAT3D = LIB + `
+uniform sampler2D uSrc; uniform sampler2D uS3;
+uniform float uDepth, uBevel, uRx, uRy, uPersp, uMat, uShape, uUseCol, uEnv, uLightA, uRough, uZ;
+uniform vec3 uCol;
+float sd2(vec2 q) {
+  vec2 uv = q / uRes + 0.5;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) { vec2 e = max(abs(q) - uRes * 0.5, 0.0); return length(e) + 40.0; }
+  return texture(uS3, uv).r;
+}
+float map(vec3 p) {
+  float s = sd2(p.xy), hd = uDepth * 0.5;
+  if (uShape < 0.5) {
+    float b = min(uBevel, hd * 0.95);
+    vec2 w = vec2(s + b, abs(p.z) - hd + b);
+    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - b;
+  }
+  // gonfiato: il profilo sale come un cuscino dal bordo verso l'interno
+  float R = max(uBevel * 2.5, 2.0);
+  float t = clamp(-s / R, 0.0, 1.0);
+  float h = hd * sqrt(t * (2.0 - t));
+  return max(s, (abs(p.z) - h) * 0.55);
+}
+vec3 nrm(vec3 p) {
+  vec2 e = vec2(1.0, -1.0) * 1.4;
+  return normalize(e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) + e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
+}
+mat3 rotX(float a) { return mat3(1.0, 0.0, 0.0, 0.0, cos(a), sin(a), 0.0, -sin(a), cos(a)); }
+mat3 rotY(float a) { return mat3(cos(a), 0.0, -sin(a), 0.0, 1.0, 0.0, sin(a), 0.0, cos(a)); }
+float box(vec3 d, vec3 c, float k) { return exp(-k * max(0.0, 1.0 - dot(d, normalize(c)))); }
+// ambienti: lo spazio vista ha y verso il basso e la camera guarda +z (i riflessi frontali tornano verso -z)
+vec3 env(vec3 d) {
+  float up = -d.y;
+  if (uEnv < 0.5) {            // studio fotografico: fondale chiaro, due softbox, pavimento grigio
+    vec3 c = mix(vec3(0.16, 0.16, 0.17), vec3(0.92), smoothstep(-0.25, 0.4, up));
+    c *= 1.0 - 0.55 * smoothstep(0.06, 0.0, abs(up + 0.02));
+    c += vec3(1.0) * box(d, vec3(-0.55, -0.55, -0.62), 40.0) * 2.0;
+    c += vec3(0.95, 0.97, 1.0) * box(d, vec3(0.7, -0.25, -0.65), 26.0) * 1.2;
+    return c;
+  }
+  if (uEnv < 1.5) {            // tramonto
+    vec3 sky = mix(vec3(1.0, 0.55, 0.25), vec3(0.42, 0.18, 0.52), smoothstep(0.0, 0.9, up));
+    vec3 ground = mix(vec3(0.16, 0.06, 0.12), vec3(0.6, 0.25, 0.2), smoothstep(-0.6, 0.0, up));
+    vec3 c = up > 0.0 ? sky : ground;
+    c += vec3(1.0, 0.85, 0.55) * box(d, vec3(0.2, -0.12, -0.97), 60.0) * 2.5;
+    return c;
+  }
+  if (uEnv < 2.5) {            // notte al neon: fasce magenta e ciano
+    vec3 c = mix(vec3(0.05, 0.02, 0.12), vec3(0.35, 0.08, 0.4), smoothstep(-0.2, 0.6, up));
+    c += vec3(1.0, 0.15, 0.7) * box(d, vec3(-0.8, -0.3, -0.5), 30.0) * 1.8;
+    c += vec3(0.1, 0.9, 1.0) * box(d, vec3(0.8, -0.2, -0.55), 30.0) * 1.6;
+    c += vec3(0.5, 0.3, 1.0) * smoothstep(0.03, 0.0, abs(up - 0.25)) * 0.8;
+    return c;
+  }
+  // cielo e terra con orizzonte netto: il cromo classico da copertina anni '80
+  vec3 c = mix(vec3(0.97, 0.98, 1.0), vec3(0.22, 0.45, 0.92), smoothstep(0.0, 0.75, up));
+  if (up < 0.0) c = mix(vec3(0.1, 0.07, 0.05), vec3(0.62, 0.55, 0.48), smoothstep(-0.02, -0.7, up));
+  c += vec3(1.0, 0.97, 0.9) * box(d, vec3(-0.4, -0.8, -0.45), 80.0) * 3.0;
+  return c;
+}
+vec4 albedo(vec2 q) {
+  // sui fianchi si prende il colore del bordo più vicino
+  float s = sd2(q);
+  if (s > -1.0) {
+    vec2 g = vec2(sd2(q + vec2(1.0, 0.0)) - sd2(q - vec2(1.0, 0.0)), sd2(q + vec2(0.0, 1.0)) - sd2(q - vec2(0.0, 1.0)));
+    q -= normalize(g + 1e-5) * (s + 1.5);
+  }
+  vec4 c = texture(uSrc, q / uRes + 0.5);
+  return c.a > 0.0 ? vec4(c.rgb / c.a, 1.0) : vec4(0.5, 0.5, 0.5, 1.0);
+}
+vec4 shade(vec3 p, vec3 rd, mat3 R) {
+  vec3 n = R * nrm(p);
+  vec3 v = -(R * rd);
+  vec3 alb = uUseCol > 0.5 ? uCol : albedo(p.xy).rgb;
+  vec3 L = normalize(vec3(cos(uLightA) * 0.65, -0.75, -0.6 + sin(uLightA) * 0.2));
+  float dif = max(dot(n, L), 0.0);
+  float shin = mix(220.0, 18.0, uRough);
+  float spe = pow(max(dot(n, normalize(L + v)), 0.0), shin);
+  float fr = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+  vec3 r = reflect(-v, n);
+  float front = smoothstep(0.55, 0.9, abs(n.z));
+  r.y += front * ((p.y / (uRes.y * 0.5)) * 1.1 - 0.25);
+  r = normalize(r);
+  vec3 ev = env(r);
+  vec3 c; float a = 1.0;
+  if (uMat < 0.5) c = alb * (0.22 + 0.85 * dif) + spe * 0.9 + ev * fr * 0.55;                         // plastica lucida
+  else if (uMat < 1.5) c = ev * mix(vec3(0.62), alb * 1.1, uUseCol * 0.35) + spe * 1.3;              // cromo
+  else if (uMat < 2.5) { float l = luma(ev); c = mix(vec3(0.28, 0.14, 0.03), vec3(1.0, 0.86, 0.5), smoothstep(0.05, 0.85, l)) * (0.65 + 0.6 * l) + spe * vec3(1.0, 0.92, 0.65) * 1.2; } // oro: luce, non colore, del riflesso
+  else if (uMat < 3.5) {                                                                            // vetro
+    vec3 t = env(refract(-v, n, 0.66)) * mix(vec3(1.0), alb, 0.65);
+    c = mix(t, ev, fr) + spe * 1.4; a = mix(0.6, 1.0, fr);
+  }
+  else if (uMat < 4.5) c = alb * (0.32 + 0.72 * dif) + spe * 0.12 + vec3(0.06) * pow(1.0 - max(dot(n, v), 0.0), 2.0); // ceramica opaca
+  else if (uMat < 5.5) {                                                                            // olografico
+    float h = fract(dot(n, vec3(0.35, 0.55, 0.25)) * 1.6 + fr * 0.8);
+    c = mix(ev * 0.5, hsv2rgb(vec3(h, 0.5, 1.0)), 0.7) + spe;
+  }
+  else c = ev * alb * 1.35 + spe * mix(alb, vec3(1.0), 0.5);                                         // metallo colorato
+  return vec4(clamp(c, 0.0, 1.0) * a, a);
+}
+void main() {
+  vec2 q = gl_FragCoord.xy - uRes * 0.5;
+  float D = max(uRes.x, uRes.y) * mix(7.0, 1.4, uPersp);
+  vec3 ro = vec3(0.0, 0.0, -D), rd = normalize(vec3(q, D));
+  mat3 R = rotY(uRy) * rotX(uRx);
+  mat3 Ri = transpose(R);
+  vec3 o2 = Ri * ro, d2 = Ri * rd;
+  float hd = uDepth * 0.5 + 3.0;
+  float t0 = 0.0, t1 = D * 2.5;
+  if (abs(d2.z) > 1e-4) {
+    float ta = (-hd - o2.z) / d2.z, tb = (hd - o2.z) / d2.z;
+    t0 = max(min(ta, tb), 0.0); t1 = max(ta, tb);
+  }
+  float t = t0, md = 1e9, tm = t0;
+  bool hit = false;
+  for (int i = 0; i < 260; i++) {
+    vec3 p = o2 + d2 * t;
+    float d = map(p);
+    if (d < md) { md = d; tm = t; }
+    if (d < 0.15) { hit = true; break; }
+    t += max(d * 0.7, 0.25);
+    if (t > t1) break;
+  }
+  if (hit) { o = shade(o2 + d2 * t, d2, R); return; }
+  // bordo antialias: il punto in cui il raggio è passato più vicino alla superficie
+  float cov = clamp(0.6 - md, 0.0, 1.0);
+  if (cov > 0.0) { vec4 c = shade(o2 + d2 * tm, d2, R); o = c * cov; return; }
+  o = vec4(0.0);
+}`
+
+/* ───────── Riempimenti generativi ─────────
+   Dentro la forma (o su un rettangolo-sfondo) un campo di colore procedurale:
+   gradiente mesh, aurora, marmo liquido, grana sfumata, linee topografiche, bolle. */
+export const GENFILL = LIB + `
+uniform sampler2D uSrc; uniform float uMode, uScale, uWarp, uGrain, uT, uZ, uAmt, uMix;
+uniform vec3 uC1, uC2, uC3, uC4;
+vec3 pal(float t) { t = fract(t); return t < 0.333 ? mix(uC1, uC2, t * 3.0) : t < 0.666 ? mix(uC2, uC3, t * 3.0 - 1.0) : mix(uC3, uC4, t * 3.0 - 2.0); }
+vec2 warp(vec2 p, float k) { return p + k * vec2(fbm(p + vec2(0.0, uT * 0.07)), fbm(p + vec2(5.2, 1.3) - uT * 0.05)); }
+void main() {
+  vec4 s = texture(uSrc, vUv);
+  vec2 asp = vec2(uRes.x / uRes.y, 1.0);
+  vec2 p = (vUv - 0.5) * asp / uScale;
+  vec3 c;
+  if (uMode < 0.5) {                       // gradiente mesh: quattro punti colore che fluttuano
+    vec2 q = warp(p * 1.4, uWarp * 0.8);
+    vec2 a = vec2(-0.45, -0.35) + 0.08 * sin(uT * 0.3), b = vec2(0.5, -0.3), cc = vec2(-0.35, 0.45), d = vec2(0.45, 0.4) + 0.08 * cos(uT * 0.25);
+    float wa = 1.0 / pow(length(q - a) + 0.15, 2.4), wb = 1.0 / pow(length(q - b) + 0.15, 2.4), wc = 1.0 / pow(length(q - cc) + 0.15, 2.4), wd = 1.0 / pow(length(q - d) + 0.15, 2.4);
+    c = (uC1 * wa + uC2 * wb + uC3 * wc + uC4 * wd) / (wa + wb + wc + wd);
+  } else if (uMode < 1.5) {                // aurora: tende di luce ondulate su fondo scuro
+    vec2 q = warp(p * vec2(1.0, 2.2), uWarp * 0.6);
+    float b1 = exp(-pow((q.y + 0.25 * sin(q.x * 2.2 + uT * 0.2)) * 3.0, 2.0));
+    float b2 = exp(-pow((q.y - 0.3 + 0.2 * sin(q.x * 1.7 - uT * 0.15)) * 3.5, 2.0));
+    c = uC4 * 0.9 + uC1 * b1 * 1.1 + uC2 * b2 * 0.9 + uC3 * pow(max(b1, b2), 3.0) * 0.6;
+  } else if (uMode < 2.5) {                // marmo liquido: domain warping a due livelli
+    vec2 q = p * 2.0;
+    vec2 w1 = vec2(fbm(q + uT * 0.05), fbm(q + vec2(5.2, 1.3)));
+    vec2 w2 = vec2(fbm(q + 3.0 * uWarp * w1 + vec2(1.7, 9.2)), fbm(q + 3.0 * uWarp * w1 + vec2(8.3, 2.8) + uT * 0.04));
+    c = pal(fbm(q + 3.5 * w2) * 1.3);
+  } else if (uMode < 3.5) {                // grana sfumata: gradiente morbido + grana forte
+    vec2 q = warp(p, uWarp * 0.5);
+    float t = smoothstep(-0.7, 0.7, q.x * 0.7 + q.y * 0.9);
+    c = mix(mix(uC1, uC2, t), mix(uC3, uC4, t), smoothstep(-0.6, 0.6, q.y - q.x * 0.3));
+  } else if (uMode < 4.5) {                // linee topografiche
+    float h = fbm(p * 1.6 + uT * 0.03) * 22.0 * (0.5 + uWarp);
+    float l = abs(fract(h) - 0.5) / max(fwidth(h), 1e-4);
+    float line = 1.0 - smoothstep(0.6, 1.6, l);
+    c = mix(mix(uC4, uC3, smoothstep(0.0, 22.0, h)), uC1, line * 0.9);
+  } else {                                 // bolle: metaball morbide
+    float f = 0.0;
+    for (int i = 0; i < 7; i++) {
+      float fi = float(i);
+      vec2 c0 = vec2(sin(fi * 1.7 + uT * 0.2 * (1.0 + fi * 0.1)), cos(fi * 2.3 + uT * 0.17)) * 0.55;
+      f += (0.06 + 0.02 * sin(fi)) / dot(p - c0, p - c0);
+    }
+    float m = smoothstep(0.9, 1.1, f);
+    c = mix(mix(uC4, uC3, smoothstep(0.0, 0.9, f)), mix(uC1, uC2, smoothstep(1.0, 3.0, f)), m);
+  }
+  vec2 g = floor(gl_FragCoord.xy / max(uZ, 0.5));
+  c += (hash12(g + fract(uT) * 31.0) - 0.5) * uGrain * 0.35;
+  vec3 base = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
+  c = mix(c, blend(base, c, 4.0), uMix);
+  o = mix(s, vec4(clamp(c, 0.0, 1.0) * s.a, s.a), uAmt);
+}`
+
+export const MIX_AMT = LIB + `uniform sampler2D uA, uB; uniform float uK;
+void main() { o = mix(texture(uA, vUv), texture(uB, vUv), uK); }`

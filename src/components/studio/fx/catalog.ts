@@ -117,6 +117,7 @@ export type FxId =
   | 'tiltShift' | 'motionBlur' | 'zoomBlur'
   | 'wave' | 'ripple' | 'twirl' | 'bulge' | 'mosaic' | 'chroma'
   | 'vhs' | 'crt'
+  | 'material3d' | 'genFill'
 
 export type PVal = number | string
 export interface FxEntry { id: FxId; on: boolean; amount: number; p: Record<string, PVal>; variant?: string }
@@ -140,7 +141,7 @@ export interface FxDef {
   pad?: (p: Record<string, PVal>) => number
 }
 
-export const FX_CATS = ['Stile', 'Testo', 'Luce', 'Stampa', 'Colore', 'Foto', 'Distorsione', 'Schermo'] as const
+export const FX_CATS = ['3D', 'Generativo', 'Stile', 'Testo', 'Luce', 'Stampa', 'Colore', 'Foto', 'Distorsione', 'Schermo'] as const
 export type FxCat = typeof FX_CATS[number]
 
 export const BLENDS = ['Normale', 'Moltiplica', 'Schermo', 'Sovrapponi', 'Luce soffusa', 'Aggiungi', 'Colore scherma', 'Colore']
@@ -152,6 +153,36 @@ const t = (key: string, label: string, def = 0): Param => ({ key, label, type: '
 const s = (key: string, label: string, options: string[], def = 0): Param => ({ key, label, type: 'select', options, def })
 
 export const FX_DEFS: FxDef[] = [
+
+  /* ─── 3D: la forma diventa un solido con materiale e luce ─── */
+  { id: 'material3d', label: 'Materiale 3D', cat: '3D', hint: 'estrusione o gonfiaggio con riflessi: cromo, oro, vetro, plastica…', animated: true,
+    pad: p => n(p.depth, 40) * 0.9 + n(p.bevel, 6) + 14,
+    params: [s('material', 'Materiale', ['Plastica lucida', 'Cromo', 'Oro', 'Vetro', 'Ceramica', 'Olografico', 'Metallo colorato'], 1), s('shape', 'Forma', ['Estrusa', 'Gonfia'], 0), s('env', 'Ambiente', ['Studio', 'Tramonto', 'Notte neon', 'Cielo'], 0), r('depth', 'Spessore', 2, 200, 40), r('bevel', 'Smusso', 0, 40, 6), r('rx', 'Inclinazione', -70, 70, 18), r('ry', 'Rotazione', -70, 70, -24), r('persp', 'Prospettiva', 0, 100, 40), r('light', 'Luce', 0, 360, 220), r('rough', 'Ruvidità', 0, 100, 30), t('useColor', 'Colore proprio', 0), c('color', 'Colore', '#ff5a36'), r('spin', 'Rotazione continua', 0, 100, 0)],
+    variants: [
+      { id: 'cromo', label: 'Cromo', p: { material: 1, shape: 0, env: 3, depth: 34, bevel: 7 } },
+      { id: 'studio', label: 'Cromo studio', p: { material: 1, shape: 0, env: 0, depth: 34, bevel: 9 } },
+      { id: 'oro', label: 'Oro', p: { material: 2, shape: 0, env: 3, depth: 34, bevel: 8 } },
+      { id: 'gonfio', label: 'Gonfiabile', p: { material: 0, shape: 1, env: 0, depth: 60, bevel: 14, rough: 20 } },
+      { id: 'vetro', label: 'Vetro', p: { material: 3, shape: 0, env: 3, depth: 30, bevel: 10 } },
+      { id: 'olografico', label: 'Olografico', p: { material: 5, shape: 1, env: 0, depth: 46, bevel: 12 } },
+      { id: 'ceramica', label: 'Ceramica', p: { material: 4, shape: 0, env: 0, depth: 42, bevel: 4, rough: 70 } },
+      { id: 'neon', label: 'Metallo neon', p: { material: 6, shape: 0, env: 2, depth: 30, bevel: 8 } },
+      { id: 'tramonto', label: 'Cromo tramonto', p: { material: 1, shape: 1, env: 1, depth: 50, bevel: 12 } },
+    ] },
+
+  /* ─── Generativo: campi di colore procedurali, anche animati ─── */
+  { id: 'genFill', label: 'Riempimento', cat: 'Generativo', hint: 'gradiente mesh, aurora, marmo, grana, topografia, bolle', animated: true,
+    params: [s('mode', 'Tipo', ['Gradiente mesh', 'Aurora', 'Marmo liquido', 'Grana sfumata', 'Topografia', 'Bolle'], 0), c('c1', 'Colore 1', '#ff6b6b'), c('c2', 'Colore 2', '#ffd93d'), c('c3', 'Colore 3', '#6bcBef'), c('c4', 'Colore 4', '#4d2c91'), r('scale', 'Scala', 20, 300, 100), r('warp', 'Movimento forme', 0, 100, 50), r('grain', 'Grana', 0, 100, 20), r('keep', 'Conserva originale', 0, 100, 0), r('speed', 'Animazione', 0, 100, 0)],
+    variants: [
+      { id: 'pesca', label: 'Pesca', p: { mode: 0, c1: '#ff9a8b', c2: '#ffd3a5', c3: '#a18cd1', c4: '#fbc2eb' } },
+      { id: 'aurora', label: 'Aurora', p: { mode: 1, c1: '#2cffb4', c2: '#7a5cff', c3: '#ffffff', c4: '#070b1f', grain: 15 } },
+      { id: 'marmo', label: 'Marmo', p: { mode: 2, c1: '#0f0c29', c2: '#ff6ec4', c3: '#7873f5', c4: '#f9f586', warp: 70 } },
+      { id: 'grana', label: 'Grana', p: { mode: 3, c1: '#ff5f6d', c2: '#ffc371', c3: '#6a82fb', c4: '#fc5c7d', grain: 60 } },
+      { id: 'topo', label: 'Topografia', p: { mode: 4, c1: '#f2efe6', c2: '#f2efe6', c3: '#1e3a5f', c4: '#13243b', warp: 40 } },
+      { id: 'bolle', label: 'Bolle', p: { mode: 5, c1: '#ff7eb3', c2: '#ffd0e0', c3: '#7afcff', c4: '#20124d' } },
+      { id: 'notte', label: 'Notte', p: { mode: 0, c1: '#0b1d51', c2: '#8c1eff', c3: '#ff2975', c4: '#00e5ff', grain: 25 } },
+      { id: 'menta', label: 'Menta', p: { mode: 3, c1: '#d4fc79', c2: '#96e6a1', c3: '#43cea2', c4: '#185a9d', grain: 45 } },
+    ] },
   /* ─── Stile (come gli stili livello di Photoshop) ─── */
   { id: 'dropShadow', label: 'Ombra', cat: 'Stile', hint: 'ombra proiettata con distanza, espansione e morbidezza', noAmount: true,
     pad: p => n(p.distance, 12) + n(p.spread) + n(p.size, 20) * 1.3,

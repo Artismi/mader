@@ -249,7 +249,8 @@ export class FxGL {
     }
     const extra = this.pass('jfaStep', JFA_STEP, w, h, { uSeed: a, uStep: 1 }, 'rgba32f')
     this.release(a)
-    const d = this.pass('jfaDist', JFA_DIST, w, h, { uSeed: extra, uSrc: alpha }, 'rgba32f')
+    // mezza precisione con interpolazione lineare: superfici e bordi lisci (rilievo, 3D)
+    const d = this.pass('jfaDist', JFA_DIST, w, h, { uSeed: extra, uSrc: alpha })
     this.release(extra)
     return d
   }
