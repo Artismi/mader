@@ -213,6 +213,7 @@ import { type SelState, D } from './extensions/canvas-types'
 import { attachFx, applyFx } from './fx/engine'
 import { fxDef, newFx, type FxId } from './fx/catalog'
 import { FxPanel } from './fx/FxPanel'
+import { Orbit3D } from './fx/Orbit3D'
 
 // ─── Colori e posizioni di default ────────────────────────────────────────────
 // Un oggetto nuovo deve vedersi: scuro su una tavola chiara, chiaro sul fondo scuro.
@@ -4144,6 +4145,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               ))}
             </svg>
           )}
+
+          {/* Maniglia d'orbita per gli oggetti con materiale 3D */}
+          {canvasReady && <Orbit3D fabricRef={fabricRef} />}
 
           {/* Rulers */}
           {showRulers && <Rulers zoom={zoom} canvas={fabricRef.current} />}
