@@ -281,6 +281,7 @@ import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-l
 import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
 import { installArtboards } from './arrange/artboards'
+import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -2837,7 +2838,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
   // in sviluppo: comandi AI eseguibili dalla console e dai test
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') (window as unknown as { __aiCommand?: unknown }).__aiCommand = handleAICommand
+    if (process.env.NODE_ENV !== 'production') Object.assign(window, { __aiCommand: handleAICommand, __cutout: cutout })
   })
 
   // Handle aiCommands queue sequentially
@@ -3019,17 +3020,19 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // ── Remove BG ─────────────────────────────────────────────────────────────
   async function removeBg() {
     const canvas = fabricRef.current, obj = canvas?.getActiveObject()
-    if (!obj || obj.type !== 'image') return
+    if (!canvas || !(obj instanceof fabric.FabricImage)) return
     setBgR(true)
     try {
-      const bg = await import('@imgly/background-removal')
-      const fn = (bg as any).default ?? bg
-      const blob = await fn((obj as any).getElement().src)
-      const url = URL.createObjectURL(blob)
-      const img = await fabric.Image.fromURL(url, { crossOrigin: 'anonymous' })
-      img.set({ left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY })
-      canvas!.remove(obj); canvas!.add(img); canvas!.setActiveObject(img); canvas!.renderAll()
-    } catch (e: any) { alert('Errore: ' + e.message) } finally { setBgR(false) }
+      // scontorno in locale: stesso ritaglio, stessa posizione, stessi effetti
+      const cut = await cutout(obj.getElement() as HTMLImageElement)
+      const img = new fabric.FabricImage(cut)
+      const keep = ['left', 'top', 'scaleX', 'scaleY', 'angle', 'flipX', 'flipY', 'originX', 'originY', 'cropX', 'cropY', 'width', 'height', 'opacity', 'name', 'clipPath'] as const
+      keep.forEach(k => img.set(k, (obj as any)[k]))
+      ;(img as any).fx = (obj as any).fx; (img as any).look = (obj as any).look; (img as any).adjust = (obj as any).adjust; (img as any).parentBoard = (obj as any).parentBoard
+      applyFx(img)
+      const at = canvas.getObjects().indexOf(obj)
+      canvas.remove(obj); canvas.insertAt(at, img); canvas.setActiveObject(img); canvas.requestRenderAll()
+    } catch (e: any) { alert('Scontorno non riuscito: ' + e.message) } finally { setBgR(false) }
   }
 
   // ── Library ───────────────────────────────────────────────────────────────

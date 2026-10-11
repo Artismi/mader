@@ -103,6 +103,7 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
     canvas.add(o); added.push(o)
     return o
   }
+  const local = (o: fabric.FabricObject): Box => { o.setCoords(); const r = o.getBoundingRect(); return { x: r.left - OX, y: r.top - OY, w: r.width, h: r.height } }
   const fx = (id: string, variant?: string, p: Record<string, number | string> = {}): FxEntry | null => {
     if (!fxDef(id)) return null
     const e = newFx(id as FxId, variant && fxDef(id)!.variants.some(v => v.id === variant) ? variant : undefined)
@@ -359,9 +360,9 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
   /* ── materiali e asset di studio (public/assets/compose) ── */
   const R = (() => { let a = (hash(slug) + index * 977) >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } })()
   const pick = <T,>(list: T[]) => list[Math.floor(R() * list.length)]
-  const TAVOLE = [2, 3, 4, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34]
+  const TAVOLE = [10, 19, 22, 28, 3, 8, 5, 6, 25, 26, 29, 30, 34, 2, 21, 15, 24, 12, 31, 14, 17]
   const ASSET = {
-    tavola: () => `/assets/compose/tavola-${pick(TAVOLE)}.png`,
+    tavola: (list = TAVOLE) => `/assets/compose/tavola-${list[(hash(slug) >>> 0) % list.length]}.png`,
     segno: () => `/assets/compose/segno-${1 + Math.floor(R() * 9)}.png`,
     carta: () => `/assets/compose/carta-${1 + Math.floor(R() * 3)}.jpg`,
     rumore: () => `/assets/compose/rumore-${1 + Math.floor(R() * 5)}.jpg`,
@@ -370,8 +371,8 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
   /** immagine d'archivio: segnaposto invisibile subito (tiene il livello), immagine quando arriva */
   const asset = (url: string, box: Box, o: { role: string; color?: string; blend?: GlobalCompositeOperation; opacity?: number; angle?: number; cover?: boolean; flip?: boolean; locked?: boolean }) => {
     const ph = put(new fabric.Rect({ left: box.x, top: box.y, width: box.w, height: box.h, fill: '', strokeWidth: 0, opacity: 0, selectable: false, evented: false }) as fabric.Rect & Obj, o.role)
-    withTimeout(fabric.FabricImage.fromURL(url).catch(() => null), 15000, null).then(img => {
-      if (!img || !canvas.getObjects().includes(ph)) return
+    const ready = withTimeout(fabric.FabricImage.fromURL(url).catch(() => null), 15000, null).then(img => {
+      if (!img || !canvas.getObjects().includes(ph)) return null
       const iw = img.width || 1, ih = img.height || 1
       if (o.cover) {
         const k = Math.max(box.w / iw, box.h / ih), cw = box.w / k, ch = box.h / k
@@ -389,8 +390,35 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
       applyFx(im)
       canvas.insertAt(canvas.getObjects().indexOf(ph), im); canvas.remove(ph)
       canvas.requestRenderAll()
+      return img
     })
-    return ph
+    return { ph, ready }
+  }
+  /** punti d'inchiostro veri dell'illustrazione: per ogni quota, il primo pixel pieno da sinistra */
+  const inkPoints = (img: fabric.FabricImage, rows: number[]) => {
+    const el = img.getElement() as HTMLImageElement, sw = 160, sh = Math.round(sw * (el.naturalHeight || el.height) / (el.naturalWidth || el.width))
+    const cv = document.createElement('canvas'); cv.width = sw; cv.height = sh
+    const cx = cv.getContext('2d', { willReadFrequently: true })!; cx.drawImage(el, 0, 0, sw, sh)
+    const data = cx.getImageData(0, 0, sw, sh).data
+    const b = local(img), kx = b.w / sw, ky = b.h / sh
+    return rows.map(fy => {
+      // si cerca nella fascia attorno alla quota la riga con l'inchiostro più a sinistra
+      let best: [number, number] | null = null
+      const y0 = Math.round(fy * sh)
+      for (let dy = -Math.round(sh * 0.06); dy <= Math.round(sh * 0.06); dy++) {
+        const y = Math.max(0, Math.min(sh - 1, y0 + dy))
+        for (let x = 0; x < sw; x++) if (data[(y * sw + x) * 4 + 3] > 140) { if (!best || x < best[0]) best = [x, y]; break }
+      }
+      return best ? { x: b.x + best[0] * kx, y: b.y + best[1] * ky } : null
+    })
+  }
+  /** tema delle tavole tecniche in base al contenuto */
+  const TEMI: Record<string, number[]> = { persone: [10, 19, 22, 28, 3, 8, 5, 6], tecnologia: [25, 26, 29, 30, 34, 2, 21], oggetti: [15, 24, 12, 31, 14, 17] }
+  const tema = () => {
+    const t = `${c.title} ${c.subtitle ?? ''} ${(c.tags ?? []).join(' ')} ${(c.items ?? []).join(' ')}`.toLowerCase()
+    if (/(app|digital|software|dati|tech|web|codice|intelligenza|ai\b|sito|online|piattaforma)/.test(t)) return TEMI.tecnologia
+    if (/(persone|team|formazione|corso|workshop|servizi|consulenza|clienti|ascolto|incontro|comunità|lavoro)/.test(t)) return TEMI.persone
+    return TEMI.oggetti
   }
   /** scheda tecnica: righe etichetta/valore con filetti */
   const specRows = () => (c.details?.length ? c.details : (c.meta ?? []).map((v, i) => ({ label: String(i + 1).padStart(2, '0'), value: v }))).slice(0, 5)
@@ -719,47 +747,77 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
     }
 
     case 'manuale': {
-      // tavola tecnica con richiami numerati, scheda tecnica e griglia
-      for (let i = 0; i <= 6; i++) put(new fabric.Rect({ left: inner.x + (inner.w * i) / 6, top: 0, width: 1, height: H, fill: ink, opacity: 0.07, strokeWidth: 0, selectable: false, evented: false }) as fabric.Rect & Obj, `griglia-${i + 1}`)
-      const eyebrow = tb(`${c.eyebrow ? c.eyebrow + ' — ' : ''}Fig. ${String(index + 1).padStart(2, '0')}`, 'label', lab, { width: colW(6), fill: readable(accent, pal.bg, 2.5), textAlign: 'left' })
+      // tavola tecnica: richiami orizzontali che cadono su punti veri dell'illustrazione
+      const cols = 6
+      for (let i = 0; i <= cols; i++) put(new fabric.Rect({ left: inner.x + (inner.w * i) / cols, top: 0, width: 1, height: H, fill: ink, opacity: 0.06, strokeWidth: 0, selectable: false, evented: false }) as fabric.Rect & Obj, `griglia-${i + 1}`)
+      const eyebrow = tb(`${c.eyebrow ? c.eyebrow + '  —  ' : ''}Fig. ${String(index + 1).padStart(2, '0')}`, 'label', lab, { width: inner.w, fill: readable(accent, pal.bg, 2.5), textAlign: 'left' })
       eyebrow.set({ left: inner.x, top: inner.y }); put(eyebrow, 'occhiello')
-      const title = styleTitle(fit(c.title, 'display', colW(landscape ? 6 : 10), H * 0.2, s * 0.12, sub, 3, { textAlign: 'left' }))
-      title.set({ left: inner.x, top: inner.y + heightOf(eyebrow) + lab }); put(title, 'titolo')
-      const top = inner.y + heightOf(eyebrow) + lab + heightOf(title) + g * 1.5
+      const title = styleTitle(fit(c.title, 'display', landscape ? inner.w * 0.5 : inner.w * 5 / 6, H * 0.2, s * 0.12, sub, 3, { textAlign: 'left' }))
+      title.set({ left: inner.x, top: inner.y + heightOf(eyebrow) + lab * 1.2 }); put(title, 'titolo')
+      const top = inner.y + heightOf(eyebrow) + lab * 1.2 + heightOf(title) + g * 2
       const tableH = specRows().length * Math.round(lab * 2.7)
-      const ill: Box = landscape ? { x: inner.x + inner.w * 0.42, y: inner.y, w: inner.w * 0.58, h: inner.h } : { x: inner.x + inner.w * 0.3, y: top, w: inner.w * 0.7, h: inner.y + inner.h - top - tableH - g * 2.5 }
-      if (imgUrl) photoArt(ill)
-      else asset(ASSET.tavola(), ill, { role: 'illustrazione', color: ink, blend: lum(pal.bg) > 0.5 ? 'multiply' : 'screen' })
       const labels = (c.items?.length ? c.items : c.tags ?? []).slice(0, 4)
-      callouts(ill, labels, landscape ? { x: inner.x, y: top, w: inner.w * 0.38, h: inner.h * 0.5 } : { x: inner.x, y: top, w: inner.w * 0.32, h: ill.h })
-      if (c.subtitle) { const t = tb(c.subtitle, 'text', base, { width: landscape ? inner.w * 0.38 : colW(6), fill: muted, textAlign: 'left' }); t.set({ left: inner.x, top: inner.y + inner.h - tableH - g * 1.5 - heightOf(t) - (landscape ? 0 : 0) }); if (!landscape) t.set({ top: top + ill.h - heightOf(t) }); put(t, 'sottotitolo') }
-      specTable(landscape ? { x: inner.x, y: inner.y + inner.h - tableH, w: inner.w * 0.38, h: tableH } : { x: inner.x, y: inner.y + inner.h - tableH, w: inner.w, h: tableH })
-      decor.add('crop'); decor.add('registration'); decor.delete('ghost')
+      const colW2 = inner.w * (landscape ? 2 : 2) / cols  // due colonne di griglia per le voci
+      const ill: Box = landscape
+        ? { x: inner.x + inner.w * 3 / cols, y: inner.y, w: inner.w * 3 / cols, h: inner.h }
+        : { x: inner.x + colW2 + g, y: top, w: inner.w - colW2 - g, h: inner.y + inner.h - top - tableH - g * 3 }
+      const subY = ill.y + ill.h - (c.subtitle ? heightOf(tb(c.subtitle, 'text', base, { width: colW2 - g, fill: muted })) : 0)
+      if (imgUrl) photoArt(ill)
+      else {
+        const { ready } = asset(ASSET.tavola(tema()), ill, { role: 'illustrazione', color: ink, blend: lum(pal.bg) > 0.5 ? 'multiply' : 'screen' })
+        const img = await ready
+        if (img && labels.length) {
+          const n = labels.length
+          const rows = Array.from({ length: n }, (_, i) => 0.14 + (0.6 * i) / Math.max(1, n - 1))
+          const pts = inkPoints(img, rows)
+          const r = Math.round(lab * 1.1), sw = Math.max(1.2, s * 0.0016)
+          pts.forEach((pt, i) => {
+            if (!pt) return
+            const y = Math.min(pt.y, subY - g * 2 - (n - 1 - i) * sub * 2.2)
+            const num = tb(String(i + 1).padStart(2, '0'), 'label', lab * 0.85, { width: 2 * r, fill: readable(pal.bg, accent), textAlign: 'center' })
+            put(new fabric.Circle({ left: inner.x, top: y - r, radius: r, fill: accent, strokeWidth: 0 }) as fabric.Circle & Obj, `richiamo-${i + 1}`)
+            num.set({ left: inner.x, top: y - heightOf(num) / 2 }); put(num, `richiamo-numero-${i + 1}`)
+            const t = tb(labels[i], 'text', base * 0.85, { width: colW2 - 2 * r - g, fill: ink, textAlign: 'left' })
+            t.set({ left: inner.x + 2 * r + g * 0.5, top: y - heightOf(t) / 2 }); put(t, `richiamo-testo-${i + 1}`)
+            const x0 = inner.x + colW2
+            // filo orizzontale fino alla colonna dell'illustrazione, poi dritto al punto
+            put(new fabric.Path(`M ${x0} ${y} L ${pt.x - (pt.y === y ? 0 : 0)} ${y} L ${pt.x} ${pt.y}`, { fill: '', stroke: ink, strokeWidth: sw, opacity: 0.85 }) as fabric.Path & Obj, `richiamo-filo-${i + 1}`)
+            put(new fabric.Circle({ left: pt.x - r * 0.32, top: pt.y - r * 0.32, radius: r * 0.32, fill: accent, stroke: pal.bg, strokeWidth: sw }) as fabric.Circle & Obj, `richiamo-punto-${i + 1}`)
+          })
+        }
+      }
+      if (c.subtitle) { const t = tb(c.subtitle, 'text', base, { width: landscape ? inner.w * 0.45 : colW2 - g, fill: muted, textAlign: 'left' }); t.set({ left: inner.x, top: landscape ? inner.y + inner.h - tableH - g * 2 - heightOf(t) : subY }); put(t, 'sottotitolo') }
+      specTable(landscape ? { x: inner.x, y: inner.y + inner.h - tableH, w: inner.w * 0.45, h: tableH } : { x: inner.x, y: inner.y + inner.h - tableH, w: inner.w, h: tableH })
+      decor.add('crop'); decor.delete('ghost'); decor.delete('arrow'); decor.delete('vertical')
       break
     }
 
     case 'collage': {
-      // foto stampata in una forma, inchiostri, segni, etichette ruotate e titolo sopra
-      const pd = Math.min(W * 0.82, H * 0.58)
-      const pbox: Box = { x: (W - pd) / 2 + (R() - 0.5) * W * 0.08, y: inner.y + H * 0.03, w: pd, h: pd }
-      const ink2 = mix2(accent, pal.bg, 0.25)
-      put(new fabric.Path(shapeD('goccia', pd, pd, 0), { left: pbox.x + pd * 0.08, top: pbox.y + pd * 0.06, fill: ink2, opacity: 0.9, strokeWidth: 0, globalCompositeOperation: 'multiply' }) as fabric.Path & Obj, 'inchiostro')
-      if (!photoArt(pbox)) art(pbox)
-      asset(ASSET.segno(), { x: pbox.x - pd * 0.15, y: pbox.y + pd * 0.45, w: pd * 0.6, h: pd * 0.6 }, { role: 'segno-1', color: accent, angle: -8 })
-      asset(ASSET.segno(), { x: pbox.x + pd * 0.6, y: pbox.y - pd * 0.08, w: pd * 0.5, h: pd * 0.5 }, { role: 'segno-2', color: ink, flip: true })
-      const tTop = pbox.y + pd * 0.86
-      const title = fit(c.title, 'display', inner.w, inner.y + inner.h - tTop - sub * 3, s * 0.15, sub, 3, { textAlign: 'left' })
-      const st = fx('stroke', 'adesivo', { size: Math.max(6, Math.round(s * 0.01)), color: pal.bg }); if (st) title.fx = [st, ...(styleTitle(title).fx ?? []).filter(e => e.id !== 'stroke')]
-      title.set({ left: inner.x, top: tTop }); put(title, 'titolo')
-      let y = tTop + heightOf(title) + base
-      if (c.subtitle) { const t = tb(c.subtitle, 'text', base * 1.05, { width: colW(8), fill: ink, textAlign: 'left' }); t.set({ left: inner.x, top: y }); put(t, 'sottotitolo'); y += heightOf(t) + base }
-      // etichette come timbri ruotati
-      ;(c.tags ?? []).slice(0, 4).forEach((tag, i) => {
-        const t = tb(tag, 'label', lab * 1.1, { width: measure(tag.toUpperCase(), labF.family, labW, lab * 1.1, 0.1) + lab * 2.2, fill: i % 2 ? pal.bg : ink, textAlign: 'center', backgroundColor: i % 2 ? ink : accent })
-        t.set({ left: inner.x + inner.w - colW(4) + (i % 2) * g, top: pbox.y + pd * (0.1 + i * 0.16), angle: i % 2 ? 5 : -6, padding: lab * 0.4 }); put(t, `timbro-${i + 1}`)
+      // composizione a registro: foto stampata nel disco, inchiostro sfalsato di un passo,
+      // un solo segno al vivo, timbri in colonna sulla destra, titolo che morde la foto
+      const pd = Math.round(Math.min(colW(9), H * 0.56))
+      const pbox: Box = { x: inner.x, y: inner.y + lab * 3, w: pd, h: pd }
+      const off = Math.round(g * 0.9)
+      put(new fabric.Path(shapeD('cerchio', pd, pd, 0), { left: pbox.x + off, top: pbox.y + off, fill: accent, strokeWidth: 0, globalCompositeOperation: 'multiply' }) as fabric.Path & Obj, 'inchiostro')
+      const prevShape = imageShape
+      if (!imgUrl) art(pbox, { r: pd / 2 })
+      else placeImage(pbox, 'immagine', 0, prevShape === 'strisce' || prevShape === 'rettangolo' ? 'cerchio' : prevShape)
+      asset(ASSET.segno(), { x: W - colW(5), y: -H * 0.04, w: colW(5) + M, h: H * 0.32 }, { role: 'segno', color: ink, flip: true, opacity: 0.9 })
+      const right: Box = { x: inner.x + colW(9) + g, y: pbox.y + pd * 0.12, w: colW(3), h: pd * 0.76 }
+      const tags = (c.tags ?? []).slice(0, 4)
+      tags.forEach((tag, i) => {
+        const t = tb(tag, 'label', lab * 1.05, { width: right.w, fill: i === 0 ? readable(pal.bg, accent) : ink, textAlign: 'center', backgroundColor: i === 0 ? accent : pal.surface })
+        t.set({ left: right.x, top: right.y + (i * right.h) / Math.max(1, tags.length), angle: i % 2 ? 3 : -3, padding: lab * 0.5 }); put(t, `timbro-${i + 1}`)
       })
-      if (c.eyebrow) { const e = tb(c.eyebrow, 'label', lab, { width: colW(5), fill: ink, textAlign: 'left' }); e.set({ left: inner.x, top: inner.y }); put(e, 'occhiello') }
-      decor.add('sticker'); decor.add('scribble')
+      if (c.eyebrow) { const e = tb(c.eyebrow, 'label', lab, { width: colW(6), fill: ink, textAlign: 'left' }); e.set({ left: inner.x, top: inner.y }); put(e, 'occhiello') }
+      const tTop = pbox.y + pd * 0.78
+      const subH = c.subtitle ? heightOf(tb(c.subtitle, 'text', base * 1.05, { width: colW(8) })) + base * 1.4 : 0
+      const title = fit(c.title, 'display', inner.w, inner.y + inner.h - tTop - subH, s * 0.15, sub, 3, { textAlign: 'left' })
+      const st = fx('stroke', 'adesivo', { size: Math.max(6, Math.round(s * 0.009)), color: pal.bg }); if (st) title.fx = [st]
+      title.set({ left: inner.x, top: tTop }); put(title, 'titolo')
+      if (c.subtitle) { const t = tb(c.subtitle, 'text', base * 1.05, { width: colW(8), fill: ink, textAlign: 'left' }); t.set({ left: inner.x, top: tTop + heightOf(title) + base * 1.2 }); put(t, 'sottotitolo') }
+      if (c.badge) decor.add('sticker')
+      decor.delete('scribble'); decor.delete('halftoneDisc'); decor.delete('bauhaus')
       break
     }
 
@@ -770,14 +828,13 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
       asset(ASSET.plastica(), { x: 0, y: 0, w: W, h: H }, { role: 'plastica', cover: true, blend: 'screen', opacity: 0.42, locked: true })
       const word = (S.display.upper ? c.title.toUpperCase() : c.title)
       const base0 = fit(word, 'display', inner.w, H * 0.16, s * 0.3, sub, 2, { textAlign: 'center' })
-      const th = heightOf(base0), n = 4, y0 = (H - th * n * 0.82) / 2
+      const th = heightOf(base0), n = 3, y0 = (H - th * n * 0.82) / 2
       for (let i = 0; i < n; i++) {
         const t = fit(word, 'display', inner.w, H * 0.16, s * 0.3, sub, 2, { textAlign: 'center', fill: i === n - 1 ? accent : pal.ink })
         if (i < n - 1) { const e = fx('hollow', 'medio', { thickness: Math.max(2, Math.round(s * 0.0025)) }); if (e) t.fx = [e]; t.set('opacity', 0.35 + i * 0.2) }
         t.set({ left: inner.x, top: y0 + i * th * 0.82 }); put(t, i === n - 1 ? 'titolo' : `eco-${i + 1}`)
       }
-      asset(ASSET.segno(), { x: -W * 0.05, y: H * 0.05, w: W * 0.6, h: H * 0.4 }, { role: 'segno-1', color: accent })
-      asset(ASSET.segno(), { x: W * 0.5, y: H * 0.58, w: W * 0.55, h: H * 0.4 }, { role: 'segno-2', color: pal.ink, flip: true })
+      asset(ASSET.segno(), { x: W * 0.45, y: H * 0.6, w: W * 0.6, h: H * 0.42 }, { role: 'segno', color: accent, flip: true })
       const corner = (txt: string, x: number, y: number, alignR: boolean, role: string) => { const t = tb(txt, 'label', lab, { width: colW(4), fill: pal.ink, textAlign: alignR ? 'right' : 'left' }); t.set({ left: x - (alignR ? colW(4) : 0), top: y }); put(t, role) }
       if (c.brand) corner(c.brand, inner.x, inner.y, false, 'marchio')
       if (c.eyebrow) corner(c.eyebrow, inner.x + inner.w, inner.y, true, 'occhiello')
@@ -932,7 +989,6 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
      Ogni intervento si appoggia solo a contenuti veri e cerca uno spazio libero:
      i riquadri dei testi sono "occupati" e nulla ci finisce sopra. Grazie al
      taglio delle tavole le forme possono uscire al vivo dai bordi. */
-  const local = (o: fabric.FabricObject): Box => { o.setCoords(); const r = o.getBoundingRect(); return { x: r.left - OX, y: r.top - OY, w: r.width, h: r.height } }
   const backdrop = /_(sfondo|griglia-\d+|luce-\d|parola-fondo|taglio-\d+[ab]|cornice|registro-\d|puntini|velo|riga-alta|riga-bassa)(_\d+)?$/
   const occupied: Box[] = added.filter(o => !backdrop.test(String(o.get('name'))) && !(o.width >= W * 0.95 && o.height >= H * 0.95)).map(local)
   const hit = (b: Box, pad = g) => occupied.some(o => b.x < o.x + o.w + pad && b.x + b.w > o.x - pad && b.y < o.y + o.h + pad && b.y + b.h > o.y - pad)

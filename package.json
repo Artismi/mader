@@ -10,7 +10,7 @@
     "build:electron": "next build && electron-builder",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "echo 'Skipping native rebuild in dev'"
+    "postinstall": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
@@ -34,6 +34,7 @@
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-three/fiber": "^9.6.0",
+    "@rmbg/model-u2netp": "^0.0.1",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.98.0",
@@ -62,7 +63,7 @@
     "matter-js": "^0.20.0",
     "next": "16.1.6",
     "next-auth": "^4.24.13",
-    "onnxruntime-web": "^1.21.0",
+    "onnxruntime-web": "^1.30.0",
     "openai": "^6.33.0",
     "opentype.js": "^2.0.0",
     "paper": "^0.12.18",
