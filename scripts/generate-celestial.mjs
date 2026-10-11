@@ -132,6 +132,109 @@ function orbit(cx, cy, rx, ry, a0, a1, { wf = 6.5, wb = 0.8, tilt = -12, swell =
 // Il tratto e' sottile in coda (p0) e si gonfia verso la testa (p3), dove chiude ad ago.
 const swoosh = (p0, p1, p2, p3, w = 6, o = {}) => brush(t => cubic(p0, p1, p2, p3, t), t => w * Math.pow(t, 1.2) * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.08)), 0.35) + 0.4, { needle: 0.2, ...o })
 
+
+// ── Fine line & flash tattoo ──────────────────────────────────────────────
+
+// Tratto fine (fine line): spessore quasi costante, punte appena rastremate.
+const fine = (at, w = 1.1, needle = 0.1) => brush(at, () => w, { needle })
+const line = (a, b, w = 1.1, needle = 0.1) => fine(t => lerp(a, b, t), w, needle)
+const ellAt = (cx, cy, rx, ry, d0, d1, tilt = 0) => t => { const a = rad(d0 + (d1 - d0) * t); return rotP([cx + rx * Math.cos(a), cy + ry * Math.sin(a)], cx, cy, tilt) }
+const arcLine = (cx, cy, r, d0, d1, w = 1.1, o = {}) => fine(ellAt(cx, cy, r, o.ry ?? r, d0, d1, o.tilt ?? 0), w, o.needle ?? 0.1)
+// Cerchio a contorno (anello sottile).
+const ringO = (cx, cy, r, w = 1.2) => pc.difference(circle(cx, cy, r + w / 2, 160), circle(cx, cy, r - w / 2, 160))
+// Raggio di sole: si stringe dalla base alla punta; wave > 0 lo rende una fiamma ondulata.
+function ray(cx, cy, deg, r0, r1, w, { wave = 0, waves = 1.5 } = {}) {
+  const a = rad(deg), d = [Math.cos(a), Math.sin(a)], n = [-d[1], d[0]]
+  return brush(t => {
+    const r = r0 + (r1 - r0) * t, off = wave * Math.sin(t * waves * 2 * Math.PI) * (1 - t * 0.4)
+    return [cx + d[0] * r + n[0] * off, cy + d[1] * r + n[1] * off]
+  }, t => w * Math.pow(1 - t, 0.85) + 0.2, { needle: 0.06 })
+}
+
+// Punti di una stella (punte e valli alternate).
+function starPts(cx, cy, r, { n = 5, inner = 0.42, alt = 1, rotate = 0 } = {}) {
+  const pts = []
+  for (let i = 0; i < n * 2; i++) {
+    const a = i * Math.PI / n - Math.PI / 2 + rad(rotate)
+    const rr = i % 2 ? r * inner : r * ((i / 2) % 2 ? alt : 1)
+    pts.push([cx + rr * Math.cos(a), cy + rr * Math.sin(a)])
+  }
+  return pts
+}
+// Rientro (offset verso l'interno) di un poligono a lati dritti, con spigoli a punta.
+function inset(pts, t) {
+  const n = pts.length
+  const make = sg => pts.map((p, i) => {
+    const prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n]
+    const e1 = [p[0] - prev[0], p[1] - prev[1]], e2 = [next[0] - p[0], next[1] - p[1]]
+    const l1 = Math.hypot(...e1), l2 = Math.hypot(...e2)
+    const n1 = [-e1[1] / l1 * sg, e1[0] / l1 * sg], n2 = [-e2[1] / l2 * sg, e2[0] / l2 * sg]
+    // intersezione delle due rette spostate
+    const a1 = [prev[0] + n1[0] * t, prev[1] + n1[1] * t], a2 = [p[0] + n2[0] * t, p[1] + n2[1] * t]
+    const den = e1[0] * e2[1] - e1[1] * e2[0]
+    const k = ((a2[0] - a1[0]) * e2[1] - (a2[1] - a1[1]) * e2[0]) / den
+    return [a1[0] + e1[0] * k, a1[1] + e1[1] * k]
+  })
+  const A = make(1), B = make(-1)
+  return ringArea(A) < ringArea(B) ? A : B
+}
+// Contorno di una stella a lati dritti.
+const starLine = (cx, cy, r, o = {}, w = 1.3) => { const p = starPts(cx, cy, r, o); return pc.difference(poly(p), poly(inset(p, w))) }
+// Stella nautica: contorno + meta' di ogni punta piena (classico flash tattoo).
+function nautical(cx, cy, r, { n = 5, inner = 0.42, alt = 1, rotate = 0, w = 1.3 } = {}) {
+  const p = starPts(cx, cy, r, { n, inner, alt, rotate })
+  const halves = []
+  for (let i = 0; i < n; i++) halves.push(poly([p[2 * i], [cx, cy], p[2 * i + 1]]))
+  return pc.union(pc.difference(poly(p), poly(inset(p, w))), ...halves)
+}
+// Contorno di uno sparkle: lo sparkle meno una sua copia piu' piccola (punte che si chiudono ad ago).
+const sparkleLine = (cx, cy, rx, ry, w = 1.6, o = {}) => pc.difference(sparkle(cx, cy, rx, ry, o), sparkle(cx, cy, rx - w * 2.6, ry - w * 2.6, o))
+
+// Luna crescente fine line: arco esterno modulato + arco interno sottile, uniti alle punte.
+function crescent(cx, cy, r, { phase = 0.42, dir = -30, wo = 2.6, wi = 1 } = {}) {
+  const a = rad(dir), d = r * phase, r2 = r * 0.92
+  const c2 = [cx + d * Math.cos(a), cy + d * Math.sin(a)]
+  // intersezione dei due cerchi
+  const x = (d * d + r * r - r2 * r2) / (2 * d), h = Math.sqrt(r * r - x * x)
+  const base = [cx + x * Math.cos(a), cy + x * Math.sin(a)], nrm = [-Math.sin(a), Math.cos(a)]
+  const T1 = [base[0] + nrm[0] * h, base[1] + nrm[1] * h], T2 = [base[0] - nrm[0] * h, base[1] - nrm[1] * h]
+  const ang = (c, p) => Math.atan2(p[1] - c[1], p[0] - c[0]) * 180 / Math.PI
+  // arco che passa dalla parte opposta all'offset (dir + 180)
+  const span = (c, rr, w, swell) => {
+    let s0 = ang(c, T1), s1 = ang(c, T2), mid = dir + 180
+    const norm = v => ((v % 360) + 360) % 360
+    if (!(norm(mid - s0) < norm(s1 - s0))) [s0, s1] = [s1, s0]
+    let e = s0 + norm(s1 - s0)
+    return brush(ellAt(c[0], c[1], rr, rr, s0, e), t => swell ? w * Math.pow(Math.sin(Math.PI * t), 0.6) + 0.5 : w, { needle: 0.06 })
+  }
+  return { joined: pc.union(span([cx, cy], r, wo, true), span(c2, r2, wi, false)) }
+}
+
+// Occhio mistico: palpebre a mandorla unite agli angoli.
+function eyeLids(cx, cy, hw, hh, w = 1.8) {
+  const L = [cx - hw, cy], R = [cx + hw, cy]
+  const lid = k => brush(t => quad(L, [cx, cy + k * hh * 2], R, t), t => w * Math.pow(Math.sin(Math.PI * t), 0.5) + 0.6, { needle: 0.05 })
+  return { joined: pc.union(lid(-1), lid(1)) }
+}
+// Punti lungo un'ellisse, piu' grandi davanti e piu' piccoli dietro (dotwork).
+function dotOrbit(cx, cy, rx, ry, n, { tilt = -12, rmax = 1.8, rmin = 0.6, avoid = [] } = {}) {
+  // passo costante lungo la curva (non lungo l'angolo), cosi' i punti non si addensano ai lati
+  const fine = Array.from({ length: 721 }, (_, i) => i / 2), pos = [0]
+  const at = d => rotP([cx + rx * Math.cos(rad(d)), cy + ry * Math.sin(rad(d))], cx, cy, tilt)
+  for (let i = 1; i < fine.length; i++) { const a = at(fine[i - 1]), b = at(fine[i]); pos.push(pos[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1])) }
+  const out = [], total = pos[pos.length - 1]
+  for (let k = 0; k < n; k++) {
+    const target = k * total / n, i = pos.findIndex(v => v >= target), d = fine[i], p = at(d)
+    const r = rmin + (rmax - rmin) * (1 + Math.sin(rad(d))) / 2
+    if (avoid.every(b => distToGeom(p, b) > r + BODY_GAP)) out.push(dot(p[0], p[1], r))
+  }
+  return out
+}
+// Linea di costellazione accorciata ai due capi (non tocca le stelle).
+const link = (a, b, ga, gb, w = 0.9) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]); return line(lerp(a, b, ga / L), lerp(a, b, 1 - gb / L), w, 0.15) }
+// Parti volutamente unite (es. contorno + riempimento): contano come una parte sola.
+const join = (...g) => ({ joined: pc.union(...g.map(x => x.joined || x)) })
+
 // ── Geometria di servizio ─────────────────────────────────────────────────
 const asPolys = g => (typeof g[0][0][0] === 'number' ? [g] : g)
 function inRing(p, r) {
@@ -146,16 +249,17 @@ function segDist(p, a, b) {
   return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
 }
 function distToGeom(p, g) {
+  if (g.joined) g = g.joined
   let m = Infinity
   for (const pl of asPolys(g)) {
-    const r = pl[0]
-    if (inRing(p, r)) return 0
-    for (let i = 0; i < r.length - 1; i++) m = Math.min(m, segDist(p, r[i], r[i + 1]))
+    if (inRing(p, pl[0]) && !pl.slice(1).some(h => inRing(p, h))) return 0
+    for (const r of pl) for (let i = 0; i < r.length - 1; i++) m = Math.min(m, segDist(p, r[i], r[i + 1]))
   }
   return m
 }
 const geomDist = (a, b) => {
   let m = Infinity
+  if (a.joined) a = a.joined
   for (const pl of asPolys(a)) for (const p of pl[0]) { m = Math.min(m, distToGeom(p, b)); if (m === 0) return 0 }
   return m
 }
@@ -163,7 +267,7 @@ const geomDist = (a, b) => {
 // Compone le parti e verifica: nessun contatto tra parti, tutto dentro il riquadro.
 const problems = []
 function compose(name, parts) {
-  const flat = parts.flatMap(p => (Array.isArray(p[0][0][0]) ? p : [p])).filter(Boolean)
+  const flat = parts.flatMap(p => (p.joined ? [p.joined] : Array.isArray(p[0][0][0]) ? p : [p])).filter(Boolean)
   for (let i = 0; i < flat.length; i++) for (let j = i + 1; j < flat.length; j++) {
     const d = Math.min(geomDist(flat[i], flat[j]), geomDist(flat[j], flat[i]))
     if (d < MIN_GAP) problems.push(`${name}: parti ${i} e ${j} troppo vicine (${d.toFixed(2)})`)
@@ -206,17 +310,13 @@ const CATS = {
     'Sparkle Tall':     [S(50, 50, 20, 48, { pinch: 0.12 })],
     'Sparkle Needle':   [S(50, 50, 12, 48, { pinch: 0.14 })],
     'Sparkle Wide':     [S(50, 50, 48, 30, { pinch: 0.1 })],
-    'Sparkle Round':    [S(50, 50, 44, 44, { pinch: 0.2, bend: 0.7 })],
-    'Sparkle Diamond':  [S(50, 50, 44, 44, { pinch: 0.08, rotate: 45 })],
     'Sparkle Duo':      [S(40, 58, 28, 38, { pinch: 0.08 }), S(82, 20, 12, 16)],
     'Sparkle Trio':     [S(42, 52, 20, 46, { pinch: 0.12 }), S(78, 24, 10, 15), S(16, 84, 7, 10)],
     'Sparkle Pair':     [S(32, 40, 18, 38, { pinch: 0.12 }), S(72, 62, 14, 32, { pinch: 0.12 })],
     'Sparkle Steps':    [S(22, 74, 10, 16), S(48, 52, 13, 22), S(78, 26, 18, 24)],
-    'Sparkle Column':   [S(50, 18, 8, 13), S(50, 50, 13, 16), S(50, 83, 8, 13)],
     'Twinkle Field':    [S(26, 30, 12, 20), S(70, 24, 7, 11), S(64, 68, 16, 26), S(20, 80, 5, 8), dot(44, 54, 1.8)],
     'Dot Sparkle':      [S(50, 50, 28, 42, { pinch: 0.08 }), dot(86, 14, 3.2), dot(14, 86, 2.4)],
     'Constellation':    [S(18, 70, 8, 12), dot(36, 52, 2), S(56, 44, 11, 17), dot(74, 30, 2), S(86, 14, 6, 10), dot(30, 86, 1.6)],
-    'Sparkle Quad':     [S(28, 28, 14, 20), S(72, 28, 10, 16), S(28, 72, 10, 16), S(72, 72, 14, 20)],
   },
   'CELESTIAL · Burst & Star': {
     'Starburst':        [burst(50, 50, 47)],
@@ -232,12 +332,51 @@ const CATS = {
     'Burst Cluster':    [burst(40, 42, 37, { alt: 0.62 }), S(82, 78, 10, 14)],
     'Burst Spark':      [burst(60, 54, 36), S(16, 26, 8, 14)],
     'Burst Twins':      [burst(32, 34, 28, { alt: 0.6 }), burst(72, 72, 24, { alt: 0.6 })],
-    'Star Solid':       [star5(50, 53, 46)],
-    'Star Slim':        [star5(50, 53, 46, { inner: 0.3 })],
-    'Star 6':           [starN(50, 50, 46, { n: 6, inner: 0.45 })],
-    'Star 7':           [starN(50, 50, 46, { n: 7, inner: 0.4 })],
-    'Star Duo':         [star5(40, 56, 34), S(84, 18, 10, 14)],
-    'Stars Trio':       [star5(30, 34, 22), star5(72, 46, 16), star5(42, 80, 12)],
+  },
+  'CELESTIAL · Fine Line': {
+    'Sparkle Outline':  [sparkleLine(50, 50, 34, 48, 1.4, { pinch: 0.1 })],
+    'Sparkle Inlay':    [sparkleLine(50, 50, 34, 48, 1.4, { pinch: 0.1 }), S(50, 50, 9, 16, { pinch: 0.12 })],
+    'Sparkle Halo':     [S(50, 50, 14, 30, { pinch: 0.12 }), ...Array.from({ length: 24 }, (_, i) => dot(50 + 42 * Math.cos(i * Math.PI / 12), 50 + 42 * Math.sin(i * Math.PI / 12), i % 2 ? 0.8 : 1.4))],
+    'Sparkle Frame':    [S(50, 50, 12, 26, { pinch: 0.12 }), ringO(50, 50, 34, 1), ...[0, 90, 180, 270].map(d => ray(50, 50, d, 38, 48, 1.6)), ...[45, 135, 225, 315].map(d => dot(50 + 40 * Math.cos(rad(d)), 50 + 40 * Math.sin(rad(d)), 1.2))],
+    'Fine Flare':       [join(needles(50, 50, 48, { n: 4, inner: 0.03, concave: 0.55 }), needles(50, 50, 22, { n: 4, inner: 0.06, rotate: 45, concave: 0.5 }))],
+    'Constellation Line': (() => {
+      const st = [[16, 74, 6], [36, 56, 4], [56, 62, 8], [70, 36, 5], [88, 16, 7]]
+      return [...st.map(([x, y, r]) => S(x, y, r * 0.7, r * 1.15)), ...st.slice(1).map((b, i) => link(st[i], b, st[i][2] + 3, b[2] + 3))]
+    })(),
+    'Constellation Hunter': (() => {
+      const st = [[22, 14, 5], [74, 18, 6], [42, 50, 3], [50, 50, 3], [58, 50, 3], [26, 86, 6], [78, 84, 5]]
+      const e = [[0, 2], [1, 4], [2, 5], [4, 6]]
+      return [...st.map(([x, y, r]) => (r > 3 ? S(x, y, r * 0.75, r * 1.2) : dot(x, y, 1.6))), ...e.map(([a, b]) => link(st[a], st[b], st[a][2] + 2.5, st[b][2] + 2.5))]
+    })(),
+    'Crescent Fine':    [crescent(50, 50, 42)],
+    'Crescent Sparkle': [crescent(42, 54, 36), S(78, 24, 8, 16, { pinch: 0.12 }), S(86, 50, 4, 7)],
+    'Crescent Hanging': (() => {
+      const m = crescent(50, 34, 26, { dir: -90 })
+      return [m, line([38, 64], [38, 74]), S(38, 86, 4, 7), line([50, 66], [50, 82]), S(50, 94, 3, 5), line([62, 64], [62, 69]), S(62, 80, 4, 7)]
+    })(),
+    'Moon Phases':      [circle(10, 50, 7), pc.union(ringO(30, 50, 7, 1), poly(Array.from({ length: 41 }, (_, i) => [30 + 7 * Math.cos(rad(90 + i * 4.5)), 50 + 7 * Math.sin(rad(90 + i * 4.5))]))), ringO(50, 50, 7, 1), pc.union(ringO(70, 50, 7, 1), poly(Array.from({ length: 41 }, (_, i) => [70 + 7 * Math.cos(rad(-90 + i * 4.5)), 50 + 7 * Math.sin(rad(-90 + i * 4.5))]))), circle(90, 50, 7)],
+    'Moon Phases Arc':  [0, 1, 2, 3, 4].map(i => { const a = rad(200 + i * 35), x = 50 + 40 * Math.cos(a), y = 70 + 40 * Math.sin(a); return i === 2 ? S(x, y, 7, 12) : moon(x, y, 7, { phase: 0.55, rotate: i < 2 ? 160 : -20 }) }),
+    'Dot Orbit':        [S(50, 48, 13, 42, { pinch: 0.12 }), ...dotOrbit(50, 54, 46, 14, 30, { avoid: [S(50, 48, 13, 42, { pinch: 0.12 })] })],
+    'Sacred Triangle':  [join(line([50, 8], [92, 82], 1.2, 0.02), line([92, 82], [8, 82], 1.2, 0.02), line([8, 82], [50, 8], 1.2, 0.02)), S(50, 58, 9, 16, { pinch: 0.12 }), dot(50, 92, 1.4), dot(50, 97, 0.9)],
+    'Sacred Circle':    [ringO(50, 50, 40, 1.1), ringO(50, 50, 30, 0.8), S(50, 50, 10, 20, { pinch: 0.12 }), ...[0, 90, 180, 270].map(d => dot(50 + 35 * Math.cos(rad(d)), 50 + 35 * Math.sin(rad(d)), 1.3))],
+    'Line Saturn':      ringAround([ringO(50, 50, 18, 1.4)], 50, 52, 46, 12, { tilt: -16, wf: 3, wb: 0.6 }),
+    'Comet Fine':       [S(78, 22, 10, 16, { pinch: 0.12 }), line([8, 92], [66, 34], 1.2, 0.5), line([18, 94], [64, 46], 0.9, 0.5), line([6, 80], [56, 36], 0.8, 0.5)],
+  },
+  'CELESTIAL · Flash Tattoo': {
+    'Nautical Star':    [nautical(50, 52, 46)],
+    'Nautical Slim':    [nautical(50, 52, 46, { inner: 0.32 })],
+    'Nautical Sparkle': [nautical(42, 56, 36), S(84, 16, 8, 14, { pinch: 0.12 }), S(86, 40, 3.5, 6)],
+    'Compass Star':     [join(nautical(50, 50, 46, { n: 8, inner: 0.2, alt: 0.55 }), ringO(50, 50, 22, 1.2))],
+    'Compass Rose':     [nautical(50, 50, 46, { n: 4, inner: 0.22 }), ...[45, 135, 225, 315].map(d => S(50 + 34 * Math.cos(rad(d)), 50 + 34 * Math.sin(rad(d)), 3.5, 6, { rotate: d + 90 }))],
+    'Star Line':        [starLine(50, 53, 46, { inner: 0.42 }, 1.3), S(50, 54, 6, 10)],
+    'Sun Flame':        [ringO(50, 50, 16, 1.6), dot(50, 50, 3), ...Array.from({ length: 16 }, (_, i) => ray(50, 50, i * 22.5 - 90, 21, i % 2 ? 40 : 48, i % 2 ? 2.4 : 2.8, { wave: i % 2 ? 2.2 : 0 }))],
+    'Sun Black':        [circle(50, 50, 15), ...Array.from({ length: 24 }, (_, i) => ray(50, 50, i * 15, 20, i % 3 === 0 ? 48 : i % 3 === 1 ? 34 : 40, i % 3 === 0 ? 2.6 : 1.6))],
+    'Sun Sparkle':      [ringO(50, 50, 20, 1.4), S(50, 50, 9, 15, { pinch: 0.12 }), ...Array.from({ length: 12 }, (_, i) => ray(50, 50, i * 30 - 90, 25, i % 2 ? 38 : 48, 2.2, { wave: i % 2 ? 0 : 1.8, waves: 1 }))],
+    'Sun Moon':         [crescent(44, 52, 38, { dir: -25 }), circle(62, 44, 8), ...Array.from({ length: 8 }, (_, i) => ray(62, 44, i * 45, 12, i % 2 ? 17 : 21, 1.6)).filter((_, i) => ![3, 4, 5].includes(i))],
+    'Mystic Eye':       [eyeLids(50, 52, 40, 16), ringO(50, 52, 11, 1.4), dot(50, 52, 5), ...[-60, -90, -120, -75, -105].map((d, i) => ray(50, 52, d, 26, i < 3 ? 46 : 40, 1.8))],
+    'Eye Sparkle':      [eyeLids(50, 40, 38, 14), ringO(50, 40, 8.5, 1.3), dot(50, 40, 3.5), S(50, 80, 6, 14, { pinch: 0.12 })],
+    'Burst Seal':       [join(needles(50, 50, 48, { n: 8, inner: 0.06, alt: 0.6 }), ringO(50, 50, 24, 1.2))],
+    'Sparkle Cross':    [S(50, 50, 12, 46, { pinch: 0.1 }), ...[45, 135, 225, 315].map(d => ray(50, 50, d, 12, 36, 1.8))],
   },
   'CELESTIAL · Orbit': {
     'Orbit Swoosh':     orbit(50, 48, 46, 16, 20, 300),
@@ -247,22 +386,17 @@ const CATS = {
     'Comet Trail':      [...orbit(50, 52, 46, 15, 25, 300, { wb: 0.6, tilt: -16 }), S(82, 18, 6, 10), S(14, 82, 4, 7)],
     'Saturn Sparkle':   ringAround([S(50, 46, 15, 44, { pinch: 0.12 })], 50, 54, 46, 14),
     'Saturn Burst':     ringAround([burst(50, 46, 42, { alt: 0.55 })], 50, 56, 46, 14),
-    'Saturn Star':      ringAround([star5(50, 38, 30)], 50, 62, 46, 13),
     'Saturn Tilt':      ringAround([S(50, 50, 15, 46, { pinch: 0.12 })], 50, 52, 46, 15, { tilt: 14 }),
     'Orbit Twin':       ringAround([S(38, 48, 14, 40, { pinch: 0.12 }), S(64, 32, 9, 22, { pinch: 0.12 })], 50, 58, 45, 14),
     'Orbit X':          ringAround([cross(56, 40, 34), cross(16, 24, 11, { inner: 0.13 })], 50, 62, 46, 15),
     'Halo Sparkle':     ringAround([S(46, 44, 14, 42, { pinch: 0.12 }), S(80, 84, 6, 10)], 47, 54, 44, 13),
     'Halo Wide':        ringAround([S(50, 50, 30, 44, { pinch: 0.08 })], 50, 56, 47, 12, { wf: 5.5 }),
-    'Shooting Star':    [star5(72, 30, 22), ...orbit(46, 60, 42, 16, 60, 320, { wb: 0.6, tilt: -22, avoid: [star5(72, 30, 22)] }), S(16, 22, 5, 9), S(88, 84, 4, 7)],
-    'Planet':           ringAround([circle(50, 50, 20)], 50, 52, 47, 13, { tilt: -16 }),
-    'Planet Sparkle':   [...ringAround([circle(46, 54, 17)], 46, 56, 44, 12, { tilt: -16 }), S(84, 18, 7, 12), S(70, 10, 3.5, 6)],
+    'Shooting Star':    [nautical(72, 30, 22), ...orbit(46, 60, 42, 16, 60, 320, { wb: 0.6, tilt: -22, avoid: [nautical(72, 30, 22)] }), S(16, 22, 5, 9), S(88, 84, 4, 7)],
+    'Planet Sparkle':   [...ringAround([ringO(46, 54, 16, 1.6)], 46, 56, 44, 12, { tilt: -16 }), S(46, 54, 6, 10), S(84, 18, 7, 12), S(70, 10, 3.5, 6)],
+    'Saturn Nautical':  ringAround([nautical(50, 40, 30)], 50, 62, 46, 13),
   },
   'CELESTIAL · Luna & Scie': {
-    'Moon':             [moon(50, 50, 44, { phase: 0.5 })],
-    'Moon Slim':        [moon(50, 50, 44, { phase: 0.62, rotate: -35 })],
-    'Moon Sparkle':     [moon(40, 54, 36, { phase: 0.5 }), S(78, 26, 10, 16), S(88, 52, 5, 8)],
-    'Moon Stars':       [moon(38, 50, 34, { phase: 0.5 }), star5(76, 30, 10), star5(82, 66, 6), dot(70, 84, 1.8)],
-    'Moon Burst':       [moon(40, 56, 34, { phase: 0.5 }), burst(78, 24, 20, { alt: 0.6 })],
+    'Moon Burst':       [crescent(40, 58, 34, { dir: -40 }), burst(78, 24, 20, { alt: 0.6 })],
     'Wave Trail':       [swoosh([6, 64], [30, 20], [58, 92], [86, 40], 7), S(86, 16, 8, 12)],
     'Comet Line':       [swoosh([6, 70], [24, 92], [56, 66], [68, 36], 8), S(80, 18, 12, 16)],
     'Comet Double':     [swoosh([4, 56], [14, 84], [44, 72], [62, 38], 7), swoosh([14, 92], [36, 98], [64, 84], [76, 52], 4), S(78, 22, 12, 16)],
@@ -276,9 +410,9 @@ const CATS = {
 // ── ICONE (viewBox 24): stesse forme in scala, piene ───────────────────────
 const ICON_FROM = {
   Sparkle: 'Sparkle', Sparkles: 'Sparkle Duo', Twinkle: 'Twinkle Field', Constellation: 'Constellation',
-  Starburst: 'Starburst', Flare: 'Flare', 'Cross X': 'Cross X', Star: 'Star Solid',
-  Orbit: 'Saturn Sparkle', Planet: 'Planet', Comet: 'Comet Line', 'Shooting Star': 'Shooting Star',
-  Moon: 'Moon', 'Moon Sparkle': 'Moon Sparkle', Halo: 'Halo Wide', Wave: 'Wave Trail', Meteor: 'Meteor Shower',
+  Starburst: 'Starburst', Flare: 'Flare', 'Cross X': 'Cross X', Star: 'Nautical Star', Compass: 'Compass Star', Sun: 'Sun Flame', Eye: 'Mystic Eye',
+  Orbit: 'Saturn Sparkle', Planet: 'Line Saturn', Comet: 'Comet Line', 'Shooting Star': 'Shooting Star',
+  Moon: 'Crescent Fine', 'Moon Sparkle': 'Crescent Sparkle', Halo: 'Halo Wide', Wave: 'Wave Trail', Meteor: 'Meteor Shower',
 }
 
 // ── Scrittura ──────────────────────────────────────────────────────────────
