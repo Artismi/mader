@@ -351,11 +351,22 @@ void main() {
 
 const JFA_INIT = LIB + `
 uniform sampler2D uSrc;
+float A(ivec2 q) { ivec2 sz = textureSize(uSrc, 0); return texelFetch(uSrc, clamp(q, ivec2(0), sz - 1), 0).a; }
 void main() {
-  vec2 p = gl_FragCoord.xy;
-  float a = texelFetch(uSrc, ivec2(p), 0).a;
-  // xy = pixel "dentro" più vicino, zw = pixel "fuori" più vicino (-1 = nessuno)
-  o = a >= 0.5 ? vec4(p, -1.0, -1.0) : vec4(-1.0, -1.0, p);
+  vec2 p = gl_FragCoord.xy; ivec2 ip = ivec2(p);
+  float a = A(ip);
+  bool inside = a >= 0.5;
+  bool edge = (a > 0.02 && a < 0.98)
+    || (A(ip + ivec2(1, 0)) >= 0.5) != inside || (A(ip - ivec2(1, 0)) >= 0.5) != inside
+    || (A(ip + ivec2(0, 1)) >= 0.5) != inside || (A(ip - ivec2(0, 1)) >= 0.5) != inside;
+  if (!edge) { o = vec4(-1.0); return; }
+  // punto del bordo con precisione sub-pixel: dove la copertura vale 0.5 lungo il gradiente
+  vec2 g = vec2(A(ip + ivec2(1, 0)) - A(ip - ivec2(1, 0)), A(ip + ivec2(0, 1)) - A(ip - ivec2(0, 1))) * 0.5
+         + vec2(A(ip + ivec2(1, 1)) - A(ip + ivec2(-1, 1)) + A(ip + ivec2(1, -1)) - A(ip + ivec2(-1, -1)),
+                A(ip + ivec2(1, 1)) - A(ip + ivec2(1, -1)) + A(ip + ivec2(-1, 1)) - A(ip + ivec2(-1, -1))) * 0.25;
+  float gl = length(g);
+  vec2 e = gl > 1e-4 ? p + g / gl * clamp((0.5 - a) / max(gl, 0.25), -1.0, 1.0) : p;
+  o = vec4(e, e);
 }`
 
 const JFA_STEP = LIB + `
@@ -382,11 +393,9 @@ void main() {
   vec2 p = gl_FragCoord.xy;
   vec4 s = texelFetch(uSeed, ivec2(p), 0);
   float a = texelFetch(uSrc, ivec2(p), 0).a;
-  float d;
-  if (a >= 0.5) d = s.z < 0.0 ? -1e4 : -(distance(p, s.zw) - 0.5);
-  else d = s.x < 0.0 ? 1e4 : distance(p, s.xy) - 0.5;
-  // vicino al bordo l'alpha (copertura) dà la posizione sub-pixel: bordi senza scalette
-  if (abs(d) < 1.0) d = 0.5 - a;
+  // distanza dal bordo vero (sub-pixel), negativa dentro: curve lisce, niente faccette
+  float d = s.x < 0.0 ? 1e4 : distance(p, s.xy);
+  d = a >= 0.5 ? -d : d;
   o = vec4(d, a, 0.0, 1.0);
 }`
 
