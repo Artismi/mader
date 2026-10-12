@@ -448,87 +448,83 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     added++
   }
   const w = R * 0.011 * o.line
-  // inchiostro semimagnetico: in ogni giunzione (contatto o incrocio di due contorni)
-  // l'inchiostro si raccoglie e si allunga lungo le due linee, nei due versi, in punte
-  // affusolate come un ferrofluido. Su ogni cerchio si registra dove sono le sue giunzioni.
-  type Spike = { a: number; W0: number; L: number }
-  const spikes: Spike[][] = circles.map(() => [])
-  const angOf = (c: { x: number; y: number }, p: Pt) => Math.atan2(p[1] - c.y, p[0] - c.x)
-  for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) {
-    const A = circles[i], B = circles[j], d = Math.hypot(B.x - A.x, B.y - A.y)
-    const small = Math.min(A.r, B.r)
-    let pts: Pt[] = []
-    const gapOut = d - A.r - B.r, gapIn = Math.max(A.r, B.r) - (d + small)
-    if (Math.abs(gapOut) < g * 0.9) {
-      // quasi tangenti all'esterno: un punto di contatto
-      const t = (A.r + gapOut / 2) / d
-      pts = [[A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t]]
-    } else if (gapIn >= 0 && gapIn < g * 0.9) {
-      // annidata e quasi tangente all'interno
-      const big = A.r > B.r ? A : B, sm = big === A ? B : A, ux = (sm.x - big.x) / (d || 1), uy = (sm.y - big.y) / (d || 1)
-      pts = [[big.x + ux * (big.r - gapIn / 2), big.y + uy * (big.r - gapIn / 2)]]
-    } else pts = intersect({ ...A, big: true }, { ...B, big: true })
-    for (const p of pts) {
-      const hv = r()
-      const L = small * range(r, 0.4, 0.85) * o.gap          // lunghezza dei bracci
-      const W0 = Math.min(small * 0.42, g * range(r, 2.2, 3.6))  // spessore alla giunzione
-      spikes[i].push({ a: angOf(A, p), W0, L: L * (hv < 0.5 ? 1 : 0.7) })
-      spikes[j].push({ a: angOf(B, p), W0, L: L * (hv < 0.5 ? 0.7 : 1) })
-    }
-  }
-  // menisco a "pallina che rotola": in ogni conca l'inchiostro riempie lo spazio dove un
-  // disco di raggio rho non riesce a entrare (chiusura morfologica del pieno). Tocca i due
-  // cerchi tangente, si affusola lungo entrambi e al centro ha un bordo rotondo di raggio
-  // rho. Si calcola regione per regione e si ritaglia sui contorni: non sborda mai.
-  const rho = g * 0.34 * o.gap
-  const N = W * H
-  const ink = new Float32Array(N)
-  const disk = (m: Mask, c: { x: number; y: number; r: number }, v: number) => {
-    const x0 = Math.max(0, Math.floor(c.x - c.r - 1)), x1 = Math.min(W - 1, Math.ceil(c.x + c.r + 1))
-    const y0 = Math.max(0, Math.floor(c.y - c.r - 1)), y1 = Math.min(H - 1, Math.ceil(c.y + c.r + 1))
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      const cov = Math.max(0, Math.min(1, c.r - Math.hypot(x - c.x, y - c.y) + 0.5)) * 255
-      const k = y * W + x
-      m.a[k] = v ? Math.max(m.a[k], cov) : Math.min(m.a[k], 255 - cov)
-    }
-  }
-  const fillPockets = (solid: Mask, region: (k: number) => boolean, rho: number) => {
-    const comp: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
-    for (let k = 0; k < N; k++) comp.a[k] = 255 - solid.a[k]
-    const dOut = distance(comp)                                   // distanza dal pieno, fuori
-    const dil: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
-    for (let k = 0; k < N; k++) dil.a[k] = solid.a[k] > 127 ? 255 : Math.max(0, Math.min(1, rho - dOut[k] + 0.5)) * 255
-    const e = distance(dil)                                       // erosione del dilatato
-    for (let k = 0; k < N; k++) {
-      if (solid.a[k] > 250 || !region(k)) continue
-      const v = Math.max(0, Math.min(1, e[k] - rho + 0.5)) * (1 - solid.a[k] / 255)
-      if (v > ink[k]) ink[k] = v
-    }
-  }
-  // annidata solo se sta tutta dentro (niente tolleranza): una bolla che esce dal bordo
-  // resta di primo livello e le sue conche esterne prendono l'inchiostro pieno
-  const inside = (q: { x: number; y: number; r: number }, c: { x: number; y: number; r: number }) => Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r - w
-  const nested = circles.map((q, j) => circles.some((c, i) => i !== j && inside(q, c)))
-  const outer: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
-  circles.forEach((c, i) => { if (!nested[i]) disk(outer, c, 1) })
-  fillPockets(outer, () => true, rho)
-  // dentro ogni bolla: conche fra il suo contorno e le bolle che vi entrano (annidate o
-  // sovrapposte), con raggio dimezzato, quindi più sottili dell'esterno
-  circles.forEach(h => {
-    const guests = circles.filter(q => q !== h && Math.hypot(q.x - h.x, q.y - h.y) < h.r + q.r - w && !inside(h, q))
-    if (!guests.length) return
-    const sol: Mask = { w: W, h: H, a: new Uint8ClampedArray(N).fill(255) }
-    disk(sol, h, 0)
-    guests.forEach(c => disk(sol, c, 1))
-    fillPockets(sol, k => { const x = k % W, y = (k / W) | 0; return Math.hypot(x - h.x, y - h.y) < h.r }, rho * 0.5)
+  // inchiostro liquido: unione morbida esponenziale dei contorni, f = -k·ln Σ e^(-d/k).
+  // Nella conca fra due bolle f < 0 e lo spazio si riempie con un fondo tondo; lungo
+  // ciascun contorno lo spessore cala come e^(-d/k), quindi la goccia si assottiglia in
+  // code lunghe e sottili invece di finire di colpo. Vale solo nel vuoto: mai nelle lenti
+  // di sovrapposizione, e dentro una bolla solo verso le bolle annidate (più fine).
+  // Anche il tratto dei contorni respira: sottile in campo aperto, gonfio verso le giunzioni.
+  const k = g * 0.22 * o.gap
+  const n = circles.length
+  // genitore = la bolla più piccola che contiene tutta la bolla
+  const contains = (c: { x: number; y: number; r: number }, q: { x: number; y: number; r: number }) => Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r - w
+  const parent = circles.map((q, j) => {
+    let best = -1
+    circles.forEach((c, i) => { if (i !== j && contains(c, q) && (best < 0 || c.r < circles[best].r)) best = i })
+    return best
   })
-  return drawMask(W, H, ctx => {
-    const img = ctx.createImageData(W, H)
-    for (let k = 0; k < N; k++) { img.data[k * 4 + 3] = ink[k] * 255; img.data[k * 4] = img.data[k * 4 + 1] = img.data[k * 4 + 2] = 255 }
-    ctx.putImageData(img, 0, 0)
-    ctx.lineWidth = w
-    for (const c of circles) { ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.stroke() }
+  const ancestors = circles.map((_, j) => { const s = new Set<number>(); for (let p = parent[j]; p >= 0; p = parent[p]) s.add(p); return s })
+  const reach = k * 11 + w * 3
+  const cell = Math.max(8, reach)
+  const GW = Math.ceil(W / cell), GH = Math.ceil(H / cell)
+  const grid: number[][] = Array.from({ length: GW * GH }, () => [])
+  circles.forEach((c, i) => {
+    const gx0 = Math.max(0, Math.floor((c.x - c.r - reach) / cell)), gx1 = Math.min(GW - 1, Math.floor((c.x + c.r + reach) / cell))
+    const gy0 = Math.max(0, Math.floor((c.y - c.r - reach) / cell)), gy1 = Math.min(GH - 1, Math.floor((c.y + c.r + reach) / cell))
+    for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+      const qx = Math.max(gx * cell, Math.min(c.x, (gx + 1) * cell)), qy = Math.max(gy * cell, Math.min(c.y, (gy + 1) * cell))
+      if (Math.hypot(qx - c.x, qy - c.y) > c.r + reach) continue
+      grid[gy * GW + gx].push(i)
+    }
   })
+  const sd = new Float32Array(n)
+  const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
+  const kIn = k * 0.55
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const list = grid[Math.floor(y / cell) * GW + Math.floor(x / cell)]
+    if (!list.length) continue
+    // contenitore più interno fra le bolle vicine; se il punto sta in due bolle non annidate è una lente
+    let h = -1, lens = false
+    for (const i of list) {
+      const c = circles[i]
+      const v = Math.hypot(x - c.x, y - c.y) - c.r
+      sd[i] = v
+      if (v < 0 && (h < 0 || c.r < circles[h].r)) h = i
+    }
+    for (const i of list) if (sd[i] < 0 && i !== h && !ancestors[h].has(i)) { lens = true; break }
+    // 1) tratto dei contorni, a spessore variabile
+    let line = 0
+    for (const i of list) {
+      const a = Math.abs(sd[i])
+      if (a > w * 2) continue
+      let other = Infinity
+      for (const j of list) if (j !== i) { const b = Math.abs(sd[j]); if (b < other) other = b }
+      const half = w * 0.5 * (0.5 + 0.9 * Math.exp(-other / (k * 1.3)))
+      const cv = half - a + 0.5
+      if (cv > line) line = cv
+    }
+    // 2) menisco nel vuoto; copertura = -f / |∇f| perché il bordo resti netto anche
+    // lungo le code, dove i due contorni sono quasi paralleli e il campo è piatto
+    let ink = 0
+    if (!lens) {
+      let S = 0, gx = 0, gy = 0, kk = k
+      const add = (i: number, sgn: number) => {
+        const c = circles[i], e = Math.exp(-sgn * sd[i] / kk)
+        const dl = Math.hypot(x - c.x, y - c.y) || 1
+        S += e; gx += e * sgn * (x - c.x) / dl; gy += e * sgn * (y - c.y) / dl
+      }
+      if (h < 0) { for (const i of list) if (parent[i] < 0) add(i, 1) }
+      else { kk = kIn; add(h, -1); for (const i of list) if (parent[i] === h) add(i, 1) }
+      if (S > 0) {
+        const f = -kk * Math.log(S), gl = Math.hypot(gx, gy) / S
+        ink = 0.5 - f / Math.max(0.05, gl)
+      }
+    }
+    const v = Math.max(line, ink)
+    if (v > 0) m.a[y * W + x] = Math.min(1, v) * 255
+  }
+  return m
+
 }
 
 // ─── rete neurale d'inchiostro ───────────────────────────────────────────────
