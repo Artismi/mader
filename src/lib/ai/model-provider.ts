@@ -62,3 +62,27 @@ export function resolveModel(choice: string | undefined, task: AiTask): { model:
   }
   return { model: anthropic('claude-sonnet-5-5'), label: 'claude-sonnet-5-5' }
 }
+
+// ── PKCE in attesa ───────────────────────────────────────────────────────────
+// Il login può partire in Electron e finire nel browser di sistema (dove il
+// login di OpenRouter funziona): niente cookie, il verifier resta nel DB locale.
+// App desktop a utente singolo: basta un solo collegamento in attesa alla volta.
+
+const PKCE_KEY = 'ai.openrouter.pkce'
+const PKCE_TTL_MS = 10 * 60 * 1000
+
+export function savePendingPkce(verifier: string, external: boolean): void {
+  config.set(PKCE_KEY, JSON.stringify({ verifier, external, ts: Date.now() }))
+}
+
+export function takePendingPkce(): { verifier: string; external: boolean } | null {
+  const raw = config.get(PKCE_KEY)
+  config.set(PKCE_KEY, '')
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as { verifier: string; external: boolean; ts: number }
+    return Date.now() - p.ts < PKCE_TTL_MS ? p : null
+  } catch {
+    return null
+  }
+}

@@ -39,6 +39,7 @@ export function AiProviderCard() {
   const [draft, setDraft] = useState<Record<Task, string>>({ design: '', general: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [waiting, setWaiting] = useState(false)
 
   const load = () =>
     fetch('/api/ai/provider')
@@ -51,12 +52,32 @@ export function AiProviderCard() {
 
   useEffect(() => { load() }, [])
 
+  // Electron: il login si apre nel browser di sistema (quello di OpenRouter non
+  // si carica nelle finestre Electron); qui aspettiamo che la chiave arrivi.
+  useEffect(() => {
+    if (!waiting) return
+    const started = Date.now()
+    const poll = setInterval(() => {
+      if (Date.now() - started > 10 * 60 * 1000) { setWaiting(false); return }
+      fetch('/api/ai/provider')
+        .then(res => res.json() as Promise<{ openrouter: ProviderState }>)
+        .then(({ openrouter }) => {
+          if (!openrouter.connected) return
+          setState(openrouter)
+          setDraft(openrouter.models)
+          setWaiting(false)
+        })
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(poll)
+  }, [waiting])
+
   const connect = async () => {
     const startUrl = `${window.location.origin}/api/auth/openrouter/start`
-    const w = window as unknown as { electronAPI?: { openOAuthWindow: (url: string) => Promise<unknown> } }
-    if (w.electronAPI?.openOAuthWindow) {
-      // Electron: popup dedicato, il callback torna nella finestra principale
-      await w.electronAPI.openOAuthWindow(startUrl)
+    const w = window as unknown as { electronAPI?: { openExternal: (url: string) => Promise<unknown> } }
+    if (w.electronAPI?.openExternal) {
+      await w.electronAPI.openExternal(`${startUrl}?ext=1`)
+      setWaiting(true)
     } else {
       window.location.href = startUrl
     }
@@ -109,10 +130,17 @@ export function AiProviderCard() {
           </p>
           <button
             onClick={connect}
-            className="text-sm font-medium px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90 transition-opacity"
+            className="text-sm font-medium px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90 transition-opacity flex items-center gap-2"
           >
-            Collega OpenRouter
+            {waiting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {waiting ? 'Riapri il browser' : 'Collega OpenRouter'}
           </button>
+          {waiting && (
+            <p className="text-xs text-primary/60">
+              Si è aperto il tuo browser: accedi a OpenRouter e autorizza Creative OS.
+              Questa scheda si aggiorna da sola appena il collegamento è fatto.
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-4">

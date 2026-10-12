@@ -1,41 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { tokens } from '@/lib/db'
-import { OPENROUTER_PROVIDER } from '@/lib/ai/model-provider'
-
-const VERIFIER_COOKIE = 'or_pkce_verifier'
+import { OPENROUTER_PROVIDER, takePendingPkce } from '@/lib/ai/model-provider'
 
 // Ritorno da OpenRouter: scambia il codice con la chiave API dell'utente
 // e la salva in user_tokens. Non arriva mai al client.
 
+function externalPage(ok: boolean): Response {
+  const title = ok ? 'OpenRouter collegato' : 'Collegamento non riuscito'
+  const text = ok
+    ? 'Puoi chiudere questa scheda e tornare a Creative OS: le Impostazioni si aggiornano da sole.'
+    : 'Torna a Creative OS e riprova da Impostazioni → Modelli AI.'
+  const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${title}</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f0f10;color:#fafafa;display:grid;place-items:center;height:100vh;margin:0}
+main{max-width:420px;text-align:center}h1{font-size:20px}p{color:#a1a1aa;line-height:1.5}</style></head>
+<body><main><h1>${ok ? '✓' : '✕'} ${title}</h1><p>${text}</p></main></body></html>`
+  return new Response(html, { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+}
+
 export async function GET(req: NextRequest) {
   const host = req.headers.get('host') ?? 'localhost:3000'
-  const back = (status: string) => {
-    const res = NextResponse.redirect(`http://${host}/settings?openrouter=${status}`)
-    res.cookies.delete({ name: VERIFIER_COOKIE, path: '/api/auth/openrouter' })
-    return res
-  }
-
   const code = req.nextUrl.searchParams.get('code')
-  const verifier = req.cookies.get(VERIFIER_COOKIE)?.value
-  if (!code || !verifier) return back('error')
+  const pending = takePendingPkce()
+
+  const done = (ok: boolean) => pending?.external
+    ? externalPage(ok)
+    : NextResponse.redirect(`http://${host}/settings?openrouter=${ok ? 'connected' : 'error'}`)
+
+  if (!code || !pending) return done(false)
 
   try {
     const exchange = await fetch('https://openrouter.ai/api/v1/auth/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }),
+      body: JSON.stringify({ code, code_verifier: pending.verifier, code_challenge_method: 'S256' }),
     })
     if (!exchange.ok) {
       console.error('[openrouter] scambio codice fallito:', exchange.status, await exchange.text())
-      return back('error')
+      return done(false)
     }
     const { key } = await exchange.json() as { key?: string }
-    if (!key) return back('error')
+    if (!key) return done(false)
 
     tokens.upsert({ provider: OPENROUTER_PROVIDER, provider_token: key })
-    return back('connected')
+    return done(true)
   } catch (err) {
     console.error('[openrouter] errore callback:', err)
-    return back('error')
+    return done(false)
   }
 }
