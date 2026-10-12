@@ -28,6 +28,8 @@ const SUGGESTED: Record<Task, { id: string; label: string }[]> = {
   ],
 }
 
+const CUSTOM = '__custom__'
+
 const TASK_LABEL: Record<Task, string> = {
   design: 'Grafiche e canvas',
   general: 'Incarichi, idee, chat',
@@ -151,21 +153,30 @@ export function AiProviderCard() {
             </p>
           )}
 
-          {(['design', 'general'] as Task[]).map(task => (
-            <label key={task} className="block space-y-1">
-              <span className="text-xs font-medium text-primary">{TASK_LABEL[task]}</span>
-              <input
-                list={`or-models-${task}`}
-                value={draft[task]}
-                onChange={e => setDraft(d => ({ ...d, [task]: e.target.value }))}
-                placeholder={state.defaults[task]}
-                className="w-full text-sm font-mono px-3 py-2 rounded-lg border border-border bg-transparent focus:outline-none focus:border-accent/60"
-              />
-              <datalist id={`or-models-${task}`}>
-                {SUGGESTED[task].map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </datalist>
-            </label>
-          ))}
+          {(['design', 'general'] as Task[]).map(task => {
+            const known = SUGGESTED[task].some(m => m.id === draft[task])
+            return (
+              <div key={task} className="space-y-1.5">
+                <span className="block text-xs font-medium text-primary">{TASK_LABEL[task]}</span>
+                <select
+                  value={known ? draft[task] : CUSTOM}
+                  onChange={e => setDraft(d => ({ ...d, [task]: e.target.value === CUSTOM ? '' : e.target.value }))}
+                  className="w-full text-sm text-primary px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:border-accent/60 cursor-pointer"
+                >
+                  {SUGGESTED[task].map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  <option value={CUSTOM}>Altro… (scrivi l&apos;ID OpenRouter)</option>
+                </select>
+                {!known && (
+                  <input
+                    value={draft[task]}
+                    onChange={e => setDraft(d => ({ ...d, [task]: e.target.value }))}
+                    placeholder="es. openai/gpt-5.5"
+                    className="w-full text-sm font-mono text-primary px-3 py-2 rounded-lg border border-border bg-white placeholder:text-primary/30 focus:outline-none focus:border-accent/60"
+                  />
+                )}
+              </div>
+            )
+          })}
 
           <div className="flex items-center gap-4">
             <button

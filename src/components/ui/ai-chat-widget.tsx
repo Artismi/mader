@@ -431,18 +431,25 @@ export function AIChatWidget() {
 
     const [selectedModel, setSelectedModel] = useState<ModelId>('gemini');
     const [openRouterConnected, setOpenRouterConnected] = useState(false);
+    const orConnectedRef = useRef(false);
 
-    // Con OpenRouter collegato si parte dal modello dell'utente
+    // Con OpenRouter collegato si parte dal modello dell'utente. Si ricontrolla
+    // quando la finestra torna in primo piano (collegamento fatto nel browser).
     useEffect(() => {
-        fetch('/api/ai/provider')
+        const check = () => fetch('/api/ai/provider')
             .then(r => r.json())
             .then(d => {
-                if (d?.openrouter?.connected) {
-                    setOpenRouterConnected(true);
-                    setSelectedModel('openrouter');
+                const connected = !!d?.openrouter?.connected;
+                if (connected !== orConnectedRef.current) {
+                    orConnectedRef.current = connected;
+                    setOpenRouterConnected(connected);
+                    setSelectedModel(m => connected ? 'openrouter' : m === 'openrouter' ? 'gemini' : m);
                 }
             })
             .catch(() => {});
+        check();
+        window.addEventListener('focus', check);
+        return () => window.removeEventListener('focus', check);
     }, []);
     const [input, setInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -681,18 +688,16 @@ export function AIChatWidget() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-0.5 bg-white/[0.03] rounded-lg p-0.5 border border-white/10 backdrop-blur-sm">
-                            {((openRouterConnected ? ['openrouter', 'gemini', 'claude'] : ['gemini', 'claude']) as ModelId[]).map(m => (
-                                <button key={m} onClick={() => setSelectedModel(m)} className={cn(
-                                    "px-3 py-1 rounded-md text-[9px] font-black tracking-widest transition-all",
-                                    selectedModel === m
-                                        ? "bg-accent/80 text-white shadow-[0_0_15px_rgba(124,58,237,0.4)]"
-                                        : "text-white/20 hover:text-white/40"
-                                )}>
-                                    {m.toUpperCase()}
-                                </button>
-                            ))}
-                        </div>
+                        <select
+                            value={selectedModel}
+                            onChange={e => setSelectedModel(e.target.value as ModelId)}
+                            title="Modello AI"
+                            className="max-w-[120px] bg-white/[0.03] border border-white/10 rounded-lg px-2 py-1 text-[9px] font-black tracking-widest uppercase text-white/80 focus:outline-none focus:border-accent/60 cursor-pointer"
+                        >
+                            {openRouterConnected && <option value="openrouter" className="bg-[#141414]">OpenRouter</option>}
+                            <option value="gemini" className="bg-[#141414]">Gemini</option>
+                            <option value="claude" className="bg-[#141414]">Claude</option>
+                        </select>
                     </div>
                 </div>
 
