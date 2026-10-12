@@ -4,16 +4,16 @@
  * Restituiscono un canvas ad alta risoluzione: tavola intera o pezzo scontornato.
  */
 import {
-  blurMask, combine, dither, fontCss, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
+  blurMask, combine, distance, dither, fontCss, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
   newMask, noise2, polar, range, remap, rng, slices, smoothstep, stretch, text, xerox,
   type Ctx, type Face, type Mask, type Rnd,
 } from './raster'
-import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
+import { SILHOUETTES, band, flick, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, whip, type Pt } from './strokes'
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
-import { arcText, burst, castShadow, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
+import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -1327,6 +1327,220 @@ const cartellino: Recipe = {
   },
 }
 
+// incisione: riempie la sagoma di linee parallele il cui spessore segue l'ombra
+// (luce da in alto a sinistra), come un bulino. Le linee si chiudono nelle luci.
+function engrave(m: Mask, S: number, pitch: number, ang = -0.5): Mask {
+  const d = distance(m), W = m.w, H = m.h
+  const out = newMask(W, H)
+  const ca = Math.cos(ang), sa = Math.sin(ang)
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x
+    if (!m.a[i]) continue
+    // ombra: lato in basso a destra della forma + bordo
+    const gx = d[i + 1] - d[i - 1], gy = d[i + W] - d[i - W]
+    const shade = Math.max(0, Math.min(1, 0.5 + (gx * 0.45 + gy * 0.6) * 0.5 + 0.35 * Math.exp(-d[i] / (S * 0.01))))
+    const u = (x * ca + y * sa) / pitch
+    const f = Math.abs(u - Math.round(u)) * 2
+    const half = 0.12 + 0.75 * shade
+    out.a[i] = Math.max(0, Math.min(1, (half - f) * pitch * 0.5 + 0.5)) * m.a[i]
+  }
+  return out
+}
+
+const exlibris: Recipe = {
+  id: 'exlibris', label: 'Ex libris', cat: 'Ephemera', hint: 'ex libris inciso a bulino: cornice, emblema a tratteggio, nome',
+  piece: true,
+  params: [P.sel('sym', 'Emblema', ['Sole', 'Luna', 'Occhio', 'Stella', 'Cuore sacro', 'Pugnale']), P.text('Artismi', 'Nome'), { key: 'motto', label: 'Motto', type: 'text', def: 'Torino · Design Studio' },
+    P.face('gotico'), P.range('pitch', 'Fitta', 40, 200, 100), P.sel('ink', 'Inchiostro', ['Nero', 'Seppia', 'Blu', 'Tono']), P.tone(1), P.grain(25)],
+  render: o => {
+    const t = tone(o), S = SS(o), r = rng(o.seed), cx = o.W / 2, cy = o.H / 2
+    const w = S * 0.6, h = S * 0.8, x = cx - w / 2, y = cy - h / 2
+    const inkC = ['#141210', '#4a2f1d', '#1b2c5a', t.ink][num(o, 'ink')] ?? '#141210'
+    const paper = drawMask(o.W, o.H, ctx => ctx.fillRect(x, y, w, h))
+    const frame = drawMask(o.W, o.H, ctx => {
+      const m = w * 0.05
+      ctx.lineWidth = S * 0.004; ctx.strokeRect(x + m, y + m, w - 2 * m, h - 2 * m)
+      ctx.lineWidth = S * 0.0015; ctx.strokeRect(x + m * 1.5, y + m * 1.5, w - 3 * m, h - 3 * m)
+      // angoli: quarti di cerchio rientranti con un rombo
+      for (const [ax, ay, sx, sy] of [[x + m * 1.5, y + m * 1.5, 1, 1], [x + w - m * 1.5, y + m * 1.5, -1, 1], [x + m * 1.5, y + h - m * 1.5, 1, -1], [x + w - m * 1.5, y + h - m * 1.5, -1, -1]] as const) {
+        ctx.beginPath(); ctx.arc(ax, ay, m * 1.2, sx > 0 ? (sy > 0 ? 0 : -Math.PI / 2) : (sy > 0 ? Math.PI / 2 : Math.PI), sx > 0 ? (sy > 0 ? Math.PI / 2 : 0) : (sy > 0 ? Math.PI : Math.PI * 1.5)); ctx.stroke()
+        lozenge(ctx, ax + sx * m * 0.45, ay + sy * m * 0.45, m * 0.22)
+      }
+      const f = face(o)
+      fitText(ctx, 'Ex Libris', FACES.bodoni, cx, y + h * 0.15, w * 0.6, h * 0.07)
+      fitText(ctx, str(o, 'text') || ' ', f, cx, y + h * 0.84, w * 0.7, h * 0.1)
+      fitText(ctx, str(o, 'motto'), FACES.mono, cx, y + h * 0.9, w * 0.6, h * 0.022)
+      ctx.lineWidth = S * 0.0015
+      for (const yy of [y + h * 0.19, y + h * 0.745]) { ctx.beginPath(); ctx.moveTo(cx - w * 0.3, yy); ctx.lineTo(cx + w * 0.3, yy); ctx.stroke(); lozenge(ctx, cx, yy, S * 0.006) }
+    })
+    // emblema: sagoma piena del simbolo, poi incisa a tratteggio; il contorno resta netto
+    const emb = drawMask(o.W, o.H, ctx => { ctx.lineCap = 'round'; ctx.lineJoin = 'round'; flash(ctx, num(o, 'sym'), cx, y + h * 0.465, w * 0.95, r, 3.2) })
+    const disc = drawMask(o.W, o.H, ctx => { ctx.beginPath(); ctx.arc(cx, y + h * 0.465, w * 0.33, 0, Math.PI * 2); ctx.fill() })
+    const pitch = Math.max(2.2, S * 0.006 * num(o, 'pitch') / 100)
+    const bgHatch = engrave(combine(disc, emb, 'sub'), S, pitch * 0.8, 0.3)
+    const lightBg = newMask(o.W, o.H); for (let i = 0; i < lightBg.a.length; i++) lightBg.a[i] = bgHatch.a[i] * 0.55
+    const embH = engrave(emb, S, pitch, -0.6)
+    const embEdge = drawMask(o.W, o.H, ctx => { ctx.lineCap = 'round'; ctx.lineJoin = 'round'; flash(ctx, num(o, 'sym'), cx, y + h * 0.465, w * 0.95, rng(o.seed), 1.0) })
+    const discRing = drawMask(o.W, o.H, ctx => { ctx.lineWidth = S * 0.002; ctx.beginPath(); ctx.arc(cx, y + h * 0.465, w * 0.33, 0, Math.PI * 2); ctx.stroke() })
+    const all = [frame, embH, embEdge, discRing, lightBg].reduce((a, b) => combine(a, b, 'max'))
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, paper, S, 0.18, 0.4)
+    ctx.drawImage(maskToCanvas(paper, '#f3ecdc'), 0, 0)
+    ctx.save(); ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(maskToCanvas(inkPress(combine(all, paper, 'min'), o.seed, S, 0.08, { tilt: 0.25 }), inkC), 0, 0); ctx.restore()
+    return finish(c, o, t, 'exlibris', null)
+  },
+}
+
+const stemma: Recipe = {
+  id: 'stemma', label: 'Badge gotico', cat: 'Sigilli', hint: 'monogramma blackletter in un arco a sesto acuto, svolazzi simmetrici, in oro o cromo',
+  piece: true,
+  params: [P.text('A', 'Monogramma'), { key: 'top', label: 'Sopra', type: 'text', def: 'Artismi' }, { key: 'bottom', label: 'Sotto', type: 'text', def: 'Torino · MMXXVI' },
+    P.face('gotico'), P.sel('frame', 'Cornice', ['Arco acuto', 'Scudo', 'Losanga']), P.mat(3), P.range('flour', 'Svolazzi', 0, 100, 70), P.tone(0), P.glow(false), P.grain(15)],
+  render: o => {
+    const t = tone(o), S = SS(o), cx = o.W / 2, cy = o.H / 2 + S * 0.02, kind = num(o, 'frame'), r = rng(o.seed)
+    const m = drawMask(o.W, o.H, ctx => {
+      const w = S * 0.3, h = S * 0.42, lw = S * 0.016
+      const path = (k: number) => {
+        ctx.beginPath()
+        if (kind === 0) { ctx.moveTo(cx - w * k, cy + h * 0.5 * k); ctx.lineTo(cx - w * k, cy - h * 0.05 * k); ctx.quadraticCurveTo(cx - w * k, cy - h * 0.45 * k, cx, cy - h * 0.62 * k); ctx.quadraticCurveTo(cx + w * k, cy - h * 0.45 * k, cx + w * k, cy - h * 0.05 * k); ctx.lineTo(cx + w * k, cy + h * 0.5 * k); ctx.closePath() }
+        else if (kind === 1) { ctx.moveTo(cx - w * k, cy - h * 0.5 * k); ctx.lineTo(cx + w * k, cy - h * 0.5 * k); ctx.lineTo(cx + w * k, cy + h * 0.05 * k); ctx.quadraticCurveTo(cx + w * k, cy + h * 0.42 * k, cx, cy + h * 0.6 * k); ctx.quadraticCurveTo(cx - w * k, cy + h * 0.42 * k, cx - w * k, cy + h * 0.05 * k); ctx.closePath() }
+        else { ctx.moveTo(cx, cy - h * 0.62 * k); ctx.lineTo(cx + w * 1.05 * k, cy); ctx.lineTo(cx, cy + h * 0.62 * k); ctx.lineTo(cx - w * 1.05 * k, cy); ctx.closePath() }
+      }
+      ctx.lineJoin = 'miter'
+      ctx.lineWidth = lw; path(1); ctx.stroke()
+      ctx.lineWidth = lw * 0.4; path(0.88); ctx.stroke()
+      const f = face(o), mono = str(o, 'text') || 'A'
+      fitText(ctx, mono, f, cx, cy + h * (kind === 1 ? 0.12 : 0.2), w * 1.4, h * 0.62)
+      // svolazzi: fruste speculari che escono dai fianchi e si arricciano verso l'alto
+      const fl = num(o, 'flour') / 100
+      if (fl > 0) for (const s of [-1, 1]) {
+        for (let k = 0; k < 3; k++) {
+          const y0 = cy - h * 0.1 + k * h * 0.22, L = S * (0.22 + 0.06 * k) * fl * range(r, 0.9, 1.1)
+          const { pts } = whip(cx + s * w * 1.02, y0, s > 0 ? -0.15 + k * 0.25 : Math.PI + 0.15 - k * 0.25, L, s * (k === 2 ? -1 : 1) * 0.6, s * (k === 2 ? -1 : 1) * 5.2, 2.4)
+          taper(ctx, pts, flick(S * 0.02, 0.06, 1.1))
+        }
+        lozenge(ctx, cx + s * w * 1.02, cy - h * 0.1, S * 0.008)
+      }
+      // cartigli di testo sopra e sotto
+      if (str(o, 'top')) fitText(ctx, str(o, 'top'), FACES.condensato, cx, cy - h * 0.7, w * 1.6, h * 0.18)
+      if (str(o, 'bottom')) fitText(ctx, str(o, 'bottom'), FACES.grotesk, cx, cy + h * 0.8, w * 1.4, h * 0.07)
+      star(ctx, cx, cy - h * 0.38, S * 0.012); star(ctx, cx - w * 0.6, cy + h * 0.32, S * 0.008); star(ctx, cx + w * 0.6, cy + h * 0.32, S * 0.008)
+    })
+    const { c, ctx } = stage(o, t)
+    paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.004)
+    return finish(c, o, t, 'stemma', null)
+  },
+}
+
+const scontrino: Recipe = {
+  id: 'scontrino', label: 'Scontrino', cat: 'Ephemera', hint: 'scontrino termico: carta strappata a zig-zag, mono, stampa che sbiadisce',
+  piece: true,
+  params: [{ key: 'items', label: 'Voci (nome:prezzo)', type: 'text', def: 'Concept:1200|Identità visiva:2400|Caffè:1,20|Idee folli:0' },
+    { key: 'head', label: 'Intestazione', type: 'text', def: 'Artismi Design Studio|Via Po 1 · Torino' }, { key: 'foot', label: 'Saluto', type: 'text', def: 'Grazie e a presto' },
+    P.range('fade', 'Sbiadito', 0, 100, 35), P.range('angle', 'Rotazione', -15, 15, 3), P.tone(1), P.grain(15)],
+  render: o => {
+    const t = tone(o), S = SS(o), cx = o.W / 2, r = rng(o.seed)
+    const items = lines(str(o, 'items')).map(l => { const [a, b] = l.split(':'); return { a: (a ?? '').trim(), b: (b ?? '').trim() } })
+    const head = lines(str(o, 'head'))
+    const w = S * 0.5, fs = w * 0.042, lh = fs * 1.75
+    const rows = head.length + 3 + items.length + 5
+    const h = Math.min(S * 0.95, lh * rows + fs * 10)
+    const x = cx - w / 2, y = o.H / 2 - h / 2
+    const ang = num(o, 'angle') * Math.PI / 180
+    const rot = (ctx: Ctx) => { ctx.translate(cx, o.H / 2); ctx.rotate(ang); ctx.translate(-cx, -o.H / 2) }
+    const paper = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      const zig = w / 26
+      ctx.beginPath(); ctx.moveTo(x, y)
+      for (let i = 0; i <= 26; i++) ctx.lineTo(x + i * zig, y + (i % 2 ? zig * 0.55 : 0) + r() * zig * 0.15)
+      ctx.lineTo(x + w, y + h)
+      for (let i = 26; i >= 0; i--) ctx.lineTo(x + i * zig, y + h - (i % 2 ? zig * 0.55 : 0) - r() * zig * 0.15)
+      ctx.closePath(); ctx.fill()
+    })
+    const mono = FACES.mono
+    const ink = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      let yy = y + fs * 3.2
+      const L = x + w * 0.08, R = x + w * 0.92
+      head.forEach((l, i) => { text(ctx, l, cx, yy, i ? mono : FACES.grotesk, i ? fs : fs * 1.25, 'center'); yy += lh * (i ? 1 : 1.3) })
+      yy += lh * 0.3
+      const dash = () => { ctx.save(); ctx.setLineDash([fs * 0.4, fs * 0.3]); ctx.lineWidth = Math.max(1, fs * 0.08); ctx.beginPath(); ctx.moveTo(L, yy - fs * 0.4); ctx.lineTo(R, yy - fs * 0.4); ctx.stroke(); ctx.restore(); yy += lh * 0.7 }
+      dash()
+      text(ctx, '12/10/26 21:04', L, yy, mono, fs, 'left'); text(ctx, 'N. ' + String(1000 + o.seed % 9000), R, yy, mono, fs, 'right'); yy += lh
+      dash()
+      let tot = 0
+      for (const it of items) {
+        const v = parseFloat(it.b.replace(',', '.')) || 0; tot += v
+        text(ctx, it.a.length > 18 ? it.a.slice(0, 17) + '.' : it.a, L, yy, mono, fs, 'left'); text(ctx, v.toFixed(2).replace('.', ','), R, yy, mono, fs, 'right'); yy += lh
+      }
+      dash()
+      text(ctx, 'TOTALE', L, yy + fs * 0.4, mono, fs * 1.3, 'left'); text(ctx, '€ ' + tot.toFixed(2).replace('.', ','), R, yy + fs * 0.4, mono, fs * 1.3, 'right'); yy += lh * 1.8
+      barcode(ctx, r, L + w * 0.1, yy, w * 0.64, fs * 2.6); yy += fs * 2.6 + lh
+      const foot = str(o, 'foot'); if (foot) text(ctx, foot, cx, yy, mono, fs, 'center')
+    })
+    // stampa termica: più chiara verso un lato e a strisce orizzontali (testina usurata)
+    const fade = num(o, 'fade') / 100
+    const n = noise2(o.seed + 3)
+    const inkF = newMask(o.W, o.H)
+    for (let yy = 0; yy < o.H; yy++) { const band = 0.75 + 0.25 * n(0, yy / (S * 0.02)); for (let xx = 0; xx < o.W; xx++) { const i = yy * o.W + xx; if (!ink.a[i]) continue; const side = (xx - x) / w; inkF.a[i] = ink.a[i] * Math.max(0.15, 1 - fade * (0.55 * side + 0.45 * (1 - band))) } }
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, paper, S, 0.2, 0.4)
+    ctx.drawImage(maskToCanvas(paper, '#fbfaf5'), 0, 0)
+    ctx.drawImage(maskToCanvas(combine(inkF, paper, 'min'), '#26262b'), 0, 0)
+    return finish(c, o, t, 'scontrino', null)
+  },
+}
+
+const bottiglia: Recipe = {
+  id: 'bottiglia', label: 'Etichetta bottiglia', cat: 'Ephemera', hint: 'etichetta da vino o liquore: carta avorio, filetti in lamina d\'oro, serif classico',
+  piece: true,
+  params: [P.text('Artismi', 'Nome'), { key: 'kind', label: 'Tipo', type: 'text', def: 'Riserva dello Studio' }, { key: 'place', label: 'Origine', type: 'text', def: 'Torino · Piemonte' },
+    { key: 'year', label: 'Annata', type: 'text', def: 'MMXXVI' }, P.face('bodoni'), P.sel('shape', 'Forma', ['Angoli intagliati', 'Ovale', 'Arco']), P.sel('foil', 'Lamina', ['Oro', 'Cromo', 'Nero lucido', 'Inchiostro']), P.tone(0), P.grain(15)],
+  render: o => {
+    const t = tone(o), S = SS(o), cx = o.W / 2, cy = o.H / 2, kind = num(o, 'shape')
+    const w = S * 0.62, h = S * 0.8, x = cx - w / 2, y = cy - h / 2, nc = w * 0.08
+    const path = (ctx: Ctx, k: number) => {
+      const ww = w * k, hh = h * k, xx = cx - ww / 2, yy = cy - hh / 2, c2 = nc * k
+      ctx.beginPath()
+      if (kind === 0) {
+        ctx.moveTo(xx + c2, yy); ctx.lineTo(xx + ww - c2, yy); ctx.arc(xx + ww, yy, c2, Math.PI, Math.PI / 2, true); ctx.lineTo(xx + ww, yy + hh - c2); ctx.arc(xx + ww, yy + hh, c2, -Math.PI / 2, Math.PI, true)
+        ctx.lineTo(xx + c2, yy + hh); ctx.arc(xx, yy + hh, c2, 0, -Math.PI / 2, true); ctx.lineTo(xx, yy + c2); ctx.arc(xx, yy, c2, Math.PI / 2, 0, true); ctx.closePath()
+      } else if (kind === 1) ctx.ellipse(cx, cy, ww / 2, hh / 2, 0, 0, Math.PI * 2)
+      else { ctx.moveTo(xx, yy + hh); ctx.lineTo(xx, yy + ww / 2); ctx.arc(cx, yy + ww / 2, ww / 2, Math.PI, 0); ctx.lineTo(xx + ww, yy + hh); ctx.closePath() }
+    }
+    const paper = drawMask(o.W, o.H, ctx => { path(ctx, 1); ctx.fill() })
+    const foil = drawMask(o.W, o.H, ctx => {
+      ctx.lineWidth = S * 0.006; path(ctx, 0.93); ctx.stroke()
+      ctx.lineWidth = S * 0.0018; path(ctx, 0.9); ctx.stroke()
+      const f = face(o)
+      const ny = kind === 2 ? cy + h * 0.02 : cy - h * 0.02
+      fitText(ctx, str(o, 'text') || ' ', f, cx, ny, w * 0.72, h * 0.16)
+      fitText(ctx, str(o, 'year'), FACES.condensato, cx, y + h * (kind === 2 ? 0.34 : 0.22), w * 0.25, h * 0.05)
+      ctx.lineWidth = S * 0.002
+      for (const yy of [ny + h * 0.045, y + h * (kind === 2 ? 0.37 : 0.25)]) { ctx.beginPath(); ctx.moveTo(cx - w * 0.2, yy); ctx.lineTo(cx + w * 0.2, yy); ctx.stroke(); lozenge(ctx, cx, yy, S * 0.006) }
+    })
+    const inkM = drawMask(o.W, o.H, ctx => {
+      const ny = kind === 2 ? cy + h * 0.02 : cy - h * 0.02
+      fitText(ctx, str(o, 'kind'), FACES.corsivo, cx, ny + h * 0.13, w * 0.6, h * 0.06)
+      fitText(ctx, str(o, 'place'), FACES.mono, cx, y + h * 0.84, w * 0.55, h * 0.025)
+      fitText(ctx, 'Cl 75 · 13,5% vol', FACES.mono, cx, y + h * 0.88, w * 0.4, h * 0.02)
+    })
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, paper, S, 0.22, 0.4)
+    ctx.drawImage(maskToCanvas(paper, '#f2ead8'), 0, 0)
+    // carta vergata: righe sottilissime
+    const laid = drawMask(o.W, o.H, c2 => { c2.globalAlpha = 0.06; for (let yy = 0; yy < o.H; yy += Math.max(2, S * 0.0035)) c2.fillRect(0, yy, o.W, 1) })
+    ctx.drawImage(maskToCanvas(combine(laid, paper, 'min'), '#7a6a50'), 0, 0)
+    ctx.save(); ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(maskToCanvas(inkPress(combine(inkM, paper, 'min'), o.seed, S, 0.06, { tilt: 0.2 }), '#2a2420'), 0, 0); ctx.restore()
+    const fi = num(o, 'foil')
+    const fm = combine(foil, paper, 'min')
+    ctx.drawImage(fi < 3 ? shade(fm, (['oro', 'cromo', 'nero'] as Material[])[fi], S * 0.002, 0.5) : maskToCanvas(fm, t.acc), 0, 0)
+    return finish(c, o, t, 'bottiglia', null)
+  },
+}
+
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
@@ -1334,7 +1548,7 @@ export const RECIPES: Recipe[] = [
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
   timbro, adesivo, ceralacca, toppa, biglietto, nastro,
-  francobollo, valigia, fiammiferi, cartellino,
+  francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
 
