@@ -73,17 +73,21 @@ export function installFxEngine() {
   // i video ridisegnano un fotogramma nuovo a ogni tick: niente cache, quindi niente effetti per ora
   const active = (o: FxObject) => !!o._fxOn && !o._fxDisabled && !(o as { isVideo?: boolean }).isVideo
 
-  // Immagini e gruppi ridefiniscono questi metodi: vanno agganciati anche loro
+  // Immagini e gruppi ridefiniscono questi metodi: vanno agganciati anche loro.
+  // In Fabric 7 shouldCache e drawObject di testi e forme stanno su una classe
+  // interna, antenata di FabricObject: sulla base si aggancia sempre (il metodo
+  // ereditato viene avvolto), sulle sottoclassi solo se lo ridefiniscono.
   for (const cls of [fabric.FabricObject, fabric.FabricImage, fabric.Group]) {
     const proto = cls.prototype as unknown as Record<string, (...a: unknown[]) => unknown>
-    if (Object.prototype.hasOwnProperty.call(proto, 'shouldCache')) {
+    const own = (k: string) => cls === fabric.FabricObject || Object.prototype.hasOwnProperty.call(proto, k)
+    if (own('shouldCache')) {
       const shouldCache = proto.shouldCache
       proto.shouldCache = function (this: FxObject) {
         if (active(this)) { (this as unknown as { ownCaching: boolean }).ownCaching = true; return true }
         return shouldCache.call(this)
       }
     }
-    if (Object.prototype.hasOwnProperty.call(proto, 'drawObject')) {
+    if (own('drawObject')) {
       const drawObject = proto.drawObject
       proto.drawObject = function (this: FxObject, ...args: unknown[]) {
         const r = drawObject.apply(this, args)

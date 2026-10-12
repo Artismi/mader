@@ -10,8 +10,9 @@ import {
 } from './raster'
 import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
 import { shade, type Material } from './material'
-import { coffeeRings, crescent, membrane, neuralNet } from './organic'
+import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
+import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ const darken = (hex: string, k: number) => { const v = parseInt(hex.slice(1), 16
 
 const membrana: Recipe = {
   id: 'membrana', label: 'Membrana', cat: 'Organici', hint: 'tessuto cellulare a due strati, fori grandi e minuscoli, artigli',
-  params: [P.sel('shape', 'Composizione', ['Fuso', 'Fondi di tazza', 'Falce', 'Ali']), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 34), P.range('web', 'Tessuto', 30, 220, 135),
+  params: [P.sel('shape', 'Composizione', ['Fuso', 'Fondi di tazza', 'Falce', 'Ali', 'Schiuma']), P.tone(0), P.mat(5), P.range('cells', 'Celle', 8, 80, 34), P.range('web', 'Tessuto', 30, 220, 135),
     P.range('varied', 'Varietà fori', 0, 100, 90), P.range('detail', 'Dettaglio', 0, 100, 60), P.range('claws', 'Artigli', 0, 100, 70), P.range('clawLen', 'Lunghezza artigli', 20, 200, 100),
     P.tog('depth', 'Doppio strato', true), P.tog('mirror', 'Simmetrica', true), P.range('chords', 'Cerchi grandi', 0, 6, 3), P.glow(false), P.caps(), P.grain(20)],
   render: o => {
@@ -162,8 +163,11 @@ const membrana: Recipe = {
     const base = { cells: num(o, 'cells'), web: num(o, 'web') / 100, claws: num(o, 'claws') / 100, clawLen: num(o, 'clawLen') / 100, detail: num(o, 'detail') / 100 }
     const { c, ctx } = stage(o, t)
     const mat = MATS[num(o, 'mat')] ?? null
-    if (sh === 1) {
-      const m = coffeeRings(o.W, o.H, cx, cy, S * 0.34, rng(o.seed), S, { big: 2 + Math.round(num(o, 'chords') / 2), bubbles: Math.round(base.cells * 0.6), gap: base.web, stars: base.claws, detail: base.detail })
+    if (sh === 4) {
+      const m = foam(o.W, o.H, cx, cy, S * 0.44, rng(o.seed), { count: Math.round(base.cells * 0.7), line: num(o, 'web') / 100, gap: num(o, 'web') / 100, nested: num(o, 'detail') / 250, spread: 1 })
+      paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.006)
+    } else if (sh === 1) {
+      const m = coffeeRings(o.W, o.H, cx, cy, S * 0.34, rng(o.seed), S, { big: 2 + Math.round(num(o, 'chords') / 2), bubbles: Math.round(base.cells * 0.6), gap: base.web, stars: base.claws * 0.55, detail: base.detail })
       paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
     } else {
       const shape = [0, 0, 2, 3][sh]
@@ -218,6 +222,72 @@ const falce: Recipe = {
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
     return finish(c, o, t, 'falce', ['FALX', code(o, 'falx'), ROMAN_YEAR, 'NOX'])
+  },
+}
+
+const quaderno: Recipe = {
+  id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'organismo di ali a falce che germogliano l\'una dall\'altra, a penna viva',
+  params: [P.sel('layout', 'Composizione', ['Organismo', 'Ala', 'Corona di ali']), P.tone(0), P.sel('style', 'Segno', ['Penna', 'Pieno']),
+    P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4), P.range('depth', 'Morso', 20, 90, 62),
+    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 45), P.range('echo', 'Riprese', 0, 100, 35),
+    P.range('branch', 'Ramificazioni', 0, 100, 70), P.range('pairs', 'Coppie', 1, 5, 3),
+    P.range('shake', 'Mano', 0, 100, 40), P.range('sketch', 'Ripassi', 0, 100, 30), P.range('breaks', 'Stacchi', 0, 100, 10),
+    P.tog('grid', 'Quadretti', true), P.caps(false), P.grain(30)],
+  render: o => {
+    const t = tone(o), S = SS(o), lay = num(o, 'layout'), r = rng(o.seed), W = o.W, H = o.H
+    const filled = num(o, 'style') === 1
+    const hand: Hand = { lw: S * 0.0032 * num(o, 'pen') / 100, shake: num(o, 'shake') / 50, sketch: num(o, 'sketch') / 100, breaks: num(o, 'breaks') / 100 * 0.6, seed: o.seed + 5, r }
+    const opts = (width: number, bites = num(o, 'bites'), bend = 1) => ({ width, bites, depth: num(o, 'depth') / 100, spikes: num(o, 'spikes') / 100, bend, veins: num(o, 'veins') / 100, echo: num(o, 'echo') / 100 })
+    const branch = num(o, 'branch') / 100
+    const wings: WingGeom[] = []
+    const lines: Pt[][] = []
+    // centra e scala nella tavola tutto ciò che è stato costruito
+    const fit = (margin: number) => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+      for (const g of wings) { const b = wingBox(g); x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1) }
+      for (const q of lines) for (const p of q) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]) }
+      const k = Math.min((W * margin) / (x1 - x0), (H * margin) / (y1 - y0))
+      const f = (p: Pt): Pt => [W / 2 + (p[0] - (x0 + x1) / 2) * k, H / 2 + (p[1] - (y0 + y1) / 2) * k]
+      wings.splice(0, wings.length, ...wings.map(g => mapWing(g, f)))
+      lines.splice(0, lines.length, ...lines.map(q => q.map(f)))
+      hand.lw *= Math.min(1.6, Math.max(0.7, k))
+    }
+    if (lay === 1) {
+      wings.push(...wingTree(r, 0, 0, 0.95 + range(r, -0.15, 0.15), S, opts(0.2), branch * 0.8, 2))
+      fit(0.86)
+    } else if (lay === 2) {
+      // corona: un anello da cui le ali partono tangenti e si avvitano tutte nello stesso verso
+      const space: Space = { polys: [] }, mains: { g: WingGeom; L: number }[] = []
+      // corona: un anello da cui le ali partono tangenti e si avvitano nello stesso verso.
+      // Ogni ala deve trovare il suo spicchio: se cadrebbe sulle precedenti si accorcia.
+      const R0 = S * range(r, 0.08, 0.11), cnt = 3 + Math.floor(r() * 2), rot = r() * Math.PI * 2
+      for (let i = 0; i < cnt; i++) {
+        const a = rot + i * Math.PI * 2 / cnt, sd = Math.floor(r() * 1e6)
+        for (const k of [1, 0.8, 0.62]) {
+          const g = wingGeom(rng(sd), Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - 0.45, S * 0.46 * k, opts(0.19))
+          if (k > 0.62 && wingOverlap(g.poly, space) > 0.12) continue
+          space.polys.push(g.poly); mains.push({ g, L: S * 0.46 * k }); break
+        }
+      }
+      // prima tutte le ali principali, poi le figlie nello spazio rimasto
+      wings.push(...mains.map(m => m.g))
+      for (const m of mains) wings.push(...growWing(r, m.g, m.L, opts(0.19), branch, 2, space))
+      const ring = (rr: number) => { const q: Pt[] = []; for (let j = 0; j <= 120; j++) { const a = j / 120 * Math.PI * 2; q.push([Math.cos(a) * rr, Math.sin(a) * rr]) } return q }
+      lines.push(ring(R0 * 0.92))
+      fit(0.84)
+    } else {
+      const org = organism(r, 0, 0, S * 1.3, S, opts(0.2), branch, num(o, 'pairs'))
+      wings.push(...org.wings); lines.push(...org.blade)
+      fit(0.88)
+    }
+    const m = drawMask(W, H, ctx => {
+      for (const q of lines) penLine(ctx, q, hand, 1.1)
+      for (const g of wings) drawWing(ctx, g, hand, filled)
+    })
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'grid') && !o.transparent) gridPaper(ctx, W, H, S * 0.024, t.ink, t.dark ? 0.22 : 0.24)
+    ctx.drawImage(maskToCanvas(m, t.ink), 0, 0)
+    return finish(c, o, t, 'quaderno', ['LIBER NOCTIS', code(o, 'lbr'), ROMAN_YEAR, 'MANU'])
   },
 }
 
@@ -793,7 +863,7 @@ const simbolo: Recipe = {
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
-  membrana, rete, falce, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
+  membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
 ]
