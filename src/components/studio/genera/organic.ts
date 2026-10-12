@@ -435,7 +435,7 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     return f
   }
   const minTiny = g * 0.7, maxTiny = R * 0.05
-  for (let i = 0, added = 0; i < 6000 && added < o.count * 0.9; i++) {
+  for (let i = 0, added = 0; i < 6000 && added < o.count * 0.45; i++) {
     const x = cx + range(r, -1, 1) * R * 0.85 * o.spread, y = cy + range(r, -1, 1) * R
     // solo dentro il grappolo: vicino ad almeno due bolle
     const near = circles.filter(c => Math.abs(Math.hypot(x - c.x, y - c.y) - c.r) < R * 0.12).length
