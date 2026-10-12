@@ -17,7 +17,7 @@ import {
   ADJUST_GROUPS, CURVES, FX_CATS, FX_DEFS, GRADE_ZONES, HSL_BANDS, LOOKS, fxDef, newFx,
   type Adjust, type FxCat, type FxEntry, type FxId, type Look, type Param,
 } from './catalog'
-import { applyFx, applyTextStyle, fxPreviews, lookPreviews, stylePreview, variantEntries } from './engine'
+import { applyFx, applyTextStyle, fxPreviews, lookPreviews, stylePreview, variantEntries, TEXT_REF } from './engine'
 import { TEXT_STYLES } from './text-styles'
 import { onAssetReady } from './gl'
 
@@ -256,7 +256,11 @@ function Effects({ obj, selKey, mutate }: { obj: FxTarget; selKey: unknown; muta
   const [cat, setCat] = useState<FxCat>('Stile')
 
   const add = (id: FxId, variant?: string) => {
-    mutate(o => { o.fx = [...(o.fx ?? []), newFx(id, variant)] })
+    mutate(o => {
+      // sul testo gli effetti si tarano sul corpo: restano in proporzione se il testo cambia misura
+      if (isText(o as fabric.FabricObject) && !(o as { fxRef?: number }).fxRef && !(o.fx ?? []).length) (o as { fxRef?: number }).fxRef = TEXT_REF
+      o.fx = [...(o.fx ?? []), newFx(id, variant)]
+    })
     setOpen(stack.length); setAdding(false)
   }
   const edit = (i: number, fn: (e: FxEntry) => FxEntry) => mutate(o => { o.fx = (o.fx ?? []).map((e, k) => k === i ? fn({ ...e, p: { ...e.p } }) : e) })
