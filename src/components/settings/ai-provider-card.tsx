@@ -11,6 +11,7 @@ interface ProviderState {
   models: Record<Task, string>
   defaults: Record<Task, string>
   credits: { usage: number; limit: number | null } | null
+  freeModels: { id: string; label: string }[]
 }
 
 // Modelli suggeriti: tutti supportano i tool. Si può scrivere qualsiasi altro ID OpenRouter.
@@ -154,7 +155,8 @@ export function AiProviderCard() {
           )}
 
           {(['design', 'general'] as Task[]).map(task => {
-            const known = SUGGESTED[task].some(m => m.id === draft[task])
+            const free = state.freeModels ?? []
+            const known = SUGGESTED[task].some(m => m.id === draft[task]) || free.some(m => m.id === draft[task])
             return (
               <div key={task} className="space-y-1.5">
                 <span className="block text-xs font-medium text-primary">{TASK_LABEL[task]}</span>
@@ -163,7 +165,14 @@ export function AiProviderCard() {
                   onChange={e => setDraft(d => ({ ...d, [task]: e.target.value === CUSTOM ? '' : e.target.value }))}
                   className="w-full text-sm text-primary px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:border-accent/60 cursor-pointer"
                 >
-                  {SUGGESTED[task].map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  <optgroup label="Consigliati (a pagamento, con i tuoi crediti)">
+                    {SUGGESTED[task].map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  </optgroup>
+                  {free.length > 0 && (
+                    <optgroup label="Gratis (qualità variabile, limiti giornalieri)">
+                      {free.map(m => <option key={m.id} value={m.id}>{m.label} — gratis</option>)}
+                    </optgroup>
+                  )}
                   <option value={CUSTOM}>Altro… (scrivi l&apos;ID OpenRouter)</option>
                 </select>
                 {!known && (

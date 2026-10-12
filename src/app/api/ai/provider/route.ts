@@ -10,7 +10,28 @@ import {
 } from '@/lib/ai/model-provider'
 
 // Stato del fornitore AI per la UI: mai la chiave, solo se è collegato,
-// i modelli scelti e i crediti rimasti.
+// i modelli scelti, i crediti rimasti e i modelli gratuiti disponibili.
+
+interface FreeModel { id: string; label: string }
+let freeCache: { at: number; models: FreeModel[] } | null = null
+
+/** Modelli gratuiti di OpenRouter che supportano i tool (servono per il canvas). Cache 1h. */
+async function freeModels(): Promise<FreeModel[]> {
+  if (freeCache && Date.now() - freeCache.at < 60 * 60 * 1000) return freeCache.models
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) return freeCache?.models ?? []
+    const { data } = await res.json() as { data: { id: string; name?: string; supported_parameters?: string[] }[] }
+    const models = data
+      .filter(m => m.id.endsWith(':free') && m.supported_parameters?.includes('tools'))
+      .map(m => ({ id: m.id, label: (m.name ?? m.id).replace(/\s*\(free\)\s*$/i, '') }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    freeCache = { at: Date.now(), models }
+    return models
+  } catch {
+    return freeCache?.models ?? []
+  }
+}
 
 export async function GET() {
   const key = getOpenRouterKey()
@@ -37,6 +58,7 @@ export async function GET() {
       models: getOpenRouterModels(),
       defaults: OPENROUTER_DEFAULTS,
       credits,
+      freeModels: key ? await freeModels() : [],
     },
   })
 }

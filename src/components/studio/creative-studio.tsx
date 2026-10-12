@@ -282,13 +282,31 @@ import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
 import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
-import { installArtboards } from './arrange/artboards'
+import { childrenOf, installArtboards, boardOf } from './arrange/artboards'
 import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
+import { boardLabel, boardToDataURL, listBoards } from './arrange/export'
 import { TextCurveControl } from './text/TextCurveControl'
 import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
 import { runPathOp } from './vector/pathfinder'
 import { pathDoubleClick } from './vector/direct-select'
+import { describeCanvas, runDesignOps } from './ai/design-ops'
+import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
+import { normalizeBoards } from '@/lib/design/compose-normalize'
+import { resolvePhoto } from './ai/photos'
 import { isCropping, startCrop } from './image/crop'
+
+/** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
+function boardOrigin(canvas: fabric.Canvas, obj: fabric.FabricObject) {
+  const ab = (obj as any).isArtboard ? undefined : boardOf(canvas, obj)
+  if (!ab) return { x: 0, y: 0 }
+  const c = ab.getCenterPoint()
+  return { x: c.x - (ab.width * ab.scaleX) / 2, y: c.y - (ab.height * ab.scaleY) / 2 }
+}
+/** misure come in un programma di grafica: angolo in alto a sinistra del riquadro, rispetto alla tavola */
+function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
+  const o = boardOrigin(canvas, obj), r = obj.getBoundingRect()
+  return { x: Math.round(r.left - o.x), y: Math.round(r.top - o.y), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) }
+}
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -480,39 +498,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
    */
   const buildSemanticManifest = () => {
     const canvas = fabricRef.current; if (!canvas) return ''
-    const artboards = canvas.getObjects().filter(o => (o as any).isArtboard)
-    const elements = canvas.getObjects().filter(o => !(o as any).isArtboard && !o.get('name')?.startsWith('label_'))
-
-    let manifest = `Il progetto contiene ${artboards.length} tavole.\n\n`
-    
-    artboards.forEach(ab => {
-      const name = ab.get('name') || 'Senza nome'
-      const abBounds = ab.getBoundingRect(false)
-      const children = elements.filter(o => 
-        o.left! >= abBounds.left && o.left! <= abBounds.left + abBounds.width &&
-        o.top! >= abBounds.top && o.top! <= abBounds.top + abBounds.height
-      )
-
-      manifest += `## Tavola: ${name}\n`
-      manifest += `- Dimensioni: ${ab.width}x${ab.height}\n`
-      manifest += `- Elementi: ${children.length}\n`
-      
-      const texts = children.filter(o => o.type === 'textbox' || o.type === 'i-text') as fabric.Textbox[]
-      if (texts.length > 0) {
-        manifest += `  - Testi:\n`
-        texts.forEach(t => {
-            manifest += `    - "${t.text}" (${t.fontFamily}, ${t.fill})\n`
-        })
-      }
-
-      const shapes = children.filter(o => o.type !== 'textbox' && o.type !== 'i-text')
-      if (shapes.length > 0) {
-        manifest += `  - Forme/Asset: ${shapes.map(s => s.type).join(', ')}\n`
-      }
-      manifest += `\n`
-    })
-
-    return manifest
+    // stato per l'IA: tavole, elementi con ID, posizioni relative alla tavola, colori
+    return describeCanvas(canvas)
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
@@ -931,7 +918,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const refreshInsp = () => {
       const obj = canvas.getActiveObject()
       if (!obj) { setInsp(null); return }
-      setInsp({ x: Math.round(obj.left || 0), y: Math.round(obj.top || 0), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) })
+      setInsp(inspOf(canvas, obj))
     }
     canvas.on('selection:created', () => { refreshSel(); refreshInsp() })
     canvas.on('selection:updated', () => { refreshSel(); refreshInsp() })
@@ -1843,9 +1830,30 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const a = document.createElement('a'); a.href = url; a.download = 'canvas.svg'; a.click()
       URL.revokeObjectURL(url); return
     }
-    const url = canvas.toDataURL({ format: format as 'png' | 'jpeg', quality: 1, multiplier })
+    // si esporta la tavola a misura vera (non la vista a schermo): quella dell'oggetto
+    // selezionato, altrimenti tutte le tavole, una per file
     const ext = format === 'jpg' ? 'jpg' : 'png'
-    const a = document.createElement('a'); a.href = url; a.download = `canvas@${multiplier}x.${ext}`; a.click()
+    const boardsAll = canvas.getObjects().filter(o => (o as any).isArtboard)
+    const active = canvas.getActiveObject()
+    const picked = active ? ((active as any).isArtboard ? active : boardOf(canvas, active)) : undefined
+    const targets = picked ? [picked] : boardsAll
+    const vt = canvas.viewportTransform.slice() as fabric.TMat2D
+    canvas.discardActiveObject()
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+    try {
+      const shots = targets.length ? targets.map(ab => {
+        // misura netta della tavola (senza lo spessore del bordo)
+        const w = Math.round(ab.width * ab.scaleX), h = Math.round(ab.height * ab.scaleY), cpt = ab.getCenterPoint()
+        const left = cpt.x - w / 2, top = cpt.y - h / 2
+        const name = String(ab.get('name') ?? 'tavola').replace(/^artboard_/, '').replace(/[^\w\- ]+/g, '').trim() || 'tavola'
+        return { name, url: canvas.toDataURL({ format: format === 'jpg' ? 'jpeg' : 'png', quality: 0.95, multiplier, left, top, width: w, height: h }) }
+      }) : [{ name: 'canvas', url: canvas.toDataURL({ format: format === 'jpg' ? 'jpeg' : 'png', quality: 0.95, multiplier }) }]
+      shots.forEach(sh => { const a = document.createElement('a'); a.href = sh.url; a.download = `${sh.name}@${multiplier}x.${ext}`; a.click() })
+    } finally {
+      canvas.setViewportTransform(vt)
+      if (active && canvas.getObjects().includes(active)) canvas.setActiveObject(active)
+      canvas.requestRenderAll()
+    }
   }
 
   // ── Apply text ────────────────────────────────────────────────────────────
@@ -2367,13 +2375,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const artboardMap = new Map<string, { rect: fabric.Object, children: fabric.Object[] }>()
     abs.forEach(ab => {
       const name = ab.get('name')!
-      const b = ab.getBoundingRect(false)
-      const children = canvas.getObjects().filter(o =>
-        !(o as any).isArtboard &&
-        !o.get('name')?.startsWith('label_') &&
-        o.left! >= b.left && o.left! <= b.left + b.width &&
-        o.top! >= b.top && o.top! <= b.top + b.height
-      )
+      // stessa regola del resto dello Studio: un oggetto è della tavola che contiene il suo centro
+      const children = childrenOf(canvas, ab)
 
       artboardMap.set(name, { rect: ab, children })
     })
@@ -2427,8 +2430,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // ─── 0. composeDesign: l'AI sceglie stile e contenuti, lo Studio impagina ──
     if (command.toolName === 'composeDesign') {
       const payload = command.result ?? command.args ?? {}
-      const boards: ComposeBoard[] = Array.isArray(payload.boards) ? payload.boards : []
+      // pilota automatico: nomi scritti male, foto mancanti e layout neutri sistemati qui, per qualsiasi modello
+      const boards: ComposeBoard[] = normalizeBoards(payload)
       if (!boards.length) return
+      // foto vere libere da diritti prima di quelle generate
+      await Promise.all(boards.map(b => resolvePhoto(b)))
       let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
       x = Number.isFinite(x) ? x + 160 : 100
       for (let i = 0; i < boards.length; i++) {
@@ -2456,6 +2462,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         items.forEach(item => { if (item.name && item.path) SHAPE_MAP[item.name] = item.path })
       })
       PRO_ASSETS.forEach(asset => { SHAPE_MAP[asset.name] = asset.path; SHAPE_MAP[asset.id] = asset.path })
+      // Ricerca tollerante del nome: maiuscole, spazi, trattini e punti non contano
+      const normShape = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const SHAPE_NORM: Record<string, string> = {}
+      Object.entries(SHAPE_MAP).forEach(([k, v]) => { SHAPE_NORM[normShape(k)] = v })
+      const findShape = (id: string) => SHAPE_MAP[id] || SHAPE_NORM[normShape(id)] || ''
 
       const deferredImages: Array<{ artboardName: string; boardW: number; boardH: number; el: any }> = []
 
@@ -2523,6 +2534,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         return resolveColor(el.color)
       }
 
+      const newBoards: fabric.FabricObject[] = []
       boards.forEach((b: any, bIdx: number) => {
         const boardW = b.width || 1080
         const boardH = b.height || 1080
@@ -2541,11 +2553,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         
         const rect = canvas.getObjects().find(o => o.get('name') === artboardName)
         if (!rect) return
-        const offsetX = rect.left!, offsetY = rect.top!
+        // l'IA ragiona dall'angolo in alto a sinistra della tavola (come Figma); Fabric 7 dal centro
+        const tl = boardTopLeft(rect)
+        const offsetX = tl.x, offsetY = tl.y
+        newBoards.push(rect)
 
         const elsByZIndex = [...(b.elements || [])].sort((a: any, c: any) => (a.zIndex ?? 0) - (c.zIndex ?? 0))
         elsByZIndex.forEach((el: any, index: number) => {
           const elId = el.id || `${b.name}_${el.type}_${index}`
+          // Una forma richiesta per nome è sempre un path, anche se l'AI ha scritto rect/circle
+          if (el.shapeId && el.type !== 'text' && el.type !== 'image') el.type = 'path'
           if (el.type === 'image' && el.url) {
             deferredImages.push({ artboardName, boardW, boardH, el: { ...el, id: elId } })
             return
@@ -2565,11 +2582,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
           const common: any = {
             left: offsetX + fx, top: offsetY + fy, name: elId, parentBoard: artboardName,
+            originX: 'left', originY: 'top',
             fill: buildFill(el), ...(el.opacity !== undefined && { opacity: el.opacity }),
             ...(el.stroke && { stroke: resolveColor(el.stroke) }),
             ...(el.strokeWidth !== undefined && { strokeWidth: el.strokeWidth }),
             ...(el.originX && { originX: el.originX }),
-            ...(el.originY && { originY: el.originY })
+            ...(el.originY && { originY: el.originY }),
+            ...(el.angle !== undefined && { angle: el.angle })
           }
 
           if (el.type === 'text') {
@@ -2595,9 +2614,17 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           } else if (el.type === 'circle') {
             obj = new fabric.Ellipse({ ...common, rx: elW / 2, ry: elH / 2 })
           } else if (el.type === 'path') {
-            let svgPath = (el.shapeId ? SHAPE_MAP[el.shapeId] : el.pathData) || ''
+            const svgPath = (el.shapeId ? findShape(el.shapeId) : el.pathData) || ''
             if (svgPath) {
-              obj = new fabric.Path(svgPath, { ...common, scaleX: (elW / 100), scaleY: (elH / 100) })
+              // Adatta la forma al box mantenendo le proporzioni e la centra nel box
+              const p = new fabric.Path(svgPath, { ...common })
+              const pw = p.width || 1, ph = p.height || 1, k = Math.min(elW / pw, elH / ph)
+              p.set({ scaleX: k, scaleY: k })
+              if (!el.originX || el.originX === 'left') p.set({ left: common.left + (elW - pw * k) / 2 })
+              if (!el.originY || el.originY === 'top') p.set({ top: common.top + (elH - ph * k) / 2 })
+              obj = p
+            } else if (el.shapeId) {
+              console.warn(`[createDesignBoards] forma non trovata: "${el.shapeId}"`)
             }
           } else if (el.type === 'line') {
             // x1,y1,x2,y2 sono coordinate relative alla posizione x,y dell'elemento
@@ -2647,15 +2674,18 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           const loadUrl = el.url.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(el.url)}` : el.url
 
           return withTimeout(fabric.FabricImage.fromURL(loadUrl, { crossOrigin: 'anonymous' }), 8000).then(img => {
-            img.set({ left: artboard.left! + (el.x ?? 0), top: artboard.top! + (el.y ?? 0), name: el.id, parentBoard: artboardName })
+            img.set({ name: el.id, parentBoard: artboardName })
             if (el.w) img.scaleToWidth(el.w)
+            placeInBoard(img, artboard, el.x ?? 0, el.y ?? 0)
             canvas.add(img); canvas.moveObjectTo(img, canvas.getObjects().indexOf(artboard) + 1)
           }).catch(e => {
             console.error('[canvas] image load failed:', el.url, e)
             // Fallback placeholder
+            const ptl = boardTopLeft(artboard)
             const placeholder = new fabric.Rect({
-              left: artboard.left! + (el.x ?? 0),
-              top: artboard.top! + (el.y ?? 0),
+              originX: 'left', originY: 'top',
+              left: ptl.x + (el.x ?? 0),
+              top: ptl.y + (el.y ?? 0),
               width: el.w || 400,
               height: el.h || 400,
               fill: '#0f172a',
@@ -2665,8 +2695,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               parentBoard: artboardName
             })
             const labelText = new fabric.Textbox('Immagine Non Disponibile', {
-              left: artboard.left! + (el.x ?? 0) + 10,
-              top: artboard.top! + (el.y ?? 0) + 10,
+              originX: 'left', originY: 'top',
+              left: ptl.x + (el.x ?? 0) + 10,
+              top: ptl.y + (el.y ?? 0) + 10,
               fontSize: 16,
               fill: '#ef4444',
               fontFamily: 'Inter',
@@ -2678,10 +2709,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             canvas.moveObjectTo(labelText, canvas.getObjects().indexOf(artboard) + 2)
           })
         })).then(() => {
+          // tutto dentro la tavola prima di riordinarle: gli elementi seguono la loro tavola
+          newBoards.forEach(ab => fitBoard(canvas, ab))
           rearrangeArtboards('strip', 100, 1)
           canvas.requestRenderAll()
         })
       } else {
+        newBoards.forEach(ab => fitBoard(canvas, ab))
         rearrangeArtboards('strip', 100, 1)
       }
 
@@ -2740,8 +2774,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (changes.x !== undefined || changes.y !== undefined || changes.w !== undefined || changes.h !== undefined) {
           const ab = findParentArtboard(obj)
           if (ab) {
-            const abLeft = ab.left!
-            const abTop = ab.top!
+            const abTL = boardTopLeft(ab)
+            const abLeft = abTL.x
+            const abTop = abTL.y
             const abW = (ab as any).width || ab.getScaledWidth()
             const abH = (ab as any).height || ab.getScaledHeight()
             if (changes.w !== undefined) {
@@ -2751,14 +2786,14 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             if (changes.h !== undefined && obj.type !== 'textbox' && obj.type !== 'i-text') {
               obj.set('height', changes.h)
             }
-            if (changes.x !== undefined) {
-              const clamped = Math.max(0, Math.min(changes.x, abW - (obj.getScaledWidth?.() || 0)))
-              obj.set('left', abLeft + clamped)
-            }
-            if (changes.y !== undefined) {
-              const clamped = Math.max(0, Math.min(changes.y, abH - (obj.getScaledHeight?.() || 0)))
-              obj.set('top', abTop + clamped)
-            }
+            // x,y dall'angolo in alto a sinistra della tavola, qualunque sia l'origine dell'oggetto
+            obj.setCoords()
+            const ob = obj.getBoundingRect()
+            const cur = { x: ob.left - abLeft, y: ob.top - abTop }
+            const nx = changes.x !== undefined ? Math.max(0, Math.min(changes.x, abW - ob.width)) : cur.x
+            const ny = changes.y !== undefined ? Math.max(0, Math.min(changes.y, abH - ob.height)) : cur.y
+            obj.set({ left: obj.left + (nx - cur.x), top: obj.top + (ny - cur.y) })
+            obj.setCoords()
           }
         }
 
@@ -2821,6 +2856,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     }
 
     // ─── 4. deleteElements ────────────────────────────────────────────────
+    // ─── editDesign: strumenti di Disponi, Vettoriale e Colore ─────────────
+    if (command.toolName === 'editDesign') {
+      const payload = command.result ?? command.args ?? {}
+      const report = await runDesignOps(canvas, Array.isArray(payload.ops) ? payload.ops : [])
+      console.info('[editDesign]', report.join(' · '))
+    }
+
     if (command.toolName === 'deleteElements') {
       const payload = command.result ?? command.args ?? {}
       const ids = (payload.ids as string[]) || []
@@ -2840,7 +2882,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const { objects } = await fabric.loadSVGFromString(out.svg)
         const parts = objects.filter(Boolean) as fabric.FabricObject[]
         if (parts.length > 0) {
-          const group = new fabric.Group(parts, { name: `schema_${Date.now()}` })
+          const group = new fabric.Group(parts, { name: `schema_${Date.now()}` } as Partial<fabric.GroupProps>)
           // Al centro della vista corrente, ridotto se più grande del 80% del viewport
           const zoom = canvas.getZoom()
           const vpt = canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0]
@@ -2881,7 +2923,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
   // in sviluppo: comandi AI eseguibili dalla console e dai test
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') Object.assign(window, { __aiCommand: handleAICommand, __cutout: cutout })
+    if (process.env.NODE_ENV !== 'production') Object.assign(window, {
+      __aiCommand: handleAICommand, __cutout: cutout,
+      // tavole esportate come png, per i test visivi
+      __boardsPng: async (mult = 0.5) => { const c = fabricRef.current; if (!c) return []; const out = []; for (const ab of listBoards(c)) out.push({ name: boardLabel(ab), png: await boardToDataURL(c, ab, { format: 'png', multiplier: mult }) }); return out },
+    })
   })
 
   // Handle aiCommands queue sequentially
@@ -3983,7 +4029,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         </div>
 
         {/* AI Control Center Floating Bar */}
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-top-4 duration-500">
           <button
             onClick={() => setShowCervello(!showCervello)}
             className={cn(
@@ -4241,7 +4287,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {!showLaunchHub && artboardBadges.map(badge => (
             <div key={badge.id} className="absolute z-[23] pointer-events-auto transition-all duration-75"
               style={{ left: badge.left, top: badge.top }}>
-              <div className="flex items-center gap-1.5 px-2 h-7 bg-[#141414]/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl group hover:bg-[#1a1a1a]/80 transition-all">
+              <div className="flex items-center gap-1.5 px-2 h-7 bg-[#141414]/60 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_1px_6px_rgba(0,0,0,0.3)] group hover:bg-[#1a1a1a]/80 transition-all">
                 {/* Artboard Icon & ID */}
                 <div className="flex items-center gap-1.5">
                   <div className="w-4 h-4 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
@@ -4801,7 +4847,12 @@ function PropertiesPanel(props: PanelProps) {
     if (prop === 'width') { obj.scaleX = (val || 1) / obj.width!; obj.setCoords() }
     else if (prop === 'height') { obj.scaleY = (val || 1) / obj.height!; obj.setCoords() }
     else if (prop === 'angle') { obj.set({ angle: val }); obj.setCoords() }
-    else obj.set({ [prop]: val })
+    else {
+      // X/Y sono misurati dalla tavola: si sposta l'oggetto della differenza
+      const cur = inspOf(canvas!, obj)
+      if (prop === 'left') obj.set({ left: obj.left + (val - cur.x) })
+      else obj.set({ top: obj.top + (val - cur.y) })
+    }
     obj.setCoords()
     canvas!.requestRenderAll()
     canvas!.fire('object:modified', { target: obj })

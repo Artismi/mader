@@ -6,8 +6,10 @@ import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
+import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
-import { resolveModel } from '@/lib/ai/model-provider'
+import { designOpSchema, designOpsToolDescription } from '@/lib/design/design-ops-spec'
+import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
@@ -97,7 +99,8 @@ const canvasElementSchema = z.object({
   effects: z.array(z.string()).optional().describe("['3d', 'glass', 'clay', 'neon', 'glitch', 'riso', 'bloom', 'grain']"),
   effectProps: z.record(z.string(), z.unknown()).optional(),
   // Path / Shape
-  shapeId: z.string().optional().describe("ID da SHAPE_MAP (es. 'Swiss Cross', 'Fluid Wave', 'Dense Halftone')."),
+  shapeId: z.string().optional().describe("Nome esatto di una forma della LIBRERIA GRAFICA (es. 'Sparkle', 'Bloom Line', 'Dot Sparkle', 'Saturn Sparkle'). Usalo con type 'path'."),
+  angle: z.number().optional().describe("Rotazione in gradi (es. 12 per un accento inclinato)."),
   pathData: z.string().optional(),
   scaleX: z.number().optional(),
   scaleY: z.number().optional(),
@@ -150,13 +153,30 @@ const canvasUpdateSchema = z.object({
 
 
 // ── composeDesign: l'AI descrive, lo Studio impagina ───────────────────────
+/** Modelli abbastanza bravi da impaginare a coordinate (createDesignBoards). */
+function isStrongDesignModel(label: string) {
+  if (/:free\b/i.test(label)) return false
+  return /claude-(sonnet|opus|fable)|gpt-5|gpt-4\.1|\bo3\b|gemini-(2\.5|3)-pro|grok-4/i.test(label)
+}
+
+const COMPOSE_ONLY_NOTE = `
+
+## Come creare grafiche (obbligatorio)
+Per ogni grafica nuova chiama SOLO composeDesign: non esiste uno strumento a coordinate.
+- Scegli uno stile e un'impaginazione dagli elenchi dello strumento.
+- Scrivi contenuti veri e completi: title, subtitle, body, cta, brand, eventuali meta/tags.
+- Per foto: content.image.query con 2-4 parole in inglese sul soggetto (lo Studio cerca una foto vera libera da diritti).
+- Lascia allo Studio posizioni, misure, caratteri ed effetti.
+Per modificare elementi esistenti usa updateCanvasElements ed editDesign con gli ID dello stato del canvas.`
+
 const composeBoardSchema = z.object({
   name: z.string().optional().describe('Nome della tavola'),
-  format: z.enum(Object.keys(FORMATS) as [string, ...string[]]).optional(),
+  format: z.string().optional().describe(`Formato: ${Object.keys(FORMATS).join(', ')}`),
   width: z.number().optional(),
   height: z.number().optional(),
-  style: z.enum(STYLES.map(s => s.id) as [string, ...string[]]),
-  layout: z.enum(LAYOUTS.map(l => l.id) as [string, ...string[]]),
+  // stringhe libere: lo Studio riconosce anche nomi scritti male (modelli piccoli); un enum rifiuterebbe la chiamata
+  style: z.string().describe(`Stile: ${STYLES.map(s => s.id).join(', ')}`),
+  layout: z.string().describe(`Impaginazione: ${LAYOUTS.map(l => l.id).join(', ')}`),
   palette: z.number().int().min(0).max(4).optional(),
   colors: z.object({ bg: z.string(), ink: z.string(), accent: z.string(), muted: z.string(), surface: z.string() }).partial().optional()
     .describe('Colori del brand del cliente, se noti (hex)'),
@@ -174,7 +194,12 @@ const composeBoardSchema = z.object({
     brand: z.string().optional(),
     badge: z.string().optional(),
     tags: z.array(z.string()).optional(),
-    image: z.object({ url: z.string().optional(), prompt: z.string().optional(), alt: z.string().optional() }).optional(),
+    image: z.object({
+      url: z.string().optional(),
+      query: z.string().optional().describe('2-4 parole in inglese per cercare una FOTO VERA libera da diritti, es. "coffee beans dark stone". Preferiscila a prompt'),
+      prompt: z.string().optional().describe('solo se serve un\'immagine inventata: descrizione per il generatore'),
+      alt: z.string().optional(),
+    }).optional(),
   }),
   titleEffect: z.string().optional(),
   imageLook: z.string().optional(),
@@ -182,10 +207,10 @@ const composeBoardSchema = z.object({
   background: z.string().optional(),
   displayFont: z.string().optional(),
   textFont: z.string().optional(),
-  align: z.enum(['left', 'center']).optional(),
-  decor: z.array(z.enum(DECOR_IDS as [string, ...string[]])).optional().describe('Interventi in più rispetto a quelli dello stile'),
+  align: z.string().optional().describe('left o center'),
+  decor: z.array(z.string()).optional().describe(`Interventi in più rispetto a quelli dello stile: ${DECOR_IDS.join(', ')}`),
   noDecor: z.boolean().optional(),
-  density: z.enum(['essenziale', 'ricco', 'massimo']).optional(),
+  density: z.string().optional().describe('essenziale, ricco o massimo'),
 })
 
 // ── Crew pipeline helpers ──────────────────────────────────────────────────
@@ -598,10 +623,14 @@ export async function POST(req: Request) {
       extraFiles: Array.isArray(extraVaultFiles) ? extraVaultFiles : undefined,
     })
 
+    // Con OpenRouter scelto, crew e schema Python (che usano sempre Gemini) si
+    // saltano: la richiesta la fa il modello dell'utente, con i tool del canvas.
+    const usingOpenRouter = !!getOpenRouterKey() && (modelId === 'openrouter' || !modelId)
+
     // ── SCHEMA DISPATCHER ────────────────────────────────────────────────────
     // Richieste di schema/mappa concettuale → crew /schema (via Next.js API).
     // Priorità: viene valutato PRIMA del canvas crew, perché non richiede crew completa.
-    if (needsSchemaPipeline(userQuery) && !needsCrewPipeline(userQuery)) {
+    if (!usingOpenRouter && needsSchemaPipeline(userQuery) && !needsCrewPipeline(userQuery)) {
       try {
         const schemaRes = await fetch('http://127.0.0.1:8765/schema', {
           method: 'POST',
@@ -644,7 +673,7 @@ export async function POST(req: Request) {
     // ── END OFFICE DISPATCHER ─────────────────────────────────────────────────
 
     // ── CREW DISPATCHER (streaming) ──────────────────────────────────────────
-    if (needsCrewPipeline(userQuery)) {
+    if (!usingOpenRouter && needsCrewPipeline(userQuery)) {
       try {
         const clientName = extractClientName(userQuery, ctx)
         const crewRes = await fetch('http://127.0.0.1:8765/canvas/stream', {
@@ -690,11 +719,12 @@ export async function POST(req: Request) {
       architecture,
       ctx.snapshot,
       canvasSnapshot
-        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements. Per modifiche chirurgiche NON usare clearBoard.\n---`
+        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements (testi, colori, posizioni) ed editDesign (allinea, distribuisci, pathfinder, offset/sticker, ripetizioni, fusioni, testo curvo, maschere, ricolora, palette, livelli, esporta). Per modifiche chirurgiche NON usare clearBoard.\n---`
         : '',
       isCreativeQuery
         ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
         : '',
+      graphicLibraryPrompt(),
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
       ctx.clientVaults.length > 0
@@ -716,13 +746,17 @@ export async function POST(req: Request) {
     // il resto a quello economico
     const task = isCreativeQuery || canvasSnapshot ? 'design' : 'general'
     const { model, label: modelLabel } = resolveModel(modelId, task)
+    // I modelli piccoli o gratuiti impaginano male a coordinate: per loro solo composeDesign,
+    // dove lo Studio fa griglia, foto, effetti e tipografia da sé
+    const lowLevelDesign = isStrongDesignModel(modelLabel)
+    console.log(`[ai] richiesta ${task} → ${modelLabel}${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
 
     const result = tracedStreamText({
       model,
-      system: SYSTEM_PROMPT,
+      system: lowLevelDesign ? SYSTEM_PROMPT : SYSTEM_PROMPT + COMPOSE_ONLY_NOTE,
       messages: modelMessages,
       stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
@@ -949,7 +983,7 @@ export async function POST(req: Request) {
           execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
         }),
 
-        createDesignBoards: tool({
+        ...(lowLevelDesign ? { createDesignBoards: tool({
           description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
 Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
@@ -995,7 +1029,7 @@ QUANTITÀ BOARD:
             success: true,
             rendered: boards?.length ?? 0,
           }),
-        }),
+        }) } : {}),
 
         updateCanvasElements: tool({
           description: 'Modifica coordinate, testi, font, colori ecc. in elementi esistenti del canvas.',
@@ -1008,6 +1042,12 @@ QUANTITÀ BOARD:
             success: true,
             updated: updates?.length ?? 0,
           }),
+        }),
+
+        editDesign: tool({
+          description: designOpsToolDescription,
+          inputSchema: z.object({ ops: z.array(designOpSchema).min(1) }),
+          execute: async ({ ops }) => ({ success: true, ops: ops.length }),
         }),
 
         clearBoard: tool({
@@ -1097,7 +1137,14 @@ QUANTITÀ BOARD:
       },
     })
 
-    return result.toUIMessageStreamResponse()
+    return result.toUIMessageStreamResponse({
+      // l'errore in chat dice anche quale modello ha fallito
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[ai] errore da ${modelLabel}:`, msg)
+        return `${msg} (modello: ${modelLabel})`
+      },
+    })
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

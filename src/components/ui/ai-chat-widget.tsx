@@ -300,7 +300,7 @@ function GenerativeUI({ data }: { data: any }) {
 
 // Canvas tools are client-side (no execute on the server). Their UI state is
 // 'input-available' (not 'output-available') so they need a dedicated check.
-const CANVAS_TOOLS = new Set(['composeDesign', 'createDesignBoards', 'updateCanvasElements', 'clearBoard', 'deleteElements', 'getCanvasState', 'generateConceptualSchema']);
+const CANVAS_TOOLS = new Set(['composeDesign', 'createDesignBoards', 'updateCanvasElements', 'editDesign', 'clearBoard', 'deleteElements', 'getCanvasState', 'generateConceptualSchema']);
 
 function QuickActions({ lastMessage, onAction, disabled, inputRef }: { 
     lastMessage?: UIMessage, 

@@ -1,12 +1,12 @@
-import { CELESTIAL_CATEGORY, CELESTIAL_SHAPES, CELESTIAL_ICONS } from './celestial-library'
+import { CELESTIAL_LIBRARY, CELESTIAL_ICONS } from './celestial-library'
 
 // Categorie con forme piene (fill invece di tratto): anteprima e inserimento pieni.
-export const FILLED_SHAPE_CATEGORIES = new Set<string>([CELESTIAL_CATEGORY])
+export const FILLED_SHAPE_CATEGORIES = new Set<string>(Object.keys(CELESTIAL_LIBRARY))
 // Icone piene (linework a inchiostro): vanno disegnate con fill, non con tratto.
 export const FILLED_ICONS = new Set<string>(CELESTIAL_ICONS.map(i => i.name))
 
 export const SHAPE_LIBRARY = {
-  [CELESTIAL_CATEGORY]: CELESTIAL_SHAPES,
+  ...CELESTIAL_LIBRARY,
   'STILE BRUTALIST (Acid Thorns)': [
     { name:'Thorn A',     path:'M 50 0 L 53 47 L 100 50 L 53 53 L 50 100 L 47 53 L 0 50 L 47 47 Z' },
     { name:'Thorn B',     path:'M 50 5 L 55 45 L 95 50 L 55 55 L 50 95 L 45 55 L 5 50 L 45 45 Z' },
