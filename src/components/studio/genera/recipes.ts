@@ -1784,6 +1784,9 @@ const bottiglia: Recipe = {
 
 // ─── TESTO GRAFICO ───────────────────────────────────────────────────────────
 
+/** colore che resta leggibile sul fondo del tono (altrimenti l'inchiostro del tono) */
+const visible = (o: Job, t: Tone, col: string) => !o.transparent && Math.abs(luma(col) - luma(t.bg)) < 0.2 ? t.ink : col
+
 const TYPE_FACES: { label: string; f: Face }[] = [
   { label: 'Groovy anni 70', f: FACES.groovy }, { label: 'Gonfio', f: FACES.gonfio }, { label: 'Espanso', f: FACES.espanso },
   { label: 'Condensato', f: FACES.condensato }, { label: 'Bodoni corsivo', f: FACES.bodoni }, { label: 'Fraktur', f: FACES.gotico },
@@ -1803,7 +1806,7 @@ const groovy: Recipe = {
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label)), P.sel('warp', 'Busta', [...WARPS], 1), P.range('amt', 'Piega', 0, 100, 45),
     P.sel('pal', 'Colori', GROOVY_PALETTES.map(x => x.label)), P.range('rings', 'Contorni', 0, 5, 3), P.range('ringW', 'Spessore contorni', 20, 200, 100),
-    P.tog('inline', 'Filo interno', true), P.range('ext', 'Estrusione', 0, 100, 45), P.tone(1), P.grain(10)],
+    P.tog('inline', 'Filo interno', true), P.range('ext', 'Estrusione', 0, 100, 45), P.tone(1), P.range('grain', 'Grana', 0, 30, 10)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const pal = GROOVY_PALETTES[num(o, 'pal')] ?? GROOVY_PALETTES[0]
@@ -1839,7 +1842,7 @@ const gonfiabile: Recipe = {
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 1), P.sel('warp', 'Busta', [...WARPS], 2), P.range('amt', 'Piega', 0, 100, 35),
     P.sel('col', 'Colore', PUFFY_COLORS.map(x => x.label)), P.range('puff', 'Gonfiore', 20, 100, 70), P.range('gloss', 'Lucido', 0, 100, 80),
-    P.sel('edge', 'Bordo', ['Nessuno', 'Bianco adesivo', 'Nero fumetto', 'Doppio']), P.tone(1), P.grain(8)],
+    P.sel('edge', 'Bordo', ['Nessuno', 'Bianco adesivo', 'Nero fumetto', 'Doppio']), P.tone(1), P.range('grain', 'Grana', 0, 30, 8)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.gonfio
@@ -1872,45 +1875,53 @@ const ECO_PALETTES = [
 const eco: Recipe = {
   id: 'eco', label: 'Scritta eco', cat: 'Testo grafico', hint: 'la parola ripetuta in contorno: scia, zoom, pila, onda — come un poster cinetico fermo',
   piece: true,
-  params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 2), P.sel('mode', 'Movimento', ['Scia', 'Zoom', 'Pila', 'Onda', 'Vortice']),
+  params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 2), P.sel('mode', 'Movimento', ['Scia', 'Aloni', 'Pila', 'Onda', 'Scala']),
     P.range('copies', 'Ripetizioni', 2, 14, 6), P.range('spread', 'Distanza', 20, 200, 100), P.range('lw', 'Filo', 20, 200, 100),
-    P.sel('pal', 'Colori', ECO_PALETTES.map(x => x.label)), P.tog('last', 'Ultima in colore', false), P.tone(1), P.grain(8)],
+    P.sel('pal', 'Colori', ECO_PALETTES.map(x => x.label)), P.tog('last', 'Ultima in colore', false), P.tone(1), P.range('grain', 'Grana', 0, 30, 8)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const pal = ECO_PALETTES[num(o, 'pal')] ?? ECO_PALETTES[0]
     const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.espanso
-    const mode = num(o, 'mode'), n = num(o, 'copies'), sp = num(o, 'spread') / 100
+    const mode = num(o, 'mode'), n = num(o, 'copies')
+    // sotto una certa distanza le copie si impastano: c'è un minimo
+    const sp = Math.max(mode === 0 ? 0.9 : mode === 3 ? 0.8 : 0.45, num(o, 'spread') / 100)
     // lo spazio per le copie si toglie al riquadro della parola
     const box = [
-      { w: W * 0.84 - S * 0.22 * sp, h: H * 0.8 - S * 0.3 * sp },
-      { w: W * 0.84 / (1 + 0.5 * sp), h: H * 0.8 / (1 + 0.5 * sp) },
+      { w: W * 0.84 / (1 + 0.25 * sp), h: H * 0.8 / (1 + n * 0.22 * sp) },
+      { w: W * 0.84 - 2 * n * S * 0.014 * sp, h: H * 0.8 - 2 * n * S * 0.014 * sp },
       { w: W * 0.84, h: H * 0.84 / ((n + 1) * (1 + 0.12 * Math.min(1, sp))) },
       { w: W * 0.84 - S * 0.16 * sp, h: H * 0.8 / (1 + n * 0.62 * sp) },
-      { w: W * 0.84 / (1 + 0.7 * sp), h: H * 0.8 / (1 + 0.7 * sp) },
+      { w: W * 0.84, h: H * 0.8 / (1 + 2.2 * Math.min(1, sp)) },
     ][mode]
     const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, 0, 0, { room: 0, boxW: box.w, boxH: box.h, lead: 0.05 })
     const b = inkBox(m)!, wh = b.y1 - b.y0, ww = b.x1 - b.x0
     const din = distance(m)
+    // altezza totale della scala, per centrarla
+    let totScale = 0
+    if (mode === 4) { let z = 1; const q = 1 - 0.14 * Math.min(1.4, sp); for (let i = 0; i < n; i++) { totScale += wh * (z + z * q) / 2 * 1.08; z *= q } }
     const lw = Math.max(1.2, S * 0.0026 * num(o, 'lw') / 100)
-    const edge = maskToCanvas(distBand(din, W, H, 0.7, lw + 0.7), pal.ink)
-    const solid = maskToCanvas(m, on(o, 'last') ? pal.acc : pal.fill)
+    const edge = maskToCanvas(distBand(din, W, H, 0.7, lw + 0.7), visible(o, t, pal.ink))
+    const solid = maskToCanvas(m, visible(o, t, on(o, 'last') ? pal.acc : pal.fill))
     const { c, ctx } = stage(o, t)
     const at = (k: number, draw: HTMLCanvasElement) => {
       // k = 0 è la parola piena, le copie si allontanano con k
-      const u = k / n
       ctx.save(); ctx.translate(W / 2, H / 2)
-      if (mode === 0) ctx.translate(-S * 0.11 * sp * u * 2 + S * 0.11 * sp, -S * 0.15 * sp * u * 2 + S * 0.15 * sp)
-      if (mode === 1) { const z = 1 + 0.5 * sp * u; ctx.scale(z, z) }
+      // scia: ogni copia scende di un quinto d'altezza e scivola di lato, la piena in cima
+      if (mode === 0) ctx.translate((k - n / 2) * ww * 0.025 * sp, (k - n / 2) * wh * 0.22 * sp)
       if (mode === 2) { const side = k % 2 ? 1 : -1; ctx.translate(0, side * Math.ceil(k / 2) * wh * (1 + 0.12 * Math.min(1, sp))) }
       if (mode === 3) ctx.translate(Math.sin((k - Math.round(n / 2)) * 0.9) * S * 0.08 * sp, (k - Math.round(n / 2)) * wh * 0.62 * sp)
-      if (mode === 4) { const z = 1 + 0.7 * sp * u; ctx.rotate(u * 0.5 * sp); ctx.scale(z, z) }
+      // scala: copie sempre più piccole che scendono sotto la parola
+      if (mode === 4) { let y = 0, z = 1; const q = 1 - 0.14 * Math.min(1.4, sp); for (let i = 0; i < k; i++) { y += wh * (z + z * q) / 2 * 1.08; z *= q }; ctx.translate(0, y - totScale / 2); ctx.scale(z, z) }
       ctx.translate(-W / 2, -H / 2)
       ctx.drawImage(draw, 0, 0); ctx.restore()
     }
-    void ww
     // la parola piena copre i fili che le passano sotto: in testa alla scia, al centro dell'onda
-    const main = mode === 0 ? n : mode === 3 ? Math.round(n / 2) : 0
-    for (let k = n; k >= (mode === 3 ? 0 : 1); k--) if (k !== main) at(k, edge)
+    const main = mode === 0 ? 0 : mode === 3 ? Math.round(n / 2) : 0
+    if (mode === 1) {
+      // aloni: contorni che si allargano a passo costante attorno alle lettere
+      const out = distance(invert(m)), gap = S * 0.014 * sp
+      for (let k = 1; k <= n; k++) ctx.drawImage(maskToCanvas(distBand(out, W, H, k * gap, k * gap + lw), visible(o, t, k % 2 && on(o, 'last') ? pal.acc : pal.ink)), 0, 0)
+    } else for (let k = n; k >= (mode === 3 || mode === 0 ? 0 : 1); k--) if (k !== main) at(k, edge)
     at(main, solid)
     return finish(c, o, t, 'eco', null)
   },
@@ -1957,13 +1968,14 @@ const trama: Recipe = {
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 3), P.sel('warp', 'Busta', [...WARPS]), P.range('amt', 'Piega', 0, 100, 30),
     P.sel('pat', 'Trama', ['Righe', 'Scacchi', 'Mezzatinta', 'Zebra', 'Pois']), P.range('cell', 'Passo trama', 20, 200, 100), P.range('ang', 'Inclinazione', -60, 60, 35),
-    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.range('shadow', 'Ombra sfalsata', 0, 100, 60), P.tog('outline', 'Contorno', true), P.tone(1), P.grain(12)],
+    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.range('shadow', 'Ombra sfalsata', 0, 100, 60), P.tog('outline', 'Contorno', true), P.tone(1), P.range('grain', 'Grana', 0, 30, 12)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
-    const pal = TRAMA_PALETTES[num(o, 'pal')] ?? TRAMA_PALETTES[0]
+    const pal0 = TRAMA_PALETTES[num(o, 'pal')] ?? TRAMA_PALETTES[0]
+    const pal = { ...pal0, ink: visible(o, t, pal0.ink) }
     const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.condensato
     const sh = S * 0.03 * num(o, 'shadow') / 100, lw = on(o, 'outline') ? Math.max(1.5, S * 0.0045) : 0
-    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room: sh + lw + S * 0.01, lead: 0.06 })
+    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room: sh + lw + S * 0.01, lead: 0.12 })
     const { c, ctx } = stage(o, t)
     const out = lw ? distance(invert(m)) : null
     const body = out ? grow(out, m, lw) : m

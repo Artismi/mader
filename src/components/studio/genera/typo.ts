@@ -5,7 +5,7 @@
  */
 import { blurMask, distance, drawMask, fitSize, fontCss, hexRgb, inkBox, makeCanvas, maskToCanvas, newMask, remap, smoothField, smoothstep, type Ctx, type Face, type Mask } from './raster'
 
-export const WARPS = ['Dritto', 'Arco', 'Rigonfio', 'Bandiera', 'Onda', 'Prospettiva', 'Strozzato', 'Ponte'] as const
+export const WARPS = ['Dritto', 'Arco', 'Rigonfio', 'Bandiera', 'Onda', 'Prospettiva', 'Strozzato'] as const
 
 /** righe impilate e centrate, ogni riga larga uguale (`fat` ingrassa i tratti) */
 export function wordMask(W: number, H: number, lines: string[], f: Face, width: number, maxH: number, o: { lead?: number; fat?: number; cy?: number } = {}): Mask {
@@ -51,11 +51,11 @@ export function warp(m: Mask, kind: number, amt: number): Mask {
     switch (kind) {
       case 1: return [x, y + A * hh * 0.9 * (1 - uu * uu)]                          // arco: il centro sale
       case 2: return [x, cy + (y - cy) / (1 + A * 0.7 * (1 - uu * uu))]                // rigonfio
-      case 3: return [x, y - A * hh * 0.55 * Math.sin(u * Math.PI)]                    // bandiera
-      case 4: return [x + A * hw * 0.03 * Math.sin(v * 3), y - A * hh * 0.42 * Math.sin(u * Math.PI * 2)] // onda
-      case 5: { const k = 1 + A * 0.55 * v; return [cx + (x - cx) / k, y] }            // prospettiva: la base si allarga
+      case 3: return [x, y - A * hh * 0.35 * Math.sin(u * Math.PI)]                    // bandiera
+      case 4: return [x + A * hw * 0.03 * Math.sin(v * 3), y - A * hh * 0.12 * Math.sin(u * Math.PI * 2)] // onda
+      case 5: { const k = 1 + A * 0.3 * v; return [cx + (x - cx) / k, cy + (y - cy) * (1 + A * 0.08 * (1 - v))] }            // prospettiva: la base si allarga
       case 6: return [x, cy + (y - cy) / Math.max(0.3, 1 - A * 0.45 * (1 - uu * uu))]  // strozzato
-      default: return [x, y - A * hh * 0.9 * (1 - uu * uu) * (v < 0 ? 1 : 0.15)]       // ponte: sale solo il bordo alto
+      default: return [x, y]
     }
   })
 }
