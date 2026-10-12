@@ -190,7 +190,7 @@ export interface ComposeContent {
   details?: { label: string; value: string }[]
   /** 2-5 etichette brevi (servizi, temi, ingredienti) mostrate come pillole */
   tags?: string[]
-  image?: { url?: string; prompt?: string; alt?: string }
+  image?: { url?: string; prompt?: string; alt?: string; /** parole per cercare una foto vera (archivi liberi) */ query?: string }
 }
 
 export interface ComposeBoard {

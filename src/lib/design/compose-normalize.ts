@@ -4,8 +4,8 @@
  *
  * - nomi di stile, layout, formato e decorazioni riconosciuti anche se scritti
  *   male ("minimal", "Luxury", "instagram story", "Swiss")
- * - se manca la foto, viene chiesta al generatore a partire dai contenuti; un
- *   layout senza foto scelto "di default" passa a uno fotografico
+ * - se manca la foto, si cerca una foto vera libera da diritti (poi il generatore);
+ *   un layout neutro scelto "di default" diventa una copertina fotografica
  * - densità ricca, effetti e materia dello stile restano attivi
  *
  * Nessuna dipendenza dal canvas: lo usano sia lo Studio sia i test.
@@ -68,6 +68,12 @@ const PHOTO_FRIENDLY = new Set(['bento', 'tipografico', 'manifesto', 'rivista', 
 /** Layout che vivono di sola tipografia o di arte generativa: la foto non va forzata. */
 const NO_PHOTO = new Set(['gigante', 'citazione', 'numeri', 'elenco', 'arte', 'manuale'])
 
+/** Cosa cercare negli archivi: la sostanza (sottotitolo, testo), non il titolo poetico. */
+function photoQuery(b: Partial<ComposeBoard>) {
+  const c = b.content ?? ({} as ComposeBoard['content'])
+  return String(c.subtitle || c.body || c.eyebrow || c.title || '').split(/[.!?]/)[0].slice(0, 90)
+}
+
 function photoPrompt(b: Partial<ComposeBoard>, styleLabel: string) {
   const c = b.content ?? ({} as ComposeBoard['content'])
   // prima la sostanza (chi è, cosa offre), poi il titolo: i titoli sono spesso poetici ("Notte Etiope" ≠ cielo stellato)
@@ -75,7 +81,7 @@ function photoPrompt(b: Partial<ComposeBoard>, styleLabel: string) {
   return `Product and lifestyle photograph for: ${subject}. Editorial ${styleLabel.toLowerCase()} mood, real objects and materials from the subject, natural light, clean composition with negative space, high detail, photorealistic, no text, no letters, no logo`
 }
 
-export interface NormalizeOpts { /** l'utente ha chiesto niente foto */ noPhoto?: boolean }
+export interface NormalizeOpts { /** l'utente ha chiesto niente foto */ noPhoto?: boolean; /** aggiungere una foto se manca (spento: dava risultati casuali) */ autoPhoto?: boolean }
 
 export function normalizeBoard(input: Partial<ComposeBoard>, opts: NormalizeOpts = {}): ComposeBoard {
   const b: Partial<ComposeBoard> = { ...input, content: { ...(input.content ?? { title: '' }) } }
@@ -88,20 +94,21 @@ export function normalizeBoard(input: Partial<ComposeBoard>, opts: NormalizeOpts
   if (fmt) b.format = fmt
   let layout = match(LAYOUTS, b.layout, LAYOUT_ALIASES)
 
-  const hasImage = !!(content.image?.url || content.image?.prompt)
-  const wantsPhoto = !opts.noPhoto && !NO_PHOTO.has(layout?.id ?? '')
+  const hasImage = !!(content.image?.url || content.image?.prompt || content.image?.query)
+  // niente foto aggiunte d'ufficio: scelte per parole chiave risultano casuali. Solo se le chiede chi scrive.
+  const wantsPhoto = !!opts.autoPhoto && !opts.noPhoto && !NO_PHOTO.has(layout?.id ?? '')
   if (!hasImage && wantsPhoto) {
     // un layout neutro (o sconosciuto) diventa fotografico: copertina per i formati alti, diviso per gli altri
     if (!layout || PLAIN.has(layout.id)) {
-      const tall = fmt === 'storia' || fmt === 'verticale'
-      layout = LAYOUTS.find(l => l.id === (tall ? 'copertina' : 'diviso'))
+      // foto a tutto campo e titolo grande: la soluzione più pulita in ogni formato
+      layout = LAYOUTS.find(l => l.id === 'copertina')
     }
     if (layout && (layout.needsImage || PHOTO_FRIENDLY.has(layout.id)))
-      content.image = { ...(content.image ?? {}), prompt: photoPrompt(b, style.label) }
+      content.image = { ...(content.image ?? {}), query: photoQuery(b), prompt: photoPrompt(b, style.label) }
   }
   b.layout = (layout ?? LAYOUTS[0]).id
   // un layout fotografico senza foto e senza possibilità di generarla: si torna a uno tipografico
-  if (opts.noPhoto && LAYOUTS.find(l => l.id === b.layout)?.needsImage && !hasImage) b.layout = 'eroe'
+  if (LAYOUTS.find(l => l.id === b.layout)?.needsImage && !content.image?.url && !content.image?.prompt && !content.image?.query) b.layout = 'eroe'
 
   if (Array.isArray(b.decor)) b.decor = b.decor.map(d => norm(d)).filter((d): d is DecorId => (DECOR_IDS as string[]).includes(d))
   if (!b.density || !['essenziale', 'ricco', 'massimo'].includes(b.density)) b.density = 'ricco'

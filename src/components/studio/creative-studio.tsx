@@ -284,6 +284,7 @@ import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
 import { childrenOf, installArtboards, boardOf } from './arrange/artboards'
 import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
+import { boardLabel, boardToDataURL, listBoards } from './arrange/export'
 import { TextCurveControl } from './text/TextCurveControl'
 import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
 import { runPathOp } from './vector/pathfinder'
@@ -291,6 +292,7 @@ import { pathDoubleClick } from './vector/direct-select'
 import { describeCanvas, runDesignOps } from './ai/design-ops'
 import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
 import { normalizeBoards } from '@/lib/design/compose-normalize'
+import { resolvePhoto } from './ai/photos'
 import { isCropping, startCrop } from './image/crop'
 
 /** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
@@ -2431,6 +2433,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       // pilota automatico: nomi scritti male, foto mancanti e layout neutri sistemati qui, per qualsiasi modello
       const boards: ComposeBoard[] = normalizeBoards(payload)
       if (!boards.length) return
+      // foto vere libere da diritti prima di quelle generate
+      await Promise.all(boards.map(b => resolvePhoto(b)))
       let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
       x = Number.isFinite(x) ? x + 160 : 100
       for (let i = 0; i < boards.length; i++) {
@@ -2919,7 +2923,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
   // in sviluppo: comandi AI eseguibili dalla console e dai test
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') Object.assign(window, { __aiCommand: handleAICommand, __cutout: cutout })
+    if (process.env.NODE_ENV !== 'production') Object.assign(window, {
+      __aiCommand: handleAICommand, __cutout: cutout,
+      // tavole esportate come png, per i test visivi
+      __boardsPng: async (mult = 0.5) => { const c = fabricRef.current; if (!c) return []; const out = []; for (const ab of listBoards(c)) out.push({ name: boardLabel(ab), png: await boardToDataURL(c, ab, { format: 'png', multiplier: mult }) }); return out },
+    })
   })
 
   // Handle aiCommands queue sequentially

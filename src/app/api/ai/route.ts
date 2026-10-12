@@ -165,7 +165,7 @@ const COMPOSE_ONLY_NOTE = `
 Per ogni grafica nuova chiama SOLO composeDesign: non esiste uno strumento a coordinate.
 - Scegli uno stile e un'impaginazione dagli elenchi dello strumento.
 - Scrivi contenuti veri e completi: title, subtitle, body, cta, brand, eventuali meta/tags.
-- Per foto: content.image.prompt con una descrizione visiva del soggetto (lo Studio la genera).
+- Per foto: content.image.query con 2-4 parole in inglese sul soggetto (lo Studio cerca una foto vera libera da diritti).
 - Lascia allo Studio posizioni, misure, caratteri ed effetti.
 Per modificare elementi esistenti usa updateCanvasElements ed editDesign con gli ID dello stato del canvas.`
 
@@ -194,7 +194,12 @@ const composeBoardSchema = z.object({
     brand: z.string().optional(),
     badge: z.string().optional(),
     tags: z.array(z.string()).optional(),
-    image: z.object({ url: z.string().optional(), prompt: z.string().optional(), alt: z.string().optional() }).optional(),
+    image: z.object({
+      url: z.string().optional(),
+      query: z.string().optional().describe('2-4 parole in inglese per cercare una FOTO VERA libera da diritti, es. "coffee beans dark stone". Preferiscila a prompt'),
+      prompt: z.string().optional().describe('solo se serve un\'immagine inventata: descrizione per il generatore'),
+      alt: z.string().optional(),
+    }).optional(),
   }),
   titleEffect: z.string().optional(),
   imageLook: z.string().optional(),

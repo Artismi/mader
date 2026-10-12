@@ -210,7 +210,7 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
     return fx(imageFx.id, imageFx.variant, p)
   }
   const srcOf = (u: string) => (u.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(u)}` : u)
-  const loadImg = () => withTimeout(fabric.FabricImage.fromURL(srcOf(imgUrl), { crossOrigin: 'anonymous' }).catch(() => null), 45000, null)
+  const loadImg = () => withTimeout(fabric.FabricImage.fromURL(srcOf(imgUrl), { crossOrigin: 'anonymous' }).catch(() => null), 180000, null) // le foto generate arrivano in fila
   /** tracciato della forma, in coordinate del riquadro */
   const shapeD = (shape: string, w: number, h: number, r: number) => {
     if (shape === 'arco') { const rr = Math.min(w / 2, h); return `M 0 ${h} L 0 ${rr} A ${w / 2} ${rr} 0 0 1 ${w} ${rr} L ${w} ${h} Z` }
@@ -233,7 +233,13 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
     put(ph, role)
     if (!imgUrl) return ph
     loadImg().then(img => {
-      if (!img || !canvas.getObjects().includes(ph)) return
+      if (!canvas.getObjects().includes(ph)) return
+      if (!img) {
+        // la foto non è arrivata: niente buco piatto, un riempimento generativo nei colori della tavola
+        const e = fx('genFill', lum(pal.bg) < 0.35 ? 'aurora' : 'marmo', { c1: accent, c2: pal.surface, c3: pal.muted, c4: pal.bg })
+        if (e) { ph.fx = [e]; applyFx(ph); canvas.requestRenderAll() }
+        return
+      }
       const iw = img.width || 1, ih = img.height || 1
       const k = Math.max(box.w / iw, box.h / ih) * (shiftY ? 1.12 : 1)
       const cw = box.w / k, ch = box.h / k
