@@ -61,7 +61,7 @@ export function Chain() {
   const chain = useOs(s => s.chain)
   const nodes = useOs(s => s.nodes)
   const back = useOs(s => s.back)
-  const name = (i: number) => { const s = chain[i]; return s.mode === 'reply' ? 'Risposta' : nodes[s.ref]?.title ?? '…' }
+  const name = (i: number) => { const s = chain[i]; return s.mode === 'reply' ? (kindOf(s.ref) === 'quote' ? 'Invio' : 'Risposta') : nodes[s.ref]?.title ?? '…' }
   const here = chain[chain.length - 1], hn = nodes[here.ref]
   const next = here.mode === 'reply' ? 'Invia' : kindOf(here.ref) === 'mail' && hn?.urgent ? 'Rispondi'
     : here.ref === 'list:oggi' ? hn?.groups?.find(g => g[0] === '__hero')?.[1]?.[0]?.title : null
@@ -238,7 +238,8 @@ type QItem = { desc: string; qty: number; unit_price: number }
 const eur = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
 function QuoteCard({ a, clientRef, forTitle }: { a: Acc; clientRef?: string; forTitle?: string }) {
-  const [q, setQ] = useState<{ title: string; number: string; total: number; items: QItem[]; status: string } | null | undefined>(undefined)
+  const go = useOs(s => s.go)
+  const [q, setQ] = useState<{ id: string; title: string; number: string; total: number; items: QItem[]; status: string } | null | undefined>(undefined)
   const [editing, setEditing] = useState(false)
   const [rows, setRows] = useState<QItem[]>([{ desc: '', qty: 1, unit_price: 0 }])
   const [busy, setBusy] = useState(false)
@@ -279,7 +280,7 @@ function QuoteCard({ a, clientRef, forTitle }: { a: Acc; clientRef?: string; for
         </tbody></table>
       )}
       <button className="legacy" style={{ marginTop: 12 }} onClick={() => setEditing(true)}>+ nuovo preventivo</button>
-      <a className="accbtn" href="/finanze">Apri in Finanze</a>
+      {q && <button className="accbtn" onClick={() => go(`quote:${q.id}`)}>{q.status === 'bozza' ? 'Apri e invia' : 'Apri al centro'}</button>}
     </Card>
   )
 }

@@ -3,7 +3,7 @@
  * circolare sa mostrare. Ogni suggerimento porta il suo perché (intelligenza visibile).
  * Solo lato server.
  */
-import { clients, designProjects, editorialPosts, ideas, memoryLinks, messages, quotes, tasks, type Client, type EditorialPost, type Message } from '@/lib/db'
+import { clients, designProjects, editorialPosts, ideas, memoryLinks, messages, quotes, tasks, type Client, type EditorialPost, type Message, type Quote } from '@/lib/db'
 import { upcomingEvents, type CalEvent } from '@/lib/google/calendar'
 
 export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea' | 'event' | 'post'
@@ -41,6 +41,7 @@ export interface NodeDetail extends NodeSummary {
   done?: boolean
   events?: { ref: string; title: string; start: string; end: string; allDay: boolean }[]   // per l'anello del giorno
   next?: { label: string; status: string }   // prossimo passo di stato (post editoriali)
+  quote?: Pick<Quote, 'id' | 'number' | 'type' | 'status' | 'items' | 'total' | 'notes' | 'issued_at' | 'drive_pdf_url'> & { to?: string }
 }
 
 // ───────── utilità ─────────
@@ -162,6 +163,16 @@ function postSummary(p: EditorialPost): NodeSummary {
   return { ref: `post:${p.id}`, kind: 'post', title: p.title || (p.content ?? '').slice(0, 70) || 'Contenuto senza titolo',
     sub: [p.client_name, p.editorial_status, p.channels.join(', ')].filter(Boolean).join(' · '), when, urgent: !!late, why: late ? 'doveva uscire' : undefined }
 }
+// preventivi e fatture: aspettano te (bozza) o il cliente (inviato)
+const eurS = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+function quoteSummary(q: Quote): NodeSummary {
+  const days = q.issued_at ? (Date.now() - Date.parse(q.issued_at)) / 86400000 : 0
+  const stale = q.status === 'inviato' && days > 7
+  return { ref: `quote:${q.id}`, kind: 'quote', title: q.title, sub: [q.client_name, `${q.type} ${q.number}`, q.status, eurS(q.total)].join(' · '),
+    when: q.status, urgent: stale, why: stale ? 'inviato da oltre una settimana: sollecita' : undefined }
+}
+const openQuotes = () => quotes.getAll().filter(q => q.status === 'bozza' || q.status === 'inviato')
+
 const activePosts = () => editorialPosts.getAll().filter(p => p.editorial_status !== 'pubblicato')
 
 // ───────── elenchi (le sezioni della ghiera) ─────────
@@ -172,7 +183,7 @@ export async function getList(id: string): Promise<NodeDetail> {
     case 'oggi': {
       const mails = rankedMails(cm)
       const pending = mails.filter(m => m.urgent)
-      const late = [...openTasks().map(taskSummary), ...activePosts().map(postSummary)].filter(t => t.urgent)
+      const late = [...openTasks().map(taskSummary), ...activePosts().map(postSummary), ...openQuotes().map(quoteSummary)].filter(t => t.urgent)
       const hero = pending[0] ?? late[0]
       const rest = [...pending.slice(1, 4), ...late.slice(hero && hero.kind !== 'mail' ? 1 : 0, 3)]
       const today = (await upcomingEvents(1)).filter(e => sameDay(new Date(e.start), new Date()))
@@ -195,7 +206,7 @@ export async function getList(id: string): Promise<NodeDetail> {
       const ts = openTasks().map(taskSummary)
       const evs = (await upcomingEvents(7)).map(eventSummary)
       return { ...base, title: 'Lavori', sub: '', lead: 'Agenda della settimana e cose da fare.', legacy: '/incarichi',
-        groups: [['Agenda · 7 giorni', evs], ['Task', ts]] }
+        groups: [['Agenda · 7 giorni', evs], ['Task', ts], ['Preventivi aperti', openQuotes().map(quoteSummary)]] }
     }
     case 'studio': {
       const posts = activePosts().sort((a, b) => (a.scheduled_at ?? '9').localeCompare(b.scheduled_at ?? '9')).map(postSummary)
@@ -259,7 +270,7 @@ export async function getNode(ref: string): Promise<NodeDetail | null> {
     const ts = openTasks().filter(t => t.client_id === id).map(taskSummary)
     const ds = designProjects.getByClient(id).map(d => designSummary(d, cm))
     return { ...clientSummary(c, pending.length), lead: [c.email, c.sector].filter(Boolean).join(' · '),
-      groups: [['Prossima cosa', pending.slice(0, 3)], ['Lavori', ts], ['Contenuti', activePosts().filter(p => p.client_id === id).map(postSummary)], ['Design', ds]],
+      groups: [['Prossima cosa', pending.slice(0, 3)], ['Lavori', ts], ['Preventivi', quotes.getAll().filter(q => q.client_id === id).map(quoteSummary)], ['Contenuti', activePosts().filter(p => p.client_id === id).map(postSummary)], ['Design', ds]],
       sats: [{ kind: 'quote', tip: 'Preventivi del cliente' }], petals: [{ label: 'Task', icon: 'check', kind: 'task' }, { label: 'Preventivo', icon: 'euro', kind: 'quote' }] }
   }
 
@@ -277,6 +288,16 @@ export async function getNode(ref: string): Promise<NodeDetail | null> {
     const c = d.client_id ? cm.get(d.client_id) : undefined
     return { ...designSummary(d, cm), lead: c ? `Per ${c.name}` : undefined, clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name,
       href: `/os/studio/${d.id}`, sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [] }
+  }
+
+  if (kind === 'quote') {
+    const q = quotes.getById(id)
+    if (!q) return null
+    const c = q.client_id ? cm.get(q.client_id) : undefined
+    return { ...quoteSummary(q), origin: originOf(id, cm), clientRef: c ? `client:${c.id}` : undefined, clientName: c?.name ?? q.client_name,
+      lead: `${q.type === 'fattura' ? 'Fattura' : 'Preventivo'} n. ${q.number} · ${q.status}`, legacy: '/finanze',
+      quote: { id: q.id, number: q.number, type: q.type, status: q.status, items: q.items, total: q.total, notes: q.notes, issued_at: q.issued_at, drive_pdf_url: q.drive_pdf_url, to: c?.email },
+      sats: c ? [{ kind: 'client', ref: `client:${c.id}`, tip: c.name }] : [], petals: [{ label: 'Task', icon: 'check', kind: 'task' }] }
   }
 
   if (kind === 'idea') {
@@ -305,6 +326,7 @@ function originOf(targetId: string, cm: Map<string, Client>): NodeSummary | unde
     return m ? mailSummary(m, cm) : undefined
   }
   if (l.source_type === 'client') { const c = cm.get(l.source_id); return c ? clientSummary(c, 0) : undefined }
+  if (l.source_type === 'quote') { const q = quotes.getById(l.source_id); return q ? quoteSummary(q) : undefined }
   return undefined
 }
 
@@ -315,6 +337,7 @@ export function clientOfRef(ref: string): Client | undefined {
   if (kind === 'client') return cm.get(id)
   if (kind === 'mail') { const m = messages.getAll({ limit: 1000 }).find(x => x.id === id); return m?.client_id ? cm.get(m.client_id) : undefined }
   if (kind === 'task') { const t = tasks.getById(id); return t?.client_id ? cm.get(t.client_id) : undefined }
+  if (kind === 'quote') { const q = quotes.getById(id); return q?.client_id ? cm.get(q.client_id) : undefined }
   return undefined
 }
 
@@ -329,6 +352,7 @@ export function search(q: string): NodeSummary[] {
     ...messages.getAll({ limit: 500 }).filter(m => hit(m.subject, m.sender_name, m.sender_id)).slice(0, 8).map(m => mailSummary(m, cm)),
     ...openTasks().filter(t => hit(t.title, t.client_name)).slice(0, 5).map(taskSummary),
     ...designProjects.getAll().filter(d => hit(d.name)).slice(0, 5).map(d => designSummary(d, cm)),
+    ...quotes.getAll().filter(q => hit(q.title, q.number, q.client_name)).slice(0, 5).map(quoteSummary),
   ].slice(0, 12)
 }
 
