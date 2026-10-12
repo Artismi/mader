@@ -3,7 +3,7 @@
  * spezzate dal motore), forme, filetti e foto ritagliate "a riempimento".
  */
 import * as fabric from 'fabric'
-import type { Scene, SceneEl } from './types'
+import type { FxSpec, Scene, SceneEl } from './types'
 import { ORNAMENTS } from '../compose/ornaments'
 import { applyFx, installFxEngine } from '../fx/engine'
 import { fxDef, newFx, type FxEntry, type FxId } from '../fx/catalog'
@@ -50,20 +50,62 @@ function shapeFor(el: Extract<SceneEl, { kind: 'image' }>, left: number, top: nu
   return new fabric.Rect({ ...base, width: el.w, height: el.h })
 }
 
+function textClip(ct: NonNullable<Extract<SceneEl, { kind: 'image' }>['clipText']>, k: number, OX: number, OY: number) {
+  return new fabric.FabricText(ct.lines.join('\n'), {
+    fontFamily: ct.font.family, fontWeight: ct.font.weight, fontStyle: ct.font.italic ? 'italic' : 'normal',
+    fontSize: ct.size * k, lineHeight: ct.lineHeight / 1.13, charSpacing: ct.tracking * 1000,
+    left: ct.x * k + OX, top: ct.y * k + OY, originX: 'left', originY: 'top', absolutePositioned: true,
+  })
+}
+
 async function imageObj(el: Extract<SceneEl, { kind: 'image' }>, left: number, top: number): Promise<fabric.FabricObject> {
   const fallback = () => shapeFor(el, left, top, el.fallback, false)
   if (!el.url) return fallback()
-  const img = await withTimeout<fabric.FabricImage | null>(fabric.FabricImage.fromURL(srcOf(el.url), { crossOrigin: 'anonymous' }).catch(() => null), 20000, null)
+  const img = await withTimeout<fabric.FabricImage | null>(loadImage(el.url), 20000, null)
   if (!img) return fallback()
   const iw = img.width || 1, ih = img.height || 1
-  const scale = Math.max(el.w / iw, el.h / ih)
-  const cw = el.w / scale, ch = el.h / scale
+  // la foto copre il riquadro `view` (di solito l'elemento stesso), poi si ritaglia sull'elemento
+  const v = el.view ?? { x: el.x, y: el.y, w: el.w, h: el.h }
+  const scale = Math.max(v.w / iw, v.h / ih)
+  const ox = (iw - v.w / scale) / 2, oy = (ih - v.h / scale) / 2
+  const cx = Math.max(0, Math.min(iw - 1, ox + (el.x - v.x) / scale)), cy = Math.max(0, Math.min(ih - 1, oy + (el.y - v.y) / scale))
   img.set({
-    cropX: (iw - cw) / 2, cropY: (ih - ch) / 2, width: cw, height: ch,
+    cropX: cx, cropY: cy, width: Math.min(iw - cx, el.w / scale), height: Math.min(ih - cy, el.h / scale),
     scaleX: scale, scaleY: scale, left, top, originX: 'left', originY: 'top',
   })
   if (el.shape && el.shape !== 'rect') img.clipPath = shapeFor(el, left, top, '#000', true)
   return img
+}
+
+/** Le stesse foto tornano in più elementi (strisce, celle): si scaricano una volta. */
+const imgCache = new Map<string, Promise<HTMLImageElement | null>>()
+function loadImage(url: string): Promise<fabric.FabricImage | null> {
+  const src = srcOf(url)
+  if (!imgCache.has(src)) imgCache.set(src, new Promise(res => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = () => res(null); im.src = src }))
+  return imgCache.get(src)!.then(im => (im ? new fabric.FabricImage(im) : null))
+}
+
+/** Effetti del laboratorio sull'oggetto (duotone, retino, riso, riempimenti generativi…). */
+function withFx(o: Obj, fx?: FxSpec[]) {
+  const list = (fx ?? []).map(f => fxMaker(f.id, f.variant, f.p)).filter(Boolean) as FxEntry[]
+  if (!list.length) return
+  o.fx = [...(o.fx ?? []), ...list]
+  try { applyFx(o) } catch (e) { console.warn('[designer] fx', e) }
+}
+
+/** Sovrastampa e trasparenza comuni. */
+function withLook(o: fabric.FabricObject, l: { blend?: GlobalCompositeOperation; opacity?: number }) {
+  if (l.blend) o.set('globalCompositeOperation', l.blend)
+  if (l.opacity !== undefined) o.set('opacity', l.opacity)
+}
+
+/** Ciò che esce dalla tavola si ritaglia sul suo bordo (lo Studio non ritaglia le tavole). */
+function clipToBoard(o: fabric.FabricObject, OX: number, OY: number, W: number, H: number) {
+  if (o.clipPath) return
+  o.setCoords()
+  const b = o.getBoundingRect()
+  if (b.left >= OX - 1 && b.top >= OY - 1 && b.left + b.width <= OX + W + 1 && b.top + b.height <= OY + H + 1) return
+  o.clipPath = new fabric.Rect({ left: OX, top: OY, width: W, height: H, originX: 'left', originY: 'top', absolutePositioned: true })
 }
 
 /** Disegna la scena sulla tavola; restituisce gli oggetti aggiunti. */
@@ -90,21 +132,45 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
         coords: el.fill.vertical ? { x1: 0, y1: 0, x2: 0, y2: 1 } : { x1: 0, y1: 0, x2: 1, y2: 0 },
         colorStops: [{ offset: el.fill.fromAt, color: el.fill.from }, { offset: el.fill.toAt, color: el.fill.to }],
       })
-      o = new fabric.Rect({ left: el.x * k, top: el.y * k, width: el.w * k, height: el.h * k, rx: (el.r ?? 0) * k, ry: (el.r ?? 0) * k, fill, opacity: el.opacity ?? 1, strokeWidth: 0 })
+      o = new fabric.Rect({ left: el.x * k, top: el.y * k, width: el.w * k, height: el.h * k, rx: (el.r ?? 0) * k, ry: (el.r ?? 0) * k, fill, opacity: el.opacity ?? 1, angle: el.angle ?? 0, stroke: el.stroke, strokeWidth: el.stroke ? (el.sw ?? 2) * k : 0 })
     } else if (el.kind === 'circle') {
-      o = new fabric.Circle({ left: (el.cx - el.r) * k, top: (el.cy - el.r) * k, radius: el.r * k, fill: el.fill, strokeWidth: 0 })
+      const sw = el.stroke ? (el.sw ?? 2) : 0
+      o = new fabric.Circle({ left: (el.cx - el.r - sw / 2) * k, top: (el.cy - el.r - sw / 2) * k, radius: el.r * k, fill: el.fill, stroke: el.stroke, strokeWidth: sw * k })
+    } else if (el.kind === 'path') {
+      const p = new fabric.Path(el.d, { fill: el.fill, stroke: el.stroke, strokeWidth: el.stroke ? (el.sw ?? 2) : 0, strokeLineJoin: 'miter' })
+      // il tracciato è in coordinate della tavola: si riporta l'origine dove la mette Fabric
+      p.set({ scaleX: k, scaleY: k, left: (p.pathOffset.x - p.width / 2 - (el.stroke ? (el.sw ?? 2) / 2 : 0)) * k, top: (p.pathOffset.y - p.height / 2 - (el.stroke ? (el.sw ?? 2) / 2 : 0)) * k })
+      o = p
     } else if (el.kind === 'line') {
-      o = new fabric.Line([el.x1 * k, el.y1 * k, el.x2 * k, el.y2 * k], { stroke: el.color, strokeWidth: el.width * k, left: Math.min(el.x1, el.x2) * k, top: (Math.min(el.y1, el.y2) - el.width / 2) * k })
+      o = new fabric.Line([el.x1 * k, el.y1 * k, el.x2 * k, el.y2 * k], { stroke: el.color, strokeWidth: el.width * k, strokeDashArray: el.dash?.map(d => d * k), opacity: el.opacity ?? 1, left: (Math.min(el.x1, el.x2) - (el.x1 === el.x2 ? el.width / 2 : 0)) * k, top: (Math.min(el.y1, el.y2) - (el.y1 === el.y2 ? el.width / 2 : 0)) * k })
     } else if (el.kind === 'text') {
       const t = new fabric.IText(el.lines.join('\n'), {
         fontFamily: el.font.family, fontWeight: el.font.weight, fontStyle: el.font.italic ? 'italic' : 'normal',
-        fontSize: el.size * k, fill: el.color, textAlign: el.align,
+        fontSize: el.size * k, fill: el.hollow ? 'transparent' : el.color, textAlign: el.align,
         lineHeight: el.lineHeight / 1.13, charSpacing: el.tracking * 1000,
+        stroke: el.stroke, strokeWidth: el.stroke ? (el.sw ?? 2) * k : 0, paintFirst: el.hollow ? 'fill' : 'stroke', strokeLineJoin: 'round',
       })
       const tw = t.width ?? 0
-      const left = el.align === 'left' ? el.x : el.align === 'right' ? el.x + el.w - tw / k : el.x + (el.w - tw / k) / 2
-      t.set({ left: left * k, top: el.y * k })
+      // allineamento dentro la colonna, poi rotazione attorno all'angolo del box (come nel motore)
+      const dx = el.align === 'left' ? 0 : el.align === 'right' ? el.w - tw / k : (el.w - tw / k) / 2
+      const a = ((el.angle ?? 0) * Math.PI) / 180
+      t.set({ left: (el.x + dx * Math.cos(a)) * k, top: (el.y + dx * Math.sin(a)) * k, angle: el.angle ?? 0 })
       o = t
+    } else if (el.kind === 'arcText') {
+      const r = el.r * k
+      const circle = new fabric.Path(`M 0 ${-r} A ${r} ${r} 0 1 1 0 ${r} A ${r} ${r} 0 1 1 0 ${-r}`, { fill: '', stroke: '', visible: false })
+      const size = el.size * k
+      let spacing = (el.tracking ?? 0.1) * 1000
+      if (el.full) {
+        const probe = new fabric.FabricText(el.text, { fontFamily: el.font.family, fontWeight: el.font.weight, fontSize: size })
+        spacing = Math.max(0, ((2 * Math.PI * r - (probe.width ?? 0)) / Math.max(1, el.text.length)) / size * 1000)
+      }
+      const txt = new fabric.FabricText(el.text, { fontFamily: el.font.family, fontWeight: el.font.weight, fontSize: size, fill: el.color, charSpacing: spacing, path: circle, pathAlign: 'center' })
+      const g = new fabric.Group([txt], { originX: 'center', originY: 'center', left: el.cx * k + OX, top: el.cy * k + OY, angle: el.start ?? 0 })
+      withLook(g, el); withFx(g as Obj, el.fx); clipToBoard(g, OX, OY, W, H)
+      ;(g as Obj).set('name', name(el.name)); (g as Obj).parentBoard = boardName
+      g.setCoords(); canvas.add(g); added.push(g as Obj)
+      continue
     } else if (el.kind === 'ornament') {
       // ornamento generativo del laboratorio, ritagliato nella sua zona
       const make = ORNAMENTS[el.id]?.make
@@ -114,7 +180,7 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       let pieces: { o: Obj; role: string }[] = []
       try { pieces = make({ w: zw, h: zh, pal, ink: pal.ink, s: Math.min(sc.w, sc.h) * k, seed: el.seed, fx: fxMaker }) as { o: Obj; role: string }[] } catch (e) { console.warn('[designer] ornamento', el.id, e); continue }
       for (const { o: po, role } of pieces) {
-        if (po instanceof fabric.Path) po.set({ left: po.pathOffset.x - po.width / 2, top: po.pathOffset.y - po.height / 2 })
+        if ((po as fabric.FabricObject) instanceof fabric.Path) { const pp = po as unknown as fabric.Path; pp.set({ left: pp.pathOffset.x - pp.width / 2, top: pp.pathOffset.y - pp.height / 2 }) }
         po.set({ originX: 'left', originY: 'top', left: (po.left ?? 0) + zx + OX, top: (po.top ?? 0) + zy + OY, opacity: (po.opacity ?? 1) * el.opacity })
         if (!po.clipPath) po.clipPath = new fabric.Rect({ left: zx + OX, top: zy + OY, width: zw, height: zh, rx: (el.r ?? 0) * k, ry: (el.r ?? 0) * k, originX: 'left', originY: 'top', absolutePositioned: true })
         if (po.fx?.length) applyFx(po)
@@ -124,13 +190,14 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       continue
     } else if (el.kind === 'glyph') {
       o = glyphObj(el.path, el.cx * k + OX, el.cy * k + OY, el.size * k, el.color, el.angle ?? 0, el.opacity ?? 1)
+      if (el.blend) o.set('globalCompositeOperation', el.blend)
       ;(o as Obj).set('name', name(el.name)); (o as Obj).parentBoard = boardName
       o.setCoords(); canvas.add(o); added.push(o as Obj)
       continue
     } else if (el.kind === 'seal') {
       // anello sottile, testo che gira lungo il cerchio, glifo al centro: un solo gruppo
       const r = el.r * k, cx = el.cx * k + OX, cy = el.cy * k + OY
-      const size = Math.max(9, r * 0.17)
+      const size = Math.max(14 * k * (Math.min(sc.w, sc.h) / 1080), r * 0.16)
       const tr = r - size * 1.05
       const ring = new fabric.Circle({ radius: r, fill: el.bg ?? 'transparent', stroke: el.color, strokeWidth: Math.max(1, r * 0.018), originX: 'center', originY: 'center', left: 0, top: 0 })
       const inner = new fabric.Circle({ radius: tr - size * 0.95, fill: 'transparent', stroke: el.color, strokeWidth: Math.max(1, r * 0.012), originX: 'center', originY: 'center', left: 0, top: 0 })
@@ -140,13 +207,14 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       const spacing = Math.max(0, ((2 * Math.PI * tr - (probe.width ?? 0)) / Math.max(1, el.text.length)) / size * 1000)
       const txt = new fabric.FabricText(el.text, { fontFamily: el.font.family, fontWeight: el.font.weight, fontSize: size, fill: el.color, charSpacing: spacing, path: circle, pathAlign: 'center', originX: 'center', originY: 'center', left: 0, top: 0 })
       const center = glyphObj(el.glyph ?? 'Sparkle', 0, 0, (tr - size) * 1.1, el.color)
-      const g = new fabric.Group([ring, inner, txt, center], { originX: 'center', originY: 'center', left: cx, top: cy })
+      const g = new fabric.Group([ring, inner, txt, center], { originX: 'center', originY: 'center', left: cx, top: cy, angle: el.angle ?? 0 })
       ;(g as Obj).set('name', name(el.name)); (g as Obj).parentBoard = boardName
       g.setCoords(); canvas.add(g); added.push(g as Obj)
       continue
     } else if (el.kind === 'image') {
       const sx = { ...el, x: el.x * k, y: el.y * k, w: el.w * k, h: el.h * k }
-      o = await imageObj(sx, OX + sx.x, OY + sx.y)
+      o = await imageObj({ ...sx, view: el.view && { x: el.view.x * k, y: el.view.y * k, w: el.view.w * k, h: el.view.h * k } }, OX + sx.x, OY + sx.y)
+      if (el.clipText) o.clipPath = textClip(el.clipText, k, OX, OY)
       // look pellicola e regolazioni del motore effetti
       if (el.url && (el.look || el.adjust)) {
         const im = o as Obj
@@ -154,6 +222,9 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
         if (el.adjust) im.adjust = { ...el.adjust }
         try { applyFx(im) } catch (e) { console.warn('[designer] look', e) }
       }
+      withFx(o as Obj, el.fx)
+      withLook(o, el)
+      clipToBoard(o, OX, OY, W, H)
       // imageObj lavora già in coordinate assolute
       o.set({ originX: 'left', originY: 'top' })
       ;(o as Obj).set('name', name(el.name)); (o as Obj).parentBoard = boardName
@@ -162,6 +233,9 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
     }
     if (!o) continue
     o.set({ originX: 'left', originY: 'top', left: (o.left ?? 0) + OX, top: (o.top ?? 0) + OY })
+    if ('blend' in el || 'opacity' in el) withLook(o, el as { blend?: GlobalCompositeOperation; opacity?: number })
+    if ('fx' in el && el.fx) withFx(o as Obj, el.fx)
+    clipToBoard(o, OX, OY, W, H)
     ;(o as Obj).set('name', name(el.name)); (o as Obj).parentBoard = boardName
     o.setCoords()
     canvas.add(o); added.push(o as Obj)
@@ -174,7 +248,7 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
     }
     if (!n && sc.finish.fallback) {
       const bg = new fabric.Rect({ left: OX, top: OY, width: W, height: H, fill: sc.bg, strokeWidth: 0, originX: 'left', originY: 'top' }) as Obj
-      bg.fx = [fxMaker('textureOverlay', sc.finish.fallback, { opacity: sc.finish.fallback === 'carta' ? 45 : 35 })].filter(Boolean) as FxEntry[]
+      bg.fx = [fxMaker('textureOverlay', sc.finish.fallback, { opacity: sc.finish.amount ?? (sc.finish.fallback === 'carta' ? 45 : 35) })].filter(Boolean) as FxEntry[]
       try { applyFx(bg) } catch { /* senza WebGL resta lo sfondo pieno */ }
       bg.set('name', name('trama')); bg.parentBoard = boardName
       bg.setCoords()
