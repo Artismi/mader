@@ -7,7 +7,7 @@ import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { buildContext } from '@/lib/ai/context'
-import { resolveModel } from '@/lib/ai/model-provider'
+import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
@@ -598,10 +598,14 @@ export async function POST(req: Request) {
       extraFiles: Array.isArray(extraVaultFiles) ? extraVaultFiles : undefined,
     })
 
+    // Con OpenRouter scelto, crew e schema Python (che usano sempre Gemini) si
+    // saltano: la richiesta la fa il modello dell'utente, con i tool del canvas.
+    const usingOpenRouter = !!getOpenRouterKey() && (modelId === 'openrouter' || !modelId)
+
     // ── SCHEMA DISPATCHER ────────────────────────────────────────────────────
     // Richieste di schema/mappa concettuale → crew /schema (via Next.js API).
     // Priorità: viene valutato PRIMA del canvas crew, perché non richiede crew completa.
-    if (needsSchemaPipeline(userQuery) && !needsCrewPipeline(userQuery)) {
+    if (!usingOpenRouter && needsSchemaPipeline(userQuery) && !needsCrewPipeline(userQuery)) {
       try {
         const schemaRes = await fetch('http://127.0.0.1:8765/schema', {
           method: 'POST',
@@ -644,7 +648,7 @@ export async function POST(req: Request) {
     // ── END OFFICE DISPATCHER ─────────────────────────────────────────────────
 
     // ── CREW DISPATCHER (streaming) ──────────────────────────────────────────
-    if (needsCrewPipeline(userQuery)) {
+    if (!usingOpenRouter && needsCrewPipeline(userQuery)) {
       try {
         const clientName = extractClientName(userQuery, ctx)
         const crewRes = await fetch('http://127.0.0.1:8765/canvas/stream', {
@@ -716,6 +720,7 @@ export async function POST(req: Request) {
     // il resto a quello economico
     const task = isCreativeQuery || canvasSnapshot ? 'design' : 'general'
     const { model, label: modelLabel } = resolveModel(modelId, task)
+    console.log(`[ai] richiesta ${task} → ${modelLabel}`)
 
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
@@ -1097,7 +1102,14 @@ QUANTITÀ BOARD:
       },
     })
 
-    return result.toUIMessageStreamResponse()
+    return result.toUIMessageStreamResponse({
+      // l'errore in chat dice anche quale modello ha fallito
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[ai] errore da ${modelLabel}:`, msg)
+        return `${msg} (modello: ${modelLabel})`
+      },
+    })
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
