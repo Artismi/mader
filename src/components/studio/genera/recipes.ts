@@ -229,9 +229,9 @@ const quaderno: Recipe = {
   id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'organismo di ali a falce che germogliano l\'una dall\'altra, a penna viva',
   params: [P.sel('layout', 'Composizione', ['Organismo', 'Ala', 'Corona di ali']), P.tone(0), P.sel('style', 'Segno', ['Penna', 'Pieno']),
     P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4), P.range('depth', 'Morso', 20, 90, 62),
-    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 60), P.range('echo', 'Riprese', 0, 100, 50),
-    P.range('branch', 'Ramificazioni', 0, 100, 55), P.range('pairs', 'Coppie', 1, 5, 3),
-    P.range('shake', 'Mano', 0, 100, 50), P.range('sketch', 'Ripassi', 0, 100, 45), P.range('breaks', 'Stacchi', 0, 100, 25),
+    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 25), P.range('echo', 'Riprese', 0, 100, 20),
+    P.range('branch', 'Ramificazioni', 0, 100, 25), P.range('pairs', 'Coppie', 1, 5, 3),
+    P.range('shake', 'Mano', 0, 100, 30), P.range('sketch', 'Ripassi', 0, 100, 10), P.range('breaks', 'Stacchi', 0, 100, 0),
     P.tog('grid', 'Quadretti', true), P.caps(false), P.grain(30)],
   render: o => {
     const t = tone(o), S = SS(o), lay = num(o, 'layout'), r = rng(o.seed), W = o.W, H = o.H

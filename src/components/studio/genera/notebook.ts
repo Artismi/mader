@@ -278,7 +278,7 @@ export function organism(r: Rnd, cx: number, top: number, bottom: number, S: num
     const a = down ? Math.PI / 2 - range(r, 0.35, 0.8) : -Math.PI / 2 + range(r, 0.15, 0.5) + i * 0.32
     // lunghe abbastanza da accavallarsi alla coppia vicina: gli incroci legano il tutto
     const L = S * (down ? range(r, 0.45, 0.6) : range(r, 0.6, 0.8) * (1 - i * 0.1))
-    const tree = wingTree(r, cx + wmax * u * 0.9, y, a, L, { ...o, bend: down ? -1 : 1 }, branch)
+    const tree = wingTree(r, cx + wmax * u * 0.9, y, a, L, { ...o, bend: down ? -1 : 1 }, branch, 1)
     for (const g of tree) { wings.push(g); wings.push(mapWing(g, p => [2 * cx - p[0], p[1]])) }
   }
   return { blade, wings }
