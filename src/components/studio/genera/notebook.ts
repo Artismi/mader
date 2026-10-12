@@ -228,19 +228,58 @@ type WingOpts = { width: number; bites: number; depth: number; spikes: number; b
  * piccola che parte tangente al ventre e si piega nello stesso verso della madre.
  * Le linee continuano l'una nell'altra: si legge un solo organismo, non pezzi sparsi.
  */
-export function wingTree(r: Rnd, x: number, y: number, angle: number, L: number, o: WingOpts, branch: number, depth = 2): WingGeom[] {
+/** punto dentro un poligono (pari-dispari) */
+function inside(p: Pt, poly: Pt[]) {
+  let c = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j]
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c
+  }
+  return c
+}
+
+/** spazio occupato: le sagome già disegnate (e, se c'è, il loro specchio) */
+export interface Space { polys: Pt[][]; mirror?: (p: Pt) => Pt }
+const occupy = (sp: Space, poly: Pt[]) => { sp.polys.push(poly); if (sp.mirror) sp.polys.push(poly.map(sp.mirror)) }
+/** quanta parte di una sagoma (radice esclusa) cade su sagome esistenti */
+function overlap(poly: Pt[], sp: Space) {
+  const n = poly.length, step = Math.max(1, Math.floor(n / 60))
+  let hit = 0, tot = 0
+  for (let i = 0; i < n; i += step) {
+    const t = i / n
+    if (t < 0.08 || t > 0.92) continue      // dorso e ventre partono entrambi dalla radice
+    tot++
+    if (sp.polys.some(q => inside(poly[i], q))) hit++
+  }
+  return tot ? hit / tot : 0
+}
+
+/**
+ * Un'ala con le sue figlie: da alcune cuspidi nasce un'ala più piccola che parte
+ * dalla punta e si apre nel vuoto. Una figlia nasce solo se trova posto: se finirebbe
+ * sopra il corpo della madre o di altre ali si rinuncia (o si prova più corta), così
+ * l'insieme resta ricco ma leggibile.
+ */
+export function wingTree(r: Rnd, x: number, y: number, angle: number, L: number, o: WingOpts, branch: number, depth = 2, space: Space = { polys: [] }): WingGeom[] {
   const g = wingGeom(r, x, y, angle, L, o)
   const out = [g]
+  occupy(space, g.poly)
   if (depth <= 0 || L < 40) return out
-  const grown = new Set<number>()
-  g.cusps.forEach((c, i) => {
+  g.cusps.forEach(c => {
     if (r() > branch) return
-    grown.add(i)
-    // la figlia si avvita al contrario: si stacca dal ventre e si apre nel vuoto
-    const sub = wingTree(r, c.p[0], c.p[1], c.a + g.side * range(r, 0.1, 0.35), L * range(r, 0.32, 0.5), { ...o, width: o.width * range(r, 0.9, 1.15), bites: Math.max(2, o.bites - 1), bend: -Math.sign(o.bend) * range(r, 0.7, 1.0) }, branch * 0.5, depth - 1)
-    out.push(...sub)
+    for (const k of [1, 0.65]) {
+      const sub = wingGeom(r, c.p[0], c.p[1], c.a + g.side * range(r, 0.1, 0.35), L * range(r, 0.32, 0.5) * k, { ...o, width: o.width * range(r, 0.9, 1.15), bites: Math.max(2, o.bites - 1), bend: -Math.sign(o.bend) * range(r, 0.7, 1.0) })
+      if (overlap(sub.poly, space) > 0.04) continue
+      // trovato posto: la figlia diventa a sua volta un albero (con il seme già consumato)
+      out.push(sub); occupy(space, sub.poly)
+      if (depth > 1) sub.cusps.forEach(cc => {
+        if (r() > branch * 0.5) return
+        const g2 = wingGeom(r, cc.p[0], cc.p[1], cc.a + sub.side * range(r, 0.1, 0.35), L * 0.4 * range(r, 0.32, 0.5) * k, { ...o, bites: 2, bend: Math.sign(o.bend) })
+        if (overlap(g2.poly, space) <= 0.04) { out.push(g2); occupy(space, g2.poly) }
+      })
+      break
+    }
   })
-  g.spikes = g.spikes.filter(s => s.cusp === undefined || !grown.has(s.cusp))
   return out
 }
 
@@ -269,6 +308,8 @@ export function organism(r: Rnd, cx: number, top: number, bottom: number, S: num
   blade.push(Array.from({ length: 80 }, (_, j): Pt => [cx, top + Hb * (0.08 + 0.6 * j / 79)]))
   const wings: WingGeom[] = []
   const Hh = Hb
+  // lo spazio è condiviso da tutte le coppie: le figlie non invadono le ali vicine
+  const space: Space = { polys: [], mirror: p => [2 * cx - p[0], p[1]] }
   for (let i = 0; i < pairs; i++) {
     const t = 0.1 + 0.6 * (pairs === 1 ? 0.3 : i / (pairs - 1)) + range(r, -0.04, 0.04)
     const y = top + Hh * t
@@ -278,7 +319,7 @@ export function organism(r: Rnd, cx: number, top: number, bottom: number, S: num
     const a = down ? Math.PI / 2 - range(r, 0.35, 0.8) : -Math.PI / 2 + range(r, 0.15, 0.5) + i * 0.32
     // lunghe abbastanza da accavallarsi alla coppia vicina: gli incroci legano il tutto
     const L = S * (down ? range(r, 0.45, 0.6) : range(r, 0.6, 0.8) * (1 - i * 0.1))
-    const tree = wingTree(r, cx + wmax * u * 0.9, y, a, L, { ...o, bend: down ? -1 : 1 }, branch, 1)
+    const tree = wingTree(r, cx + wmax * u * 0.9, y, a, L, { ...o, bend: down ? -1 : 1 }, branch, 2, space)
     for (const g of tree) { wings.push(g); wings.push(mapWing(g, p => [2 * cx - p[0], p[1]])) }
   }
   return { blade, wings }

@@ -12,7 +12,7 @@ import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, 
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
-import { drawWing, gridPaper, mapWing, organism, penLine, wingBox, wingTree, type Hand, type WingGeom } from './notebook'
+import { drawWing, gridPaper, mapWing, organism, penLine, wingBox, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
 
@@ -229,9 +229,9 @@ const quaderno: Recipe = {
   id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'organismo di ali a falce che germogliano l\'una dall\'altra, a penna viva',
   params: [P.sel('layout', 'Composizione', ['Organismo', 'Ala', 'Corona di ali']), P.tone(0), P.sel('style', 'Segno', ['Penna', 'Pieno']),
     P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4), P.range('depth', 'Morso', 20, 90, 62),
-    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 25), P.range('echo', 'Riprese', 0, 100, 20),
-    P.range('branch', 'Ramificazioni', 0, 100, 25), P.range('pairs', 'Coppie', 1, 5, 3),
-    P.range('shake', 'Mano', 0, 100, 30), P.range('sketch', 'Ripassi', 0, 100, 10), P.range('breaks', 'Stacchi', 0, 100, 0),
+    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 45), P.range('echo', 'Riprese', 0, 100, 35),
+    P.range('branch', 'Ramificazioni', 0, 100, 70), P.range('pairs', 'Coppie', 1, 5, 3),
+    P.range('shake', 'Mano', 0, 100, 40), P.range('sketch', 'Ripassi', 0, 100, 30), P.range('breaks', 'Stacchi', 0, 100, 10),
     P.tog('grid', 'Quadretti', true), P.caps(false), P.grain(30)],
   render: o => {
     const t = tone(o), S = SS(o), lay = num(o, 'layout'), r = rng(o.seed), W = o.W, H = o.H
@@ -253,14 +253,15 @@ const quaderno: Recipe = {
       hand.lw *= Math.min(1.6, Math.max(0.7, k))
     }
     if (lay === 1) {
-      wings.push(...wingTree(r, 0, 0, 0.95 + range(r, -0.15, 0.15), S, opts(0.2), branch * 0.6, 1))
+      wings.push(...wingTree(r, 0, 0, 0.95 + range(r, -0.15, 0.15), S, opts(0.2), branch * 0.8, 2))
       fit(0.86)
     } else if (lay === 2) {
       // corona: un anello da cui le ali partono tangenti e si avvitano tutte nello stesso verso
+      const space: Space = { polys: [] }
       const R0 = S * range(r, 0.07, 0.11), cnt = 3 + Math.floor(r() * 3), rot = r() * Math.PI * 2
       for (let i = 0; i < cnt; i++) {
         const a = rot + i * Math.PI * 2 / cnt
-        wings.push(...wingTree(r, Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - range(r, 0.3, 0.6), S * range(r, 0.4, 0.5), opts(range(r, 0.16, 0.22)), branch))
+        wings.push(...wingTree(r, Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - range(r, 0.3, 0.6), S * range(r, 0.4, 0.5), opts(range(r, 0.16, 0.22)), branch, 2, space))
       }
       const ring = (rr: number) => { const q: Pt[] = []; for (let j = 0; j <= 120; j++) { const a = j / 120 * Math.PI * 2; q.push([Math.cos(a) * rr, Math.sin(a) * rr]) } return q }
       lines.push(ring(R0), ring(R0 * range(r, 0.55, 0.75)))
