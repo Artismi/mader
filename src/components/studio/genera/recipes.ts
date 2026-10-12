@@ -12,6 +12,7 @@ import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, 
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
+import { batWing, dagger, gridPaper, outline, spikedWord, wobble } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
 
@@ -221,6 +222,67 @@ const falce: Recipe = {
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
     return finish(c, o, t, 'falce', ['FALX', code(o, 'falx'), ROMAN_YEAR, 'NOX'])
+  },
+}
+
+const quaderno: Recipe = {
+  id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'pagina di taccuino tattoo: ali a falce, scritte che colano in aghi, pugnali',
+  params: [P.sel('layout', 'Composizione', ['Pagina', 'Ala', 'Scritta']), P.tone(0), P.text('WILL BEAT|HAD', 'Parole'), P.face('condensato'),
+    P.sel('style', 'Segno', ['Contorno', 'Doppio contorno', 'Pieno']), P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4),
+    P.range('depth', 'Morso', 20, 90, 62), P.range('spikes', 'Aghi', 0, 100, 80), P.range('drip', 'Colature', 0, 100, 70),
+    P.tog('grid', 'Quadretti', true), P.range('shake', 'Mano', 0, 100, 40), P.caps(false), P.grain(30)],
+  render: o => {
+    const t = tone(o), S = SS(o), lay = num(o, 'layout'), r = rng(o.seed), W = o.W, H = o.H
+    const f = face(o)
+    const words = lines(str(o, 'text'))
+    const wing = (ctx: Ctx, x: number, y: number, a: number, L: number, flip = false) => {
+      ctx.save()
+      if (flip) { ctx.translate(x, y); ctx.scale(1, -1); ctx.rotate(0); ctx.translate(-x, -y); a = -a }
+      batWing(ctx, r, x, y, a, L, { width: range(r, 0.17, 0.24), bites: num(o, 'bites'), depth: num(o, 'depth') / 100, spikes: num(o, 'spikes') / 100, bend: 1 })
+      ctx.restore()
+    }
+    const drip = num(o, 'drip') / 100
+    let m: Mask
+    if (lay === 2) {
+      m = spikedWord(W, H, r, words[0] ?? 'NOX', f, W / 2, H * 0.45, W * 0.7, { drip: drip * 1.2, bar: true })
+    } else if (lay === 1) {
+      // disegna, misura e ricentra: la frusta non ha un ingombro prevedibile
+      const a = 0.95 + range(r, -0.15, 0.15), L = Math.max(W, H) * 0.95, sd = o.seed
+      const draw = (dx: number, dy: number) => drawMask(W, H, ctx => { ctx.translate(dx, dy); batWing(ctx, rng(sd), W * 0.2, H * 0.12, a, L, { width: 0.2, bites: num(o, 'bites'), depth: num(o, 'depth') / 100, spikes: num(o, 'spikes') / 100, bend: 1 }) })
+      const b = inkBox(draw(0, 0)) ?? { x0: 0, y0: 0, x1: W - 1, y1: H - 1 }
+      const k = Math.min(1, (W * 0.84) / (b.x1 - b.x0 + 1), (H * 0.84) / (b.y1 - b.y0 + 1))
+      m = drawMask(W, H, ctx => {
+        ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.translate(-(b.x0 + b.x1) / 2, -(b.y0 + b.y1) / 2)
+        batWing(ctx, rng(sd), W * 0.2, H * 0.12, a, L, { width: 0.2, bites: num(o, 'bites'), depth: num(o, 'depth') / 100, spikes: num(o, 'spikes') / 100, bend: 1 })
+      })
+    } else {
+      const jit = () => range(r, -0.03, 0.03)
+      const shapes = drawMask(W, H, ctx => {
+        wing(ctx, W * (0.06 + jit()), H * (0.22 + jit()), 0.62 + range(r, -0.1, 0.1), S * 0.98)
+        wing(ctx, W * (0.98 + jit()), H - S * (0.6 + jit()), Math.PI - 0.15 + range(r, -0.1, 0.15), S * 0.72, true)
+        wing(ctx, W * (0.36 + jit()), H * (0.06 + jit()), 1.25, S * 0.24)
+        // coppia speculare: ali di pipistrello aperte, che si inarcano verso il basso
+        const px = W * (0.76 + jit() * 0.5), py = H * (0.52 + jit() * 0.5), pa = range(r, -0.35, -0.15), pl = S * range(r, 0.2, 0.25), seed2 = r()
+        if (H > W * 1.5) for (const sg of [-1, 1]) {
+          ctx.save(); ctx.translate(px, py); ctx.scale(sg, 1)
+          batWing(ctx, rng(Math.floor(seed2 * 1e6)), S * 0.01, 0, pa, pl, { width: 0.22, bites: 3, depth: num(o, 'depth') / 100, spikes: num(o, 'spikes') / 100, bend: 0.8 })
+          ctx.restore()
+        }
+        for (let i = 0; i < 3; i++) dagger(ctx, r, W * (0.08 + i * 0.075), H * 0.84, H * range(r, 0.09, 0.12))
+      })
+      const w1 = spikedWord(W, H, r, words[0] ?? 'WILL BEAT', f, W * 0.66, H * 0.36, W * 0.46, { drip, bar: true })
+      const w2 = words[1] ? spikedWord(W, H, r, words[1], f, W * 0.62, H * 0.2, W * 0.24, { drip, bar: r() < 0.5 }) : null
+      m = combine(shapes, w1, 'max')
+      if (w2) m = combine(m, w2, 'max')
+    }
+    const st = num(o, 'style'), lw = S * 0.0034 * num(o, 'pen') / 100
+    if (st < 2) m = outline(m, lw, st === 1 ? lw * 3.2 : 0)
+    const sh = num(o, 'shake') / 100
+    if (sh > 0) m = wobble(m, o.seed + 5, S * 0.004 * sh, S * 0.05)
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'grid') && !o.transparent) gridPaper(ctx, W, H, S * 0.024, t.ink, t.dark ? 0.22 : 0.24)
+    ctx.drawImage(maskToCanvas(m, t.ink), 0, 0)
+    return finish(c, o, t, 'quaderno', ['LIBER NOCTIS', code(o, 'lbr'), ROMAN_YEAR, 'MANU'])
   },
 }
 
@@ -796,7 +858,7 @@ const simbolo: Recipe = {
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
-  membrana, rete, falce, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
+  membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
 ]
