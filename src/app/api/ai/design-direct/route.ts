@@ -18,7 +18,8 @@ export async function POST(req: Request) {
   const slides = body.slides === 'auto' ? 'auto' : Math.max(1, Math.min(10, Number(body.slides) || 1))
   try {
     const r = await regia(brief, { slides, haFoto: body.haFoto, riservato: !!body.riservato })
-    return NextResponse.json(r)
+    // charset esplicito: alcuni client (PowerShell) altrimenti leggono male gli accenti
+    return NextResponse.json(r, { headers: { 'Content-Type': 'application/json; charset=utf-8' } })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message, log: (e as { log?: unknown }).log }, { status: 502 })
   }

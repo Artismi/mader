@@ -50,7 +50,7 @@ function classify(e: unknown): 'quota' | 'salta' | 'altro' {
   const err = e as { statusCode?: number; message?: string; responseBody?: string }
   const text = `${err.message ?? ''} ${err.responseBody ?? ''}`
   if (err.statusCode === 429 || /RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(text)) return 'quota'
-  if (err.statusCode === 404 || err.statusCode === 400 || err.statusCode === 403 || (err.statusCode ?? 0) >= 500 || /not found|not supported|unavailable|overloaded|denied/i.test(text)) return 'salta'
+  if (err.statusCode === 404 || err.statusCode === 400 || err.statusCode === 403 || (err.statusCode ?? 0) >= 500 || /not found|not supported|unavailable|overloaded|denied|internal error/i.test(text)) return 'salta'
   return 'altro'
 }
 
@@ -104,6 +104,9 @@ export async function eseguiRuolo<T>(o: RuoloOpts<T>): Promise<RuoloEsito<T>> {
         ;({ text } = await generateText({ model: c.model, system: o.system, messages, temperature: o.temperature ?? 0.7, maxRetries: 0 }))
       } catch (e) {
         const kind = classify(e)
+        // errori del servizio o modello assente: per un po' non lo si riprova (non si spreca una chiamata a ogni richiesta)
+        const code = (e as { statusCode?: number }).statusCode ?? 0
+        if (kind === 'salta') esauriti.set(c.id, Date.now() + (code === 404 ? 24 * 3600_000 : 10 * 60_000))
         if (kind === 'quota') {
           // quota giornaliera o al minuto: non riprovare per un po'
           const daily = /per.?day|daily/i.test(String((e as Error).message))

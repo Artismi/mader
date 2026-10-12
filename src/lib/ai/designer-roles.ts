@@ -10,7 +10,7 @@
  */
 import { z } from 'zod'
 import { eseguiRuolo, type Giro } from './roles'
-import { lunghezza, frasiFatte, numeriInventati, diverse, enfasiNelTitolo, tutti, clean } from './maestra'
+import { lunghezza, frasiFatte, numeriInventati, diverse, enfasiNelTitolo, apostrofi, unaParola, tutti, clean } from './maestra'
 import { SISTEMI, TRATTAMENTI } from '@/components/studio/designer/gen/knobs'
 import { STYLES } from '@/components/studio/designer/styles'
 
@@ -35,9 +35,13 @@ export async function analista(brief: string, opts: { riservato?: boolean } = {}
   return eseguiRuolo({
     ruolo: 'analista', riservato: opts.riservato, schema: analisiSchema, temperature: 0.3,
     system: `Sei l'analista di uno studio grafico. Dal brief estrai solo informazioni vere e presenti: non inventare prezzi, date, numeri o caratteristiche. ${LINGUA} ${SOLO_JSON}`,
-    prompt: `Brief:\n"""${brief}"""\n\nRestituisci: {"brand": "nome o vuoto", "settore": "…", "prodotto": "…", "pubblico": "…", "tono": ["2-4 aggettivi"], "fatti": ["frasi brevi e vere, dalla più importante"], "numeri": ["numeri, date, prezzi, misure presenti nel brief, scritti come nel brief"], "azione": "cosa deve fare chi guarda", "foto": "soggetto concreto da fotografare (3-6 parole) o vuoto"}`,
+    prompt: `Brief:\n"""${brief}"""\n\nRestituisci: {"brand": "solo il nome del marchio, corto (es. 'Tostatura Nera', non 'Torrefazione Tostatura Nera di Bologna'), o vuoto", "settore": "…", "prodotto": "…", "pubblico": "…", "tono": ["2-4 aggettivi"], "fatti": ["frasi brevi e vere, dalla più importante"], "numeri": ["numeri, date, prezzi, misure presenti nel brief, scritti come nel brief"], "azione": "cosa deve fare chi guarda", "foto": "soggetto generico da cercare in un archivio fotografico, 3-6 parole: materia, luce, ambiente (es. 'chicchi di caffè tostati su pietra scura'); niente nomi di brand, confezioni o loghi; vuoto se non serve"}\nIl pubblico va dedotto dal contenuto se non è scritto (es. 'appassionati di caffè di specialità').`,
     verifica: a => tutti(
-      lunghezza('settore', a.settore, 60, 2), lunghezza('prodotto', a.prodotto, 100, 2),
+      lunghezza('settore', a.settore, 60, 2), lunghezza('prodotto', a.prodotto, 100, 2), lunghezza('pubblico', a.pubblico, 120, 4),
+      lunghezza('brand', a.brand, 32),
+      // la foto si cerca in un archivio: soggetto generico, niente nomi propri di brand o prodotto
+      a.foto && a.brand && a.foto.toLowerCase().includes(a.brand.toLowerCase().split(' ')[0]) ? ['foto: niente nomi di brand o prodotto: descrivi un soggetto generico che si trova in un archivio fotografico (es. "chicchi di caffè tostati su pietra scura").'] : [],
+      /\b(confezione|logo|packaging|etichetta|bottiglia di [A-Z])/i.test(a.foto) ? ['foto: una confezione o un logo specifici non esistono negli archivi: descrivi il soggetto (materia, luce, ambiente).'] : [],
       a.numeri.flatMap(n => numeriInventati('numeri', n, brief)),
       a.fatti.some(f => clean(f).length > 160) ? ['fatti: ogni fatto deve essere una frase breve (massimo 160 caratteri).'] : [],
     ),
@@ -62,12 +66,13 @@ function controllaTesti(t: Omit<Testi, 'titoli'> & { titoli?: Testi['titoli'] },
   const p = (s: string) => (pre ? `${pre} ${s}` : s)
   return tutti(
     (t.titoli ?? []).flatMap((x, i) => tutti(
-      lunghezza(p(`titolo ${i + 1}`), x.testo, maxTitolo, 3), frasiFatte(p(`titolo ${i + 1}`), x.testo),
+      lunghezza(p(`titolo ${i + 1}`), x.testo, maxTitolo, 3), frasiFatte(p(`titolo ${i + 1}`), x.testo), apostrofi(p(`titolo ${i + 1}`), x.testo), unaParola(p(`enfasi ${i + 1}`), x.enfasi),
       numeriInventati(p(`titolo ${i + 1}`), x.testo, fonte), enfasiNelTitolo(p(`titolo ${i + 1}`), x.testo, x.enfasi),
     )),
     t.titoli ? diverse(p('titoli'), t.titoli.map(x => x.testo)) : [],
     lunghezza(p('occhiello'), t.occhiello, BUDGET.occhiello), frasiFatte(p('occhiello'), t.occhiello), numeriInventati(p('occhiello'), t.occhiello, fonte),
-    lunghezza(p('testo'), t.testo, BUDGET.testo), frasiFatte(p('testo'), t.testo), numeriInventati(p('testo'), t.testo, fonte),
+    lunghezza(p('testo'), t.testo, BUDGET.testo), frasiFatte(p('testo'), t.testo), numeriInventati(p('testo'), t.testo, fonte), apostrofi(p('testo'), t.testo),
+    apostrofi(p('occhiello'), t.occhiello),
     t.dettagli.flatMap((d, i) => tutti(lunghezza(p(`dettaglio ${i + 1}`), d, BUDGET.dettaglio, 2), numeriInventati(p(`dettaglio ${i + 1}`), d, fonte))),
     lunghezza(p('invito'), t.invito, BUDGET.invito), frasiFatte(p('invito'), t.invito),
     lunghezza(p('numero'), t.numero, BUDGET.numero), numeriInventati(p('numero'), t.numero, fonte),
@@ -80,7 +85,8 @@ export async function copywriter(brief: string, an: Analisi, opts: { riservato?:
     ruolo: 'copywriter', riservato: opts.riservato, schema: testiSchema, temperature: 0.8,
     system: `Sei il copywriter di uno studio grafico: scrivi testi brevi, concreti, con un'immagine precisa, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti. ${SOLO_JSON}`,
     prompt: `Analisi del brief:\n${JSON.stringify(an)}\n\nScrivi i testi di una grafica social. Regole:
-- 3 titoli DAVVERO diversi (massimo ${BUDGET.titolo} caratteri): uno descrittivo, uno evocativo, uno con un gioco di parole o un contrasto. Per ognuno la parola chiave da evidenziare ("enfasi"), che deve comparire nel titolo.
+- 3 titoli DAVVERO diversi (massimo ${BUDGET.titolo} caratteri): uno descrittivo, uno evocativo, uno con un gioco di parole o un contrasto. Per ognuno la parola chiave da evidenziare ("enfasi"): UNA parola che compare nel titolo.
+- Ortografia italiana curata: apostrofi tipografici (dell’Etiopia, un’altra), accenti giusti (caffè, perché).
 - occhiello: massimo ${BUDGET.occhiello} caratteri (categoria, data, "Nuovo…").
 - testo: massimo ${BUDGET.testo} caratteri, una o due frasi.
 - dettagli: da 0 a 3, massimo ${BUDGET.dettaglio} caratteri ciascuno (formato, luogo, orario, prezzo). Solo dati presenti.
