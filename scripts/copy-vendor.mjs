@@ -1,7 +1,9 @@
 // Copia in public/ i file binari serviti al browser: runtime ONNX e modello di scontorno.
 import fs from 'fs'
 import path from 'path'
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+import { fileURLToPath } from 'url'
+// fileURLToPath: su Windows il pathname dell'URL ("/C:/…") non è un percorso valido
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const copy = (from, to) => {
   const src = path.join(root, 'node_modules', from), dst = path.join(root, 'public', to)
   if (!fs.existsSync(src)) return console.warn('[vendor] manca', from)
