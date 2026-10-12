@@ -823,7 +823,7 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
 
     case 'collage': {
       // composizione a registro: foto stampata nel disco, inchiostro sfalsato di un passo,
-      // un solo segno al vivo, timbri in colonna sulla destra, titolo che morde la foto
+      // un solo segno al vivo, titolo che morde la foto
       const pd = Math.round(Math.min(colW(9), H * 0.56))
       const pbox: Box = { x: inner.x, y: inner.y + lab * 3, w: pd, h: pd }
       const off = Math.round(g * 0.9)
@@ -832,12 +832,6 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
       if (!imgUrl) art(pbox, { r: pd / 2 })
       else placeImage(pbox, 'immagine', 0, prevShape === 'strisce' || prevShape === 'rettangolo' ? 'cerchio' : prevShape)
       asset(ASSET.segno(), { x: W - colW(5), y: -H * 0.04, w: colW(5) + M, h: H * 0.32 }, { role: 'segno', color: ink, flip: true, opacity: 0.9 })
-      const right: Box = { x: inner.x + colW(9) + g, y: pbox.y + pd * 0.12, w: colW(3), h: pd * 0.76 }
-      const tags = (c.tags ?? []).slice(0, 4)
-      tags.forEach((tag, i) => {
-        const t = tb(tag, 'label', lab * 1.05, { width: right.w, fill: i === 0 ? readable(pal.bg, accent) : ink, textAlign: 'center', backgroundColor: i === 0 ? accent : pal.surface })
-        t.set({ left: right.x, top: right.y + (i * right.h) / Math.max(1, tags.length), angle: i % 2 ? 3 : -3, padding: lab * 0.5 }); put(t, `timbro-${i + 1}`)
-      })
       if (c.eyebrow) { const e = tb(c.eyebrow, 'label', lab, { width: colW(6), fill: ink, textAlign: 'left' }); e.set({ left: inner.x, top: inner.y }); put(e, 'occhiello') }
       const tTop = pbox.y + pd * 0.78
       const subH = c.subtitle ? heightOf(tb(c.subtitle, 'text', base * 1.05, { width: colW(8) })) + base * 1.4 : 0
