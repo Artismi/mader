@@ -1,8 +1,8 @@
 /**
  * Paper Shaders dentro il motore effetti.
  *
- * Gli shader originali di Paper (metallo liquido, mappa termica, fumo di gemma,
- * mezzetinte CMYK, retino a punti, dithering, carta, vetro, acqua) girano su un
+ * Dal set di Paper si prendono solo gli effetti che il motore non aveva
+ * (mezzetinte CMYK, retino a gocce, carta vera, acqua): girano su un
  * contesto WebGL2 dedicato: ricevono il livello (testo, forma o foto) come immagine
  * e il risultato torna nella pila degli effetti.
  *
@@ -12,14 +12,9 @@
  */
 import {
   getShaderColorFromString, getShaderNoiseTexture, ShaderFitOptions,
-  liquidMetalFragmentShader, toProcessedLiquidMetal,
-  heatmapFragmentShader, toProcessedHeatmap,
-  gemSmokeFragmentShader, toProcessedGemSmoke,
   halftoneCmykFragmentShader, HalftoneCmykTypes,
   halftoneDotsFragmentShader, HalftoneDotsTypes, HalftoneDotsGrids,
-  imageDitheringFragmentShader,
   paperTextureFragmentShader,
-  flutedGlassFragmentShader, GlassDistortionShapes, GlassGridShapes,
   waterFragmentShader,
 } from '@paper-design/shaders'
 import { assetReady } from './gl'
@@ -270,106 +265,6 @@ function noiseTex(): HTMLImageElement | null {
   return noise && noise.complete && noise.naturalWidth ? noise : null
 }
 
-/** impronta della sagoma: cambia se cambia il disegno, non a ogni ridisegno */
-export function shapeKey(src: HTMLCanvasElement) {
-  const n = 40, cv = document.createElement('canvas'); cv.width = n; cv.height = n
-  const x = cv.getContext('2d', { willReadFrequently: true })!
-  x.drawImage(src, 0, 0, n, n)
-  const d = x.getImageData(0, 0, n, n).data
-  let h = 2166136261
-  for (let i = 3; i < d.length; i += 4) { h ^= d[i] >> 3; h = Math.imul(h, 16777619) }
-  return `${src.width}x${src.height}:${(h >>> 0).toString(36)}`
-}
-
-type Kind = 'metal' | 'heat' | 'gem'
-/** la mappa termica vuole un logo scuro su bianco: la sagoma diventa nera */
-function silhouette(src: HTMLCanvasElement) {
-  const cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height
-  const x = cv.getContext('2d')!
-  x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#000'; x.fillRect(0, 0, cv.width, cv.height)
-  return cv
-}
-/** Paper aggiunge un margine attorno al logo: si ritaglia per tornare sulla sagoma originale */
-async function uncropHeat(blob: Blob, w: number, h: number): Promise<Blob> {
-  const bmp = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
-  const size = 1000, pad = Math.ceil(Math.floor(size * 0.15) * 2.5), ratio = w / h
-  const iw = ratio > 1 ? size : Math.floor(size * ratio), ih = ratio > 1 ? Math.floor(size / ratio) : size
-  const cv = document.createElement('canvas'); cv.width = iw; cv.height = ih
-  cv.getContext('2d')!.drawImage(bmp, pad, pad, iw, ih, 0, 0, iw, ih)
-  return new Promise(res => cv.toBlob(b => res(b!), 'image/png'))
-}
-const processed = new Map<string, ImageBitmap | 'pending' | 'error'>()
-/** sagoma preparata da Paper (campo di Poisson): asincrona, poi l'effetto si ridisegna */
-function prepared(kind: Kind, src: HTMLCanvasElement): ImageBitmap | null {
-  const key = kind + '|' + shapeKey(src)
-  const hit = processed.get(key)
-  if (hit && hit !== 'pending' && hit !== 'error') return hit
-  if (!hit) {
-    processed.set(key, 'pending')
-    const url = src.toDataURL('image/png')
-    const job = kind === 'metal' ? toProcessedLiquidMetal(url).then(r => r.pngBlob)
-      : kind === 'heat' ? toProcessedHeatmap(silhouette(src).toDataURL('image/png')).then(r => uncropHeat(r.blob, src.width, src.height))
-      : toProcessedGemSmoke(url).then(r => r.pngBlob)
-    job.then(b => createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' })).then(bmp => {
-      processed.set(key, bmp); if (processed.size > 40) processed.delete(processed.keys().next().value!); assetReady() })
-      .catch(e => { console.warn('[paper] preparazione non riuscita', e); processed.set(key, 'error') })
-  }
-  return null
-}
-
-
-/** riquadri dei singoli segni: righe separate da spazi orizzontali, poi lettere separate da spazi verticali */
-function segments(src: HTMLCanvasElement): { x: number; y: number; w: number; h: number }[] {
-  const k = Math.min(1, 900 / Math.max(src.width, src.height))
-  const w = Math.max(1, Math.round(src.width * k)), h = Math.max(1, Math.round(src.height * k))
-  const cv = document.createElement('canvas'); cv.width = w; cv.height = h
-  const x = cv.getContext('2d', { willReadFrequently: true })!
-  x.drawImage(src, 0, 0, w, h)
-  const d = x.getImageData(0, 0, w, h).data
-  const on = (i: number, j: number) => d[(j * w + i) * 4 + 3] > 40
-  const runs = (n: number, hit: (i: number) => boolean) => {
-    const out: [number, number][] = []; let st = -1
-    for (let i = 0; i <= n; i++) { const v = i < n && hit(i); if (v && st < 0) st = i; if (!v && st >= 0) { out.push([st, i]); st = -1 } }
-    return out
-  }
-  const res: { x: number; y: number; w: number; h: number }[] = []
-  for (const [y0, y1] of runs(h, j => { for (let i = 0; i < w; i++) if (on(i, j)) return true; return false })) {
-    const rh = y1 - y0
-    // lettere: spazi verticali; i pezzi troppo stretti (accenti, punti) si uniscono al vicino
-    let cols = runs(w, i => { for (let j = y0; j < y1; j++) if (on(i, j)) return true; return false })
-    const merged: [number, number][] = []
-    for (const c of cols) {
-      const last = merged[merged.length - 1]
-      if (last && (c[0] - last[1] < rh * 0.04 || c[1] - c[0] < rh * 0.12)) last[1] = c[1]
-      else merged.push([...c])
-    }
-    cols = merged
-    for (const [x0, x1] of cols) {
-      const m = Math.round(rh * 0.12)
-      const X = Math.max(0, x0 - m), Y = Math.max(0, y0 - m), X1 = Math.min(w, x1 + m), Y1 = Math.min(h, y1 + m)
-      res.push({ x: X / k, y: Y / k, w: (X1 - X) / k, h: (Y1 - Y) / k })
-    }
-  }
-  return res
-}
-
-/** shader "da logo" applicato segno per segno: ogni lettera ha la sua luce, poi si ricompone */
-function perGlyph(kind: Kind, src: HTMLCanvasElement, draw: (img: ImageBitmap, w: number, h: number) => HTMLCanvasElement): HTMLCanvasElement | null {
-  const segs = segments(src)
-  if (!segs.length) return null
-  const crops = segs.map(r => {
-    const cv = document.createElement('canvas'); cv.width = Math.max(2, Math.round(r.w)); cv.height = Math.max(2, Math.round(r.h))
-    cv.getContext('2d')!.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, cv.width, cv.height)
-    return cv
-  })
-  const imgs = crops.map(cv => prepared(kind, cv))
-  if (imgs.some(i => !i)) return null
-  const out = document.createElement('canvas'); out.width = src.width; out.height = src.height
-  const ox = out.getContext('2d')!
-  imgs.forEach((img, i) => { const r = segs[i], cv = crops[i]; ox.drawImage(draw(img!, cv.width, cv.height), r.x, r.y, r.w, r.h) })
-  return out
-}
-
 /* ───────── effetti ───────── */
 const col = (s: unknown, d: string) => getShaderColorFromString(typeof s === 'string' ? s : d) as number[]
 const num = (v: unknown, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
@@ -378,52 +273,13 @@ const sizing = (w: number, h: number, aspect = w / h): PaperUniforms => ({
   u_worldWidth: 0, u_worldHeight: 0, u_fit: ShaderFitOptions.contain, u_scale: 1, u_rotation: 0, u_offsetX: 0, u_offsetY: 0,
 })
 
-const HEAT_PAL = [
-  '#11206a,#1f3ba2,#2f63e7,#6bd7ff,#ffe679,#ff991e,#ff4c00', '#997F45,#ffffff',
-  '#0b1a3a,#1f8a70,#5cffc8,#e6ff9a', '#1a0500,#7a0b00,#ff3b00,#ffb000,#fff2a8', '#06122b,#1d4e89,#6fc3ff,#e8fbff',
-]
-const GEM_PAL = ['#333333,#e7e6df', '#2fb64c,#cdff61,#ffffff', '#fe5b16,#f7ff61,#ffffff', '#ff9900,#fff67a,#dcff52,#00ffbb,#0077ff']
-
 /** mask: 'shape' = ritagliato sulla forma, 'soft' = alone morbido attorno alla forma, 'none' = com'è */
 export type PaperRun = (src: HTMLCanvasElement, p: Record<string, unknown>, t: number) => { out: HTMLCanvasElement; mask: 'shape' | 'soft' | 'none' } | null
 
 export const PAPER: Record<string, PaperRun> = {
-  /** metallo liquido: il cromo fluido con dispersione, sulla sagoma vera */
-  metalloLiquido: (src, p, t) => {
-    const gl = getGL(); if (!gl) return null
-    const out = perGlyph('metal', src, (img, w, h) => gl.render(liquidMetalFragmentShader, {
-      ...sizing(w, h, img.width / img.height), u_time: t + num(p.phase) * 0.1,
-      u_image: img, u_isImage: true, u_shape: 0,
-      u_colorBack: [0, 0, 0, 0], u_colorTint: col(p.tint, '#ffffff'),
-      u_contour: num(p.contour, 40) / 100, u_distortion: num(p.distortion, 7) / 100, u_softness: num(p.softness, 10) / 100,
-      u_repetition: num(p.repetition, 2), u_shiftRed: num(p.shiftRed, 30) / 100, u_shiftBlue: num(p.shiftBlue, 30) / 100, u_angle: num(p.angle, 70),
-    }, w, h))
-    return out ? { mask: 'none', out } : null
-  },
-  /** mappa termica: la sagoma come un'immagine a infrarossi, con alone */
-  mappaTermica: (src, p, t) => {
-    const img = prepared('heat', src); const gl = getGL(); if (!img || !gl) return null
-    const colors = (HEAT_PAL[num(p.palette)] ?? HEAT_PAL[0]).split(',').map(c => col(c.trim(), '#ffffff'))
-    return { mask: 'soft', out: gl.render(heatmapFragmentShader, {
-      ...sizing(src.width, src.height, img.width / img.height), u_time: t + num(p.phase) * 0.1,
-      u_image: img, u_colorBack: [0, 0, 0, 0], u_colors: colors, u_colorsCount: colors.length,
-      u_contour: num(p.contour, 50) / 100, u_angle: num(p.angle, 0), u_noise: num(p.noise, 0) / 100,
-      u_innerGlow: num(p.innerGlow, 60) / 100, u_outerGlow: num(p.outerGlow, 20) / 100,
-    }, src.width, src.height) }
-  },
-  /** fumo di gemma: volute di colore dentro la sagoma, con bagliori */
-  fumoGemma: (src, p, t) => {
-    const gl = getGL(); if (!gl) return null
-    const colors = (GEM_PAL[num(p.palette)] ?? GEM_PAL[0]).split(',').map(c => col(c.trim(), '#ffffff'))
-    const out = perGlyph('gem', src, (img, w, h) => gl.render(gemSmokeFragmentShader, {
-      ...sizing(w, h, img.width / img.height), u_time: t + num(p.phase) * 0.1,
-      u_image: img, u_isImage: true, u_shape: 0, u_colorBack: [0, 0, 0, 0], u_colorInner: col(p.inner, '#00000000'),
-      u_colors: colors, u_colorsCount: colors.length, u_outerGlow: num(p.outerGlow, 15) / 100, u_innerGlow: num(p.innerGlow, 100) / 100,
-      u_innerDistortion: num(p.innerDistortion, 80) / 100, u_outerDistortion: num(p.outerDistortion, 60) / 100, u_offset: num(p.offset, 0) / 100,
-      u_angle: num(p.angle, 0), u_size: num(p.size, 80) / 100,
-    }, w, h))
-    return out ? { mask: 'soft', out } : null
-  },
+
+
+
   /** mezzetinte CMYK: quattro retini ruotati con inchiostro che si allarga e grana */
   mezzetinteCmyk: (src, p) => {
     const gl = getGL(), nz = noiseTex(); if (!gl || !nz) return null
@@ -448,15 +304,7 @@ export const PAPER: Record<string, PaperRun> = {
       u_grid: num(p.grid, HalftoneDotsGrids.hex), u_type: num(p.type, HalftoneDotsTypes.gooey),
     }, src.width, src.height) }
   },
-  /** dithering a matrice: 2×2, 4×4, 8×8 o casuale, a due colori o con i colori dell'immagine */
-  ditheringPaper: (src, p) => {
-    const gl = getGL(); if (!gl) return null
-    return { mask: 'shape', out: gl.render(imageDitheringFragmentShader, {
-      ...sizing(src.width, src.height), u_time: 0, u_image: src,
-      u_colorFront: col(p.front, '#94ffaf'), u_colorBack: col(p.back, '#000c38'), u_colorHighlight: col(p.highlight, '#eaff94'),
-      u_type: num(p.type, 3) + 1, u_pxSize: num(p.size, 2), u_colorSteps: num(p.steps, 2), u_originalColors: !!num(p.original), u_inverted: !!num(p.inverted),
-    }, src.width, src.height) }
-  },
+
   /** carta vera: fibre, pieghe, grinze e macchie sopra il livello */
   cartaPaper: (src, p) => {
     const gl = getGL(), nz = noiseTex(); if (!gl || !nz) return null
@@ -469,18 +317,7 @@ export const PAPER: Record<string, PaperRun> = {
       u_wrinkles: num(p.wrinkles, 100) / 100, u_wrinkleSize: 0.65, u_crumples: num(p.crumples, 0) / 100, u_crumpleCount: 6, u_crumpleSize: 0.5, u_drops: num(p.drops, 40) / 100, u_fade: 0, u_contrast: 0.3, u_scale: 1,
     }, src.width, src.height) }
   },
-  /** vetro cannettato di Paper: prisma, onde, pieghe, linee irregolari */
-  vetroPaper: (src, p) => {
-    const gl = getGL(); if (!gl) return null
-    return { mask: 'shape', out: gl.render(flutedGlassFragmentShader, {
-      ...sizing(src.width, src.height), u_time: 0, u_image: src,
-      u_colorBack: [0, 0, 0, 0], u_colorShadow: col(p.shadowColor, '#000000'), u_colorHighlight: col(p.highlightColor, '#ffffff'),
-      u_shadows: num(p.shadows, 25) / 100, u_size: num(p.size, 50) / 100, u_angle: num(p.angle, 0), u_highlights: num(p.highlights, 10) / 100,
-      u_distortionShape: num(p.distortionShape, 0) + GlassDistortionShapes.prism, u_shape: num(p.shape, 0) + GlassGridShapes.lines,
-      u_distortion: num(p.distortion, 50) / 100, u_shift: 0, u_blur: num(p.blur, 0) / 100, u_edges: num(p.edges, 25) / 100, u_stretch: num(p.stretch, 0) / 100,
-      u_margin: 0, u_marginLeft: 0, u_marginRight: 0, u_marginTop: 0, u_marginBottom: 0, u_grainMixer: 0, u_grainOverlay: num(p.grain, 0) / 100,
-    }, src.width, src.height) }
-  },
+
   /** acqua: caustiche e increspature sopra il livello */
   acqua: (src, p, t) => {
     const gl = getGL(); if (!gl) return null
