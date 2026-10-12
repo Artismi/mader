@@ -476,52 +476,61 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
       spikes[j].push({ a: angOf(B, p), W0, L: L * (hv < 0.5 ? 0.7 : 1) })
     }
   }
-  // l'inchiostro si raccoglie solo negli angoli concavi ESTERNI: nello spazio vuoto fra
-  // le bolle (o fra una bolla e quella annidata dentro), dove due contorni convergono a
-  // cuspide. Mai dentro le bolle né nelle lenti di sovrapposizione. Il menisco è
-  // dA + dB < G: pieno nella cuspide, si affusola da solo man mano che i bordi si aprono.
-  const G = g * 0.6
-  const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
-  const x0 = Math.max(0, Math.floor(cx - R * 1.3)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.3))
-  const y0 = Math.max(0, Math.floor(cy - R * 1.3)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.3))
-  const n = circles.length
-  // per ogni bolla: quali bolle le stanno dentro (annidate)
-  const nestedIn = circles.map((c, i) => circles.map((q, j) => j !== i && Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r + g))
-  const sd = new Float32Array(n)
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    let dmin = Infinity
-    const inside: number[] = []
-    for (let i = 0; i < n; i++) {
-      const c = circles[i], v = Math.hypot(x - c.x, y - c.y) - c.r
-      sd[i] = v
-      if (Math.abs(v) < dmin) dmin = Math.abs(v)
-      if (v < 0) inside.push(i)
+  // menisco a "pallina che rotola": in ogni conca l'inchiostro riempie lo spazio dove un
+  // disco di raggio rho non riesce a entrare (chiusura morfologica del pieno). Tocca i due
+  // cerchi tangente, si affusola lungo entrambi e al centro ha un bordo rotondo di raggio
+  // rho. Si calcola regione per regione e si ritaglia sui contorni: non sborda mai.
+  const rho = g * 0.34 * o.gap
+  const N = W * H
+  const ink = new Float32Array(N)
+  const disk = (m: Mask, c: { x: number; y: number; r: number }, v: number) => {
+    const x0 = Math.max(0, Math.floor(c.x - c.r - 1)), x1 = Math.min(W - 1, Math.ceil(c.x + c.r + 1))
+    const y0 = Math.max(0, Math.floor(c.y - c.r - 1)), y1 = Math.min(H - 1, Math.ceil(c.y + c.r + 1))
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const cov = Math.max(0, Math.min(1, c.r - Math.hypot(x - c.x, y - c.y) + 0.5)) * 255
+      const k = y * W + x
+      m.a[k] = v ? Math.max(m.a[k], cov) : Math.min(m.a[k], 255 - cov)
     }
-    let cov = 0.5 - (dmin - w / 2)
-    if (cov < 1) {
-      // vuoto: fuori da tutte le bolle (contano tutti i contorni) oppure dentro una
-      // sola bolla, fuori dalle sue annidate (contano il suo contorno e quelli annidati)
-      let host = -1, ok = false
-      if (inside.length === 0) ok = true
-      else {
-        // la bolla più interna che contiene il punto, e il punto non sta in nessun'altra non annidata
-        host = inside.reduce((b, i) => (circles[i].r < circles[b].r ? i : b), inside[0])
-        ok = inside.every(i => i === host || nestedIn[i][host])
-      }
-      if (ok) {
-        let d1 = Infinity, d2 = Infinity
-        for (let i = 0; i < n; i++) {
-          if (host >= 0 && i !== host && !nestedIn[host][i]) continue
-          const ad = Math.abs(sd[i])
-          if (ad < d1) { d2 = d1; d1 = ad } else if (ad < d2) d2 = ad
-        }
-        const v = 0.5 - (d1 + d2 - G) * 0.7
-        if (v > cov) cov = v
-      }
-    }
-    if (cov > 0) m.a[y * W + x] = Math.min(1, cov) * 255
   }
-  return m
+  const fillPockets = (solid: Mask, region: (k: number) => boolean) => {
+    const comp: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
+    for (let k = 0; k < N; k++) comp.a[k] = 255 - solid.a[k]
+    const dOut = distance(comp)                                   // distanza dal pieno, fuori
+    const dil: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
+    for (let k = 0; k < N; k++) dil.a[k] = solid.a[k] > 127 ? 255 : Math.max(0, Math.min(1, rho - dOut[k] + 0.5)) * 255
+    const e = distance(dil)                                       // erosione del dilatato
+    for (let k = 0; k < N; k++) {
+      if (solid.a[k] > 250 || !region(k)) continue
+      const v = Math.max(0, Math.min(1, e[k] - rho + 0.5)) * (1 - solid.a[k] / 255)
+      if (v > ink[k]) ink[k] = v
+    }
+  }
+  // nidificazione: chi sta dentro chi
+  const inHost = circles.map((q, j) => {
+    let best = -1
+    circles.forEach((c, i) => { if (i !== j && Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r + g && (best < 0 || c.r < circles[best].r)) best = i })
+    return best
+  })
+  // regione esterna: il pieno sono le bolle di primo livello
+  const outer: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
+  circles.forEach((c, i) => { if (inHost[i] < 0) disk(outer, c, 1) })
+  fillPockets(outer, () => true)
+  // dentro ogni bolla che ne contiene altre: il pieno è il fuori della bolla + le annidate
+  circles.forEach((h, hi) => {
+    const kids = circles.filter((_, j) => inHost[j] === hi)
+    if (!kids.length) return
+    const sol: Mask = { w: W, h: H, a: new Uint8ClampedArray(N).fill(255) }
+    disk(sol, h, 0)
+    kids.forEach(c => disk(sol, c, 1))
+    fillPockets(sol, k => { const x = k % W, y = (k / W) | 0; return Math.hypot(x - h.x, y - h.y) < h.r })
+  })
+  return drawMask(W, H, ctx => {
+    const img = ctx.createImageData(W, H)
+    for (let k = 0; k < N; k++) { img.data[k * 4 + 3] = ink[k] * 255; img.data[k * 4] = img.data[k * 4 + 1] = img.data[k * 4 + 2] = 255 }
+    ctx.putImageData(img, 0, 0)
+    ctx.lineWidth = w
+    for (const c of circles) { ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.stroke() }
+  })
 }
 
 // ─── rete neurale d'inchiostro ───────────────────────────────────────────────
