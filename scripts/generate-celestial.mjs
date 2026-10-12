@@ -776,11 +776,48 @@ function rotateArrow(cx = 50, cy = 50, r = 34, a0 = 200, a1 = 470, dashedArc = t
   return [...out, ...arrowHead(tip, tangent, 6, { open: false })]
 }
 
+// Richiamo con freccia: la linea guida termina con una punta piena sull'oggetto.
+function calloutArrow(from, to, n, { r = 6.5 } = {}) {
+  const deg = Math.atan2(from[1] - to[1], from[0] - to[0]) * 180 / Math.PI, d = Math.hypot(to[0] - from[0], to[1] - from[1])
+  const end = lerp(from, to, 1 - (r + 0.2) / d), sz = r * 0.95, str = String(n)
+  return [...arrowHead(from, deg, 4.5, { open: false }), line(lerp(from, to, 3.5 / d), end, TW, 0), ringO(to[0], to[1], r, TW), ...number(str, to[0] - (str.length * sz * 0.78 - sz * 0.23) / 2, to[1] - sz / 2, sz)]
+}
+// Cerchio numerato (passaggio di una sequenza).
+const stepBadge = (c, n, r = 7) => { const sz = r * 0.95; return [ringO(c[0], c[1], r, TW), ...number(n, c[0] - sz * 0.275, c[1] - sz / 2, sz)] }
+// Marcatore di sezione: cerchio diviso con frecce di vista.
+function sectionMarker(cx = 50, cy = 50, r = 16) {
+  return [ringO(cx, cy, r, TW), line([cx - r, cy], [cx + r, cy], TW, 0), ...number(1, cx - 2.6, cy - r * 0.75, r * 0.55), ...number(2, cx - 2.6, cy + r * 0.2, r * 0.55),
+    line([cx + r, cy], [cx + r + 18, cy], TW, 0), ...arrowHead([cx + r + 18, cy + 9], 90, 5, { open: false }), line([cx + r + 18, cy], [cx + r + 18, cy + 5], TW, 0)]
+}
+// Quota angolare: due lati e un arco con frecce.
+function angleMarker(cx = 20, cy = 80, L = 70, deg = 40) {
+  const a = rad(-deg), arcR = L * 0.55
+  const at = d => [cx + arcR * Math.cos(rad(d)), cy + arcR * Math.sin(rad(d))]
+  return [line([cx, cy], [cx + L, cy], TW, 0), line([cx, cy], [cx + L * Math.cos(a), cy + L * Math.sin(a)], TW, 0),
+    brush(t => at(-deg * t), () => TW, { N: 80, needle: 0 }), ...arrowHead(at(-2), 90, 3.6, { w: TW }), ...arrowHead(at(-deg + 2), -90 - deg, 3.6, { w: TW })]
+}
+// Scala grafica a blocchi alternati pieni/vuoti.
+function scaleBar(x0 = 8, x1 = 92, y = 50, n = 6, h = 5) {
+  const out = [lineOf(poly([[x0, y], [x1, y], [x1, y + h], [x0, y + h]]), TW)], step = (x1 - x0) / n
+  for (let i = 0; i < n; i += 2) out.push(poly([[x0 + i * step, y], [x0 + (i + 1) * step, y], [x0 + (i + 1) * step, y + h], [x0 + i * step, y + h]]))
+  return out
+}
+// Griglia di crocini (blueprint).
+function plusGrid(n = 6, m = 8, s = 2.6) { const out = []; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = m + i * (100 - 2 * m) / (n - 1), y = m + j * (100 - 2 * m) / (n - 1); out.push(join(line([x - s, y], [x + s, y], TW, 0), line([x, y - s], [x, y + s], TW, 0))) } return out }
+// Mirino HUD: anello con tacche graduate.
+function hudReticle(cx = 50, cy = 50, R = 40) {
+  const out = [ringO(cx, cy, R, TW), ringO(cx, cy, R * 0.18, TW)]
+  for (let i = 0; i < 72; i++) { const a = rad(i * 5), L = i % 18 === 0 ? 9 : i % 6 === 0 ? 5 : 2.6
+    out.push(line([cx + R * Math.cos(a), cy + R * Math.sin(a)], [cx + (R - L) * Math.cos(a), cy + (R - L) * Math.sin(a)], TW * 0.8, 0)) }
+  out.push(line([cx, cy - R + 11], [cx, cy - R * 0.18 - 3], TW, 0), line([cx, cy + R - 11], [cx, cy + R * 0.18 + 3], TW, 0), line([cx - R + 11, cy], [cx - R * 0.18 - 3, cy], TW, 0), line([cx + R - 11, cy], [cx + R * 0.18 + 3, cy], TW, 0))
+  return out
+}
+
 // Ragnatela organica: nodi collegati da filamenti che si assottigliano a meta' e
 // si annodano nei nodi; alcuni filamenti escono liberi e chiudono ad ago.
-function web(seed, { nodes = 6, free = 6, w = 2.6 } = {}) {
+function web(seed, { nodes = 6, free = 6, w = 2.6, box = [22, 22, 78, 78] } = {}) {
   const R = rng(seed * 7717 + 3), pts = []
-  for (let i = 0; i < nodes; i++) pts.push([22 + R() * 56, 22 + R() * 56])
+  for (let i = 0; i < nodes; i++) pts.push([box[0] + R() * (box[2] - box[0]), box[1] + R() * (box[3] - box[1])])
   // albero di copertura minimo + un paio di lati extra
   const edges = [], inT = [0]
   while (inT.length < nodes) { let best = null
@@ -948,6 +985,13 @@ const CATS = {
     'Arrow':            [join(line([8, 50], [86, 50], TW, 0), ...arrowHead([92, 50], 0, 8))],
     'Arrow Dashed':     [join(...dashed([8, 50], [84, 50]), ...arrowHead([92, 50], 0, 8, { open: false }))],
     'Exploded Axis':    [join(...dashed([50, 10], [50, 90]), ...arrowHead([50, 4], -90, 7), ...arrowHead([50, 96], 90, 7))],
+    'Callout Arrow':    [join(...calloutArrow([24, 76], [70, 30], 1, { r: 9 }))],
+    'Steps':            [join(...stepBadge([14, 50], 1)), join(...dashed([24, 50], [36, 50]), ...arrowHead([40, 50], 0, 4, { open: false })), join(...stepBadge([50, 50], 2)), join(...dashed([60, 50], [72, 50]), ...arrowHead([76, 50], 0, 4, { open: false })), join(...stepBadge([86, 50], 3))],
+    'Section Marker':   [join(...sectionMarker(36, 50, 18))],
+    'Angle':            [join(...angleMarker(12, 80, 80, 38))],
+    'Scale Bar':        [join(...scaleBar(8, 92, 47, 6, 6))],
+    'Plus Grid':        plusGrid(6, 8, 2.6),
+    'HUD Reticle':      [join(...hudReticle(50, 50, 44))],
   },
   'SPEC': {
     'Sparkle Spec':     [join(sparkle(44, 46, 16, 38, { pinch: 0.12 }), ...callout([45.5, 20], [80, 14], 1)), join(...dimension([28, 92], [60, 92], { ticks: true }))],
@@ -956,9 +1000,15 @@ const CATS = {
     'Gear Exploded':    [join(gear(44, 22, 17), ...callout([60, 26], [86, 40], 1)), join(...dashed([44, 43], [44, 57])), join(gear(44, 78, 17, { teeth: 12, hole: 0.42 }), ...callout([60, 74], [86, 60], 2))],
     'Globe Spec':       [join(globe(44, 50, 36), ...callout([64, 24], [86, 10], 1)), join(...ruler(8, 80, 97, 2.4))],
     'Target Spec':      [join(...registration(50, 50, 30), lineOf(sparkle(50, 50, 6, 12, { pinch: 0.15 }), 1)), join(...cropMarks(6, 10))],
+    'Slim Spec':        [join(sparkle(40, 50, 14, 44, { pinch: 0.12 }), ...callout([40, 50], [84, 30], 1)), join(...dimension([10, 6], [10, 94], { ticks: true }))],
+    'Twinkle Spec':     [twinkle(42, 56, 36), join(...calloutArrow([55.5, 42.5], [84, 14], 2))],
+    'Bloom Exploded':   [join(lineOf(bloom(50, 24, 20), 1.3)), join(...dashed([50, 47], [50, 55])), join(lineOf(bloom(50, 78, 20, { n: 6, depth: 0.5 }), 1.3)), join(...stepBadge([86, 24], 1, 6)), join(...stepBadge([86, 78], 2, 6))],
+    'Flow Specimen':    [flowField(8, { inside: (x, y) => Math.hypot(x - 50, y - 50) < 32, sep: 1.8 }), join(...cropMarks(6, 10))],
   },
   'RAGNATELE': {
     'Web 1':            [web(1)], 'Web 2': [web(4)], 'Web 3': [web(6)], 'Web 4': [web(9)], 'Web 5': [web(10)], 'Web 6': [web(12)],
+    'Web Tall':         [web(3, { nodes: 5, free: 5, box: [42, 8, 58, 92] })],
+    'Web Wide':         [web(7, { nodes: 5, free: 5, box: [8, 40, 92, 60] })],
   },
   'FLUSSI': {
     'Flow Circle':      [flowField(1)],
@@ -967,6 +1017,9 @@ const CATS = {
     'Flow Ring':        [flowField(5, { inside: (x, y) => { const d = Math.hypot(x - 50, y - 50); return d < 46 && d > 24 }, sep: 1.8 })],
     'Flow Bloom':       [flowField(6, { inside: (x, y) => sdGeom([x, y], bloom()) < -0.5, sep: 1.8 })],
     'Flow Arch':        [flowField(7, { inside: (x, y) => (y > 50 ? Math.abs(x - 50) < 40 : Math.hypot(x - 50, y - 50) < 40) && y < 96, sep: 1.9 })],
+    'Flow Sparkle':     [flowField(9, { inside: (x, y) => sdGeom([x, y], sparkle(50, 50, 44, 47, { pinch: 0.25, bend: 0.6 })) < -0.5, sep: 1.6 })],
+    'Flow Diagonal':    [flowField(10, { inside: (x, y) => Math.abs(x - y) < 26 && x > 3 && x < 97 && y > 3 && y < 97, sep: 1.8 })],
+    'Flow Half':        [flowField(11, { inside: (x, y) => y > 50 && Math.hypot(x - 50, y - 50) < 46, sep: 1.8 })],
   },
   'ORBITE': {
     'Saturn Sparkle':   ringAround([S(50, 46, 15, 44, { pinch: 0.12 })], 50, 54, 46, 14),
