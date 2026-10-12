@@ -18,7 +18,7 @@ import { LOOKS, fxDef, migrateFx, newFx, type Adjust, type FxEntry, type FxId, t
 import { fxPadding, fxSpeed, isActive, renderFx, type FxData } from './render'
 import { onAssetReady } from './gl'
 import { ensureFont } from '../libraries/font-loader'
-import type { TextStyle } from './text-styles'
+import { TEXT_STYLES, type TextStyle } from './text-styles'
 
 interface FxState {
   adjust?: Adjust
@@ -147,7 +147,7 @@ function tick(now: number) {
 export function attachFx(canvas: fabric.Canvas) {
   installFxEngine()
   // in sviluppo il catalogo è raggiungibile dalla console (e dai test nel browser)
-  if (process.env.NODE_ENV !== 'production') Object.assign(window, { __fx: { newFx, fxDef, LOOKS, applyFx, canvas, fabric } })
+  if (process.env.NODE_ENV !== 'production') Object.assign(window, { __fx: { newFx, fxDef, LOOKS, applyFx, applyTextStyle, TEXT_STYLES, canvas, fabric } })
   const visit = (o: fabric.FabricObject) => {
     if (hasFx(o)) applyFx(o)
     if (o instanceof fabric.Group) o.getObjects().forEach(visit)

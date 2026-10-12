@@ -23,10 +23,10 @@ export interface TextStyle {
 
 export const TEXT_STYLES: TextStyle[] = [
   // Metallo
-  { id: 'cromo-liquido', label: 'Cromo liquido', group: 'Metallo', family: 'Unbounded', weight: 800, fill: '#cfd6e6', swatch: '#0b1020', fx: [['material3d', 'cromo', { shape: 1, depth: 40, bevel: 12 }]] },
-  { id: 'cromo-studio', label: 'Cromo studio', group: 'Metallo', family: 'Climate Crisis', fill: '#d9dde8', swatch: '#111111', fx: [['material3d', 'studio']] },
+  { id: 'cromo-liquido', label: 'Cromo liquido', group: 'Metallo', family: 'Unbounded', weight: 800, fill: '#cfd6e6', swatch: '#0b1020', tracking: 30, fx: [['material3d', 'cromo', { shape: 1, depth: 40, bevel: 12 }]] },
+  { id: 'cromo-studio', label: 'Cromo studio', group: 'Metallo', family: 'Archivo Black', fill: '#d9dde8', swatch: '#111111', tracking: 40, fx: [['material3d', 'studio']] },
   { id: 'oro', label: 'Oro massiccio', group: 'Metallo', family: 'Playfair Display', weight: 800, fill: '#d4af37', swatch: '#14100a', fx: [['material3d', 'oro', { depth: 26, bevel: 10 }]] },
-  { id: 'olografico', label: 'Olografico', group: 'Metallo', family: 'Syne', weight: 800, fill: '#e8e0ff', swatch: '#0d0a1a', fx: [['material3d', 'olografico']] },
+  { id: 'olografico', label: 'Olografico', group: 'Metallo', family: 'Syne', weight: 800, fill: '#e8e0ff', swatch: '#0d0a1a', tracking: 50, fx: [['material3d', 'olografico']] },
   { id: 'glitter', label: 'Glitter', group: 'Metallo', family: 'UnifrakturMaguntia', fill: '#c9ccd6', swatch: '#0a0a0a', fx: [['glitter', 'argento']] },
   { id: 'glitter-oro', label: 'Glitter oro', group: 'Metallo', family: 'Pinyon Script', fill: '#d9b45a', swatch: '#0d0b08', fx: [['glitter', 'oro', { size: 3 }]] },
   // Luce
@@ -47,13 +47,13 @@ export const TEXT_STYLES: TextStyle[] = [
   // Retrò e pop
   { id: 'anni70', label: 'Strisce anni 70', group: 'Retrò e pop', family: 'Shrikhand', fill: '#fff3b0', swatch: '#1a8fd6', fx: [['stroke', 'sottile', { size: 4, color: '#3b1f0e' }], ['extrude', 'arcobaleno']] },
   { id: 'party', label: 'Party', group: 'Retrò e pop', family: 'Archivo Black', fill: '#ffffff', swatch: '#080808', upper: true, fx: [['extrude', 'party']] },
-  { id: 'gonfiabile', label: 'Gonfiabile', group: 'Retrò e pop', family: 'Bagel Fat One', fill: '#ff7eb3', swatch: '#ffd6e7', fx: [['material3d', 'gonfio', { useColor: 1, color: '#ff7eb3' }]] },
+  { id: 'gonfiabile', label: 'Gonfiabile', group: 'Retrò e pop', family: 'Bagel Fat One', fill: '#ff7eb3', swatch: '#ffd6e7', tracking: 40, fx: [['material3d', 'gonfio', { useColor: 1, color: '#ff7eb3' }]] },
   { id: 'adesivo', label: 'Adesivo', group: 'Retrò e pop', family: 'Rubik Mono One', fill: '#ff3b1f', swatch: '#f4ff3a', upper: true, fx: [['stroke', 'adesivo'], ['dropShadow', 'morbida']] },
   { id: 'fumetto', label: 'Fumetto', group: 'Retrò e pop', family: 'Tilt Warp', fill: '#ffd400', swatch: '#3fa9f5', fx: [['stroke', 'spesso', { color: '#111111', size: 8 }], ['longShadow', 'flat', { opacity: 100, length: 30 }], ['halftone', 'fumetto']] },
   { id: 'riso', label: 'Risograph', group: 'Retrò e pop', family: 'Bricolage Grotesque', weight: 800, fill: '#0078bf', swatch: '#f3eee3', fx: [['riso', 'rosablu']] },
   // Digitale
-  { id: 'glitch', label: 'Glitch', group: 'Digitale', family: 'Space Grotesk', weight: 700, fill: '#ffffff', swatch: '#0a0a0a', fx: [['glitch', 'forte'], ['chroma', 'forte']] },
+  { id: 'glitch', label: 'Glitch', group: 'Digitale', family: 'Space Grotesk', weight: 700, fill: '#ffffff', swatch: '#0a0a0a', fx: [['glitch', 'leggero', { power: 35, split: 22 }], ['chroma', 'leggero']] },
   { id: 'vhs', label: 'Nastro VHS', group: 'Digitale', family: 'VT323', fill: '#fff2c8', swatch: '#120c08', upper: true, fx: [['vhs', 'nastro'], ['outerGlow', 'caldo']] },
   { id: 'eco', label: 'Eco', group: 'Digitale', family: 'Archivo Black', fill: '#ffffff', swatch: '#0b0b0b', upper: true, fx: [['echo', 'pop', { useColor: 0, count: 5, distance: 14, angle: 90, fade: 80 }]] },
-  { id: 'terminale', label: 'Terminale', group: 'Digitale', family: 'VT323', fill: '#7dff9a', swatch: '#020a04', fx: [['crt', 'terminale'], ['outerGlow', 'alone', { color: '#7dff9a' }]] },
+  { id: 'terminale', label: 'Terminale', group: 'Digitale', family: 'VT323', fill: '#7dff9a', swatch: '#020a04', fx: [['crt', 'terminale', { curve: 0, mask: 10 }], ['outerGlow', 'alone', { color: '#7dff9a' }]] },
 ]
