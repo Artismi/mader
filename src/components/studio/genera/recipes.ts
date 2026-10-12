@@ -4,7 +4,7 @@
  * Restituiscono un canvas ad alta risoluzione: tavola intera o pezzo scontornato.
  */
 import {
-  blurMask, combine, distance, dither, fontCss, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
+  blurMask, combine, distance, dither, hexRgb, fontCss, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
   newMask, noise2, polar, range, remap, rng, slices, smoothstep, stretch, text, xerox,
   type Ctx, type Face, type Mask, type Rnd,
 } from './raster'
@@ -1938,69 +1938,123 @@ const eco: Recipe = {
 }
 
 const TRAMA_PALETTES = [
-  { label: 'Rosso e crema', a: '#e8283c', b: '#fff3e0', ink: '#141414' },
-  { label: 'Blu e giallo', a: '#2343ff', b: '#ffd23f', ink: '#141414' },
-  { label: 'Verde bottiglia', a: '#14593c', b: '#f3e6c4', ink: '#0d2a1d' },
-  { label: 'Rosa e bordeaux', a: '#ff8fb8', b: '#6b0f2a', ink: '#2a0712' },
+  { label: 'Rosso e crema', a: '#e8283c', b: '#fff1dc', ink: '#1a1414' },
+  { label: 'Blu e giallo', a: '#2343ff', b: '#ffd23f', ink: '#10123a' },
+  { label: 'Verde bottiglia', a: '#14593c', b: '#f6e7bf', ink: '#0d2a1d' },
+  { label: 'Rosa e bordeaux', a: '#6b0f2a', b: '#ffa3c4', ink: '#2a0712' },
   { label: 'Bianco e nero', a: '#141414', b: '#ffffff', ink: '#141414' },
-  { label: 'Arancio e viola', a: '#ff6a1a', b: '#3a1c71', ink: '#1c0d38' },
+  { label: 'Arancio e viola', a: '#3a1c71', b: '#ff8a2a', ink: '#1c0d38' },
 ]
 
-/** riempimento a motivo su tutto il foglio: righe, scacchi, mezzatinta, zebra, pois */
-function patternCanvas(W: number, H: number, kind: number, a: string, b: string, cell: number, ang: number) {
+const TRAMA_KINDS = ['Righe tramonto', 'Contorni interni', 'Righe diagonali', 'Scacchi', 'Mezzatinta', 'Metà e metà']
+
+/**
+ * Riempimento delle lettere, pensato sulla parola e non sul foglio: le righe
+ * tramonto e la mezzatinta crescono dall'alto al basso del suo ingombro, i
+ * contorni interni seguono la forma di ogni lettera.
+ */
+function tramaFill(m: Mask, din: Float32Array, kind: number, a: string, b: string, step: number, ang: number) {
+  const W = m.w, H = m.h, bx = inkBox(m)!
+  const y0 = bx.y0, hh = bx.y1 - bx.y0
   const { c, ctx } = makeCanvas(W, H)
-  ctx.fillStyle = b; ctx.fillRect(0, 0, W, H)
-  ctx.fillStyle = a
-  ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(ang)
-  const R = Math.hypot(W, H) / 2 + cell * 2
-  if (kind === 0) for (let x = -R; x < R; x += cell) ctx.fillRect(x, -R, cell / 2, R * 2)
-  else if (kind === 1) for (let y = -R, j = 0; y < R; y += cell, j++) for (let x = -R + (j % 2) * cell; x < R; x += cell * 2) ctx.fillRect(x, y, cell, cell)
-  else if (kind === 2) {
-    // mezzatinta: punti che crescono dall'alto verso il basso
-    for (let y = -R, j = 0; y < R; y += cell * 0.5, j++) for (let x = -R + (j % 2) * cell * 0.25; x < R; x += cell * 0.5) {
-      const k = Math.min(1, Math.max(0, (y + H * 0.25) / (H * 0.5)))
-      ctx.beginPath(); ctx.arc(x, y, cell * 0.28 * Math.sqrt(k) + 0.3, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = a; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = b
+  if (kind === 0) {
+    // tramonto: pieno in alto, poi righe chiare sempre più spesse verso il basso
+    const n = Math.max(4, Math.round(hh / (step * 2.2)))
+    for (let k = 0; k < n; k++) {
+      const t = k / n, y = y0 + hh * (0.42 + 0.58 * t), th = (hh * 0.58 / n) * (0.18 + 0.62 * t)
+      ctx.fillRect(0, y, W, th)
     }
-  } else if (kind === 3) {
-    for (let x = -R; x < R; x += cell) {
-      ctx.beginPath(); ctx.moveTo(x, -R)
-      for (let y = -R; y <= R; y += cell * 0.25) ctx.lineTo(x + Math.sin(y / cell * 1.3) * cell * 0.35, y)
-      for (let y = R; y >= -R; y -= cell * 0.25) ctx.lineTo(x + cell * 0.42 + Math.sin(y / cell * 1.3 + 0.6) * cell * 0.35, y)
-      ctx.closePath(); ctx.fill()
+  } else if (kind === 1) {
+    // contorni interni: anelli alterni a passo costante dal bordo verso il cuore
+    const img = ctx.getImageData(0, 0, W, H), d = img.data, [ar, ag, ab] = hexRgb(a), [br, bg, bb] = hexRgb(b)
+    const p = step * 0.9
+    for (let i = 0; i < din.length; i++) {
+      if (!m.a[i]) continue
+      const v = din[i] / p, f = v - Math.floor(v), k = Math.floor(v) % 2
+      // bordo morbido tra un anello e l'altro
+      const mix = 0.5 + (k - 0.5) * smoothstep(0, 1.2, Math.min(f, 1 - f) * p)
+      d[i * 4] = ar + (br - ar) * mix; d[i * 4 + 1] = ag + (bg - ag) * mix; d[i * 4 + 2] = ab + (bb - ab) * mix
     }
-  } else for (let y = -R, j = 0; y < R; y += cell, j++) for (let x = -R + (j % 2) * cell / 2; x < R; x += cell) { ctx.beginPath(); ctx.arc(x, y, cell * 0.24, 0, Math.PI * 2); ctx.fill() }
-  ctx.restore()
+    ctx.putImageData(img, 0, 0)
+  } else if (kind === 2 || kind === 3) {
+    ctx.save(); ctx.translate((bx.x0 + bx.x1) / 2, (bx.y0 + bx.y1) / 2); ctx.rotate(ang)
+    const R = Math.hypot(W, H)
+    if (kind === 2) for (let x = -R; x < R; x += step * 2) ctx.fillRect(x, -R, step, R * 2)
+    else for (let y = -R, j = 0; y < R; y += step * 2.4, j++) for (let x = -R + (j % 2) * step * 2.4; x < R; x += step * 4.8) ctx.fillRect(x, y, step * 2.4, step * 2.4)
+    ctx.restore()
+  } else if (kind === 4) {
+    // mezzatinta a 45°: niente in alto, punti che si toccano in basso
+    const cell = step * 1.6
+    ctx.save(); ctx.translate((bx.x0 + bx.x1) / 2, y0); ctx.rotate(Math.PI / 4)
+    const R = Math.hypot(W, H)
+    for (let v = -R; v < R; v += cell) for (let u = -R; u < R; u += cell) {
+      const y = (u + v) / Math.SQRT2, t = Math.min(1, Math.max(0, (y - hh * 0.25) / (hh * 0.8)))
+      if (t <= 0) continue
+      ctx.beginPath(); ctx.arc(u, v, cell * 0.62 * Math.sqrt(t), 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.restore()
+  } else {
+    // metà e metà: taglio ondulato a metà altezza
+    ctx.beginPath(); ctx.moveTo(0, H)
+    for (let x = 0; x <= W; x += 4) ctx.lineTo(x, y0 + hh * 0.52 + Math.sin(x / (step * 3)) * step * 0.5)
+    ctx.lineTo(W, H); ctx.closePath(); ctx.fill()
+  }
+  ctx.globalCompositeOperation = 'destination-in'; ctx.drawImage(maskToCanvas(m, '#000000'), 0, 0)
+  return c
+}
+
+/** tratteggio diagonale su tutto il foglio (per l'ombra retrò) */
+function hatch(W: number, H: number, ink: string, paper: string, gap: number, lw: number) {
+  const { c, ctx } = makeCanvas(W, H)
+  ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H)
+  ctx.strokeStyle = ink; ctx.lineWidth = lw
+  ctx.beginPath()
+  for (let x = -H; x < W; x += gap) { ctx.moveTo(x, H); ctx.lineTo(x + H, 0) }
+  ctx.stroke()
   return c
 }
 
 const trama: Recipe = {
-  id: 'trama', label: 'Scritta a trama', cat: 'Testo grafico', hint: 'lettere piene di righe, scacchi, mezzatinta o zebra, contorno e ombra sfalsata piena',
+  id: 'trama', label: 'Scritta a trama', cat: 'Testo grafico', hint: 'lettere a righe tramonto, contorni interni, mezzatinta o mezze; contorno pieno e ombra retrò tratteggiata',
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 3), P.sel('warp', 'Busta', [...WARPS]), P.range('amt', 'Piega', 0, 100, 30),
-    P.sel('pat', 'Trama', ['Righe', 'Scacchi', 'Mezzatinta', 'Zebra', 'Pois']), P.range('cell', 'Passo trama', 20, 200, 100), P.range('ang', 'Inclinazione', -60, 60, 35),
-    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.range('shadow', 'Ombra sfalsata', 0, 100, 60), P.tog('outline', 'Contorno', true), P.tog('shine', 'Lucido', true), P.tone(1), P.range('grain', 'Grana', 0, 30, 12)],
+    P.sel('pat', 'Trama', TRAMA_KINDS), P.range('cell', 'Passo trama', 40, 200, 100), P.range('ang', 'Inclinazione righe', -60, 60, 35),
+    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.sel('shStyle', 'Ombra', ['Tratteggiata', 'Piena', 'Nessuna']), P.range('shadow', 'Profondità ombra', 20, 100, 60),
+    P.range('outline', 'Contorno', 0, 100, 50), P.tog('shine', 'Lucido', true), P.tone(1), P.range('grain', 'Grana', 0, 30, 10)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const pal0 = TRAMA_PALETTES[num(o, 'pal')] ?? TRAMA_PALETTES[0]
     const pal = { ...pal0, ink: visible(o, t, pal0.ink) }
     const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.condensato
-    const sh = S * 0.03 * num(o, 'shadow') / 100, lw = on(o, 'outline') ? Math.max(1.5, S * 0.0045) : 0
+    const shS = num(o, 'shStyle'), sh = shS === 2 ? 0 : S * 0.045 * num(o, 'shadow') / 100
+    const lw = Math.max(1.5, S * 0.009 * num(o, 'outline') / 100)
     const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room: sh + lw + S * 0.01, lead: 0.12 })
     const { c, ctx } = stage(o, t)
-    const out = lw ? distance(invert(m)) : null
-    const body = out ? grow(out, m, lw) : m
-    if (sh > 0) ctx.drawImage(maskToCanvas(body, pal.ink), sh * 0.7, sh)
-    if (out) ctx.drawImage(maskToCanvas(body, pal.ink), 0, 0)
-    // la trama riempie solo le lettere
-    const pat = patternCanvas(W, H, num(o, 'pat'), pal.a, pal.b, S * 0.022 * num(o, 'cell') / 100, num(o, 'ang') * Math.PI / 180)
-    const pc = pat.getContext('2d')!
-    pc.globalCompositeOperation = 'destination-in'; pc.drawImage(maskToCanvas(m, '#000000'), 0, 0)
-    ctx.drawImage(pat, 0, 0)
-    if (on(o, 'shine')) {
-      const din = distance(m)
-      let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
-      ctx.drawImage(maskToCanvas(shine(m, din, mx * 0.12, Math.max(1.2, mx * 0.13), mx * 0.5), '#ffffff', 0.9), 0, 0)
+    const out = distance(invert(m))
+    const body = grow(out, m, lw)
+    const dx = sh * 0.75, dy = sh
+    if (sh > 0) {
+      // ombra: il blocco della scritta spostato, pieno o con il bordo e il tratteggio dentro
+      extrude(ctx, body, pal.ink, dx, dy)
+      if (shS === 0) {
+        // l'interno del blocco (tolto il bordo) prende un tratteggio fermo, non trascinato
+        const inner = maskToCanvas(grow(out, m, lw * 0.15), '#000')
+        const sweep = makeCanvas(W, H), n = Math.ceil(Math.hypot(dx, dy))
+        for (let i = n; i >= 1; i--) sweep.ctx.drawImage(inner, (dx * i) / n, (dy * i) / n)
+        const h = hatch(W, H, pal.ink, t.bg, Math.max(4, S * 0.0105), Math.max(1.4, S * 0.003))
+        const hc = h.getContext('2d')!
+        hc.globalCompositeOperation = 'destination-in'; hc.drawImage(sweep.c, 0, 0)
+        ctx.drawImage(h, 0, 0)
+      }
     }
+    ctx.drawImage(maskToCanvas(body, pal.ink), 0, 0)
+    const din = distance(m)
+    let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
+    const step = Math.max(2, mx * 0.34 * num(o, 'cell') / 100)
+    ctx.drawImage(tramaFill(m, din, num(o, 'pat'), pal.a, pal.b, step, num(o, 'ang') * Math.PI / 180), 0, 0)
+    if (on(o, 'shine')) ctx.drawImage(maskToCanvas(shine(m, din, mx * 0.12, Math.max(1.2, mx * 0.12), mx * 0.5), '#ffffff', 0.9), 0, 0)
     return finish(c, o, t, 'trama', null)
   },
 }
