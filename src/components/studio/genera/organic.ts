@@ -463,6 +463,9 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     circles.forEach((c, i) => { if (i !== j && contains(c, q) && (best < 0 || c.r < circles[best].r)) best = i })
     return best
   })
+  // bolle sorelle che attraversano il contorno: dentro una bolla, la conca fra il suo
+  // bordo e una bolla che lo incrocia prende anch'essa il menisco (più fine)
+  const crosses = circles.map((c, i) => new Set(circles.map((q, j) => j).filter(j => j !== i && parent[j] === parent[i] && Math.hypot(circles[j].x - c.x, circles[j].y - c.y) < c.r + circles[j].r - w)))
   const ancestors = circles.map((_, j) => { const s = new Set<number>(); for (let p = parent[j]; p >= 0; p = parent[p]) s.add(p); return s })
   const reach = k * 11 + w * 3
   const cell = Math.max(8, reach)
@@ -479,7 +482,7 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
   })
   const sd = new Float32Array(n)
   const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
-  const kIn = k * 0.55
+  const kIn = k
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const list = grid[Math.floor(y / cell) * GW + Math.floor(x / cell)]
     if (!list.length) continue
@@ -514,7 +517,7 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
         S += e; gx += e * sgn * (x - c.x) / dl; gy += e * sgn * (y - c.y) / dl
       }
       if (h < 0) { for (const i of list) if (parent[i] < 0) add(i, 1) }
-      else { kk = kIn; add(h, -1); for (const i of list) if (parent[i] === h) add(i, 1) }
+      else { kk = kIn; add(h, -1); for (const i of list) if (parent[i] === h || crosses[h].has(i)) add(i, 1) }
       if (S > 0) {
         const f = -kk * Math.log(S), gl = Math.hypot(gx, gy) / S
         ink = 0.5 - f / Math.max(0.05, gl)
