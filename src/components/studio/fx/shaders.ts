@@ -709,8 +709,9 @@ vec3 env(vec3 d) {
     return c;
   }
   // cielo e terra con orizzonte netto: il cromo classico da copertina anni '80
-  vec3 c = mix(vec3(0.97, 0.98, 1.0), vec3(0.22, 0.45, 0.92), smoothstep(0.0, 0.75, up));
-  if (up < 0.0) c = mix(vec3(0.1, 0.07, 0.05), vec3(0.62, 0.55, 0.48), smoothstep(-0.02, -0.7, up));
+  vec3 c = mix(vec3(1.0), vec3(0.16, 0.38, 0.86), smoothstep(0.0, 0.8, up));
+  if (up < 0.0) c = mix(vec3(0.16, 0.11, 0.08), vec3(0.93, 0.84, 0.72), smoothstep(-0.03, -0.75, up));
+  c *= 1.0 - 0.8 * smoothstep(0.035, 0.0, abs(up));          // linea d'orizzonte scura e netta
   c += vec3(1.0, 0.97, 0.9) * box(d, vec3(-0.4, -0.8, -0.45), 80.0) * 3.0;
   return c;
 }
@@ -735,7 +736,8 @@ vec4 shade(vec3 p, vec3 rd, mat3 R) {
   float fr = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
   vec3 r = reflect(-v, n);
   float front = smoothstep(0.55, 0.9, abs(n.z));
-  r.y += front * ((p.y / (uRes.y * 0.5)) * 1.1 - 0.25);
+  // sulle facce frontali il riflesso scorre lungo l'altezza della lettera: cielo sopra, orizzonte netto, terra sotto
+  r.y = mix(r.y, (p.y / (uRes.y * 0.5)) * 1.9 - 0.08, front * 0.85);
   r = normalize(r);
   vec3 ev = env(r);
   vec3 c; float a = 1.0;
@@ -922,35 +924,40 @@ void main() {
     float micro = 1.0 + dot(nm.xy, L.xy) * uMicro * 0.35;
     o = mix(s, vec4(mat * micro * scene * s.a, s.a), uAmt); return;
   }
-  vec2 e = px() * max(1.0, uSize * uZ * 0.25);
-  float h = hgt(vUv);
-  vec2 g = vec2(hgt(vUv + vec2(e.x, 0.0)) - hgt(vUv - vec2(e.x, 0.0)), hgt(vUv + vec2(0.0, e.y)) - hgt(vUv - vec2(0.0, e.y))) / (2.0 * max(1.0, uSize * uZ * 0.25));
-  vec3 n = normalize(vec3(-g * uDepth * uSize * uZ * 1.2 + nm.xy * uMicro * 0.5, 1.0));
-  float dif = dot(n, L) - L.z;
-  float shade = 1.0 + dif * 0.9;
-  // ombra portata morbida (dal rilievo sfocato più largo) e occlusione negli angoli
-  vec2 ldir = normalize(vec2(L.x, -L.y)) * px() * uSize * uZ * 0.9;
-  float hb = texture(uHb, vUv).a, hbl = texture(uHb, vUv + ldir).a;
+  // rilievo: normale dal campo d'altezza (lettera sfocata poco = spigolo netto)
+  vec2 e = px() * max(1.0, uSize * uZ * 0.2);
+  vec2 g = vec2(hgt(vUv + vec2(e.x, 0.0)) - hgt(vUv - vec2(e.x, 0.0)), hgt(vUv + vec2(0.0, e.y)) - hgt(vUv - vec2(0.0, e.y))) / (2.0 * max(1.0, uSize * uZ * 0.2));
+  vec3 n = normalize(vec3(-g * uDepth * uSize * uZ * 1.5, 1.0));
+  vec3 nmi = normalize(n + vec3(nm.xy * uMicro * 0.35, 0.0));
+  float dif = dot(nmi, L) - L.z;
   float sgn = (uMode < 0.5 || uMode > 2.5) ? -1.0 : 1.0;
-  float castSh = clamp((hbl - hb) * sgn * 2.2, 0.0, 1.0);
-  float ao = sgn < 0.0 ? clamp(texture(uH, vUv).a - hb, 0.0, 1.0) : clamp(hb - texture(uH, vUv).a, 0.0, 1.0);
-  shade *= (1.0 - castSh * 0.28 * uDepth) * (1.0 - ao * 0.35 * uDepth);
+  // ombra portata stretta: il bordo della lettera fa ombra dentro (impresso) o fuori (rilievo)
+  vec2 ldir = normalize(vec2(L.x, -L.y)) * px() * uSize * uZ * 0.45;
   float inside = texture(uOrig, vUv).a;
-  vec3 col = mat * shade;
+  float occl = texture(uH, vUv + ldir * sgn).a;
+  float castSh = sgn < 0.0 ? clamp(inside - texture(uOrig, vUv - ldir).a, 0.0, 1.0) * inside
+                           : clamp(occl - inside, 0.0, 1.0);
+  float halo = texture(uHb, vUv).a;
+  // faccia della lettera: il suo colore con la grana del materiale (niente toppe di texture)
+  vec3 base = s.a > 0.0 ? s.rgb / s.a : uTint;
+  float grain = uHasMat > 0.5 ? 0.9 + 0.2 * luma(texture(uMat, tuv).rgb) : 1.0;
+  vec3 face = base * grain * (1.0 + dif * 0.85) * (1.0 - castSh * 0.45 * uDepth);
   if (uMode > 1.5 && uMode < 2.5) {
-    vec3 nf = normalize(n + vec3(nm.xy * 0.5, 0.0));
-    float spec = pow(max(dot(reflect(-L, nf), vec3(0.0, 0.0, 1.0)), 0.0), 22.0);
-    float sweep = 0.5 + 0.5 * sin(p.x * 0.004 - p.y * 0.006 + nf.x * 2.5);
-    vec3 foil = mix(uFoilA, uFoilB, clamp(0.25 + dif * 1.4 + sweep * 0.45, 0.0, 1.0)) + spec * 0.8;
-    col = mix(col, foil * (1.0 - castSh * 0.2), inside);
+    float spec = pow(max(dot(reflect(-L, nmi), vec3(0.0, 0.0, 1.0)), 0.0), 26.0);
+    float sweep = 0.5 + 0.5 * sin(p.x * 0.004 - p.y * 0.006 + nmi.x * 2.5);
+    face = mix(uFoilA, uFoilB, clamp(0.3 + dif * 1.5 + sweep * 0.4, 0.0, 1.0)) * grain + spec * 0.7;
   } else if (uMode > 2.5) {
-    float ink = inside * (0.8 + 0.2 * vnoise(p * 0.35)) * smoothstep(0.15, 0.55, vnoise(p * 0.05) * 0.3 + 0.7);
-    col = mix(col, uInk * (0.5 + 0.5 * dot(mat, vec3(0.33))) * shade, ink);
+    float ink = (0.8 + 0.2 * vnoise(p * 0.35)) * smoothstep(0.15, 0.55, vnoise(p * 0.05) * 0.3 + 0.7);
+    face = mix(face, uInk * (0.6 + 0.4 * grain) * (1.0 + dif * 0.5), ink);
   }
-  col *= scene;
-  // copre la lettera e l'alone di carta deformata attorno
-  float a = clamp(max(inside, texture(uHb, vUv).a * 1.6), 0.0, 1.0);
-  o = mix(s, vec4(col * a, a), uAmt);
+  face *= scene;
+  // attorno: solo luce e ombra trasparenti, così il rilievo si posa su qualunque fondo
+  float zone = clamp(halo * 2.2, 0.0, 1.0) * (1.0 - inside);
+  float hiA = clamp(dif * 1.8, 0.0, 1.0) * 0.7 * uDepth * zone;
+  float shA = clamp(-dif * 1.8, 0.0, 1.0) * 0.55 * uDepth * zone + castSh * 0.4 * uDepth * (1.0 - inside);
+  vec4 around = vec4(vec3(hiA), clamp(hiA + shA, 0.0, 1.0));
+  vec4 res = vec4(face * inside, inside) + around * (1.0 - inside);
+  o = mix(s, res, uAmt);
 }`
 
 /* ─── luce e movimento (stile poster) ─── */
@@ -979,7 +986,11 @@ void main() {
   for (int j = -1; j <= 1; j++) {
     vec2 uv = vUv + perp * px() * (float(j) * 1.5 + wob * 40.0);
     vec4 hit; float f = reach(uv, hit);
-    float w = hit.a * pow(1.0 - f, uFade);
+    // ogni filo di luce ha la sua lunghezza: scie sottili e irregolari, non colonne piene
+    float lane = dot(p, perp);
+    float lv = vnoise(vec2(lane * 0.11, 9.0)) * 0.65 + vnoise(vec2(lane * 0.45, 3.0)) * 0.35;
+    float fe = f / mix(0.3, 1.0, lv);
+    float w = hit.a * pow(max(1.0 - fe, 0.0), uFade) * (0.55 + 0.45 * vnoise(vec2(lane * 0.8, 17.0)));
     vec3 c = hit.a > 0.0 ? hit.rgb / hit.a : vec3(0.0);
     // dispersione: ogni colonna prende una tinta dello spettro che scorre lungo la scia
     float hue = fract(vnoise(vec2(dot(p, perp) * 0.018, 1.0)) * 1.4 + f * 0.35);
@@ -1023,21 +1034,45 @@ export const GLITTER = FX + `uniform vec3 uBase; uniform float uUse, uSize, uSpa
 vec2 cellRnd(vec2 c) { return vec2(hash12(c), hash12(c + 17.3)); }
 void main() {
   vec4 s = texture(uSrc, vUv);
-  vec2 p = vUv * uRes / (uZ * uSize);
+  vec2 P = vUv * uRes / uZ;
+  vec2 p = P / uSize;
   vec2 c = floor(p), f = fract(p);
-  float md = 9.0; vec2 mc = c;
+  // scaglie: cella più vicina e seconda più vicina (per il filo scuro tra una e l'altra)
+  float md = 9.0, md2 = 9.0; vec2 mc = c;
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 g = vec2(float(i), float(j)); vec2 o2 = cellRnd(c + g);
-    float d = length(g + o2 - f); if (d < md) { md = d; mc = c + g; }
+    float d = length(g + o2 - f);
+    if (d < md) { md2 = md; md = d; mc = c + g; } else if (d < md2) md2 = d;
   }
+  // ogni scaglia ha la sua inclinazione: riflette solo se è girata verso la luce,
+  // e la luce scorre sulla parola, così le scaglie accese si raggruppano
+  vec2 r2 = cellRnd(mc * 1.31) - 0.5;
+  vec3 n = normalize(vec3(r2 * 1.5, 1.0));
+  vec2 sweep = vec2(fbm(P * 0.004), fbm(P * 0.004 + 7.0)) - 0.5;
+  vec3 H = normalize(vec3(sweep * 1.6 + vec2(-0.15, -0.2), 1.0));
+  float spec = pow(max(dot(n, H), 0.0), 60.0);
   float h = hash12(mc * 1.7);
-  float bright = pow(h, 6.0) * uSpark * 3.0 + 0.35 + 0.65 * h;
+  float bright = 0.32 + 0.38 * h + spec * (1.2 + uSpark * 2.2);
   vec3 base = uUse > 0.5 ? uBase : (s.a > 0.0 ? s.rgb / s.a : uBase);
-  vec3 col = base * bright + vec3(pow(h, 18.0) * uSpark * 2.0);
+  vec3 col = base * bright + vec3(spec * spec) * uSpark * 0.8;
+  col *= 0.7 + 0.3 * smoothstep(0.0, 0.12, md2 - md);
+  // scintille a stella sulle scaglie più accese (si cercano anche nelle celle vicine)
+  float star = 0.0;
+  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+    vec2 cc = c + vec2(float(i), float(j));
+    if (hash12(cc * 3.7) < 1.0 - 0.03 * uSpark) continue;
+    vec2 sc = cc + cellRnd(cc);
+    if (texture(uOrig, sc * uSize * uZ / uRes).a < 0.5) continue;   // solo scaglie della lettera
+    vec2 d = (p - sc) * uSize;
+    float k = 1.0 / (uSize * 2.2);
+    star += exp(-abs(d.x) * k * 0.8) * exp(-abs(d.y) * k * 9.0) + exp(-abs(d.y) * k * 0.8) * exp(-abs(d.x) * k * 9.0);
+  }
+  col += vec3(star) * uSpark * 0.9;
+  float inside = s.a;
   float dust = 0.0;
-  float d = sd(vUv) / uZ;
-  if (d > 0.0) { float r = hash12(floor(vUv * uRes / 2.0)); dust = step(1.0 - uDust * 0.06 * exp(-d / 40.0), r); }
-  float a = max(s.a, dust);
+  float dd = sd(vUv) / uZ;
+  if (dd > 0.0) { float r = hash12(floor(P / 1.5)); dust = step(1.0 - uDust * 0.05 * exp(-dd / 35.0), r) * (0.4 + 0.6 * hash12(floor(P / 1.5) + 3.0)); }
+  float a = clamp(max(inside, max(dust, star * uSpark * 0.7)), 0.0, 1.0);
   o = mix(s, vec4(col * a, a), uAmt);
 }`
 
@@ -1348,3 +1383,6 @@ void main() {
   c += (hash12(vUv * uRes + fract(uT) * 91.0) - 0.5) * uGrain;
   o = vec4(clamp(c, 0.0, 1.0) * s.a, s.a);
 }`
+
+/** sovrapposizione semplice: A sopra B */
+export const OVER_AB = LIB + `uniform sampler2D uA, uB; void main() { o = over(texture(uA, vUv), texture(uB, vUv)); }`

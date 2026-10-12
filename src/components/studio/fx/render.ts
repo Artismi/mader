@@ -9,7 +9,7 @@ import { FxGL, type Tex, type UVal } from './gl'
 import {
   MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, SMEAR, RAYS, GLITTER, FLUTED, ASCII, LINOCUT, MIRRORTILE, LIGHTCAST, PIXELSORT, LOWPOLY, KALEIDO, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
-  TONEMATCH,
+  TONEMATCH, OVER_AB,
 } from './shaders'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
 
@@ -282,13 +282,15 @@ const RUN: Partial<Record<string, Run>> = {
     const mat = c.g.image(`/assets/materials/${name}.jpg`), nrm = c.g.image(`/assets/materials/${name}-rilievo.jpg`)
     const size = num(p.size, 8)
     const mode = num(p.mode)
-    const h = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 0.6)
-    const hb = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 1.8)
-    return c.g.pass('impress', IMPRESS, c.W, c.H, std(c, cur, amt, {
+    const h = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 0.35)
+    const hb = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 0.9)
+    const out = c.g.pass('impress', IMPRESS, c.W, c.H, std(c, cur, amt, {
       uMat: mat ?? cur, uNrm: nrm ?? cur, uH: h, uHb: hb, uHasMat: mat && nrm ? 1 : 0, uMode: mode, uDepth: num(p.depth, 60) / 100, uSize: size,
       uLight: num(p.light, 135) * Math.PI / 180, uScale: num(p.scale, 100) / 100, uMicro: num(p.micro, 60) / 100, uScene: num(p.scene, 60) / 100,
       uInk: rgb(p.ink, '#1d2a6b'), uFoilA: rgb(p.c1, '#6b4a10'), uFoilB: rgb(p.c2, '#ffe9a8'), uTint: rgb(p.tint, '#ffffff'),
     }))
+    if (mode <= 3.5) c.g.release(h, hb)
+    return out
   },
   vetro: (c, cur, p, amt) => {
     const w = Math.max(4, num(p.width, 22))
@@ -342,7 +344,14 @@ const RUN: Partial<Record<string, Run>> = {
   splice: simple('splice', SPLICE, (c, p) => ({ uW: num(p.thickness, 3) * c.z, uOff: dirUv(c, num(p.angle, 315), num(p.distance, 8)), uCol: rgb(p.color) })),
   longShadow: simple('longShadow', LONG_SHADOW, (c, p) => ({ uDir: dirUv(c, num(p.angle, 45), num(p.length, 120)), uCol: rgb(p.color), uOp: num(p.opacity, 35) / 100, uFade: num(p.fade, 60) / 100 })),
   extrude: simple('extrude', EXTRUDE, (c, p) => ({ uDir: dirUv(c, num(p.angle, 45), num(p.depth, 24)), uCol: rgb(p.color), uShade: num(p.shade, 60) / 100, uBands: num(p.bands), uC2: rgb(p.c2, '#ffb000'), uC3: rgb(p.c3, '#ff3d00'), uC4: rgb(p.c4, '#7a1fa2') })),
-  colata: simple('smear', SMEAR, (c, p) => ({ uDir: dirUv(c, num(p.angle, 90), num(p.length, 260)), uFade: Math.max(0.3, num(p.fade, 60) / 25), uWobble: num(p.wobble, 30) / 100, uGlow: num(p.glow, 50) / 100, uSpectrum: num(p.spectrum) / 100 })),
+  colata: (c, cur, p, amt) => {
+    const out = c.g.pass('smear', SMEAR, c.W, c.H, std(c, cur, amt, { uDir: dirUv(c, num(p.angle, 90), num(p.length, 260)), uFade: Math.max(0.3, num(p.fade, 60) / 25), uWobble: num(p.wobble, 30) / 100, uGlow: num(p.glow, 50) / 100, uSpectrum: num(p.spectrum) / 100 }))
+    // la scia si ammorbidisce appena, le lettere tornano nitide sopra
+    const soft = c.g.blur(out, 1.6 * c.z)
+    const res = c.g.pass('overAB', OVER_AB, c.W, c.H, { uA: cur, uB: soft })
+    c.g.release(out, soft)
+    return res
+  },
   raggi: simple('rays', RAYS, (_c, p) => ({ uCenter: [num(p.cx, 50) / 100, num(p.cy, 50) / 100], uLen: num(p.length, 60) / 100, uInt: num(p.intensity, 70) / 100, uMode: num(p.mode), uCol: rgb(p.color, '#7ab8ff') })),
   glitter: simple('glitter', GLITTER, (_c, p) => ({ uBase: rgb(p.color, '#c9ccd6'), uUse: num(p.useColor, 1), uSize: Math.max(0.5, num(p.size, 4)), uSpark: num(p.sparkle, 70) / 100, uDust: num(p.dust, 50) / 100 })),
   glitch: simple('glitch', GLITCH, (_c, p) => ({ uPow: num(p.power, 50) / 100, uSplit: num(p.split, 30) / 100, uSlices: num(p.slices, 18), uNoise: num(p.noise, 20) / 100 })),
