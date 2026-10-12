@@ -21,6 +21,8 @@ export interface WingGeom {
   echo: Pt[][]
   /** sagoma piena (per lo stile pieno) */
   poly: Pt[]
+  /** ingombro senza morsi: nessun'altra ala ci entra */
+  hull: Pt[]
   /** cuspidi del ventre: punto, direzione d'uscita, spessore locale (per farci crescere altre ali) */
   cusps: { p: Pt; a: number; w: number }[]
   /** curvatura: +1 o -1 */
@@ -73,7 +75,9 @@ export function wingGeom(r: Rnd, x: number, y: number, angle: number, L: number,
     const horn = hasHorn ? { len: w * range(r, 0.3, 0.6), dt: seg * range(r, 0.03, 0.09) } : null
     horns.push(horn)
     const tip = horn ? off(t + horn.dt, w + horn.len) : off(t, w)
-    cusps.push({ p: tip, a: Math.atan2(nv[1], nv[0]) + side * range(r, 0.3, 0.6), w })
+    // direzione d'uscita = direzione della punta: un'ala figlia ne è il proseguimento
+    const base = off(t, w)
+    cusps.push({ p: tip, a: horn ? Math.atan2(tip[1] - base[1], tip[0] - base[0]) : Math.atan2(nv[1], nv[0]) + side * 0.4, w })
   }
   horns.push(null)
   const arcs: Pt[][] = []
@@ -83,7 +87,8 @@ export function wingGeom(r: Rnd, x: number, y: number, angle: number, L: number,
   for (let i = 0; i < k; i++) {
     const ta = cuts[i], tb = cuts[i + 1], hIn = horns[i], hOut = horns[i + 1]
     // senza punta lo smerlo sfora la cuspide e incrocia il vicino
-    const e0 = hIn ? 0 : range(r, 0.04, 0.12), e1 = hOut ? 0 : range(r, 0.04, 0.12)
+    // gli smerli si chiudono esattamente nella cuspide: niente baffi che sforano
+    const e0 = 0, e1 = 0
     const q: Pt[] = [], m = steps(tb - ta) * 2
     const reach = range(r, 0.3, 0.45)
     for (let j = 0; j <= m; j++) {
@@ -130,7 +135,10 @@ export function wingGeom(r: Rnd, x: number, y: number, angle: number, L: number,
     if (t > t0 && t < t1) { let c = 0; while (c < k - 1 && t > cuts[c + 1]) c++; b = biteU((t - cuts[c]) / (cuts[c + 1] - cuts[c]), depths[c]) }
     poly.push(off(t, th(t) * (1 - b)))
   }
-  return { back: pts, arcs, spikes, veins, echo, poly, cusps, side }
+  // sagoma senza morsi: l'ingombro vero dell'ala, cavità comprese
+  const hull: Pt[] = [...pts]
+  for (let i = n - 1; i >= 0; i--) hull.push(off(i / (n - 1), th(i / (n - 1))))
+  return { back: pts, arcs, spikes, veins, echo, poly, hull, cusps, side }
 }
 
 /** riflette una geometria d'ala (o qualsiasi insieme di punti) con una funzione */
@@ -142,7 +150,7 @@ export function mapWing(g: WingGeom, f: (p: Pt) => Pt): WingGeom {
   const dirMap = (a: number) => { const q = f([Math.cos(a), Math.sin(a)]); return Math.atan2(q[1] - p0[1], q[0] - p0[0]) }
   const k = Math.sqrt(Math.abs(det))
   return {
-    back: m(g.back), arcs: g.arcs.map(m), spikes: g.spikes.map(s => ({ pts: m(s.pts), w: s.w * k, cusp: s.cusp })), veins: g.veins.map(m), echo: g.echo.map(m), poly: m(g.poly),
+    back: m(g.back), arcs: g.arcs.map(m), spikes: g.spikes.map(s => ({ pts: m(s.pts), w: s.w * k, cusp: s.cusp })), veins: g.veins.map(m), echo: g.echo.map(m), poly: m(g.poly), hull: m(g.hull),
     cusps: g.cusps.map(c => ({ p: f(c.p), a: dirMap(c.a), w: c.w * k })), side: det < 0 ? -g.side : g.side,
   }
 }
@@ -174,9 +182,10 @@ export function penLine(ctx: Ctx, pts: Pt[], h: Hand, weight = 1) {
     const lw = h.lw * weight * k
     taper(ctx, seg, t => {
       const s = s0 + (s1 - s0) * t
-      const ends = Math.min(1, (s - s0) / (lw * 5), (s1 - s) / (lw * 5))
+      // attacco e stacco brevi: alle giunzioni le linee arrivano piene e si saldano
+      const ends = Math.min(1, (s - s0) / (lw * 1.5), (s1 - s) / (lw * 1.5))
       const press = 0.6 + 0.8 * (0.5 + 0.5 * np(off0 + s / (h.lw * 70), 0.5))
-      return lw * press * Math.pow(Math.max(0.15, ends), 0.5)
+      return lw * press * Math.pow(Math.max(0.55, ends), 0.5)
     })
   }
   const slice = (a: number, b: number) => {
@@ -265,7 +274,7 @@ export function wingOverlap(poly: Pt[], sp: Space) {
  */
 export function wingTree(r: Rnd, x: number, y: number, angle: number, L: number, o: WingOpts, branch: number, depth = 2, space: Space = { polys: [] }): WingGeom[] {
   const g = wingGeom(r, x, y, angle, L, o)
-  occupy(space, g.poly)
+  occupy(space, g.hull)
   return [g, ...growWing(r, g, L, o, branch, depth, space)]
 }
 
@@ -276,14 +285,14 @@ export function growWing(r: Rnd, g: WingGeom, L: number, o: WingOpts, branch: nu
   g.cusps.forEach(c => {
     if (r() > branch) return
     for (const k of [1, 0.65]) {
-      const sub = wingGeom(r, c.p[0], c.p[1], c.a + g.side * range(r, 0.1, 0.35), L * range(r, 0.32, 0.5) * k, { ...o, width: o.width * range(r, 0.9, 1.15), bites: Math.max(2, o.bites - 1), bend: -Math.sign(o.bend) * range(r, 0.7, 1.0) })
-      if (wingOverlap(sub.poly, space) > 0.04) continue
+      const sub = wingGeom(r, c.p[0], c.p[1], c.a, L * range(r, 0.32, 0.5) * k, { ...o, width: o.width * range(r, 0.9, 1.15), bites: Math.max(2, o.bites - 1), bend: -Math.sign(o.bend) * range(r, 0.7, 1.0) })
+      if (wingOverlap(sub.hull, space) > 0.04) continue
       // trovato posto: la figlia diventa a sua volta un albero (con il seme già consumato)
-      out.push(sub); occupy(space, sub.poly)
+      out.push(sub); occupy(space, sub.hull)
       if (depth > 1) sub.cusps.forEach(cc => {
         if (r() > branch * 0.5) return
-        const g2 = wingGeom(r, cc.p[0], cc.p[1], cc.a + sub.side * range(r, 0.1, 0.35), L * 0.4 * range(r, 0.32, 0.5) * k, { ...o, bites: 2, bend: Math.sign(o.bend) })
-        if (wingOverlap(g2.poly, space) <= 0.04) { out.push(g2); occupy(space, g2.poly) }
+        const g2 = wingGeom(r, cc.p[0], cc.p[1], cc.a, L * 0.4 * range(r, 0.32, 0.5) * k, { ...o, bites: 2, bend: Math.sign(o.bend) })
+        if (wingOverlap(g2.hull, space) <= 0.04) { out.push(g2); occupy(space, g2.hull) }
       })
       break
     }
@@ -330,7 +339,7 @@ export function organism(r: Rnd, cx: number, top: number, bottom: number, S: num
     const L = S * (down ? range(r, 0.45, 0.6) : range(r, 0.6, 0.8) * (1 - i * 0.1))
     const oo = { ...o, bend: down ? -1 : 1 }
     const g = wingGeom(r, cx + wmax * u * 0.9, y, a, L, oo)
-    occupy(space, g.poly); mains.push({ g, L, o: oo })
+    occupy(space, g.hull); mains.push({ g, L, o: oo })
   }
   // prima tutte le coppie, poi le figlie nello spazio rimasto
   const mirror = (g: WingGeom) => mapWing(g, p => [2 * cx - p[0], p[1]])

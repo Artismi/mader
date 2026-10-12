@@ -228,10 +228,10 @@ const falce: Recipe = {
 const quaderno: Recipe = {
   id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'organismo di ali a falce che germogliano l\'una dall\'altra, a penna viva',
   params: [P.sel('layout', 'Composizione', ['Organismo', 'Ala', 'Corona di ali']), P.tone(0), P.sel('style', 'Segno', ['Penna', 'Pieno']),
-    P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4), P.range('depth', 'Morso', 20, 90, 62),
-    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 45), P.range('echo', 'Riprese', 0, 100, 35),
+    P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4), P.range('depth', 'Morso', 20, 90, 42),
+    P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 20), P.range('echo', 'Riprese', 0, 100, 0),
     P.range('branch', 'Ramificazioni', 0, 100, 70), P.range('pairs', 'Coppie', 1, 5, 3),
-    P.range('shake', 'Mano', 0, 100, 40), P.range('sketch', 'Ripassi', 0, 100, 30), P.range('breaks', 'Stacchi', 0, 100, 10),
+    P.range('shake', 'Mano', 0, 100, 40), P.range('sketch', 'Ripassi', 0, 100, 0), P.range('breaks', 'Stacchi', 0, 100, 0),
     P.tog('grid', 'Quadretti', true), P.caps(false), P.grain(30)],
   render: o => {
     const t = tone(o), S = SS(o), lay = num(o, 'layout'), r = rng(o.seed), W = o.W, H = o.H
@@ -260,20 +260,23 @@ const quaderno: Recipe = {
       const space: Space = { polys: [] }, mains: { g: WingGeom; L: number }[] = []
       // corona: un anello da cui le ali partono tangenti e si avvitano nello stesso verso.
       // Ogni ala deve trovare il suo spicchio: se cadrebbe sulle precedenti si accorcia.
-      const R0 = S * range(r, 0.08, 0.11), cnt = 3 + Math.floor(r() * 2), rot = r() * Math.PI * 2
+      const R0 = S * range(r, 0.08, 0.11)
+      space.polys.push(Array.from({ length: 48 }, (_, j): Pt => [Math.cos(j / 48 * Math.PI * 2) * R0 * 1.15, Math.sin(j / 48 * Math.PI * 2) * R0 * 1.15]))
+      const cnt = 3 + Math.floor(r() * 2), rot = r() * Math.PI * 2
       for (let i = 0; i < cnt; i++) {
         const a = rot + i * Math.PI * 2 / cnt, sd = Math.floor(r() * 1e6)
         for (const k of [1, 0.8, 0.62]) {
-          const g = wingGeom(rng(sd), Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - 0.45, S * 0.46 * k, opts(0.19))
-          if (k > 0.62 && wingOverlap(g.poly, space) > 0.12) continue
-          space.polys.push(g.poly); mains.push({ g, L: S * 0.46 * k }); break
+          // parte tangente all'anello e si avvita verso l'esterno: il ventre guarda fuori, il cerchio resta libero
+          const g = wingGeom(rng(sd), Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - 0.12, S * 0.46 * k, opts(0.19, num(o, 'bites'), -1))
+          if (k > 0.62 && wingOverlap(g.hull, space) > 0.12) continue
+          space.polys.push(g.hull); mains.push({ g, L: S * 0.46 * k }); break
         }
       }
       // prima tutte le ali principali, poi le figlie nello spazio rimasto
       wings.push(...mains.map(m => m.g))
-      for (const m of mains) wings.push(...growWing(r, m.g, m.L, opts(0.19), branch, 2, space))
+      for (const m of mains) wings.push(...growWing(r, m.g, m.L, opts(0.19, num(o, 'bites'), -1), branch, 2, space))
       const ring = (rr: number) => { const q: Pt[] = []; for (let j = 0; j <= 120; j++) { const a = j / 120 * Math.PI * 2; q.push([Math.cos(a) * rr, Math.sin(a) * rr]) } return q }
-      lines.push(ring(R0 * 0.92))
+      lines.push(ring(R0))
       fit(0.84)
     } else {
       const org = organism(r, 0, 0, S * 1.3, S, opts(0.2), branch, num(o, 'pairs'))
