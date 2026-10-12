@@ -643,6 +643,84 @@ function vine(seed, { lines = 4, w = 1.6, focal = 'sparkle' } = {}) {
   return { joined: fitBox(pc.union(...parts), 4) }
 }
 
+// ── Sistema di glifi ──────────────────────────────────────────────────────
+// Come nei pacchetti professionali: un alfabeto di glifi base, tutti centrati e con lo
+// stesso ingombro ottico, declinati in trattamenti coerenti (pieno, linea, mezzatinta).
+
+// Twinkle: 4 punte lunghe e 4 corte, lati concavi.
+const twinkle = (cx = 50, cy = 50, R = 46) => needles(cx, cy, R, { n: 8, inner: 0.1, alt: 0.42, concave: 0.5 })
+// Cross flare: fasci lunghissimi verticale/orizzontale, brevi diagonali, nucleo a diamante.
+const crossFlare = (cx = 50, cy = 50, R = 47) => pc.union(needles(cx, cy, R, { n: 4, inner: 0.035, concave: 0.65 }), needles(cx, cy, R * 0.3, { n: 4, inner: 0.12, rotate: 45, concave: 0.5 }), sparkle(cx, cy, R * 0.12, R * 0.12, { pinch: 0.3, bend: 0.5 }))
+// Glint: nucleo piccolo e quattro fasci a capello.
+const glint = (cx = 50, cy = 50, R = 47) => pc.union(sparkle(cx, cy, R * 0.22, R * 0.22, { pinch: 0.14 }), needles(cx, cy, R, { n: 4, inner: 0.012, concave: 0.75 }))
+// Bloom: fiore a petali tondi (r polare = base + petali).
+function bloom(cx = 50, cy = 50, R = 46, { n = 8, depth = 0.4, round = 0.55, rotate = 0 } = {}) {
+  const ring = []
+  for (let i = 0; i < 360; i++) { const a = rad(i), r = R * (1 - depth + depth * Math.pow(Math.abs(Math.cos((a - rad(rotate)) * n / 2)), round)); ring.push([cx + r * Math.cos(a - Math.PI / 2), cy + r * Math.sin(a - Math.PI / 2)]) }
+  return poly(ring)
+}
+// Ingranaggio: corona dentata con foro.
+function gear(cx = 50, cy = 50, R = 46, { teeth = 16, depth = 0.14, hole = 0.5, duty = 0.5 } = {}) {
+  const ring = []
+  for (let i = 0; i < 720; i++) { const a = i / 720 * 2 * Math.PI, f = ((a / (2 * Math.PI)) * teeth) % 1, inT = f < duty
+    const sm = Math.min(1, Math.min(Math.abs(f - 0), Math.abs(f - duty), Math.abs(1 - f)) * teeth * 0.9)
+    const r = R * (inT ? 1 : 1 - depth) ; ring.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]) }
+  return pc.difference(poly(ring), circle(cx, cy, R * hole, 120))
+}
+// Croce: bracci paralleli che finiscono a punta.
+function crossArm(cx = 50, cy = 50, R = 46, { w = 0.2, tip = 0.3 } = {}) {
+  const h = R * w / 2, pts = []
+  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2, d = [Math.cos(a), Math.sin(a)], n = [-d[1], d[0]]
+    const P = (along, side) => [cx + d[0] * along + n[0] * side, cy + d[1] * along + n[1] * side]
+    pts.push(P(h, -h), P(R * (1 - tip), -h), P(R, 0), P(R * (1 - tip), h)) }
+  return poly(pts)
+}
+// Bersaglio: anelli concentrici e punto centrale.
+const target = (cx = 50, cy = 50, R = 46, { rings = 3, w = 1.6 } = {}) => pc.union(dot(cx, cy, R * 0.12), ...Array.from({ length: rings }, (_, i) => ringO(cx, cy, R * (0.36 + 0.64 * i / Math.max(1, rings - 1)) - w / 2, w)))
+const targetSolid = (cx = 50, cy = 50, R = 46) => pc.union(dot(cx, cy, R * 0.18), ringO(cx, cy, R * 0.52, R * 0.16), ringO(cx, cy, R * 0.88, R * 0.16))
+
+// Elementi a linea Y2K.
+const ellLine = (cx, cy, rx, ry, w = 1.3, tilt = 0) => brush(ellAt(cx, cy, rx, ry, 0, 360, tilt), () => w, { N: 360, needle: 0 })
+// Globo wireframe: contorno, meridiani ed equatore/paralleli.
+function globe(cx = 50, cy = 50, R = 45, { w = 1.3, mer = [0.72, 0.38], par = [0.5, 0.86] } = {}) {
+  const parts = [ringO(cx, cy, R, w), line([cx, cy - R], [cx, cy + R], w, 0), line([cx - R, cy], [cx + R, cy], w, 0)]
+  for (const k of mer) parts.push(ellLine(cx, cy, R * k, R, w))
+  for (const k of par) { const y = R * k, hw = Math.sqrt(R * R - y * y); parts.push(line([cx - hw, cy - y], [cx + hw, cy - y], w, 0), line([cx - hw, cy + y], [cx + hw, cy + y], w, 0)) }
+  return pc.union(...parts)
+}
+// Rettangolo arrotondato (poligono).
+function roundRect(cx, cy, hw, hh, r) {
+  const pts = [], c = [[cx + hw - r, cy - hh + r, -90], [cx + hw - r, cy + hh - r, 0], [cx - hw + r, cy + hh - r, 90], [cx - hw + r, cy - hh + r, 180]]
+  for (const [x, y, a0] of c) for (let i = 0; i <= 12; i++) { const a = rad(a0 + i * 7.5); pts.push([x + r * Math.cos(a), y + r * Math.sin(a)]) }
+  return poly(pts)
+}
+const concentricSquares = (n = 5, w = 1.3) => pc.union(...Array.from({ length: n }, (_, i) => { const h = 45 - i * (38 / n); return lineOf(roundRect(50, 50, h, h, h * 0.28), w) }))
+// Griglia deformata a lente (fisheye) dentro un cerchio.
+function warpGrid(n = 11, w = 1, bulge = 0.3) {
+  // lente: dentro il cerchio unitario i punti si allontanano dal centro come su una sfera
+  const map = (u, v) => { const r = Math.hypot(u, v), k = r < 1e-6 ? 1 + bulge : Math.sin(r * Math.PI / 2) / r * (1 + bulge * 0) ; return [50 + 45 * u * k, 50 + 45 * v * k] }
+  const parts = [ringO(50, 50, 45, w)]
+  for (let i = 1; i < n - 1; i++) { const c = -1 + 2 * i / (n - 1), h = Math.sqrt(1 - c * c)
+    parts.push(brush(t => map(c, -h + 2 * h * t), () => w, { N: 120, needle: 0 }), brush(t => map(-h + 2 * h * t, c), () => w, { N: 120, needle: 0 })) }
+  return pc.union(...parts)
+}
+// Eco: lo stesso glifo ripetuto a contorno, in scala decrescente.
+const echo = (make, scales = [1, 0.72, 0.44], w = 1.3) => pc.union(...scales.map(k => lineOf(make(k), w)))
+
+// Linea di precisione: contorno a spessore costante di qualunque forma (anche con fori),
+// costruito come unione di segmenti spessi lungo il bordo.
+function lineOf(g, w = 1.6) {
+  const quads = []
+  for (const pl of asPolys(g.joined || g)) for (const r of pl) {
+    for (let i = 0; i < r.length - 1; i++) {
+      const a = r[i], b = r[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-6) continue
+      const d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L], n = [-d[1] * w / 2, d[0] * w / 2], e = [d[0] * w * 0.35, d[1] * w * 0.35]
+      quads.push(poly([[a[0] - e[0] + n[0], a[1] - e[1] + n[1]], [b[0] + e[0] + n[0], b[1] + e[1] + n[1]], [b[0] + e[0] - n[0], b[1] + e[1] - n[1]], [a[0] - e[0] - n[0], a[1] - e[1] - n[1]]]))
+    }
+  }
+  return pc.union(...quads)
+}
+
 // ── Combinazioni: strumenti ───────────────────────────────────────────────
 // Mette una forma (anche un sigillo) dentro un riquadro [x0, y0, x1, y1].
 const place = (g, box) => ({ joined: fitBox(g.joined || g, 0, box) })
@@ -699,33 +777,54 @@ function facetSparkle(cx, cy, rx, ry = rx, o = {}) {
 const S = (cx, cy, rx, ry = rx, o = {}) => (Math.max(rx, ry) >= 30 ? facetSparkle(cx, cy, rx, ry, o) : sparkle(cx, cy, rx, ry, o))
 
 const CATS = {
-  'SPARKLE': {
+  'GLIFI · PIENI': {
     'Sparkle':          [S(50, 50, 36, 48, { pinch: 0.08 })],
-    'Sparkle Tall':     [S(50, 50, 20, 48, { pinch: 0.12 })],
-    'Sparkle Needle':   [S(50, 50, 12, 48, { pinch: 0.14 })],
+    'Sparkle Slim': [sparkle(50, 50, 18, 47, { pinch: 0.12 })],
     'Sparkle Wide':     [S(50, 50, 48, 30, { pinch: 0.1 })],
+    'Twinkle': [twinkle()],
+    'Cross Flare': [join(crossFlare())],
+    'Glint': [join(glint())],
+    'Starburst':        [burst(50, 50, 47)],
+    'Starburst Alt':    [burst(50, 50, 47, { alt: 0.58 })],
+    'Bloom': [bloom()],
+    'Bloom 6': [bloom(50, 50, 46, { n: 6, depth: 0.5 })],
+    'Bloom 12': [bloom(50, 50, 46, { n: 12, depth: 0.28, round: 0.7 })],
+    'Gear': [join(gear())],
+    'Target': [join(targetSolid())],
     'Sparkle Duo':      [S(40, 58, 28, 38, { pinch: 0.08 }), S(82, 20, 12, 16)],
     'Sparkle Trio':     [S(42, 52, 20, 46, { pinch: 0.12 }), S(78, 24, 10, 15), S(16, 84, 7, 10)],
-    'Sparkle Outline':  [sparkleLine(50, 50, 34, 48, 1.4, { pinch: 0.1 })],
+    'Sparkle Blade':    [blade(50, 50, 1.35)],
+  },
+  'GLIFI · LINEA': {
+    'Sparkle Line': [join(lineOf(sparkle(50, 50, 34, 47, { pinch: 0.1 }), 1.6))],
+    'Slim Line': [join(lineOf(sparkle(50, 50, 18, 47, { pinch: 0.12 }), 1.6))],
+    'Bloom Line': [join(lineOf(bloom(), 1.6))],
+    'Bloom 6 Line': [join(lineOf(bloom(50, 50, 46, { n: 6, depth: 0.5 }), 1.6))],
+    'Gear Line': [join(lineOf(gear(), 1.4))],
+    'Target Line': [join(target(50, 50, 46, { rings: 4, w: 1.4 }))],
+    'Echo Bloom': [join(echo(k => bloom(50, 50, 46 * k), [1, 0.74, 0.48, 0.22]))],
+    'Echo Sparkle': [join(echo(k => sparkle(50, 50, 34 * k, 47 * k, { pinch: 0.16 })))],
+    'Echo Slim': [join(echo(k => sparkle(50, 50, 18 * k + 2, 47 * k, { pinch: 0.2 }), [1, 0.7, 0.4]))],
+    'Globe': [join(globe())],
+    'Lens Grid': [join(warpGrid())],
+    'Squares': [join(concentricSquares())],
     'Sparkle Inlay':    [sparkleLine(50, 50, 34, 48, 1.4, { pinch: 0.1 }), S(50, 50, 9, 16, { pinch: 0.12 })],
     'Sparkle Hatch':    (() => { const g = sparkle(50, 50, 32, 46, { pinch: 0.1 })
       return [join(sparkleLine(50, 50, 32, 46, 0.9, { pinch: 0.1 }), hatch(sparkle(50, 50, 31.3, 45.3, { pinch: 0.1 }), { shadeAt: sideShade(-135), gap: 2.2 }))] })(),
-    'Sparkle Blade':    [blade(50, 50, 1.35)],
-    'Blade Straight':   [blade(50, 50, 1.35, { bend: 0 })],
-    'Blade Trio':       [blade(26, 24, 0.62), blade(50, 52, 0.55), blade(76, 80, 0.62)],
   },
-  'DOT POINT': {
+  'GLIFI · MEZZATINTA': {
+    'Dot Sparkle': [halftone(covGlow(sparkle(50, 50, 34, 47, { pinch: 0.1 }), 7), { step: 2.6 })],
+    'Dot Slim': [halftone(covGlow(sparkle(50, 50, 18, 47, { pinch: 0.12 }), 7), { step: 2.6 })],
+    'Dot Twinkle': [halftone(covGlow(twinkle(), 7), { step: 2.6 })],
+    'Dot Flare': [halftone(covGlow(crossFlare(), 6), { step: 2.2 })],
+    'Dot Bloom': [halftone(covGlow(bloom(), 7), { step: 2.6 })],
+    'Dot Gear': [halftone(covGlow(gear(), 6), { step: 2.6 })],
+    'Dot Target': [halftoneRadial(covGlow(targetSolid(), 5), 50, 50, { step: 2.4 })],
     'Halftone Star':       [htFill(star5(50, 54, 44), 10)],
     'Halftone Star Line':  [htLine(star5(50, 54, 42), 4.5, { step: 2.8 })],
-    'Halftone Star Glow':  [htGlow(star5(50, 54, 34), 12)],
     'Halftone Star Hollow':[halftone((x, y) => { const d = sdGeom([x, y], star5(50, 54, 44)); return d > 0 ? clamp01(0.7 - d / 8) : clamp01(1.1 - Math.abs(d + 6) / 6) })],
+    'Halftone Star Glow':  [htGlow(star5(50, 54, 34), 12)],
     'Stella Radiale':        [halftoneRadial(covFill(star5(50, 54, 44), 8), 50, 52, { step: 2.8 })],
-    'Stella Radiale Alone':  [halftoneRadial(covGlow(star5(50, 54, 30), 12), 50, 52, { step: 2.6 })],
-    'Stella Fine':           [halftone(covFill(star5(50, 54, 44), 6), { step: 2.2 })],
-    'Stella Diagonale':      [halftone((x, y) => (sdGeom([x, y], star5(50, 54, 44)) < 0 ? clamp01(1.25 - (x + y - 20) / 110) : 0), { step: 2.6 })],
-    'Halftone Sparkle':    [htGlow(sparkle(50, 50, 22, 38, { pinch: 0.1 }), 10, { step: 3 })],
-    'Sparkle Radiale':       [halftoneRadial(covGlow(sparkle(50, 50, 18, 36, { pinch: 0.1 }), 10), 50, 50, { step: 2.4 })],
-    'Sparkle Fine':          [halftone(covFill(sparkle(50, 50, 34, 46, { pinch: 0.1 }), 5), { step: 2 })],
     'Halftone Burst':      [htFill(burst(50, 50, 46, { inner: 0.1, alt: 0.6 }), 6, { step: 2.6 })],
   },
   'ORBITE': {
@@ -738,15 +837,6 @@ const CATS = {
     'Orbit Swoosh':     orbit(50, 44, 46, 16, 20, 300, { echo: [45, 150] }),
     'Orbit Dust':       [...orbit(50, 56, 46, 15, 20, 300, { echo: [45, 150] }), S(55, 22, 6, 10), S(68, 20, 4, 7), dot(43, 23, 1.8)],
     'Comet Trail':      [...orbit(50, 48, 46, 15, 25, 300, { wb: 0.6, tilt: -16, echo: [50, 150] }), S(82, 18, 6, 10), S(14, 82, 4, 7)],
-  },
-  'BURST': {
-    'Starburst':        [burst(50, 50, 47)],
-    'Starburst Alt':    [burst(50, 50, 47, { alt: 0.58 })],
-    'Flare':            [needles(50, 50, 48, { n: 8, inner: 0.06, alt: 0.3 })],
-    'Fine Flare':       [join(needles(50, 50, 48, { n: 4, inner: 0.03, concave: 0.55 }), needles(50, 50, 22, { n: 4, inner: 0.06, rotate: 45, concave: 0.5 }))],
-    'Cross X':          [cross(50, 50, 46)],
-    'Burst Glow':       (() => { const g = burst(50, 50, 46, { alt: 0.55 })
-      return [g, stipple((x, y) => { const d = Math.hypot(x - 50, y - 50); return sdGeom([x, y], g) < 1.6 ? 0 : 0.7 * Math.pow(clamp01(1 - d / 26), 1.6) }, { seed: 3 })] })(),
   },
   'SPINE & INCHIOSTRO': {
     'Thorn Branch':     [thornBranch([6, 84], [34, 54], [58, 66], [94, 16], { n: 7, len: 15 })],
@@ -773,8 +863,32 @@ const CATS = {
 
 // ── ICONE (viewBox 24): stesse forme in scala, piene ───────────────────────
 const ICON_FROM = {
-  Sparkle: 'Sparkle', Sparkles: 'Sparkle Duo', Blade: 'Sparkle Blade', Starburst: 'Starburst', Flare: 'Flare', 'Cross X': 'Cross X',
-  Orbit: 'Saturn Sparkle', Halo: 'Halo Wide', Comet: 'Comet Trail', Thorn: 'Thorn Branch', 'Thorn Crown': 'Thorn Crown', Arcs: 'Arc Wave',
+  Sparkle: 'Sparkle', 'Sparkle Slim': 'Sparkle Slim', Twinkle: 'Twinkle', Flare: 'Cross Flare', Glint: 'Glint', Starburst: 'Starburst',
+  Bloom: 'Bloom', 'Bloom Line': 'Bloom Line', Gear: 'Gear', Target: 'Target Line', Globe: 'Globe', 'Sparkle Line': 'Sparkle Line',
+  Orbit: 'Saturn Sparkle', Halo: 'Halo Wide', Thorn: 'Thorn Branch', Arcs: 'Arc Wave',
+}
+
+// ── Esplorazione glifi: GLYPH_EXPLORE=<cartella> scrive la matrice glifo × trattamento ──
+const GLYPHS = {
+  sparkle: () => sparkle(50, 50, 34, 47, { pinch: 0.1 }), slim: () => sparkle(50, 50, 18, 47, { pinch: 0.12 }), twinkle: () => twinkle(), flare: () => crossFlare(),
+  glint: () => glint(), burst: () => burst(50, 50, 47), bloom: () => bloom(), bloom6: () => bloom(50, 50, 46, { n: 6, depth: 0.5 }), cross: () => crossArm(),
+  gear: () => gear(), target: () => targetSolid(), star: () => star5(50, 53, 46),
+}
+const LINES = {
+  globe: () => globe(), squares: () => concentricSquares(), warp: () => warpGrid(), echoSparkle: () => echo(k => sparkle(50, 50, 34 * k, 47 * k, { pinch: 0.16 })),
+  echoBloom: () => echo(k => bloom(50, 50, 46 * k), [1, 0.74, 0.48, 0.22]), echoSlim: () => echo(k => sparkle(50, 50, 18 * k + 2, 47 * k, { pinch: 0.2 }), [1, 0.7, 0.4]),
+}
+if (process.env.GLYPH_EXPLORE) {
+  const dir = process.env.GLYPH_EXPLORE; mkdirSync(dir, { recursive: true })
+  const svg = d => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="${d}" fill="currentColor"/></svg>`
+  for (const [k, f] of Object.entries(GLYPHS)) {
+    const g = f()
+    writeFileSync(`${dir}/${k}-1solid.svg`, svg(toPath(g)))
+    writeFileSync(`${dir}/${k}-2line.svg`, svg(toPath(lineOf(g, 1.6))))
+    writeFileSync(`${dir}/${k}-3half.svg`, svg(halftone(covGlow(g, 7), { step: 2.6 }).raw))
+  }
+  for (const [k, f] of Object.entries(LINES)) writeFileSync(`${dir}/z-${k}.svg`, svg(toPath(f())))
+  process.exit(0)
 }
 
 // ── Esplorazione: SIGIL_EXPLORE=<cartella> genera candidati e si ferma ─────
