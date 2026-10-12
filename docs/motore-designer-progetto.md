@@ -470,3 +470,62 @@ Le fasi 0–2 sono le fondamenta: senza misure e grammatica, qualsiasi IA lavora
 - **Si tiene**: render con le nuove estensioni (rotazioni, sovrastampa, testo su cerchio, foto nelle lettere e in porzioni, ritaglio al bordo), motore effetti, controllo di leggibilità con i pixel, `treat()`, nastri, puntini, segni di stampa, sigilli corretti.
 - **Si rifà sulla grammatica**: gli 8 sistemi.
 - **Si butta**: le vecchie impaginazioni (`layouts-lancio.ts`, `layouts-testo.ts`, `generate.ts`) e l'azione `contenuti` di `template-assist`, quando la Regia è pronta.
+
+---
+
+## 16. Revisione: perché siamo ancora sotto, e come arrivarci con i modelli gratuiti
+
+### I gradini che mancano
+1. **L'idea.** Un grafico parte da un'idea che lega contenuto e forma ("Progettare il vuoto" → tavola quasi vuota, testo minuscolo in un angolo). Il motore ha solo forma: anche curato, sembra generico.
+2. **Il gusto d'autore.** Tutto è procedurale. Gli strumenti che arrivano alla qualità partono da modelli disegnati da designer e li variano dentro limiti.
+3. **La scelta.** Un grafico fa trenta prove e ne butta ventisette; il motore ne mostra otto.
+4. **I materiali.** Una foto ritagliata al centro, nessuna illustrazione, i pack dell'utente usati solo come trama.
+5. **L'occhio.** I modelli, soprattutto gratuiti, non giudicano bene un'immagine se la domanda è aperta.
+
+Per i gradini 1–4 il collo di bottiglia non è il modello ma il sistema; per il 5 servono domande chiuse.
+
+### L'architettura con i modelli gratuiti
+I modelli gratuiti sbagliano i compiti grandi e aperti, ma reggono quelli piccoli e chiusi. Quindi molte chiamate brevi, ognuna con un ruolo, un menu da cui scegliere, uno schema JSON e un controllo scritto in codice. Nessun ruolo piazza coordinate o giudica la bellezza in modo aperto.
+
+| Ruolo (chiamata) | Compito | Uscita controllata |
+|---|---|---|
+| Analista | dal brief: brand, prodotto, pubblico, tono, fatti, numeri, date | campi obbligatori, niente dati inventati |
+| Copywriter | testi per ruolo, 3 titoli alternativi, parola chiave | budget di caratteri, parole vietate, verbi specifici |
+| Direttore creativo | 3 direzioni scelte dal menu dei concetti, famiglie e abbinamenti | solo voci del menu, 3 direzioni diverse |
+| Regista (carosello) | arco, ruoli delle slide, ritmo | ruoli validi, niente ripetizioni |
+| Photo editor | ricerche foto per slide, scelta tra i risultati (didascalie) | una foto per slide, coerenti |
+| Critico (visione, se disponibile) | domande sì/no sulle miniature: "il titolo si legge?", "c'è un protagonista?" | maggioranza su più risposte |
+
+### La maestra (codice, non modello)
+Un modello che controlla un altro modello è pigro quanto lui: la maestra è uno script con una lista di controllo per ogni fase:
+- tutti i ruoli compilati;
+- budget rispettati;
+- nessun testo generico (elenco di frasi vietate: "Scopri di più", "Il meglio per te"…);
+- tre direzioni davvero diverse;
+- nessuna famiglia ripetuta;
+- ogni slide con brand e numero;
+- densità rispettata (il numero di passaggi richiesto c'è tutto);
+- leggibilità e punteggio sopra soglia.
+
+Quando qualcosa non va rimanda al ruolo giusto con l'errore preciso ("titolo di 41 caratteri, massimo 32"; "'Scopri di più' non ammesso, usa un verbo specifico"). Al massimo 3 giri, poi valori di ripiego.
+
+### Menu e manuale
+- **Abbinamenti (dati, non prompt)**: circa 30 coppie di caratteri, 40 palette con nome e umore, 60 concetti visivi per settore e tono, tabella famiglia × tono, trattamento × tipo di foto. L'IA sceglie per nome; il motore sa eseguire ogni voce.
+- **Manuale dello Studio** (`docs/manuale-studio.md` + JSON): ogni strumento, famiglia, trattamento e dispositivo, con quando usarlo, quando no ed esempi. Ogni ruolo riceve solo il suo capitolo (i modelli gratuiti hanno contesti piccoli).
+
+### Modelli d'autore
+Il salto più grande. Le tavole disegnate da un designer nello Studio vengono salvate come modelli: i livelli diventano slot (titolo, foto, testo, accento, dispositivo) con le loro regole ("Salva come modello"). Il motore li adatta:
+- testo adattato con la scala;
+- foto tagliata sul soggetto;
+- palette e dispositivi sostituiti;
+- composizione specchiata e variata dentro limiti.
+
+La grammatica resta per la novità e per creare varianti dei modelli.
+
+### Nuovo ordine di lavoro
+1. Maestra + catena di ruoli su modelli gratuiti (elenco dinamico; visione solo dove c'è).
+2. Menu degli abbinamenti e dei concetti, manuale dello Studio.
+3. Modelli d'autore: salvataggio dallo Studio e adattatore.
+4. Misure e grammatica (in corso), al servizio di entrambi.
+5. Molte candidate e scelta (punteggio e maestra).
+6. Sequenze e pannello.
