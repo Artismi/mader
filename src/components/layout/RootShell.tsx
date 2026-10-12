@@ -90,8 +90,15 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  if (pathname === '/overlay') return <>{children}</>
+  // guscio circolare: niente barra legacy, ma il Co-Pilot resta a portata di mano
   if (isOverlay) {
-    return <>{children}</>
+    return (
+      <>
+        {children}
+        <CoPilotFloat open={isCoPilotOpen} setOpen={setCoPilotOpen} />
+      </>
+    )
   }
 
   return (
@@ -162,3 +169,39 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Co-Pilot nel guscio: linguetta sul bordo destro (non copre i comandi dello Studio), chat in un pannello laterale. */
+function CoPilotFloat({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+  return (
+    <>
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          title="Co-Pilot AI"
+          aria-label="Apri il Co-Pilot"
+          className="fixed right-0 top-1/2 z-[300] flex h-20 w-9 -translate-y-1/2 items-center justify-center rounded-l-2xl bg-[#111] text-accent shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-all hover:w-11"
+        >
+          <Sparkles className="h-4 w-4" />
+        </button>
+      )}
+      <div
+        className={cn(
+          'fixed right-0 top-0 z-[300] flex h-full w-[400px] max-w-[100vw] flex-col border-l border-white/10 bg-[#090909] shadow-2xl transition-transform duration-200',
+          open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
+        )}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-white/5 bg-white/[0.02] px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-accent" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Co-Pilot</span>
+          </div>
+          <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-white/30 transition-colors hover:bg-white/10 hover:text-white" aria-label="Chiudi pannello AI">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {/* sempre montata: chiudendo il pannello la conversazione resta */}
+        <div className="relative flex-1 overflow-hidden"><AIChatWidget /></div>
+      </div>
+    </>
+  )
+}
