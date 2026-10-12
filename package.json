@@ -24,7 +24,6 @@
     "@iconify-json/streamline-emojis": "^1.2.4",
     "@iconify-json/tabler": "^1.2.42",
     "@iconify/utils": "^3.1.7",
-    "@imgly/background-removal": "^1.7.0",
     "@lume/kiwi": "^0.4.4",
     "@notionhq/client": "^5.11.1",
     "@openrouter/ai-sdk-provider": "^2.10.0",
