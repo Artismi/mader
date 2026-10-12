@@ -10,7 +10,7 @@ import fs from 'fs'
 import { randomUUID } from 'crypto'
 import { db } from '@/lib/db/client'
 import { config } from '@/lib/db'
-import { google } from '@ai-sdk/google'
+import { google } from '@/lib/ai/google'
 import { anthropic } from '@ai-sdk/anthropic'
 import { embed, generateText } from 'ai'
 

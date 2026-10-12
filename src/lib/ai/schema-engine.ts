@@ -1,4 +1,4 @@
-import { google } from '@ai-sdk/google'
+import { google } from '@/lib/ai/google'
 import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
 import { generateObject } from 'ai'
 import { z } from 'zod'
