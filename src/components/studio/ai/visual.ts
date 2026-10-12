@@ -173,17 +173,69 @@ function treatment(o: fabric.FabricObject, id?: string) {
   applyFx(o)
 }
 
+/**
+ * Il rettangolo libero più grande della tavola (dentro i margini), lontano da
+ * testi, foto, bottoni e filetti: una griglia di celle, poi il rettangolo massimo
+ * sull'istogramma delle celle libere.
+ */
+export function freeRect(canvas: fabric.Canvas, ab: fabric.FabricObject) {
+  const tl = boardTopLeft(ab), W = ab.getScaledWidth(), H = ab.getScaledHeight()
+  const m = Math.min(W, H) * 0.06, pad = Math.min(W, H) * 0.03
+  const N = 32, cw = (W - 2 * m) / N, ch = (H - 2 * m) / N
+  const B = { l: tl.x, t: tl.y, r: tl.x + W, b: tl.y + H }
+  const busy: { l: number; t: number; r: number; b: number }[] = []
+  for (const k of childrenOf(canvas, ab)) {
+    if (k.excludeFromExport || (k.opacity ?? 1) < 0.35) continue
+    const r = k.getBoundingRect()
+    const area = Math.max(0, Math.min(r.left + r.width, B.r) - Math.max(r.left, B.l)) * Math.max(0, Math.min(r.top + r.height, B.b) - Math.max(r.top, B.t))
+    if (area > W * H * 0.85) continue // lo sfondo
+    busy.push({ l: r.left - pad, t: r.top - pad, r: r.left + r.width + pad, b: r.top + r.height + pad })
+  }
+  const free: boolean[][] = []
+  for (let i = 0; i < N; i++) {
+    free.push([])
+    for (let j = 0; j < N; j++) {
+      const x0 = tl.x + m + j * cw, y0 = tl.y + m + i * ch
+      free[i].push(!busy.some(b => b.l < x0 + cw && b.r > x0 && b.t < y0 + ch && b.b > y0))
+    }
+  }
+  // rettangolo massimo: istogramma delle altezze riga per riga; si preferiscono le forme quasi quadrate
+  const hgt = new Array(N).fill(0)
+  let best: { x: number; y: number; w: number; h: number } | null = null, bestScore = 0
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) hgt[j] = free[i][j] ? hgt[j] + 1 : 0
+    for (let j = 0; j < N; j++) {
+      let minH = Infinity
+      for (let k = j; k < N && hgt[k] > 0; k++) {
+        minH = Math.min(minH, hgt[k])
+        const w = (k - j + 1) * cw, h = minH * ch
+        const score = Math.min(w, h) ** 2 // conta il lato corto: il visual è quasi quadrato
+        if (score > bestScore) { bestScore = score; best = { x: tl.x + m + j * cw, y: tl.y + m + (i - minH + 1) * ch, w, h } }
+      }
+    }
+  }
+  return best
+}
+
 /** Crea il visual sulla tavola (o al centro della vista). Restituisce l'oggetto o un messaggio. */
 export async function buildVisual(canvas: fabric.Canvas, ab: fabric.FabricObject | undefined, spec: VisualSpec): Promise<fabric.FabricObject | string> {
   const R = rng(hash(spec.seed ?? `${spec.source}|${spec.treatment}|${spec.arrangement}`))
   const tl = ab ? boardTopLeft(ab) : new fabric.Point(0, 0)
   const W = ab ? ab.getScaledWidth() : canvas.getWidth(), H = ab ? ab.getScaledHeight() : canvas.getHeight()
-  const size = spec.size ?? Math.min(W, H) * 0.62
-  const src = await makeSource(spec.source || 'glifo:', spec.arrangement && spec.arrangement !== 'solo' ? size : size, spec.color ?? '#d9d9d9', R)
+  // dove: se non è indicato, nel rettangolo libero più grande (i testi restano leggibili)
+  let cx = spec.x, cy = spec.y, size = spec.size
+  if (ab && (cx === undefined || cy === undefined)) {
+    const free = freeRect(canvas, ab)
+    if (!free || Math.min(free.w, free.h) < Math.min(W, H) * 0.2) return 'Nessuno spazio libero per il visual: la tavola resta tipografica'
+    cx = free.x - tl.x + free.w / 2; cy = free.y - tl.y + free.h / 2
+    size = size ?? Math.min(free.w, free.h) * 0.9
+  }
+  size = size ?? Math.min(W, H) * 0.62
+  const src = await makeSource(spec.source || 'glifo:', size, spec.color ?? '#d9d9d9', R)
   if (typeof src === 'string') return src
   const o = await arrange(src, spec.arrangement ?? 'solo', size, spec.count ?? 0, R)
   o.set({ angle: spec.angle ?? 0, opacity: spec.opacity ?? 1 })
-  o.setPositionByOrigin(new fabric.Point(tl.x + (spec.x ?? W / 2), tl.y + (spec.y ?? H / 2)), 'center', 'center')
+  o.setPositionByOrigin(new fabric.Point(tl.x + (cx ?? W / 2), tl.y + (cy ?? H / 2)), 'center', 'center')
   o.set('name', `visual_${norm(spec.source).slice(0, 18) || 'glifo'}_${spec.treatment ?? 'cromo'}`)
   treatment(o, spec.treatment)
   o.setCoords()

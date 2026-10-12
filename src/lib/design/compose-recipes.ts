@@ -120,3 +120,6 @@ export const STYLE_FINISH: Record<string, string[]> = {
   poster: ['carta'], bauhaus: ['carta'], brutalista: ['fotocopia', 'y2k'], cinema: ['polvere', 'luce'], neon: ['plastica'],
   tech: ['graffi'], cromo: ['plastica', 'y2k'], lusso: ['polvere'], morbido: [], minimal: [], svizzero: [],
 }
+
+/** Decorazioni d'effetto che fanno a pugni con un visual: con il visual si spengono. */
+export const LOUD_DECOR = ['ghost', 'orbs', 'starburst', 'shape3d', 'halftoneDisc', 'blob', 'bauhaus', 'sticker', 'scribble', 'badge', 'dots'] as const

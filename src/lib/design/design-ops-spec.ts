@@ -62,6 +62,12 @@ export const designOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('palette'), colors: z.array(color).min(1), board: z.string().optional(), x: z.number().optional(), y: z.number().optional() }),
   z.object({ op: z.literal('layer'), id, to: z.enum(['front', 'back', 'forward', 'backward']) }),
   z.object({
+    op: z.literal('subject'), id,
+    generator: z.enum(['punti', 'righe', 'flusso', 'isolinee', 'eco', 'blocchi', 'mosaico']).describe('generatore che legge il soggetto (persona, testo, forma)'),
+    step: z.number().optional().describe('passo/densità in px'), ink: z.string().optional().describe("colore, o 'originale'"),
+    bg: z.enum(['trasparente', 'carta', 'nero', 'originale']).optional(), amount: z.number().min(0).max(1).optional(), seed: z.number().optional(), invert: z.boolean().optional(),
+  }),
+  z.object({
     op: z.literal('visual'), board: z.string().optional().describe('nome della tavola'),
     source: z.string().describe(VISUAL_SOURCE_HELP),
     treatment: z.string().optional().describe(`trattamento: ${VISUAL_TREATMENTS.join(', ')}`),
@@ -92,5 +98,6 @@ Operazioni (campo "op"), eseguite in ordine:
 - palette: mette sul canvas una striscia di campioni con i codici
 - layer: porta in primo piano / sfondo
 - export: scarica le tavole (png, jpg, svg, pdf)
+- subject: generatore procedurale sul soggetto di un elemento (foto di persona, testo, forma): punti istanziati, righe in rilievo, linee di flusso, curve di livello, eco del contorno, blocchi in rilievo, mosaico
 - visual: immagine d'impatto fatta con gli strumenti dello Studio: sorgente (glifo, parola, PNG dei pack, generatore) × trattamento (cromo, oro, vetro, gonfio, olografico, liquido, caleido, glitch…) × disposizione (solo, raggiera, pioggia, specchio, griglia, eco); va dietro ai testi
 Gli elementi creati prendono nuovi ID: per lavorarci ancora rileggi lo stato del canvas nel turno successivo.`

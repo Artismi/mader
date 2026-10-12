@@ -18,6 +18,7 @@ import { collectColors, documentColors, placePalette, Recolor, toHex, parse } fr
 import { getRepeat } from '../vector/repeat'
 import { getBlend } from '../vector/blend'
 import { buildVisual, type VisualSpec } from './visual'
+import { applyGenerator } from '../subject/apply'
 
 type Obj = fabric.FabricObject & { isArtboard?: boolean; name?: string; isClipMask?: boolean; warpCorners?: unknown }
 const nameOf = (o: fabric.FabricObject) => String(o.get('name') ?? '')
@@ -234,6 +235,13 @@ async function runOne(c: fabric.Canvas, op: DesignOp): Promise<string> {
       c.moveObjectTo(o, to)
       c.fire('object:modified', { target: o })
       return `livello ${op.to}`
+    }
+    case 'subject': {
+      const o = find(c, op.id); if (!o) return 'elemento non trovato'
+      const { generator, id: _id, op: _op, ...params } = op
+      void _id; void _op
+      const res = await applyGenerator(c, o, generator, params)
+      return typeof res === 'string' ? res : `${generator} → [${nameOf(res)}]`
     }
     case 'visual': {
       const ab = boardByName(c, op.board)

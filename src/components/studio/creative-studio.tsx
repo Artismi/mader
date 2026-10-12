@@ -2678,6 +2678,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           }
 
           if (obj) {
+            ;(obj as any)._z = el.zIndex ?? index
             if (Array.isArray(el.effects)) {
               // l'AI chiede effetti per nome: si usano quelli del motore fx che esistono davvero
               ;(obj as any).fx = (el.effects as string[]).filter(id => fxDef(id)).map(id => ({ ...newFx(id as FxId), p: { ...newFx(id as FxId).p, ...(el.effectProps?.[id] ?? {}) } }))
@@ -2704,7 +2705,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             img.set({ name: el.id, parentBoard: artboardName })
             if (el.w) img.scaleToWidth(el.w)
             placeInBoard(img, artboard, el.x ?? 0, el.y ?? 0)
-            canvas.add(img); canvas.moveObjectTo(img, canvas.getObjects().indexOf(artboard) + 1)
+            // al suo livello: sotto gli elementi con zIndex più alto, sopra lo sfondo
+            const z = el.zIndex ?? 1
+            const above = canvas.getObjects().findIndex(o => (o as any).parentBoard === artboardName && ((o as any)._z ?? 0) > z)
+            ;(img as any)._z = z
+            if (above >= 0) canvas.insertAt(above, img); else canvas.add(img)
           }).catch(e => {
             console.error('[canvas] image load failed:', el.url, e)
             // Fallback placeholder
