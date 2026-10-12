@@ -13,6 +13,7 @@ import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
+import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
@@ -1298,6 +1299,51 @@ const foglioAdesivi: Recipe = {
   },
 }
 
+const TAT_PALETTES = [
+  { label: 'Tradizionale', p: {} },
+  { label: 'Solo nero', p: { red: '#141212', yellow: '#141212', green: '#141212', gold: '#3a3634', steel: '#efe2c8', blue: '#141212' } },
+  { label: 'Rosso e nero', p: { yellow: '#c3172b', green: '#141212', gold: '#c3172b', blue: '#141212' } },
+  { label: 'Pastello', p: { red: '#f08aa4', yellow: '#f6d27a', green: '#8cc9a1', gold: '#f2c879', steel: '#c9d6e8', blue: '#8fb3e6' } },
+]
+
+const tattoo: Recipe = {
+  id: 'tattoo', label: 'Tattoo flash', cat: 'Tattoo', hint: 'flash tradizionale: contorno pieno, colori piatti, ombra a puntini, cartiglio',
+  piece: true,
+  params: [P.sel('subj', 'Soggetto', [...SUBJECTS]), { key: 'banner', label: 'Cartiglio', type: 'text', def: 'Artismi' }, P.sel('pal', 'Colori', TAT_PALETTES.map(x => x.label)),
+    P.range('line', 'Contorno', 50, 200, 100), P.range('shade', 'Ombra a puntini', 0, 100, 70), P.tog('bg', 'Fondo carta', false), P.tone(1), P.grain(15)],
+  render: o => {
+    const t = tone(o), S = SS(o), cx = o.W / 2, cy = o.H / 2
+    const Pal = { ...INK, ...TAT_PALETTES[num(o, 'pal')]?.p }
+    const lw = S * 0.009 * num(o, 'line') / 100
+    const ban = str(o, 'banner')
+    const s = S * (ban ? 0.66 : 0.78)
+    const items = tattooItems(num(o, 'subj'), cx, cy - (ban ? S * 0.04 : 0), s, o.seed, Pal)
+    const { c, ctx } = stage(o, t)
+    const art = makeCanvas(o.W, o.H)
+    inkFlash(art.ctx, o.W, o.H, items, { lw, shade: num(o, 'shade') / 100, seed: o.seed, palette: Pal })
+    if (ban) {
+      const bw = S * 0.62, bh = S * 0.1, by = cy + S * 0.3
+      inkFlash(art.ctx, o.W, o.H, banner(cx, by, bw, bh, Pal), { lw, shade: 0, seed: o.seed, palette: Pal })
+      // lettere che seguono la curva del nastro
+      const f = FACES.condensato, curve = bannerCurve(cx, bw, bh, by)
+      const { ctx: m } = makeCanvas(4, 4)
+      const sz = Math.min(fitSize(m, ban.toUpperCase(), f, bw * 0.78), bh * 0.62)
+      m.font = fontCss(f, sz)
+      const chars = [...ban.toUpperCase()], ws = chars.map(ch => m.measureText(ch).width), tot = ws.reduce((a, b) => a + b, 0)
+      let x = cx - tot / 2
+      art.ctx.fillStyle = Pal.black; art.ctx.font = fontCss(f, sz); art.ctx.textAlign = 'center'
+      chars.forEach((ch, i) => {
+        const xm = x + ws[i] / 2, ym = curve(xm), slope = (curve(xm + 1) - curve(xm - 1)) / 2
+        art.ctx.save(); art.ctx.translate(xm, ym + capOf(f, sz) / 2); art.ctx.rotate(Math.atan(slope)); art.ctx.fillText(ch, 0, 0); art.ctx.restore()
+        x += ws[i]
+      })
+    }
+    if (on(o, 'bg') && !o.transparent) { ctx.fillStyle = INK.skin; ctx.fillRect(0, 0, o.W, o.H) }
+    ctx.drawImage(art.c, 0, 0)
+    return finish(c, o, t, 'tattoo', null)
+  },
+}
+
 // ─── EPHEMERA ────────────────────────────────────────────────────────────────
 
 const francobollo: Recipe = {
@@ -1740,6 +1786,7 @@ export const RECIPES: Recipe[] = [
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
+  tattoo,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
