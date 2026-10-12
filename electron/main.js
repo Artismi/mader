@@ -184,7 +184,7 @@ ipcMain.handle('auth:openOAuthWindow', (_, url) => {
     authWindow.loadURL(url)
 
     const checkCallback = (navUrl) => {
-      if (navUrl.startsWith('http://localhost:3000/auth/callback')) {
+      if (/^http:\/\/(localhost|127\.0\.0\.1):3000\/(auth\/callback|api\/auth\/openrouter\/callback)/.test(navUrl)) {
         // Carica il callback nella finestra principale, chiudi il popup
         mainWindow.loadURL(navUrl)
         authWindow.destroy()
