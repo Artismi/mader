@@ -14,6 +14,8 @@ export const FACES = {
   bodoni: { family: 'Bodoni Moda', weight: 900, italic: true, track: -0.03 },
   grotesk: { family: 'Inter Tight', weight: 800, upper: true, track: -0.03 },
   mono: { family: 'Geist Mono', weight: 500, upper: true, track: 0.14 },
+  groovy: { family: 'Shrikhand', weight: 400, track: -0.01 },
+  gonfio: { family: 'Bagel Fat One', weight: 400, track: -0.02 },
 } satisfies Record<string, Face>
 
 export type FaceId = keyof typeof FACES
@@ -27,7 +29,7 @@ export const DISPLAY_FACES: { id: FaceId; label: string }[] = [
 
 const HREF = 'https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Pirata+One&family=Grenze+Gotisch:wght@400;900' +
   '&family=Anton&family=Unbounded:wght@400;900&family=Instrument+Serif:ital@0;1&family=Bodoni+Moda:ital,wght@1,400;1,900' +
-  '&family=Inter+Tight:wght@500;800&family=Geist+Mono:wght@400;500&display=swap'
+  '&family=Inter+Tight:wght@500;800&family=Geist+Mono:wght@400;500&family=Shrikhand&family=Bagel+Fat+One&display=swap'
 
 let ready: Promise<void> | null = null
 

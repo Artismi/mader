@@ -14,6 +14,7 @@ import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
+import { WARPS, band as distBand, extrude, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
@@ -1781,12 +1782,92 @@ const bottiglia: Recipe = {
 
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
+// ─── TESTO GRAFICO ───────────────────────────────────────────────────────────
+
+const TYPE_FACES: { label: string; f: Face }[] = [
+  { label: 'Groovy anni 70', f: FACES.groovy }, { label: 'Gonfio', f: FACES.gonfio }, { label: 'Espanso', f: FACES.espanso },
+  { label: 'Condensato', f: FACES.condensato }, { label: 'Bodoni corsivo', f: FACES.bodoni }, { label: 'Fraktur', f: FACES.gotico },
+]
+
+const GROOVY_PALETTES = [
+  { label: 'Anni 70', fill: '#f7e8c6', bands: ['#f0a12a', '#e0602a', '#b8321f', '#6e2416', '#f0a12a'], ext: '#3a1a10', line: '#e0602a' },
+  { label: 'Acido', fill: '#141414', bands: ['#c8ff2e', '#141414', '#ff4fd1', '#141414', '#c8ff2e'], ext: '#141414', line: '#c8ff2e' },
+  { label: 'Pop', fill: '#ffd23f', bands: ['#ee4266', '#3bceac', '#540d6e', '#ee4266', '#3bceac'], ext: '#1d0b2e', line: '#ee4266' },
+  { label: 'Bianco e nero', fill: '#ffffff', bands: ['#141414', '#ffffff', '#141414', '#ffffff', '#141414'], ext: '#141414', line: '#141414' },
+  { label: 'Sorbetto', fill: '#fff6ec', bands: ['#ff9aa2', '#ffc8a2', '#b5ead7', '#9fb8ff', '#ff9aa2'], ext: '#5a4b7a', line: '#ff9aa2' },
+  { label: 'Neon notte', fill: '#fdfbff', bands: ['#ff2e88', '#7a2cff', '#00d1ff', '#140a2e', '#ff2e88'], ext: '#140a2e', line: '#ff2e88' },
+]
+
+const groovy: Recipe = {
+  id: 'groovy', label: 'Scritta a contorni', cat: 'Testo grafico', hint: 'scritta anni 70: contorni concentrici, filo interno, blocco estruso, piegata a busta',
+  piece: true,
+  params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label)), P.sel('warp', 'Busta', [...WARPS], 1), P.range('amt', 'Piega', 0, 100, 45),
+    P.sel('pal', 'Colori', GROOVY_PALETTES.map(x => x.label)), P.range('rings', 'Contorni', 0, 5, 3), P.range('ringW', 'Spessore contorni', 20, 200, 100),
+    P.tog('inline', 'Filo interno', true), P.range('ext', 'Estrusione', 0, 100, 45), P.tone(1), P.grain(10)],
+  render: o => {
+    const t = tone(o), S = SS(o), W = o.W, H = o.H
+    const pal = GROOVY_PALETTES[num(o, 'pal')] ?? GROOVY_PALETTES[0]
+    const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.groovy
+    const rings = num(o, 'rings'), bw = S * 0.011 * num(o, 'ringW') / 100, ext = S * 0.05 * num(o, 'ext') / 100
+    const room = rings * bw + ext * 0.75 + S * 0.01
+    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room, lead: 0.08 })
+    const out = distance(invert(m))
+    const all = grow(out, m, rings * bw)
+    const { c, ctx } = stage(o, t)
+    // blocco: tutta la sagoma (contorni compresi) spinta giù a destra
+    if (ext > 0) extrude(ctx, all, pal.ext, ext * 0.55, ext * 0.85)
+    for (let k = rings; k >= 1; k--) ctx.drawImage(maskToCanvas(grow(out, m, k * bw), pal.bands[(k - 1) % pal.bands.length]), 0, 0)
+    ctx.drawImage(maskToCanvas(m, pal.fill), 0, 0)
+    if (on(o, 'inline')) {
+      // filo che corre dentro le aste, solo dove la lettera è abbastanza grossa
+      const din = distance(m)
+      let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
+      const at = mx * 0.42, w = Math.max(1.2, mx * 0.16)
+      ctx.drawImage(maskToCanvas(distBand(din, W, H, at, at + w), pal.line), 0, 0)
+    }
+    return finish(c, o, t, 'groovy', null)
+  },
+}
+
+const PUFFY_COLORS = [
+  { label: 'Bubblegum', c: '#ff6fae' }, { label: 'Cielo', c: '#4fa8ff' }, { label: 'Lime', c: '#a8e83a' }, { label: 'Arancio', c: '#ff7a1a' },
+  { label: 'Lilla', c: '#a98bff' }, { label: 'Giallo', c: '#ffd02e' }, { label: 'Rosso', c: '#e8283c' }, { label: 'Nero lucido', c: '#232326' },
+]
+
+const gonfiabile: Recipe = {
+  id: 'gonfiabile', label: 'Scritta gonfiabile', cat: 'Testo grafico', hint: 'lettere gonfie e lucide come palloncini, bordo adesivo, piegate a busta',
+  piece: true,
+  params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 1), P.sel('warp', 'Busta', [...WARPS], 2), P.range('amt', 'Piega', 0, 100, 35),
+    P.sel('col', 'Colore', PUFFY_COLORS.map(x => x.label)), P.range('puff', 'Gonfiore', 20, 100, 70), P.range('gloss', 'Lucido', 0, 100, 80),
+    P.sel('edge', 'Bordo', ['Nessuno', 'Bianco adesivo', 'Nero fumetto', 'Doppio']), P.tone(1), P.grain(8)],
+  render: o => {
+    const t = tone(o), S = SS(o), W = o.W, H = o.H
+    const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.gonfio
+    const col = PUFFY_COLORS[num(o, 'col')]?.c ?? PUFFY_COLORS[0].c
+    const edge = num(o, 'edge'), ew = S * 0.016
+    const room = (edge === 3 ? ew * 2 : edge ? ew : 0) + S * 0.02
+    // le lettere si toccano e si fondono come un palloncino solo
+    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room, fat: 0.02, lead: 0.04 })
+    const din = distance(m)
+    let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
+    const { c, ctx } = stage(o, t)
+    const out = edge ? distance(invert(m)) : null
+    const shell = out ? grow(out, m, edge === 3 ? ew * 2 : ew) : m
+    softShadow(ctx, shell, S, 1.2, '#000000', t.dark ? 0.5 : 0.28)
+    if (out && edge === 3) ctx.drawImage(maskToCanvas(shell, '#141414'), 0, 0)
+    if (out) ctx.drawImage(maskToCanvas(grow(out, m, ew), edge === 2 ? '#141414' : '#ffffff'), 0, 0)
+    ctx.drawImage(puffy(m, mx * (0.5 + num(o, 'puff') / 100 * 0.5), col, num(o, 'gloss') / 100), 0, 0)
+    return finish(c, o, t, 'gonfiabile', null)
+  },
+}
+
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
   tattoo,
+  groovy, gonfiabile,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
