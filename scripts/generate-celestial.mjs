@@ -559,11 +559,12 @@ function sigil(seed, { pairs = 3, core = 'spine', w = 3.4, barbs = 1, reach = 1,
 }
 
 // Adatta una geometria al riquadro (margine m), mantenendo le proporzioni.
-function fitBox(g, m = 4) {
+function fitBox(g, m = 4, box = [0, 0, 100, 100]) {
   const pts = asPolys(g).flatMap(p => p.flat())
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
-  const k = (100 - 2 * m) / Math.max(x1 - x0, y1 - y0), ox = 50 - (x0 + x1) / 2 * k, oy = 50 - (y0 + y1) / 2 * k
+  const k = Math.min((box[2] - box[0] - 2 * m) / (x1 - x0), (box[3] - box[1] - 2 * m) / (y1 - y0))
+  const ox = (box[0] + box[2]) / 2 - (x0 + x1) / 2 * k, oy = (box[1] + box[3]) / 2 - (y0 + y1) / 2 * k
   return asPolys(g).map(p => p.map(r => r.map(([x, y]) => [x * k + ox, y * k + oy])))
 }
 
@@ -603,6 +604,44 @@ const SIGILS = {
   cross: s => { const R = rng(s); return sigilOf([...fan([51, 40], { n: 2, a0: -20, a1: -55, L: 44, curl: -(70 + R() * 40), seed: s }), ...fan([51, 50], { n: 1, a0: 0, a1: 0, L: 46, curl: 50 + R() * 50, start: [1, 0], seed: s + 3 }), ...fan([51, 60], { n: 2, a0: 25, a1: 60, L: 40, curl: 70 + R() * 40, start: [0, 1], seed: s + 5 })], { core: [spine(2, 98, 3)] }) },
 }
 
+
+// ── Combinazioni: strumenti ───────────────────────────────────────────────
+// Mette una forma (anche un sigillo) dentro un riquadro [x0, y0, x1, y1].
+const place = (g, box) => ({ joined: fitBox(g.joined || g, 0, box) })
+// Maschera una copertura di punti: zero vicino ai tratti indicati (i punti non li toccano).
+const masked = (cov, geoms, gap = 2.6) => (x, y) => (geoms.some(g => sdGeom([x, y], g) < gap) ? 0 : cov(x, y))
+// Scia di punti lungo una curva at(t): raggio da r0 a r1, passo costante lungo la curva.
+function dotTrail(at, n, r0, r1, { t0 = 0, t1 = 1 } = {}) {
+  const N = 400, pos = [0], pts = [at(t0)]
+  for (let i = 1; i <= N; i++) { const p = at(t0 + (t1 - t0) * i / N); pos.push(pos[i - 1] + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1])); pts.push(p) }
+  const out = []
+  for (let k = 0; k < n; k++) { const target = pos[N] * k / Math.max(1, n - 1), i = pos.findIndex(v => v >= target - 1e-9), u = k / Math.max(1, n - 1)
+    out.push(dot(pts[i][0], pts[i][1], r0 + (r1 - r0) * u)) }
+  return out
+}
+// Mezzatinta a cerchi concentrici (al posto della griglia): anelli di punti attorno a (cx, cy).
+function halftoneRadial(cov, cx = 50, cy = 50, { step = 3.2, rmaxR = 48 } = {}) {
+  const out = [], rm = step * 0.46
+  const f = v => String(Math.round(v * 100) / 100)
+  for (let rr = 0; rr <= rmaxR; rr += step) {
+    const n = rr === 0 ? 1 : Math.round(2 * Math.PI * rr / step)
+    for (let i = 0; i < n; i++) {
+      const a = i * 2 * Math.PI / n + rr * 0.07, x = cx + rr * Math.cos(a), y = cy + rr * Math.sin(a), r = rm * clamp01(cov(x, y))
+      if (r > 0.25 && x > 1 && x < 99 && y > 1 && y < 99) out.push(`M${f(x - r)} ${f(y)}a${f(r)} ${f(r)} 0 1 0 ${f(2 * r)} 0a${f(r)} ${f(r)} 0 1 0 ${f(-2 * r)} 0Z`)
+    }
+  }
+  return { raw: out.join('') }
+}
+// Coperture pronte per le stelle a punti.
+const covFill = (g, fade = 8) => (x, y) => clamp01(0.85 - sdGeom([x, y], g) / fade)
+const covGlow = (g, fade = 10) => (x, y) => { const d = sdGeom([x, y], g); return d < -3 ? 1.2 : clamp01(0.75 - d / fade) }
+const covLine = (g, band = 4) => (x, y) => clamp01(1 - Math.abs(sdGeom([x, y], g) + 1) / band)
+
+// Sigillo a raggiera senza nucleo (per metterci al centro una stella a punti).
+const haloOpen = s => { const R = rng(s); return sigilOf([...fan([54, 44], { n: 3, a0: -10, a1: -60, L: 40, curl: 90 + R() * 40, seed: s }), ...fan([54, 56], { n: 3, a0: 10, a1: 60, L: 40, curl: -(90 + R() * 40), start: [0, 1], seed: s + 9 })]) }
+const flipY = g => ({ joined: (g.joined || g).map(p => p.map(r => r.map(([x, y]) => [x, 100 - y]))) })
+const geomOf = g => g.joined || g
+
 // ── Composizioni ──────────────────────────────────────────────────────────
 // Orbita completa attorno a dei corpi: spezzata automaticamente dove li incontra.
 const ringAround = (bodies, cx, cy, rx, ry, o = {}) => [...bodies, ...orbit(cx, cy, rx, ry, -90, 270, { avoid: bodies, echo: [40, 140], ...o })]
@@ -622,6 +661,47 @@ function facetSparkle(cx, cy, rx, ry = rx, o = {}) {
 const S = (cx, cy, rx, ry = rx, o = {}) => (Math.max(rx, ry) >= 30 ? facetSparkle(cx, cy, rx, ry, o) : sparkle(cx, cy, rx, ry, o))
 
 const CATS = {
+  'POESIA': {
+    'Stella tra le Spine':  (() => { const c = asPolys(pc.union(ringO(50, 50, 32, 3), ...Array.from({ length: 14 }, (_, i) => { const a = rad(i * 360 / 14), tan = [-Math.sin(a), Math.cos(a)]; return thorn([50 + 32 * Math.cos(a), 50 + 32 * Math.sin(a)], tan, i % 2 ? 1 : -1, i % 2 ? 7 : 14, 2.4, { lean: 0.4 }) })))
+      return [{ joined: c }, halftoneRadial(masked(covFill(star5(50, 52, 17), 5), [c], 2.4), 50, 51, { step: 1.9, rmaxR: 24 })] })(),
+    'Polvere di Stelle':    [S(74, 24, 12, 20, { pinch: 0.1 }), ...dotTrail(t => cubic([60, 42], [44, 52], [30, 70], [10, 92], t), 10, 2.2, 0.6), S(34, 40, 4, 7), S(88, 60, 3, 5)],
+    'Corona Stellata':      (() => { const c = place(SIGILS.crown(10), [8, 40, 92, 98]); return [c, halftoneRadial(masked(covGlow(star5(50, 22, 14), 6), [geomOf(c)], 3), 50, 21, { step: 1.8, rmaxR: 20 })] })(),
+    'Nascita':              [place(SIGILS.flame(13), [4, 40, 96, 98]), S(50, 18, 9, 16, { pinch: 0.1 }), dot(38, 30, 1.2), dot(63, 26, 0.9)],
+    'Anello di Punti':      (() => { const c = S(50, 50, 13, 44, { pinch: 0.12 })
+      return [c, halftoneRadial(masked((x, y) => { const d = Math.hypot(x - 50, y - 50); return d > 26 && d < 42 ? (0.35 + 0.65 * Math.pow((1 + Math.sin(Math.atan2(y - 50, x - 50) + 0.8)) / 2, 1.5)) * Math.sin(Math.PI * (d - 26) / 16) : 0 }, [c], 2.4), 50, 50, { step: 2.1 })] })(),
+    'Fumo e Stelle':        (() => { const st = [star5(30, 26, 11), star5(70, 70, 13)]
+      return [...inkSmoke([[8, 98], [20, 78], [16, 56], [34, 46], [50, 52], [60, 40], [56, 22], [74, 12], [94, 4]], { seed: 9, w: 2.2, avoid: st.map(g => star5(...[g === st[0] ? [30, 26, 16] : [70, 70, 18]].flat())) }),
+        halftoneRadial(covFill(st[0], 4), 30, 26, { step: 1.6, rmaxR: 14 }), halftoneRadial(covFill(st[1], 4), 70, 70, { step: 1.7, rmaxR: 16 })] })(),
+    'Costellazione di Punti': (() => { const P = [[24, 26, 14], [72, 38, 10], [42, 78, 12]], lines = [link(P[0], P[1], 19, 15, 0.8), link(P[1], P[2], 15, 17, 0.8), link(P[2], P[0], 17, 19, 0.8)]
+      return [...lines, ...P.map(([x, y, r]) => halftoneRadial(masked(covFill(star5(x, y + 1, r), 4), lines, 2.2), x, y, { step: 1.7, rmaxR: r + 3 }))] })(),
+    'Luna e Polvere':       [crescent(40, 52, 34, { dir: -30 }), ...dotTrail(t => cubic([66, 26], [76, 34], [82, 50], [80, 66], t), 7, 0.6, 1.7), S(76, 14, 6, 10), S(90, 80, 3.5, 6)],
+    'Altare':               (() => { const arcs = { joined: pc.union(...Array.from({ length: 6 }, (_, i) => arcLine(50, 80, 46 - i * 4.8, 180, 360, 1.1, { needle: 0 }))) }
+      return [arcs, halftoneRadial(masked(covFill(star5(50, 72, 13), 4), [geomOf(arcs)], 2.4), 50, 71, { step: 1.6, rmaxR: 16 }), dot(50, 92, 1.6)] })(),
+    'Lame nel Vento':       [blade(30, 30, 0.55), blade(72, 66, 0.62), ...dotTrail(t => cubic([44, 46], [52, 50], [54, 54], [58, 56], t), 4, 0.6, 1.2), ...dotTrail(t => cubic([10, 60], [16, 74], [28, 84], [44, 90], t), 7, 0.5, 1.6)],
+    'Sigillo Stellare':     (() => { const c = haloOpen(6); return [c, halftoneRadial(masked(covFill(star5(50, 51, 11), 4), [geomOf(c)], 2.4), 50, 50, { step: 1.6, rmaxR: 14 })] })(),
+    'Cometa di Spine':      (() => { const sp = S(76, 22, 12, 20, { pinch: 0.1 }), br = thornBranch([6, 94], [24, 74], [40, 60], [58, 42], { n: 4, len: 10, w: 5 })
+      return [sp, br, halftoneRadial(masked((x, y) => clamp01(1.05 - Math.hypot(x - 76, y - 22) / 24), [sp, geomOf(br)], 2.6), 76, 22, { step: 1.8, rmaxR: 23 })] })(),
+    'Pioggia di Stelle':    [[22, 70, 7, 12], [50, 90, 5, 8], [78, 58, 9, 14]].flatMap(([x, y, rx, ry]) => [S(x, y, rx, ry), ...dotTrail(t => [x, y - ry - 4 - (y - ry - 8) * t], 7, 1.5, 0.4)]),
+    'Cuore di Stella':      (() => { const o = sparkleLine(50, 50, 34, 47, 0.9, { pinch: 0.1 }); return [o, halftoneRadial(masked(covFill(star5(50, 52, 13), 4), [o], 2.2), 50, 51, { step: 1.5, rmaxR: 16 })] })(),
+    'Vortice':              [S(50, 50, 5, 9), ...dotTrail(t => { const a = t * 3.4 * Math.PI + 1, r = 14 + 30 * t; return [50 + r * Math.cos(a), 50 + r * Math.sin(a) * 0.9] }, 34, 0.5, 2.2)],
+    'Doppio Sigillo':       (() => { const a = place(SIGILS.flame(10), [6, 56, 94, 98]), b = flipY(place(SIGILS.flame(22), [6, 56, 94, 98]))
+      return [a, b, halftoneRadial(masked(covGlow(star5(50, 50, 6), 4), [geomOf(a), geomOf(b)], 2.4), 50, 50, { step: 1.4, rmaxR: 9 })] })(),
+    'Spina e Luna':         [crescent(52, 34, 30, { dir: -40 }), thornBranch([6, 90], [30, 80], [62, 92], [94, 76], { n: 6, len: 8, w: 4.5, seed: 4 })],
+  },
+  'VARIAZIONI': {
+    'Stella Radiale':        [halftoneRadial(covFill(star5(50, 54, 44), 8), 50, 52, { step: 2.8 })],
+    'Stella Radiale Alone':  [halftoneRadial(covGlow(star5(50, 54, 30), 12), 50, 52, { step: 2.6 })],
+    'Stella Fine':           [halftone(covFill(star5(50, 54, 44), 6), { step: 2.2 })],
+    'Stella Diagonale':      [halftone((x, y) => (sdGeom([x, y], star5(50, 54, 44)) < 0 ? clamp01(1.25 - (x + y - 20) / 110) : 0), { step: 2.6 })],
+    'Stella Doppia Linea':   [halftone((x, y) => Math.max(covLine(star5(50, 54, 44), 3)(x, y), covLine(star5(50, 54, 26), 3)(x, y)), { step: 2.2 })],
+    'Sparkle Radiale':       [halftoneRadial(covGlow(sparkle(50, 50, 18, 36, { pinch: 0.1 }), 10), 50, 50, { step: 2.4 })],
+    'Sparkle Fine':          [halftone(covFill(sparkle(50, 50, 34, 46, { pinch: 0.1 }), 5), { step: 2 })],
+    'Sparkle Inciso Largo':  [S(50, 50, 46, 46, { pinch: 0.1 })],
+    'Sigil Flame 5':  [SIGILS.flame(10)], 'Sigil Flame 6':  [SIGILS.flame(13)], 'Sigil Flame 7':  [SIGILS.flame(22)], 'Sigil Flame 8':  [SIGILS.flame(24)],
+    'Sigil Halo 5':   [SIGILS.halo(10)],  'Sigil Halo 6':   [SIGILS.halo(20)],  'Sigil Halo 7':   [SIGILS.halo(22)],
+    'Sigil Crown 4':  [SIGILS.crown(10)], 'Sigil Crown 5':  [SIGILS.crown(20)], 'Sigil Crown 6':  [SIGILS.crown(22)],
+    'Sigil Cross 4':  [SIGILS.cross(14)], 'Sigil Cross 5':  [SIGILS.cross(20)],
+  },
   'SPARKLE': {
     'Sparkle':          [S(50, 50, 36, 48, { pinch: 0.08 })],
     'Sparkle Tall':     [S(50, 50, 20, 48, { pinch: 0.12 })],
