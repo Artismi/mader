@@ -17,6 +17,7 @@ import { applyTextCurve, getTextCurve, isText } from '../text/curve'
 import { collectColors, documentColors, placePalette, Recolor, toHex, parse } from '../color/colors'
 import { getRepeat } from '../vector/repeat'
 import { getBlend } from '../vector/blend'
+import { buildVisual, type VisualSpec } from './visual'
 
 type Obj = fabric.FabricObject & { isArtboard?: boolean; name?: string; isClipMask?: boolean; warpCorners?: unknown }
 const nameOf = (o: fabric.FabricObject) => String(o.get('name') ?? '')
@@ -233,6 +234,11 @@ async function runOne(c: fabric.Canvas, op: DesignOp): Promise<string> {
       c.moveObjectTo(o, to)
       c.fire('object:modified', { target: o })
       return `livello ${op.to}`
+    }
+    case 'visual': {
+      const ab = boardByName(c, op.board)
+      const res = await buildVisual(c, ab, { ...op, arrangement: op.arrangement as VisualSpec['arrangement'] })
+      return typeof res === 'string' ? res : `visual [${nameOf(res)}]`
     }
     case 'export': {
       const only = op.boards?.map(n => boardByName(c, n)).filter((b): b is fabric.FabricObject => !!b)

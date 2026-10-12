@@ -12,6 +12,9 @@ const ids = z.array(z.string()).min(1).describe('ID degli elementi, come nello s
 const id = z.string().describe('ID di un elemento')
 const color = z.string().describe('colore CSS, es. "#1d3557"')
 
+export const VISUAL_TREATMENTS = ['cromo', 'oro', 'vetro', 'gonfio', 'olografico', 'ceramica', 'neon', 'tramonto', 'liquido', 'caleido', 'prisma', 'retino', 'riso', 'glitch', 'estruso', 'eco', 'linocut', 'foil', 'piatto']
+export const VISUAL_SOURCE_HELP = "sorgente: 'glifo:<nome>' (Sparkle, Bloom, Starburst, Gear, Target, Globe, Twinkle, Cross Flare…), 'testo:<parola>', 'pack:<finitura o pack>' (es. pack:y2k, pack:segni, pack:collage: PNG dell'utente), 'genera:<generatore>' (membrana, rete, falce, corona, cromo, colata, vortice, costellazione…)"
+
 export const designOpSchema = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('align'), ids,
@@ -59,6 +62,15 @@ export const designOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('palette'), colors: z.array(color).min(1), board: z.string().optional(), x: z.number().optional(), y: z.number().optional() }),
   z.object({ op: z.literal('layer'), id, to: z.enum(['front', 'back', 'forward', 'backward']) }),
   z.object({
+    op: z.literal('visual'), board: z.string().optional().describe('nome della tavola'),
+    source: z.string().describe(VISUAL_SOURCE_HELP),
+    treatment: z.string().optional().describe(`trattamento: ${VISUAL_TREATMENTS.join(', ')}`),
+    arrangement: z.string().optional().describe('solo (protagonista), raggiera, pioggia, specchio, griglia, eco'),
+    x: z.number().optional(), y: z.number().optional(), size: z.number().optional().describe('lato in px'),
+    angle: z.number().optional(), color: color.optional(), count: z.number().optional(), opacity: z.number().optional(),
+    front: z.boolean().optional().describe('sopra i testi; predefinito dietro'),
+  }),
+  z.object({
     op: z.literal('export'), format: z.enum(['png', 'jpg', 'svg', 'pdf']),
     scale: z.number().min(1).max(4).optional(), boards: z.array(z.string()).optional().describe('nomi delle tavole; omesso = tutte'),
   }),
@@ -80,4 +92,5 @@ Operazioni (campo "op"), eseguite in ordine:
 - palette: mette sul canvas una striscia di campioni con i codici
 - layer: porta in primo piano / sfondo
 - export: scarica le tavole (png, jpg, svg, pdf)
+- visual: immagine d'impatto fatta con gli strumenti dello Studio: sorgente (glifo, parola, PNG dei pack, generatore) × trattamento (cromo, oro, vetro, gonfio, olografico, liquido, caleido, glitch…) × disposizione (solo, raggiera, pioggia, specchio, griglia, eco); va dietro ai testi
 Gli elementi creati prendono nuovi ID: per lavorarci ancora rileggi lo stato del canvas nel turno successivo.`

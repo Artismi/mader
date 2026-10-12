@@ -8,7 +8,7 @@ import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
-import { designOpSchema, designOpsToolDescription } from '@/lib/design/design-ops-spec'
+import { designOpSchema, designOpsToolDescription, VISUAL_SOURCE_HELP, VISUAL_TREATMENTS } from '@/lib/design/design-ops-spec'
 import { FINISH_IDS, RECIPES } from '@/lib/design/compose-recipes'
 import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
@@ -164,7 +164,7 @@ const COMPOSE_ONLY_NOTE = `
 
 ## Come creare grafiche (obbligatorio)
 Per ogni grafica nuova chiama SOLO composeDesign: non esiste uno strumento a coordinate.
-- Scegli una ricetta (recipe) adatta al contenuto: lo Studio propone più versioni pulite.\n- Se vuoi un carattere materico aggiungi finish (es. carta, grana, polvere, y2k): usa i pack di texture dell'utente.
+- Scegli una ricetta (recipe) adatta al contenuto: lo Studio propone più versioni pulite.\n- Se vuoi un carattere materico aggiungi finish (es. carta, grana, polvere, y2k): usa i pack di texture dell'utente.\n- Senza foto, dai forza con visual: per esempio un glifo in cromo a raggiera, una parola in vetro, un generatore in oro.
 - Scrivi contenuti veri e completi: title, subtitle, body, cta, brand, eventuali meta/tags.
 - Per foto: content.image.query con 2-4 parole in inglese sul soggetto (lo Studio cerca una foto vera libera da diritti).
 - Lascia allo Studio posizioni, misure, caratteri ed effetti.
@@ -175,6 +175,12 @@ const composeBoardSchema = z.object({
   recipe: z.string().optional().describe(`Ricetta pulita (impaginazione-stile), consigliata: ${RECIPES.map(r => `${r.id} [${r.family}]`).join(', ')}`),
   variants: z.number().optional().describe('Quante proposte diverse (1-4, predefinito 3 per una tavola sola)'),
   finish: z.array(z.string()).optional().describe(`Finiture con i pack di texture e asset dell'utente, max 2: ${FINISH_IDS.join(', ')}`),
+  visual: z.object({
+    source: z.string().describe(VISUAL_SOURCE_HELP),
+    treatment: z.string().optional().describe(`trattamento: ${VISUAL_TREATMENTS.join(', ')}`),
+    arrangement: z.string().optional().describe('solo, raggiera, pioggia, specchio, griglia, eco'),
+    size: z.number().optional(), x: z.number().optional(), y: z.number().optional(), color: z.string().optional(), count: z.number().optional(), opacity: z.number().optional(),
+  }).optional().describe("Visual d'impatto dietro ai testi, fatto con glifi, parole, PNG dei pack o generatori + materiale 3D e filtri. Ottimo quando non c'è una foto."),
   format: z.string().optional().describe(`Formato: ${Object.keys(FORMATS).join(', ')}`),
   width: z.number().optional(),
   height: z.number().optional(),

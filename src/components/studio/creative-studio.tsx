@@ -294,6 +294,7 @@ import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
 import { normalizeBoards } from '@/lib/design/compose-normalize'
 import { resolvePhoto } from './ai/photos'
 import { applyFinish } from './ai/finish'
+import { buildVisual, type VisualSpec } from './ai/visual'
 import { isCropping, startCrop } from './image/crop'
 
 /** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
@@ -2447,6 +2448,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           await composeBoard(canvas, ab, b, i, boards.length)
           // finiture con i pack importati (carta, grana, luci, elementi): procedurali, stesse per lo stesso contenuto
           if (b.finish?.length) await applyFinish(canvas, ab, b.finish, `${b.content.title}|${b.recipe ?? b.style}|${i}`)
+          if (b.visual?.source) await buildVisual(canvas, ab, { ...b.visual, arrangement: b.visual.arrangement as VisualSpec['arrangement'], seed: `${b.content.title}|${i}` })
         }
         x += w + 160
       }

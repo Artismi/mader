@@ -228,6 +228,8 @@ export interface ComposeBoard {
   recipe?: string
   /** finiture con i pack importati: carta, grana, luce, polvere, y2k… (compose-recipes.ts) */
   finish?: string[]
+  /** visual d'impatto dietro ai testi: sorgente × trattamento × disposizione (studio/ai/visual.ts) */
+  visual?: { source: string; treatment?: string; arrangement?: string; size?: number; x?: number; y?: number; color?: string; count?: number; opacity?: number }
   /** materia sopra la tavola: carta, rumore, plastica o nessuna */
   texture?: 'stile' | 'carta' | 'rumore' | 'plastica' | 'nessuna'
   /** ornamento generativo: 'stile' (predefinito), 'nessuno' o un id */
