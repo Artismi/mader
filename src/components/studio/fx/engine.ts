@@ -233,7 +233,7 @@ export async function stylePreview(st: TextStyle, sample: string, w = 336, h = 2
   const fx2 = fin.getContext('2d')!
   fx2.fillStyle = st.swatch; fx2.fillRect(0, 0, w, h)
   fx2.drawImage(ok ? out : box, 0, 0)
-  return fin.toDataURL('image/jpeg', 0.86)
+  return fin.toDataURL('image/webp', 0.95)
 }
 
 /** applica uno stile testo: carattere, colore e pila di effetti (poi tutto resta modificabile) */

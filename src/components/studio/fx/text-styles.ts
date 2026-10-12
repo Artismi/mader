@@ -18,7 +18,7 @@ export interface TextStyle {
   swatch: string
   upper?: boolean
   tracking?: number
-  group: 'Metallo' | 'Luce' | 'Carta e materia' | 'Retrò e pop' | 'Digitale'
+  group: 'Metallo' | 'Vetro e 3D' | 'Luce' | 'Carta e materia' | 'Stampa' | 'Retrò e pop' | 'Font a colori' | 'Digitale'
 }
 
 export const TEXT_STYLES: TextStyle[] = [
@@ -56,4 +56,42 @@ export const TEXT_STYLES: TextStyle[] = [
   { id: 'vhs', label: 'Nastro VHS', group: 'Digitale', family: 'VT323', fill: '#fff2c8', swatch: '#120c08', upper: true, fx: [['vhs', 'nastro'], ['outerGlow', 'caldo']] },
   { id: 'eco', label: 'Eco', group: 'Digitale', family: 'Archivo Black', fill: '#ffffff', swatch: '#0b0b0b', upper: true, fx: [['echo', 'pop', { useColor: 0, count: 5, distance: 14, angle: 90, fade: 80 }]] },
   { id: 'terminale', label: 'Terminale', group: 'Digitale', family: 'VT323', fill: '#7dff9a', swatch: '#020a04', fx: [['crt', 'terminale', { curve: 0, mask: 10 }], ['outerGlow', 'alone', { color: '#7dff9a' }]] },
+  // Metallo (altri)
+  { id: 'cromo-tramonto', label: 'Cromo tramonto', group: 'Metallo', family: 'Bungee', fill: '#ffd0a0', swatch: '#1a0d22', tracking: 20, fx: [['material3d', 'tramonto', { depth: 30, bevel: 8 }], ['outerGlow', 'caldo', { size: 30, opacity: 35 }]] },
+  { id: 'lamina-oro', label: 'Lamina d’oro', group: 'Metallo', family: 'Bodoni Moda', weight: 700, fill: '#d4af37', swatch: '#0f1a14', fx: [['foil', 'oro'], ['dropShadow', 'contatto']] },
+  { id: 'lamina-olografica', label: 'Lamina olografica', group: 'Metallo', family: 'Syne', weight: 800, fill: '#e8e0ff', swatch: '#101018', tracking: 30, fx: [['foil', 'olografico', { crinkle: 25 }], ['outerGlow', 'aura', { color: '#b9a8ff', size: 26, opacity: 25 }]] },
+  { id: 'oro-rosa', label: 'Oro rosa', group: 'Metallo', family: 'Italiana', fill: '#e8b4a0', swatch: '#2a1a1c', tracking: 60, upper: true, fx: [['foil', 'rosa'], ['outerGlow', 'caldo', { size: 18, opacity: 25 }]] },
+  { id: 'acciaio', label: 'Acciaio scolpito', group: 'Metallo', family: 'Big Shoulders Display', weight: 900, fill: '#9aa3ad', swatch: '#15181c', upper: true, tracking: 30, fx: [['bevel', 'metallo', { hiColor: '#ffffff', shColor: '#0b0d10' }], ['gradientOverlay', 'cromo', { opacity: 55 }], ['dropShadow', 'sollevata']] },
+  // Vetro e 3D
+  { id: 'vetro-3d', label: 'Vetro', group: 'Vetro e 3D', family: 'Unbounded', weight: 800, fill: '#bfe6ff', swatch: '#ff9a62', tracking: 20, fx: [['material3d', 'vetro', { depth: 30, bevel: 10 }]] },
+  { id: 'ceramica', label: 'Ceramica lucida', group: 'Vetro e 3D', family: 'Bagel Fat One', fill: '#2f6bff', swatch: '#f4efe6', tracking: 30, fx: [['material3d', 'ceramica', { useColor: 1, color: '#2f6bff' }], ['dropShadow', 'morbida', { opacity: 25 }]] },
+  { id: 'plastica', label: 'Plastica giocattolo', group: 'Vetro e 3D', family: 'Rubik', weight: 900, fill: '#ff4f3a', swatch: '#ffe36e', tracking: 20, fx: [['material3d', 'gonfio', { material: 0, useColor: 1, color: '#ff4f3a', depth: 40 }]] },
+  { id: 'metallo-neon', label: 'Metallo neon', group: 'Vetro e 3D', family: 'Chakra Petch', weight: 700, fill: '#d0e8ff', swatch: '#07050f', upper: true, tracking: 30, fx: [['material3d', 'neon'], ['outerGlow', 'aura', { color: '#ff3cac', size: 40, opacity: 40 }]] },
+  { id: 'cannettato', label: 'Vetro cannettato', group: 'Vetro e 3D', family: 'Anton', fill: '#ff6a3d', swatch: '#f2e9dc', upper: true, fx: [['gradientOverlay', 'tramonto'], ['vetro', 'fine', { width: 6, strength: 80, dispersion: 60 }], ['dropShadow', 'morbida', { opacity: 18 }]] },
+  // Luce (altri)
+  { id: 'neon-ciano', label: 'Neon ghiaccio', group: 'Luce', family: 'Tilt Neon', fill: '#e8fdff', swatch: '#020b14', fx: [['neon', 'ciano']] },
+  { id: 'sognante', label: 'Bagliore sognante', group: 'Luce', family: 'Cormorant Garamond', weight: 600, fill: '#fff4e6', swatch: '#2b1d3a', fx: [['bloom', 'sognante'], ['outerGlow', 'aura', { color: '#ffb3d9', size: 50, opacity: 45 }]] },
+  { id: 'velocita', label: 'Scia di velocità', group: 'Luce', family: 'Big Shoulders Display', weight: 900, fill: '#ffffff', swatch: '#0a0f1f', upper: true, fx: [['colata', 'lato', { glow: 60 }], ['chroma', 'leggera']] },
+  { id: 'aurora', label: 'Aurora', group: 'Luce', family: 'Fraunces', weight: 900, fill: '#ffffff', swatch: '#050814', fx: [['gradientOverlay', 'aurora'], ['outerGlow', 'aura', { color: '#5cffc8', size: 46, opacity: 40 }]] },
+  // Carta e materia (altri)
+  { id: 'gesso', label: 'Rilievo su gesso', group: 'Carta e materia', family: 'DM Serif Display', fill: '#ece8e1', swatch: '#ece8e1', fx: [['impressione', 'rilievo']] },
+  { id: 'denim', label: 'Ricamo su denim', group: 'Carta e materia', family: 'Pinyon Script', fill: '#f2c14e', swatch: '#24324a', fx: [['stitch', 'fine'], ['dropShadow', 'contatto']] },
+  { id: 'carta-tagliata', label: 'Carta ritagliata', group: 'Carta e materia', family: 'Abril Fatface', fill: '#f6f1e7', swatch: '#e94f37', fx: [['dropShadow', 'sollevata', { opacity: 45 }], ['innerShadow', 'luce'], ['textureOverlay', 'carta']] },
+  // Stampa
+  { id: 'banconota', label: 'Banconota', group: 'Stampa', family: 'Yeseva One', fill: '#8a8a8a', swatch: '#eef0e4', fx: [['gradientOverlay', 'cromo'], ['linocut', 'banconota', { lines: 2.2, mass: 40, threshold: 72 }]] },
+  { id: 'mezzetinte', label: 'Mezzetinte pop', group: 'Stampa', family: 'Bungee', fill: '#ff3d7f', swatch: '#ffe9a8', upper: true, fx: [['halftone', 'pop'], ['stroke', 'sottile', { color: '#1a1a1a', size: 3 }], ['longShadow', 'flat', { opacity: 100, length: 18, color: '#1a1a1a', fade: 0 }]] },
+  { id: 'serigrafia', label: 'Serigrafia', group: 'Stampa', family: 'Gloock', fill: '#ff5a1f', swatch: '#f4ecdc', fx: [['gradientOverlay', 'tramonto', { opacity: 60 }], ['screenprint', 'poster'], ['grunge', 'timbro']] },
+  { id: 'riso-duo', label: 'Riso fuori registro', group: 'Stampa', family: 'Space Grotesk', weight: 700, fill: '#d81b7a', swatch: '#f6f0e2', tracking: -20, fx: [['riso', 'arancioacqua']] },
+  // Retrò e pop (altri)
+  { id: 'anni80', label: 'Retrò anni 80', group: 'Retrò e pop', family: 'Monoton', fill: '#ff6ec7', swatch: '#120428', fx: [['gradientOverlay', 'tramonto'], ['extrude', 'retro'], ['outerGlow', 'aura', { color: '#ff6ec7', size: 30, opacity: 35 }]] },
+  { id: 'pastello', label: 'Pastello', group: 'Retrò e pop', family: 'Bungee Shade', fill: '#ffb3c7', swatch: '#fff6e9', fx: [['extrude', 'pastello']] },
+  { id: 'doppio', label: 'Contorno sfalsato', group: 'Retrò e pop', family: 'Archivo Black', fill: '#111111', swatch: '#f3efe6', upper: true, fx: [['splice', 'rosa']] },
+  { id: 'ombra-lunga', label: 'Ombra lunga', group: 'Retrò e pop', family: 'Tilt Warp', fill: '#ffffff', swatch: '#2ec4b6', fx: [['longShadow', 'colorata']] },
+  // Font a colori (caratteri COLR: il colore è nel font)
+  { id: 'nabla', label: 'Isometrico a colori', group: 'Font a colori', family: 'Nabla', fill: '#000000', swatch: '#14102a', fx: [['dropShadow', 'morbida', { opacity: 35 }]] },
+  { id: 'honk', label: 'Gonfio a colori', group: 'Font a colori', family: 'Honk', fill: '#000000', swatch: '#1b2236', fx: [['outerGlow', 'aura', { color: '#ff9ad5', size: 30, opacity: 30 }]] },
+  // Digitale (altri)
+  { id: 'gameboy', label: 'Game Boy', group: 'Digitale', family: 'Press Start 2P', fill: '#9bbc0f', swatch: '#0f380f', fx: [['dither', 'gameboy'], ['dropShadow', 'netta', { color: '#306230', distance: 6, opacity: 100 }]] },
+  { id: 'rgb', label: 'Separazione RGB', group: 'Digitale', family: 'Major Mono Display', fill: '#ffffff', swatch: '#0b0b0f', fx: [['chroma', 'forte'], ['glitch', 'rgb']] },
+  { id: 'schermo', label: 'Schermo CRT', group: 'Digitale', family: 'Orbitron', weight: 800, fill: '#ffffff', swatch: '#06070c', upper: true, tracking: 40, fx: [['gradientOverlay', 'olografico'], ['crt', 'piatto', { scan: 70, mask: 60 }], ['outerGlow', 'aura', { color: '#7af7ff', size: 30, opacity: 35 }]] },
 ]
