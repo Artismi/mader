@@ -23,15 +23,13 @@ export interface TextStyle {
 
 export const TEXT_STYLES: TextStyle[] = [
   // Metallo liquido e fumo (Paper Shaders): materiali fluidi da shader originali
-  { id: 'liquido-cromo', label: 'Cromo liquido pro', group: 'Metallo liquido', family: 'Archivo Black', fill: '#111111', swatch: '#e9e8e4', fx: [['metalloLiquido', 'cromo'], ['dropShadow', 'morbida', { size: 26, distance: 14, opacity: 20 }]] },
+  { id: 'liquido-cromo', label: 'Cromo liquido pro', group: 'Metallo liquido', family: 'Archivo Black', fill: '#111111', swatch: '#e9e8e4', fx: [['metalloLiquido', 'cromo', { contour: 70 }], ['dropShadow', 'morbida', { size: 26, distance: 14, opacity: 20 }]] },
   { id: 'liquido-noir', label: 'Metallo noir', group: 'Metallo liquido', family: 'Bebas Neue', fill: '#111111', swatch: '#0b0b0c', upper: true, tracking: 20, fx: [['metalloLiquido', 'noir']] },
-  { id: 'liquido-oro', label: 'Oro fuso', group: 'Metallo liquido', family: 'Playfair Display', weight: 800, fill: '#111111', swatch: '#151210', fx: [['metalloLiquido', 'oro'], ['outerGlow', 'caldo', { size: 24, opacity: 25 }]] },
+  { id: 'liquido-oro', label: 'Oro fuso', group: 'Metallo liquido', family: 'Abril Fatface', fill: '#111111', swatch: '#151210', fx: [['metalloLiquido', 'oro', { contour: 70 }], ['outerGlow', 'caldo', { size: 24, opacity: 25 }]] },
   { id: 'liquido-rosa', label: 'Mercurio rosa', group: 'Metallo liquido', family: 'Unbounded', weight: 800, fill: '#111111', swatch: '#f6e7ee', tracking: 10, fx: [['metalloLiquido', 'rosa'], ['dropShadow', 'morbida', { size: 26, distance: 14, opacity: 18, color: '#8a3a5a' }]] },
   { id: 'liquido-strisce', label: 'Strisce liquide', group: 'Metallo liquido', family: 'Syne', weight: 800, fill: '#111111', swatch: '#0c1a20', tracking: 20, fx: [['metalloLiquido', 'strisce']] },
   { id: 'gemma-fluo', label: 'Gemma fluorescente', group: 'Metallo liquido', family: 'Rubik', weight: 900, fill: '#111111', swatch: '#030503', fx: [['fumoGemma', 'fluorescente']] },
   { id: 'gemma-fuoco', label: 'Gemma di fuoco', group: 'Metallo liquido', family: 'Anton', fill: '#111111', swatch: '#070302', upper: true, fx: [['fumoGemma', 'fuoco']] },
-  { id: 'gemma-grafite', label: 'Fumo di grafite', group: 'Metallo liquido', family: 'Fraunces', weight: 900, fill: '#111111', swatch: '#f0efea', fx: [['fumoGemma', 'grafite']] },
-  { id: 'termico', label: 'Termocamera', group: 'Metallo liquido', family: 'Archivo Black', fill: '#111111', swatch: '#04060f', upper: true, fx: [['mappaTermica', 'infrarossi', { innerGlow: 80, outerGlow: 30 }]] },
   // 3D contemporaneo: materiali da render (luce da studio, occlusione, vernice), ombra di contatto e grana
   { id: 'argilla', label: 'Argilla', group: '3D contemporaneo', family: 'Bagel Fat One', fill: '#f2a98f', swatch: '#f3e3d6', tracking: 30, fx: [['material3d', 'argilla', { useColor: 1, color: '#f2a98f', rx: 12, ry: -14 }], ['dropShadow', 'morbida', { size: 34, distance: 22, opacity: 22, color: '#7a4a3a' }], ['finitura', 'fine']] },
   { id: 'gel', label: 'Gel caramella', group: '3D contemporaneo', family: 'Rubik', weight: 900, fill: '#ff3f8e', swatch: '#ffe6f0', tracking: 20, fx: [['material3d', 'gel', { useColor: 1, color: '#ff3f8e', rx: 14, ry: -18 }], ['dropShadow', 'morbida', { size: 30, distance: 18, opacity: 30, color: '#c0105a' }], ['finitura', 'pulita']] },

@@ -317,6 +317,59 @@ function prepared(kind: Kind, src: HTMLCanvasElement): ImageBitmap | null {
   return null
 }
 
+
+/** riquadri dei singoli segni: righe separate da spazi orizzontali, poi lettere separate da spazi verticali */
+function segments(src: HTMLCanvasElement): { x: number; y: number; w: number; h: number }[] {
+  const k = Math.min(1, 900 / Math.max(src.width, src.height))
+  const w = Math.max(1, Math.round(src.width * k)), h = Math.max(1, Math.round(src.height * k))
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h
+  const x = cv.getContext('2d', { willReadFrequently: true })!
+  x.drawImage(src, 0, 0, w, h)
+  const d = x.getImageData(0, 0, w, h).data
+  const on = (i: number, j: number) => d[(j * w + i) * 4 + 3] > 40
+  const runs = (n: number, hit: (i: number) => boolean) => {
+    const out: [number, number][] = []; let st = -1
+    for (let i = 0; i <= n; i++) { const v = i < n && hit(i); if (v && st < 0) st = i; if (!v && st >= 0) { out.push([st, i]); st = -1 } }
+    return out
+  }
+  const res: { x: number; y: number; w: number; h: number }[] = []
+  for (const [y0, y1] of runs(h, j => { for (let i = 0; i < w; i++) if (on(i, j)) return true; return false })) {
+    const rh = y1 - y0
+    // lettere: spazi verticali; i pezzi troppo stretti (accenti, punti) si uniscono al vicino
+    let cols = runs(w, i => { for (let j = y0; j < y1; j++) if (on(i, j)) return true; return false })
+    const merged: [number, number][] = []
+    for (const c of cols) {
+      const last = merged[merged.length - 1]
+      if (last && (c[0] - last[1] < rh * 0.04 || c[1] - c[0] < rh * 0.12)) last[1] = c[1]
+      else merged.push([...c])
+    }
+    cols = merged
+    for (const [x0, x1] of cols) {
+      const m = Math.round(rh * 0.12)
+      const X = Math.max(0, x0 - m), Y = Math.max(0, y0 - m), X1 = Math.min(w, x1 + m), Y1 = Math.min(h, y1 + m)
+      res.push({ x: X / k, y: Y / k, w: (X1 - X) / k, h: (Y1 - Y) / k })
+    }
+  }
+  return res
+}
+
+/** shader "da logo" applicato segno per segno: ogni lettera ha la sua luce, poi si ricompone */
+function perGlyph(kind: Kind, src: HTMLCanvasElement, draw: (img: ImageBitmap, w: number, h: number) => HTMLCanvasElement): HTMLCanvasElement | null {
+  const segs = segments(src)
+  if (!segs.length) return null
+  const crops = segs.map(r => {
+    const cv = document.createElement('canvas'); cv.width = Math.max(2, Math.round(r.w)); cv.height = Math.max(2, Math.round(r.h))
+    cv.getContext('2d')!.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, cv.width, cv.height)
+    return cv
+  })
+  const imgs = crops.map(cv => prepared(kind, cv))
+  if (imgs.some(i => !i)) return null
+  const out = document.createElement('canvas'); out.width = src.width; out.height = src.height
+  const ox = out.getContext('2d')!
+  imgs.forEach((img, i) => { const r = segs[i], cv = crops[i]; ox.drawImage(draw(img!, cv.width, cv.height), r.x, r.y, r.w, r.h) })
+  return out
+}
+
 /* ───────── effetti ───────── */
 const col = (s: unknown, d: string) => getShaderColorFromString(typeof s === 'string' ? s : d) as number[]
 const num = (v: unknown, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d)
@@ -337,14 +390,15 @@ export type PaperRun = (src: HTMLCanvasElement, p: Record<string, unknown>, t: n
 export const PAPER: Record<string, PaperRun> = {
   /** metallo liquido: il cromo fluido con dispersione, sulla sagoma vera */
   metalloLiquido: (src, p, t) => {
-    const img = prepared('metal', src); const gl = getGL(); if (!img || !gl) return null
-    return { mask: 'none', out: gl.render(liquidMetalFragmentShader, {
-      ...sizing(src.width, src.height, img.width / img.height), u_time: t + num(p.phase) * 0.1,
+    const gl = getGL(); if (!gl) return null
+    const out = perGlyph('metal', src, (img, w, h) => gl.render(liquidMetalFragmentShader, {
+      ...sizing(w, h, img.width / img.height), u_time: t + num(p.phase) * 0.1,
       u_image: img, u_isImage: true, u_shape: 0,
       u_colorBack: [0, 0, 0, 0], u_colorTint: col(p.tint, '#ffffff'),
       u_contour: num(p.contour, 40) / 100, u_distortion: num(p.distortion, 7) / 100, u_softness: num(p.softness, 10) / 100,
       u_repetition: num(p.repetition, 2), u_shiftRed: num(p.shiftRed, 30) / 100, u_shiftBlue: num(p.shiftBlue, 30) / 100, u_angle: num(p.angle, 70),
-    }, src.width, src.height) }
+    }, w, h))
+    return out ? { mask: 'none', out } : null
   },
   /** mappa termica: la sagoma come un'immagine a infrarossi, con alone */
   mappaTermica: (src, p, t) => {
@@ -359,15 +413,16 @@ export const PAPER: Record<string, PaperRun> = {
   },
   /** fumo di gemma: volute di colore dentro la sagoma, con bagliori */
   fumoGemma: (src, p, t) => {
-    const img = prepared('gem', src); const gl = getGL(); if (!img || !gl) return null
+    const gl = getGL(); if (!gl) return null
     const colors = (GEM_PAL[num(p.palette)] ?? GEM_PAL[0]).split(',').map(c => col(c.trim(), '#ffffff'))
-    return { mask: 'soft', out: gl.render(gemSmokeFragmentShader, {
-      ...sizing(src.width, src.height, img.width / img.height), u_time: t + num(p.phase) * 0.1,
+    const out = perGlyph('gem', src, (img, w, h) => gl.render(gemSmokeFragmentShader, {
+      ...sizing(w, h, img.width / img.height), u_time: t + num(p.phase) * 0.1,
       u_image: img, u_isImage: true, u_shape: 0, u_colorBack: [0, 0, 0, 0], u_colorInner: col(p.inner, '#00000000'),
       u_colors: colors, u_colorsCount: colors.length, u_outerGlow: num(p.outerGlow, 15) / 100, u_innerGlow: num(p.innerGlow, 100) / 100,
       u_innerDistortion: num(p.innerDistortion, 80) / 100, u_outerDistortion: num(p.outerDistortion, 60) / 100, u_offset: num(p.offset, 0) / 100,
       u_angle: num(p.angle, 0), u_size: num(p.size, 80) / 100,
-    }, src.width, src.height) }
+    }, w, h))
+    return out ? { mask: 'soft', out } : null
   },
   /** mezzetinte CMYK: quattro retini ruotati con inchiostro che si allarga e grana */
   mezzetinteCmyk: (src, p) => {
