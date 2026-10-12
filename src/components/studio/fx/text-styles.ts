@@ -18,10 +18,28 @@ export interface TextStyle {
   swatch: string
   upper?: boolean
   tracking?: number
-  group: 'Metallo' | 'Vetro e 3D' | 'Luce' | 'Carta e materia' | 'Stampa' | 'Retrò e pop' | 'Font a colori' | 'Digitale'
+  group: 'Metallo liquido' | '3D contemporaneo' | 'Metallo' | 'Vetro e 3D' | 'Luce' | 'Carta e materia' | 'Stampa' | 'Retrò e pop' | 'Font a colori' | 'Digitale'
 }
 
 export const TEXT_STYLES: TextStyle[] = [
+  // Metallo liquido e fumo (Paper Shaders): materiali fluidi da shader originali
+  { id: 'liquido-cromo', label: 'Cromo liquido pro', group: 'Metallo liquido', family: 'Archivo Black', fill: '#111111', swatch: '#e9e8e4', fx: [['metalloLiquido', 'cromo'], ['dropShadow', 'morbida', { size: 26, distance: 14, opacity: 20 }]] },
+  { id: 'liquido-noir', label: 'Metallo noir', group: 'Metallo liquido', family: 'Bebas Neue', fill: '#111111', swatch: '#0b0b0c', upper: true, tracking: 20, fx: [['metalloLiquido', 'noir']] },
+  { id: 'liquido-oro', label: 'Oro fuso', group: 'Metallo liquido', family: 'Playfair Display', weight: 800, fill: '#111111', swatch: '#151210', fx: [['metalloLiquido', 'oro'], ['outerGlow', 'caldo', { size: 24, opacity: 25 }]] },
+  { id: 'liquido-rosa', label: 'Mercurio rosa', group: 'Metallo liquido', family: 'Unbounded', weight: 800, fill: '#111111', swatch: '#f6e7ee', tracking: 10, fx: [['metalloLiquido', 'rosa'], ['dropShadow', 'morbida', { size: 26, distance: 14, opacity: 18, color: '#8a3a5a' }]] },
+  { id: 'liquido-strisce', label: 'Strisce liquide', group: 'Metallo liquido', family: 'Syne', weight: 800, fill: '#111111', swatch: '#0c1a20', tracking: 20, fx: [['metalloLiquido', 'strisce']] },
+  { id: 'gemma-fluo', label: 'Gemma fluorescente', group: 'Metallo liquido', family: 'Rubik', weight: 900, fill: '#111111', swatch: '#030503', fx: [['fumoGemma', 'fluorescente']] },
+  { id: 'gemma-fuoco', label: 'Gemma di fuoco', group: 'Metallo liquido', family: 'Anton', fill: '#111111', swatch: '#070302', upper: true, fx: [['fumoGemma', 'fuoco']] },
+  { id: 'gemma-grafite', label: 'Fumo di grafite', group: 'Metallo liquido', family: 'Fraunces', weight: 900, fill: '#111111', swatch: '#f0efea', fx: [['fumoGemma', 'grafite']] },
+  { id: 'termico', label: 'Termocamera', group: 'Metallo liquido', family: 'Archivo Black', fill: '#111111', swatch: '#04060f', upper: true, fx: [['mappaTermica', 'infrarossi', { innerGlow: 80, outerGlow: 30 }]] },
+  // 3D contemporaneo: materiali da render (luce da studio, occlusione, vernice), ombra di contatto e grana
+  { id: 'argilla', label: 'Argilla', group: '3D contemporaneo', family: 'Bagel Fat One', fill: '#f2a98f', swatch: '#f3e3d6', tracking: 30, fx: [['material3d', 'argilla', { useColor: 1, color: '#f2a98f', rx: 12, ry: -14 }], ['dropShadow', 'morbida', { size: 34, distance: 22, opacity: 22, color: '#7a4a3a' }], ['finitura', 'fine']] },
+  { id: 'gel', label: 'Gel caramella', group: '3D contemporaneo', family: 'Rubik', weight: 900, fill: '#ff3f8e', swatch: '#ffe6f0', tracking: 20, fx: [['material3d', 'gel', { useColor: 1, color: '#ff3f8e', rx: 14, ry: -18 }], ['dropShadow', 'morbida', { size: 30, distance: 18, opacity: 30, color: '#c0105a' }], ['finitura', 'pulita']] },
+  { id: 'perla', label: 'Perla', group: '3D contemporaneo', family: 'Fraunces', weight: 900, fill: '#f4ecf6', swatch: '#cfd8e6', tracking: 20, fx: [['material3d', 'perla', { useColor: 1, color: '#f1e8f4', rx: 10, ry: -16 }], ['dropShadow', 'morbida', { size: 36, distance: 20, opacity: 20, color: '#56607a' }], ['finitura', 'fine']] },
+  { id: 'satinato', label: 'Alluminio satinato', group: '3D contemporaneo', family: 'Big Shoulders Display', weight: 900, fill: '#c8ccd2', swatch: '#1c1e22', upper: true, tracking: 40, fx: [['material3d', 'satinato', { rx: 8, ry: -12 }], ['dropShadow', 'morbida', { size: 28, distance: 16, opacity: 50 }], ['finitura', 'fine']] },
+  { id: 'smerigliato', label: 'Vetro smerigliato', group: '3D contemporaneo', family: 'Unbounded', weight: 800, fill: '#cfe3ff', swatch: '#5b6cff', tracking: 30, fx: [['material3d', 'smerigliato', { useColor: 1, color: '#e6f0ff', rx: 12, ry: -16 }], ['dropShadow', 'morbida', { size: 40, distance: 24, opacity: 25, color: '#1b2470' }], ['finitura', 'pulita']] },
+  { id: 'gonfio-lucido', label: 'Gonfiabile lucido', group: '3D contemporaneo', family: 'Bagel Fat One', fill: '#7b5cff', swatch: '#e9e4ff', tracking: 40, fx: [['material3d', 'gonfio', { material: 0, useColor: 1, color: '#7b5cff', depth: 60, bevel: 18, rough: 20, rx: 14, ry: -18 }], ['dropShadow', 'morbida', { size: 34, distance: 22, opacity: 26, color: '#3a2a8a' }], ['finitura', 'fine']] },
+  { id: 'cromo-y2k', label: 'Cromo Y2K', group: '3D contemporaneo', family: 'Syne', weight: 800, fill: '#dfe3ea', swatch: '#c9ccd4', tracking: 40, fx: [['material3d', 'studio', { shape: 1, depth: 50, bevel: 16, rough: 10, rx: 10, ry: -16 }], ['dropShadow', 'morbida', { size: 30, distance: 18, opacity: 30 }], ['finitura', 'pulita']] },
   // Metallo
   { id: 'cromo-liquido', label: 'Cromo liquido', group: 'Metallo', family: 'Unbounded', weight: 800, fill: '#cfd6e6', swatch: '#0b1020', tracking: 30, fx: [['material3d', 'cromo', { shape: 1, depth: 40, bevel: 12 }]] },
   { id: 'cromo-studio', label: 'Cromo studio', group: 'Metallo', family: 'Archivo Black', fill: '#d9dde8', swatch: '#111111', tracking: 40, fx: [['material3d', 'studio']] },
@@ -78,6 +96,10 @@ export const TEXT_STYLES: TextStyle[] = [
   { id: 'denim', label: 'Ricamo su denim', group: 'Carta e materia', family: 'Pinyon Script', fill: '#f2c14e', swatch: '#24324a', fx: [['stitch', 'fine'], ['dropShadow', 'contatto']] },
   { id: 'carta-tagliata', label: 'Carta ritagliata', group: 'Carta e materia', family: 'Abril Fatface', fill: '#f6f1e7', swatch: '#e94f37', fx: [['dropShadow', 'sollevata', { opacity: 45 }], ['innerShadow', 'luce'], ['textureOverlay', 'carta']] },
   // Stampa
+  { id: 'cmyk', label: 'Stampa CMYK', group: 'Stampa', family: 'Bricolage Grotesque', weight: 800, fill: '#e2462f', swatch: '#fbfaf5', fx: [['gradientOverlay', 'tramonto'], ['mezzetinteCmyk', 'inchiostro', { size: 10 }]] },
+  { id: 'cmyk-vintage', label: 'Fumetto vintage', group: 'Stampa', family: 'Bungee', fill: '#2f6bff', swatch: '#fffaf0', fx: [['gradientOverlay', 'oceano'], ['mezzetinteCmyk', 'vintage', { size: 9 }], ['dropShadow', 'netta', { distance: 6, opacity: 100, color: '#2d2824', size: 0 }]] },
+  { id: 'retino-gocce', label: 'Retino a gocce', group: 'Stampa', family: 'Archivo Black', fill: '#2b2b2b', swatch: '#f2f1e8', fx: [['gradientOverlay', 'cromo'], ['retinoPunti', 'gocce', { size: 14, back: '#00000000' }]] },
+  { id: 'carta-stampata', label: 'Carta stampata', group: 'Stampa', family: 'DM Serif Display', fill: '#1b1b1b', swatch: '#efece4', fx: [['cartaPaper', 'piegata', { paper: '#f4f1ea' }]] },
   { id: 'banconota', label: 'Banconota', group: 'Stampa', family: 'Yeseva One', fill: '#8a8a8a', swatch: '#eef0e4', fx: [['gradientOverlay', 'cromo'], ['linocut', 'banconota', { lines: 2.2, mass: 40, threshold: 72 }]] },
   { id: 'mezzetinte', label: 'Mezzetinte pop', group: 'Stampa', family: 'Bungee', fill: '#ff3d7f', swatch: '#ffe9a8', upper: true, fx: [['halftone', 'pop'], ['stroke', 'sottile', { color: '#1a1a1a', size: 3 }], ['longShadow', 'flat', { opacity: 100, length: 18, color: '#1a1a1a', fade: 0 }]] },
   { id: 'serigrafia', label: 'Serigrafia', group: 'Stampa', family: 'Gloock', fill: '#ff5a1f', swatch: '#f4ecdc', fx: [['gradientOverlay', 'tramonto', { opacity: 60 }], ['screenprint', 'poster'], ['grunge', 'timbro']] },

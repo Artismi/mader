@@ -67,6 +67,8 @@ let shared: FxGL | null = null
 const images = new Map<string, { tex: Tex | null }>()
 const readyListeners = new Set<() => void>()
 export const onAssetReady = (f: () => void) => { readyListeners.add(f); return () => { readyListeners.delete(f) } }
+/** un'elaborazione asincrona (immagine, sagoma) è pronta: gli oggetti con effetti si ridisegnano */
+export const assetReady = () => readyListeners.forEach(f => f())
 let broken = false
 
 export class FxGL {

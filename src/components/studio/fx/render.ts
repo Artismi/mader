@@ -9,8 +9,9 @@ import { FxGL, type Tex, type UVal } from './gl'
 import {
   MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, SMEAR, RAYS, GLITTER, FLUTED, ASCII, LINOCUT, MIRRORTILE, LIGHTCAST, PIXELSORT, LOWPOLY, KALEIDO, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
-  TONEMATCH, OVER_AB,
+  TONEMATCH, OVER_AB, FINITURA, PAPER_MIX,
 } from './shaders'
+import { PAPER } from './paper'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
 
 export interface FxData { adjust?: Adjust; look?: Look; fx?: FxEntry[] }
@@ -250,7 +251,26 @@ function finish(c: Ctx, out: Tex, src: Tex, radius: number, k: number, bloom = 0
   return res
 }
 
+/** effetti di Paper Shaders: il livello va al loro contesto e il risultato torna qui */
+const paperRun = (id: string): Run => (c, cur, p, amt) => {
+  const fn = PAPER[id]; if (!fn) return cur
+  const src = document.createElement('canvas')
+  c.g.present(cur, src)
+  let r: ReturnType<typeof fn> = null
+  try { r = fn(src, p, c.t) } catch (e) { console.warn('[paper]', e); return cur }
+  if (!r) return cur        // sagoma o risorsa ancora in preparazione: si ridisegna appena pronta
+  const t = c.g.upload(r.out, c.W, c.H)
+  // alone morbido: la forma allargata e sfumata, così niente bordi del riquadro
+  const soft = r.mask === 'soft' ? c.g.blur(c.mask(-14 * c.z), 18 * c.z) : null
+  const out = c.g.pass('paperMix', PAPER_MIX, c.W, c.H, std(c, cur, amt, { uP: t, uMask: r.mask === 'none' ? 0 : 1, uM: soft ?? cur, uSoft: soft ? 1 : 0 }))
+  c.g.release(t, soft)
+  return out
+}
+
 const RUN: Partial<Record<string, Run>> = {
+  metalloLiquido: paperRun('metalloLiquido'), mappaTermica: paperRun('mappaTermica'), fumoGemma: paperRun('fumoGemma'),
+  mezzetinteCmyk: paperRun('mezzetinteCmyk'), retinoPunti: paperRun('retinoPunti'), ditheringPaper: paperRun('ditheringPaper'),
+  cartaPaper: paperRun('cartaPaper'), vetroPaper: paperRun('vetroPaper'), acqua: paperRun('acqua'),
   dropShadow: (c, cur, p) => {
     const m = c.mask(-num(p.spread) * c.z)
     const b = num(p.size, 20) > 0 ? c.g.blur(m, num(p.size, 20) * c.z) : m
@@ -317,6 +337,12 @@ const RUN: Partial<Record<string, Run>> = {
       uInk: rgb(p.ink, '#1d2a6b'), uFoilA: rgb(p.c1, '#6b4a10'), uFoilB: rgb(p.c2, '#ffe9a8'), uTint: rgb(p.tint, '#ffffff'),
     }))
     if (mode <= 3.5) c.g.release(h, hb)
+    return out
+  },
+  finitura: (c, cur, p, amt) => {
+    const b = c.g.blur(cur, 6 * c.z)
+    const out = c.g.pass('finitura', FINITURA, c.W, c.H, std(c, cur, amt, { uB: b, uGrain: num(p.grain, 40) / 100, uCA: num(p.aberration, 25) / 100, uGlow: num(p.glow, 30) / 100, uSize: Math.max(0.5, num(p.grainSize, 1)) }))
+    c.g.release(b)
     return out
   },
   vetro: (c, cur, p, amt) => {

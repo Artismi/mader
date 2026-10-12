@@ -32,6 +32,7 @@
     "@opentelemetry/resources": "^2.6.1",
     "@opentelemetry/sdk-node": "^0.214.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@paper-design/shaders": "0.0.81",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-three/fiber": "^9.6.0",
     "@rmbg/model-u2netp": "^0.0.1",

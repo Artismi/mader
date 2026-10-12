@@ -683,35 +683,39 @@ vec3 nrm(vec3 p) {
 }
 mat3 rotX(float a) { return mat3(1.0, 0.0, 0.0, 0.0, cos(a), sin(a), 0.0, -sin(a), cos(a)); }
 mat3 rotY(float a) { return mat3(cos(a), 0.0, -sin(a), 0.0, 1.0, 0.0, sin(a), 0.0, cos(a)); }
-float box(vec3 d, vec3 c, float k) { return exp(-k * max(0.0, 1.0 - dot(d, normalize(c)))); }
+// ruvidezza globale del materiale: allarga riflessi e luci dell'ambiente (riflesso sfocato)
+float gR = 0.0;
+float box(vec3 d, vec3 c, float k) { float kk = k / (1.0 + gR * 14.0); return exp(-kk * max(0.0, 1.0 - dot(d, normalize(c)))) * (1.0 / (1.0 + gR * 2.5)); }
+float sst(float a, float b, float x) { float w = gR * 0.45 * min(1.0, abs(b - a) * 4.0); return smoothstep(a - w * sign(b - a), b + w * sign(b - a), x); }
 // ambienti: lo spazio vista ha y verso il basso e la camera guarda +z (i riflessi frontali tornano verso -z)
 vec3 env(vec3 d) {
   float up = -d.y;
-  if (uEnv < 0.5) {            // studio fotografico: fondale chiaro, due softbox, pavimento grigio
-    vec3 c = mix(vec3(0.16, 0.16, 0.17), vec3(0.92), smoothstep(-0.25, 0.4, up));
-    c *= 1.0 - 0.55 * smoothstep(0.06, 0.0, abs(up + 0.02));
-    c += vec3(1.0) * box(d, vec3(-0.55, -0.55, -0.62), 40.0) * 2.0;
-    c += vec3(0.95, 0.97, 1.0) * box(d, vec3(0.7, -0.25, -0.65), 26.0) * 1.2;
+  if (uEnv < 0.5) {            // studio fotografico: fondale chiaro, grandi softbox, pavimento morbido
+    vec3 c = mix(vec3(0.18, 0.18, 0.2), vec3(0.95, 0.95, 0.97), sst(-0.3, 0.45, up));
+    c *= 1.0 - 0.45 * sst(0.07, 0.0, abs(up + 0.02));
+    c += vec3(1.0) * box(d, vec3(-0.55, -0.55, -0.62), 22.0) * 2.2;          // softbox chiave
+    c += vec3(0.95, 0.97, 1.0) * box(d, vec3(0.75, -0.2, -0.62), 16.0) * 1.1; // riempimento
+    c += vec3(1.0, 0.96, 0.92) * box(d, vec3(0.0, -0.95, 0.3), 10.0) * 0.8;   // luce dall'alto, dietro
     return c;
   }
   if (uEnv < 1.5) {            // tramonto
-    vec3 sky = mix(vec3(1.0, 0.55, 0.25), vec3(0.42, 0.18, 0.52), smoothstep(0.0, 0.9, up));
-    vec3 ground = mix(vec3(0.16, 0.06, 0.12), vec3(0.6, 0.25, 0.2), smoothstep(-0.6, 0.0, up));
-    vec3 c = up > 0.0 ? sky : ground;
+    vec3 sky = mix(vec3(1.0, 0.58, 0.3), vec3(0.42, 0.2, 0.56), sst(0.0, 0.9, up));
+    vec3 ground = mix(vec3(0.18, 0.07, 0.14), vec3(0.65, 0.3, 0.22), sst(-0.6, 0.0, up));
+    vec3 c = mix(ground, sky, sst(-0.01, 0.01, up));
     c += vec3(1.0, 0.85, 0.55) * box(d, vec3(0.2, -0.12, -0.97), 60.0) * 2.5;
     return c;
   }
   if (uEnv < 2.5) {            // notte al neon: fasce magenta e ciano
-    vec3 c = mix(vec3(0.05, 0.02, 0.12), vec3(0.35, 0.08, 0.4), smoothstep(-0.2, 0.6, up));
+    vec3 c = mix(vec3(0.05, 0.02, 0.12), vec3(0.35, 0.08, 0.4), sst(-0.2, 0.6, up));
     c += vec3(1.0, 0.15, 0.7) * box(d, vec3(-0.8, -0.3, -0.5), 30.0) * 1.8;
     c += vec3(0.1, 0.9, 1.0) * box(d, vec3(0.8, -0.2, -0.55), 30.0) * 1.6;
-    c += vec3(0.5, 0.3, 1.0) * smoothstep(0.03, 0.0, abs(up - 0.25)) * 0.8;
+    c += vec3(0.5, 0.3, 1.0) * sst(0.03, 0.0, abs(up - 0.25)) * 0.8;
     return c;
   }
   // cielo e terra con orizzonte netto: il cromo classico da copertina anni '80
-  vec3 c = mix(vec3(1.0), vec3(0.16, 0.38, 0.86), smoothstep(0.0, 0.8, up));
-  if (up < 0.0) c = mix(vec3(0.16, 0.11, 0.08), vec3(0.93, 0.84, 0.72), smoothstep(-0.03, -0.75, up));
-  c *= 1.0 - 0.8 * smoothstep(0.035, 0.0, abs(up));          // linea d'orizzonte scura e netta
+  vec3 c = mix(vec3(1.0), vec3(0.16, 0.38, 0.86), sst(0.0, 0.8, up));
+  if (up < 0.0) c = mix(vec3(0.16, 0.11, 0.08), vec3(0.93, 0.84, 0.72), sst(-0.03, -0.75, up));
+  c *= 1.0 - 0.8 * sst(0.035, 0.0, abs(up));
   c += vec3(1.0, 0.97, 0.9) * box(d, vec3(-0.4, -0.8, -0.45), 80.0) * 3.0;
   return c;
 }
@@ -725,35 +729,86 @@ vec4 albedo(vec2 q) {
   vec4 c = texture(uSrc, q / uRes + 0.5);
   return c.a > 0.0 ? vec4(c.rgb / c.a, 1.0) : vec4(0.5, 0.5, 0.5, 1.0);
 }
+// microfacet GGX: luci speculari morbide e realistiche secondo la ruvidezza
+float ggx(vec3 n, vec3 h, float r) { float a = max(r * r, 0.002); float a2 = a * a; float nh = max(dot(n, h), 0.0); float d = nh * nh * (a2 - 1.0) + 1.0; return a2 / (3.14159 * d * d); }
+vec3 schlick(vec3 f0, float c) { return f0 + (1.0 - f0) * pow(1.0 - c, 5.0); }
+// interferenza a film sottile: i colori della perla e della bolla di sapone
+vec3 thinFilm(float c, float th) { return 0.5 + 0.5 * cos(6.2832 * (th * (1.2 - c) * vec3(1.0, 1.18, 1.38) + vec3(0.0, 0.33, 0.67))); }
 vec4 shade(vec3 p, vec3 rd, mat3 R) {
-  vec3 n = R * nrm(p);
+  vec3 no = nrm(p);
+  vec3 n = R * no;
   vec3 v = -(R * rd);
   vec3 alb = uUseCol > 0.5 ? uCol : albedo(p.xy).rgb;
   vec3 L = normalize(vec3(cos(uLightA) * 0.65, -0.75, -0.6 + sin(uLightA) * 0.2));
-  float dif = max(dot(n, L), 0.0);
-  float shin = mix(220.0, 18.0, uRough);
-  float spe = pow(max(dot(n, normalize(L + v)), 0.0), shin);
-  float fr = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
-  vec3 r = reflect(-v, n);
-  float front = smoothstep(0.55, 0.9, abs(n.z));
-  // sulle facce frontali il riflesso scorre lungo l'altezza della lettera: cielo sopra, orizzonte netto, terra sotto
-  r.y = mix(r.y, (p.y / (uRes.y * 0.5)) * 1.9 - 0.08, front * 0.85);
-  r = normalize(r);
-  vec3 ev = env(r);
+  vec3 L2 = normalize(vec3(-L.x, -0.3, -0.8));
+  // occlusione ambientale dal campo di distanze: pieghe e attacchi delle lettere più scuri
+  float ao = 0.0, hs = max(uBevel * 0.5, 2.0);
+  for (int i = 1; i <= 4; i++) { float h = hs * float(i); ao += (h - map(p + no * h)) / h * (1.0 / float(i)); }
+  ao = clamp(1.0 - ao * 0.45, 0.25, 1.0);
+  float nv = max(dot(n, v), 0.0);
+  float dif = max(dot(n, L), 0.0), dif2 = max(dot(n, L2), 0.0);
+  float rough = uRough;
   vec3 c; float a = 1.0;
-  if (uMat < 0.5) c = alb * (0.22 + 0.85 * dif) + spe * 0.9 + ev * fr * 0.55;                         // plastica lucida
-  else if (uMat < 1.5) c = ev * mix(vec3(0.62), alb * 1.1, uUseCol * 0.35) + spe * 1.3;              // cromo
-  else if (uMat < 2.5) { float l = luma(ev); c = mix(vec3(0.28, 0.14, 0.03), vec3(1.0, 0.86, 0.5), smoothstep(0.05, 0.85, l)) * (0.65 + 0.6 * l) + spe * vec3(1.0, 0.92, 0.65) * 1.2; } // oro: luce, non colore, del riflesso
-  else if (uMat < 3.5) {                                                                            // vetro
-    vec3 t = env(refract(-v, n, 0.66)) * mix(vec3(1.0), alb, 0.65);
-    c = mix(t, ev, fr) + spe * 1.4; a = mix(0.6, 1.0, fr);
+  if (uMat < 0.5) {                                       // plastica lucida con vernice trasparente
+    gR = 0.0; vec3 r = reflect(-v, n);
+    vec3 diff = alb * (0.18 + 0.75 * dif + 0.25 * dif2) * ao;
+    vec3 coat = env(r) * schlick(vec3(0.04), nv) * 1.1 + vec3(ggx(n, normalize(L + v), 0.12)) * 0.35;
+    gR = rough; vec3 spec = vec3(ggx(n, normalize(L + v), mix(0.25, 0.6, rough))) * 0.25;
+    c = diff + coat + spec;
+  } else if (uMat < 1.5) {                                // cromo
+    gR = rough * 0.4; vec3 r = reflect(-v, n);
+    vec3 front = n; float fr = smoothstep(0.55, 0.9, abs(front.z));
+    r.y = mix(r.y, (p.y / (uRes.y * 0.5)) * 1.9 - 0.08, fr * 0.85); r = normalize(r);
+    c = env(r) * mix(vec3(0.72), alb * 1.1, uUseCol * 0.35) * mix(1.0, ao, 0.6) + vec3(ggx(n, normalize(L + v), 0.08)) * 0.6;
+  } else if (uMat < 2.5) {                                // oro
+    gR = rough * 0.4; vec3 r = reflect(-v, n);
+    float fr = smoothstep(0.55, 0.9, abs(n.z));
+    r.y = mix(r.y, (p.y / (uRes.y * 0.5)) * 1.9 - 0.08, fr * 0.85); r = normalize(r);
+    float l = luma(env(r));
+    c = mix(vec3(0.24, 0.12, 0.03), vec3(1.0, 0.84, 0.48), smoothstep(0.04, 0.85, l)) * (0.62 + 0.6 * l) * mix(1.0, ao, 0.6);
+    c += vec3(1.0, 0.9, 0.62) * ggx(n, normalize(L + v), 0.1) * 0.5;
+  } else if (uMat < 3.5) {                                // vetro
+    gR = 0.0;
+    vec3 t = env(refract(-v, n, 0.66)) * mix(vec3(1.0), alb, 0.6);
+    float fr = schlick(vec3(0.04), nv).x;
+    c = mix(t, env(reflect(-v, n)), fr) + vec3(ggx(n, normalize(L + v), 0.05)) * 0.7; a = mix(0.62, 1.0, fr);
+  } else if (uMat < 4.5) {                                // ceramica smaltata
+    gR = 0.0;
+    c = alb * (0.25 + 0.7 * dif + 0.2 * dif2) * ao + env(reflect(-v, n)) * schlick(vec3(0.05), nv) * 0.9 + vec3(ggx(n, normalize(L + v), 0.08)) * 0.45;
+  } else if (uMat < 5.5) {                                // olografico (film sottile su metallo)
+    gR = rough * 0.5;
+    vec3 film = thinFilm(nv, 1.6 + 0.6 * dot(n, vec3(0.3, 0.5, 0.2)));
+    c = mix(env(reflect(-v, n)) * 0.55, film, 0.68) * mix(1.0, ao, 0.5) + vec3(ggx(n, normalize(L + v), 0.15)) * 0.5;
+  } else if (uMat < 6.5) {                                // metallo colorato
+    gR = rough * 0.5;
+    c = env(reflect(-v, n)) * alb * 1.35 * mix(1.0, ao, 0.5) + alb * ggx(n, normalize(L + v), 0.2) * 0.4;
+  } else if (uMat < 7.5) {                                // argilla: opaca, luce che avvolge, grana fine
+    float wrap = max((dot(n, L) + 0.35) / 1.35, 0.0);
+    float grain = 0.94 + 0.06 * vnoise(p.xy * 0.9) + 0.03 * vnoise(p.xy * 3.1);
+    c = alb * (0.22 + 0.8 * wrap + 0.15 * dif2) * ao * grain + vec3(0.04) * pow(1.0 - nv, 3.0);
+  } else if (uMat < 8.5) {                                // gel traslucido: colore che si accende dentro, superficie lucida
+    gR = 0.0;
+    float thick = clamp(-sd2(p.xy) / max(uBevel * 2.0, 4.0), 0.0, 1.0);
+    vec3 body = alb * mix(1.35, 0.55, thick) + alb * 0.5 * pow(1.0 - nv, 2.0);
+    float fr = schlick(vec3(0.04), nv).x;
+    c = body * (0.6 + 0.5 * dif) * mix(1.0, ao, 0.5) + env(reflect(-v, n)) * fr * 1.2 + vec3(ggx(n, normalize(L + v), 0.06)) * 0.8;
+    a = mix(0.88, 1.0, fr);
+  } else if (uMat < 9.5) {                                // perla iridescente
+    gR = 0.25;
+    vec3 film = thinFilm(nv, 0.9);
+    c = mix(alb, vec3(1.0), 0.45) * (0.45 + 0.55 * dif) * ao + film * 0.35 * (1.0 - nv * 0.5) + env(reflect(-v, n)) * schlick(vec3(0.06), nv) * 0.8 + vec3(ggx(n, normalize(L + v), 0.2)) * 0.4;
+  } else if (uMat < 10.5) {                               // metallo satinato: riflesso morbido e spazzolato
+    gR = 0.5 + rough * 0.4;
+    float brush = 0.92 + 0.08 * vnoise(vec2(p.x * 0.05, p.y * 2.5));
+    c = env(reflect(-v, n)) * mix(vec3(0.75), alb, 0.5) * brush * mix(1.0, ao, 0.6) + vec3(ggx(n, normalize(L + v), 0.35)) * 0.3;
+  } else {                                                // vetro smerigliato
+    gR = 0.6;
+    vec3 t = env(refract(-v, n, 0.7)) * mix(vec3(1.0), alb, 0.55);
+    float fr = schlick(vec3(0.04), nv).x;
+    c = mix(t * 0.95, env(reflect(-v, n)), fr * 0.6) + vec3(ggx(n, normalize(L + v), 0.3)) * 0.25;
+    c *= 0.97 + 0.06 * hash12(p.xy * 3.0);
+    a = mix(0.8, 1.0, fr);
   }
-  else if (uMat < 4.5) c = alb * (0.32 + 0.72 * dif) + spe * 0.12 + vec3(0.06) * pow(1.0 - max(dot(n, v), 0.0), 2.0); // ceramica opaca
-  else if (uMat < 5.5) {                                                                            // olografico
-    float h = fract(dot(n, vec3(0.35, 0.55, 0.25)) * 1.6 + fr * 0.8);
-    c = mix(ev * 0.5, hsv2rgb(vec3(h, 0.5, 1.0)), 0.7) + spe;
-  }
-  else c = ev * alb * 1.35 + spe * mix(alb, vec3(1.0), 0.5);                                         // metallo colorato
   return vec4(clamp(c, 0.0, 1.0) * a, a);
 }
 void main() {
@@ -1386,3 +1441,30 @@ void main() {
 
 /** sovrapposizione semplice: A sopra B */
 export const OVER_AB = LIB + `uniform sampler2D uA, uB; void main() { o = over(texture(uA, vUv), texture(uB, vUv)); }`
+
+/** finitura fotografica: grana fine legata alla luce, aberrazione cromatica ai bordi,
+ *  luci che bruciano dolcemente — il passo che toglie l'aria "digitale" */
+export const FINITURA = FX + `uniform float uGrain, uCA, uGlow, uSize; uniform sampler2D uB;
+void main() {
+  vec2 d = (vUv - 0.5) * px() * uCA * uZ * 2.0 * length(uRes) / max(uRes.x, uRes.y);
+  vec4 s = texture(uSrc, vUv);
+  vec4 r = texture(uSrc, vUv + d), b = texture(uSrc, vUv - d);
+  vec4 c = vec4(r.r, s.g, b.b, max(s.a, max(r.a, b.a) * 0.6));
+  vec3 col = c.a > 0.0 ? c.rgb / c.a : vec3(0.0);
+  vec4 bl = texture(uB, vUv);
+  vec3 glow = bl.a > 0.0 ? bl.rgb / bl.a : vec3(0.0);
+  col += max(glow - 0.62, 0.0) * uGlow * 1.6;
+  float L = luma(col);
+  vec2 gp = floor(vUv * uRes / max(uZ * uSize, 1.0));
+  float n = hash12(gp + fract(uT) * 37.0) + hash12(gp * 1.37 + 11.0) - 1.0;
+  col += n * uGrain * 0.16 * (0.35 + 0.65 * (1.0 - abs(L - 0.45) * 1.6));
+  o = mix(s, vec4(clamp(col, 0.0, 1.0) * c.a, c.a), uAmt);
+}`
+
+/** risultato di uno shader Paper rimesso nella pila: eventualmente ritagliato sulla forma */
+export const PAPER_MIX = FX + `uniform sampler2D uP, uM; uniform float uMask, uSoft;
+void main() {
+  vec4 s = texture(uSrc, vUv); vec4 q = texture(uP, vUv);
+  if (uMask > 0.5) q *= uSoft > 0.5 ? clamp(texture(uM, vUv).a * 1.4, 0.0, 1.0) : s.a;
+  o = mix(s, q, uAmt);
+}`
