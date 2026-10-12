@@ -63,6 +63,24 @@ function balanced(words: string[], k: number, font: FontSpec, size: number, trac
   return lines
 }
 
+/** Parole che in italiano non si lasciano a fine riga: articoli, preposizioni, congiunzioni brevi. */
+const STOP = new Set(['il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', "l'", "un'", 'di', 'a', 'da', 'in', 'con', 'su', 'per', 'tra', 'fra',
+  'e', 'ed', 'o', 'ma', 'che', 'se', 'del', 'dello', 'della', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle',
+  'dal', 'dalla', 'dai', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle', 'sul', 'sulla', 'sui', 'non', 'ogni', 'the', 'a', 'of', 'and'])
+const isStop = (w: string) => STOP.has(w.toLowerCase().replace(/[^\p{L}']/gu, '')) || /^[\p{L}]'$/u.test(w)
+
+/** Sposta a capo le parole deboli rimaste in fondo alla riga, se la riga dopo le accoglie. */
+function fixStops(lines: string[], font: FontSpec, size: number, maxW: number, tracking: number): string[] {
+  const out = lines.slice()
+  for (let i = 0; i < out.length - 1; i++) {
+    const ws = out[i].split(' ')
+    if (ws.length < 2 || !isStop(ws[ws.length - 1])) continue
+    const moved = `${ws[ws.length - 1]} ${out[i + 1]}`
+    if (lineWidth(moved, font, size, tracking) <= maxW) { out[i] = ws.slice(0, -1).join(' '); out[i + 1] = moved }
+  }
+  return out
+}
+
 export interface FitOpts {
   text: string
   font: FontSpec
@@ -78,7 +96,8 @@ export interface FitOpts {
   balance?: boolean
 }
 
-export interface Fit { size: number; lines: string[]; h: number; w: number }
+/** Risultato: corpo, righe e misure; interlinea e spaziatura usate (da riusare quando si piazza il testo). */
+export interface Fit { size: number; lines: string[]; h: number; w: number; leading?: number; tracking?: number }
 
 /** La dimensione più grande (a passi di ~3%) con cui il testo sta nello spazio; null se non sta nemmeno al minimo. */
 export function fit(o: FitOpts): Fit | null {
@@ -95,13 +114,20 @@ export function fit(o: FitOpts): Fit | null {
     for (const words of paragraphs) {
       const g = greedy(words, o.font, s, o.maxW, tracking)
       if (!g) { ok = false; break }
-      lines.push(...(o.balance && g.length > 1 ? balanced(words, g.length, o.font, s, tracking) : g))
+      let ls = g
+      if (g.length > 1) {
+        // titoli sempre bilanciati; i paragrafi solo se l'ultima riga resterebbe una vedova
+        const last = lineWidth(g[g.length - 1], o.font, s, tracking), widest = Math.max(...g.map(l => lineWidth(l, o.font, s, tracking)))
+        if (o.balance || last < widest * 0.35 || !g[g.length - 1].includes(' ')) ls = balanced(words, g.length, o.font, s, tracking)
+        ls = fixStops(ls, o.font, s, o.maxW, tracking)
+      }
+      lines.push(...ls)
     }
     if (!ok || lines.length > o.maxLines) continue
     const h = blockHeight(s, lines.length, o.leading)
     if (o.maxH !== undefined && h > o.maxH) continue
     const w = Math.max(...lines.map(l => lineWidth(l, o.font, s, tracking)))
-    return { size: s, lines, h, w }
+    return { size: s, lines, h, w, leading: o.leading, tracking }
   }
   return null
 }

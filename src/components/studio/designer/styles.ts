@@ -65,7 +65,7 @@ export const STYLES: Style[] = [
     display: { family: 'DM Serif Display', weight: 400 }, displayTracking: -0.015, displayLeading: 1.0,
     text: { family: 'DM Sans', weight: 400 }, label: { family: 'DM Sans', weight: 600 },
     impact: { family: 'Anton', weight: 400 }, impactSans: true,
-    keywords: ['libro', 'libri', 'poesia', 'mostra', 'cultura', 'festival', 'rivista', 'editoriale', 'lettura', 'incontro', 'talk', 'museo', 'teatro', 'arte', 'galleria', 'storia'],
+    keywords: ['viaggio', 'viaggi', 'itinerario', 'itinerari', 'mostra', 'dischi', 'vinili', 'vinile', 'libro', 'libri', 'poesia', 'mostra', 'cultura', 'festival', 'rivista', 'editoriale', 'lettura', 'incontro', 'talk', 'museo', 'teatro', 'arte', 'galleria', 'storia'],
     decor: { look: 'trix', adjust: { grain: 30, vignette: -15 }, finishes: ['carta'], fallback: 'carta', ornaments: ['sovrastampa', 'puntinato', 'archi'], glyphs: ['Twinkle', 'Glint', 'Halftone Star'] },
   },
   {
@@ -74,7 +74,7 @@ export const STYLES: Style[] = [
     display: { family: 'Cormorant Garamond', weight: 500 }, displayTracking: -0.01, displayLeading: 0.95,
     text: { family: 'Jost', weight: 400 }, label: { family: 'Jost', weight: 500 },
     impact: { family: 'Fraunces', weight: 800 }, impactSans: false,
-    keywords: ['artigianale', 'artigiano', 'ceramica', 'pane', 'forno', 'pasta', 'olio', 'naturale', 'fatto a mano', 'bottega', 'laboratorio', 'terra', 'lana', 'legno', 'osteria', 'trattoria', 'cucina', 'ricetta'],
+    keywords: ['mercato', 'frutta', 'fragole', 'verdura', 'verdure', 'orto', 'contadino', 'agricola', 'agricole', 'raccolta', 'raccolte', 'km zero', 'artigianale', 'artigiano', 'ceramica', 'pane', 'forno', 'pasta', 'olio', 'naturale', 'fatto a mano', 'bottega', 'laboratorio', 'terra', 'lana', 'legno', 'osteria', 'trattoria', 'cucina', 'ricetta'],
     decor: { look: 'polaroid', adjust: { grain: 22, vignette: -20 }, finishes: ['carta', 'grana'], fallback: 'carta', ornaments: ['archi', 'tessere', 'onde'], glyphs: ['Bloom', 'Bloom 6', 'Thorn Branch'] },
   },
   {
@@ -101,7 +101,7 @@ export const STYLES: Style[] = [
     display: { family: 'Fraunces', weight: 300 }, displayTracking: -0.02, displayLeading: 0.98,
     text: { family: 'Manrope', weight: 400 }, label: { family: 'Manrope', weight: 600 },
     impact: { family: 'Fraunces', weight: 700 }, impactSans: false,
-    keywords: ['piante', 'pianta', 'verde', 'bio', 'biologico', 'vegan', 'tè', 'te verde', 'erbe', 'giardino', 'fiori', 'natura', 'sostenibile', 'benessere', 'yoga', 'spa'],
+    keywords: ['lago', 'montagna', 'bosco', 'sentiero', 'rifugio', 'piante', 'pianta', 'verde', 'bio', 'biologico', 'vegan', 'tè', 'te verde', 'erbe', 'giardino', 'fiori', 'natura', 'sostenibile', 'benessere', 'yoga', 'spa'],
     decor: { look: 'fuji', adjust: { grain: 22, vignette: -25 }, finishes: ['grana', 'luce'], fallback: 'grana', ornaments: ['flusso', 'isoipse', 'vetrata'], glyphs: ['Thorn Stem', 'Bloom 12', 'Arc Wave'] },
   },
   {

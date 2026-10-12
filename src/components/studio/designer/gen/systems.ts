@@ -42,38 +42,39 @@ function putStack(g: G, st: ReturnType<typeof stack>, x: number, y: number, colo
 }
 
 export function supertipo(g: G): Scene | null {
-  const { W, H, m, P, s, k, r } = g
+  const { W, H, m, T, B, P, s, k, r } = g
   const side = g.landscape
   // passo 1: testata
   const brand = lab(g, g.c.brand, W * 0.45), right = lab(g, g.c.numero || g.c.kicker, W * 0.45)
   const headH = Math.max(brand?.h ?? 0, right?.h ?? 0, U(g, 16))
-  const top = m + headH + U(g, 40)
+  const top = T + headH + U(g, 40)
   const overPhoto = !!g.photo && !side && r.chance(0.5)
   const colW = side ? (W - 2 * m) * 0.42 : (W - 2 * m - g.g) / 2
   const info = infoBlock(g, colW, { kicker: !!g.c.numero, details: !side || true })
 
-  if (overPhoto) {
-    // variante: foto a tutta tavola, velo che sale dal basso, pila sopra il velo
+  // variante: foto a tutta tavola, velo che sale dal basso, pila sopra il velo; la foto resta protagonista (almeno il 45% visibile)
+  const stOver = overPhoto ? stack(g, g.c.title, W - 2 * m, H * 0.3, g.portrait ? 4 : 3) : null
+  const veilTopOver = stOver ? B - info.h - U(g, 44) - stOver.h - U(g, 50) : 0
+  if (stOver && veilTopOver >= H * 0.45) {
     photo(g, 'foto', { x: 0, y: 0, w: W, h: H })
-    const st = stack(g, g.c.title, W - 2 * m, H * 0.42, g.portrait ? 4 : 3)
-    const veilTop = H - m - info.h - U(g, 44) - st.h - U(g, 50)
+    const st = stOver, veilTop = veilTopOver
     put(g, { kind: 'rect', name: 'sfumatura', x: 0, y: veilTop - H * 0.25, w: W, h: H * 0.25 + 2, fill: { from: alpha(P.bg, 0), to: P.bg, fromAt: 0, toAt: 1, vertical: true } })
     put(g, { kind: 'rect', name: 'velo', x: 0, y: veilTop, w: W, h: H - veilTop, fill: P.bg })
     // testata su una fascia piena in alto
-    put(g, { kind: 'rect', name: 'velo_testata', x: 0, y: 0, w: W, h: m + headH + U(g, 18), fill: P.bg })
-    if (brand) putLab(g, 'brand', brand, m, m, P.fg)
+    put(g, { kind: 'rect', name: 'velo_testata', x: 0, y: 0, w: W, h: T + headH + U(g, 18), fill: P.bg })
+    if (brand) putLab(g, 'brand', brand, m, T, P.fg)
     if (right) putLab(g, 'occhiello', right, W - m - right.w, m, ink(g).acc)
     const y = putStack(g, st, m, veilTop + U(g, 30), P.fg, ink(g).acc)
     put(g, { kind: 'line', name: 'filetto', x1: m, y1: y + U(g, 14), x2: W - m, y2: y + U(g, 14), color: P.fg, width: Math.max(1, 2 * g.u) })
-    info.place(m, H - m - info.h, ink(g))
+    info.place(m, B - info.h, ink(g))
     return finish(g, 'supertipo', 'Tipo gigante')
   }
 
   // passo 2: un disco tenue che esce dalla tavola, dietro a tutto
   if (k.densita > 0.35) put(g, { kind: 'circle', name: 'disco', cx: r.pick([W * 0.92, W * 0.08]), cy: H * r.range(0.25, 0.5), r: Math.min(W, H) * (0.35 + k.densita * 0.2), fill: mix(P.bg, P.acc, 0.12 + k.sovrastampa * 0.15) })
-  if (brand) putLab(g, 'brand', brand, m, m, P.fg)
+  if (brand) putLab(g, 'brand', brand, m, T, P.fg)
   if (right) putLab(g, 'occhiello', right, W - m - right.w, m, ink(g).acc)
-  put(g, { kind: 'line', name: 'filetto', x1: m, y1: m + headH + U(g, 16), x2: W - m, y2: m + headH + U(g, 16), color: P.fg, width: Math.max(1, 2 * g.u) })
+  put(g, { kind: 'line', name: 'filetto', x1: m, y1: T + headH + U(g, 16), x2: W - m, y2: T + headH + U(g, 16), color: P.fg, width: Math.max(1, 2 * g.u) })
   // passo 3: la pila; dietro, se si spinge la sovrastampa, la stessa pila fuori registro nell'altro inchiostro
   const stW = side ? (W - 2 * m) * 0.52 : W - 2 * m
   const st = stack(g, g.c.title, stW, side ? H - top - m - info.h - U(g, 50) : H * (0.3 + 0.18 * k.scala), side ? 4 : g.portrait ? 4 : 3)
@@ -86,15 +87,15 @@ export function supertipo(g: G): Scene | null {
   // passo 4: la foto grande nello spazio che resta, informazioni sotto o accanto
   if (side) {
     const px = m + stW + U(g, 50)
-    frame(g, px, top, W - m - px, H - m - top)
-    info.place(m, H - m - info.h, ink(g))
+    frame(g, px, top, W - m - px, B - top)
+    info.place(m, B - info.h, ink(g))
   } else {
     const bottomH = info.h
-    const py = yEnd + U(g, 40), ph = H - m - bottomH - U(g, 40) - py
+    const py = yEnd + U(g, 40), ph = B - bottomH - U(g, 40) - py
     if (ph > H * 0.16) frame(g, m, py, W - 2 * m, ph)
-    info.place(m, H - m - info.h, ink(g))
+    info.place(m, B - info.h, ink(g))
     // a destra dell'informazione: dettagli numerati
-    let yr = H - m - info.h
+    let yr = B - info.h
     for (const [i, d] of (g.c.details ?? []).slice(0, 3).entries()) {
       const f = lab(g, `${String(i + 1).padStart(2, '0')}   ${d}`, colW, 14)
       if (!f) continue
@@ -147,7 +148,7 @@ function sealAt(g: G, cx: number, cy: number, r0: number) {
 
 /* ═══ 2. Eco ════════════════════════════════════════════════════════════ */
 export function eco(g: G): Scene | null {
-  const { W, H, m, P, s, k, r } = g
+  const { W, H, m, T, B, P, s, k, r } = g
   const font = s.display
   const tickH = U(g, 58)
   // passo 1: nastri in alto e in basso con il brand che scorre
@@ -155,11 +156,11 @@ export function eco(g: G): Scene | null {
   ticker(g, 'nastro_alto', tape, 0, tickH, P.acc, readable(P.acc, [P.bg, P.fg, '#111111', '#ffffff']))
   // passo 2: blocco informativo in fondo
   const info = infoBlock(g, g.landscape ? (W - 2 * m) * 0.45 : W - 2 * m, { kicker: false })
-  const infoTop = H - m - info.h
+  const infoTop = B - info.h
   const many = words(g.c.title).length > 3
   const full = many ? display(g, g.c.title, W - 2 * m, U(g, 140), 54, 28, 2) : null
   const fullTop = full ? infoTop - full.h - U(g, 22) : infoTop
-  const zoneTop = tickH + U(g, 24), zoneBot = fullTop - U(g, 36)
+  const zoneTop = Math.max(tickH + U(g, 24), T), zoneBot = fullTop - U(g, 36)
   // passo 3: la riga piena e le sue eco a contorno
   const row = up(many ? keyword(g) : g.c.title, true)
   const size = Math.min(sizeForWidth(row, font, (W - 2 * m) * (0.75 + 0.25 * k.scala), s.displayTracking), (zoneBot - zoneTop) * 0.3)
@@ -197,7 +198,7 @@ export function eco(g: G): Scene | null {
 
 /* ═══ 3. Strisce ════════════════════════════════════════════════════════ */
 export function strisce(g: G): Scene | null {
-  const { W, H, m, P, k, r } = g
+  const { W, H, m, T, B, P, k, r } = g
   const side = g.landscape
   const ph = side ? H : Math.round(H * ((g.format === 'storia' ? 0.64 : 0.56) + 0.1 * k.scala))
   const pw = side ? Math.round(W * 0.58) : W
@@ -247,7 +248,7 @@ export function strisce(g: G): Scene | null {
   if (side) {
     const colX = pw + U(g, 40), colW = W - m - colX
     const info = infoBlock(g, colW)
-    info.place(colX, H - m - info.h, ink(g))
+    info.place(colX, B - info.h, ink(g))
     const brand = lab(g, g.c.brand, colW)
     if (brand) putLab(g, 'brand', brand, W - m - brand.w, bandY + bandH + U(g, 40), P.fg)
   } else {
@@ -269,7 +270,7 @@ export function strisce(g: G): Scene | null {
       yr += U(g, 12)
     }
     const c = lab(g, ctaText(g.c), colW)
-    if (c) putLab(g, 'invito', c, W - m - colW, Math.max(yr + U(g, 20), H - m - c.h), ink(g).acc)
+    if (c) putLab(g, 'invito', c, W - m - colW, Math.max(yr + U(g, 20), B - c.h), ink(g).acc)
   }
   // passo 5: segni di stampa
   if (k.densita > 0.35) {
@@ -281,7 +282,7 @@ export function strisce(g: G): Scene | null {
 
 /* ═══ 4. Costruttivista ═════════════════════════════════════════════════ */
 export function costruttivo(g: G): Scene | null {
-  const { W, H, m, P, s, k, r } = g
+  const { W, H, m, T, B, P, s, k, r } = g
   const ang = -(14 + k.energia * 22) + r.range(-4, 4)
   const a = (ang * Math.PI) / 180
   // passo 1: il grande disco, che esce dalla tavola in alto a destra
@@ -323,11 +324,11 @@ export function costruttivo(g: G): Scene | null {
   putDisplay(g, 'titolo', t, tx0, ty0, P.bg, 'center', t.w, { angle: ang })
   // passo 5: brand e occhiello in verticale sul bordo sinistro
   const brand = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), H * 0.5)
-  if (brand) putLab(g, 'brand', brand, m, m * 0.6 + numH + U(g, 20) + brand.w, P.fg, 'left', brand.w, { angle: -90 })
+  if (brand) putLab(g, 'brand', brand, m, Math.max(T, m * 0.6 + numH + U(g, 20)) + brand.w, P.fg, 'left', brand.w, { angle: -90 })
   // passo 6: informazioni in basso a destra, allineate a destra
   const colW = g.landscape ? W * 0.32 : W * 0.5
   const info = infoBlock(g, colW, { kicker: false })
-  info.place(W - m - colW, H - m - info.h, ink(g), 'right')
+  info.place(W - m - colW, B - info.h, ink(g), 'right')
   // passo 7: blocchetti e puntini lungo l'asse
   if (k.densita > 0.5) {
     dotField(g, 'puntini', { x: m * 1.6, y: H * 0.08 + (num ? H * 0.2 : 0), w: W * 0.28, h: H * 0.18 }, U(g, 16), P.fg, 'x')
@@ -338,13 +339,13 @@ export function costruttivo(g: G): Scene | null {
 
 /* ═══ 5. Risograph ══════════════════════════════════════════════════════ */
 export function riso(g: G): Scene | null {
-  const { W, H, m, P, k, r } = g
+  const { W, H, m, T, B, P, k, r } = g
   const bl = over(g)
   const inkA = P.acc, inkB = P.acc2 === P.bg ? P.fg : P.acc2
   // la zona delle forme e quella del testo
   const side = g.landscape
   const head = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  —  '), side ? (W - 2 * m) * 0.38 : W - 2 * m)
-  const zx = m, zy = m + (head && !side ? head.h + U(g, 26) : 0), zw = side ? (W - 2 * m) * 0.58 : W - 2 * m, zh = side ? H - 2 * m : H * ((g.format === 'storia' ? 0.56 : 0.46) + 0.06 * k.scala)
+  const zx = m, zy = T + (head && !side ? head.h + U(g, 26) : 0), zw = side ? (W - 2 * m) * 0.58 : W - 2 * m, zh = side ? H - 2 * m : H * ((g.format === 'storia' ? 0.56 : 0.46) + 0.06 * k.scala)
   const cols = side ? 3 : 2, rows = side ? 2 : 3
   const cw = zw / cols, ch = zh / rows
   // passo 1: forme piene in due inchiostri che si sovrappongono
@@ -384,13 +385,13 @@ export function riso(g: G): Scene | null {
   const tx = side ? zx + zw + U(g, 40) : m, tw = side ? W - m - tx : W - 2 * m
   const info = infoBlock(g, side ? tw : tw * 0.62, { kicker: false })
   const top = side ? m + U(g, 50) : zy + zh + U(g, 30)
-  const t = display(g, g.c.title, tw, (side ? H - 2 * m - info.h - U(g, 90) : H - m - info.h - U(g, 40) - top), 230, 50, 4)
+  const t = display(g, g.c.title, tw, (side ? H - 2 * m - info.h - U(g, 90) : B - info.h - U(g, 40) - top), 230, 50, 4)
   if (!t) return null
   const titleColor = readable(P.bg, [inkA, inkB, P.fg], 3)
   putDisplay(g, 'titolo', t, tx, top, titleColor)
   // passo 4: brand e occhiello come intestazione di stampa
-  if (head) putLab(g, 'brand', head, side ? tx : m, m, P.fg)
-  info.place(side ? tx : W - m - tw * 0.62, side ? H - m - info.h : top + t.h + U(g, 34), ink(g), side ? 'left' : 'left')
+  if (head) putLab(g, 'brand', head, side ? tx : m, T, P.fg)
+  info.place(side ? tx : W - m - tw * 0.62, side ? B - info.h : top + t.h + U(g, 34), ink(g), side ? 'left' : 'left')
   return finish(g, 'riso', 'Risograph')
 }
 
@@ -408,13 +409,13 @@ function shapePath(kind: string, b: { x: number; y: number; w: number; h: number
 
 /* ═══ 6. Griglia modulare ═══════════════════════════════════════════════ */
 export function modulare(g: G): Scene | null {
-  const { W, H, m, P, s, k, r } = g
+  const { W, H, m, T, B, P, s, k, r } = g
   const cols = g.landscape ? 6 : 4
-  const gw = W - 2 * m, gh = H - 2 * m, gut = g.g
+  const gw = W - 2 * m, gh = B - T, gut = g.g
   const cw = (gw - (cols - 1) * gut) / cols
   const rows = Math.max(4, Math.round((gh + gut) / (cw + gut)))
   const ch = (gh - (rows - 1) * gut) / rows
-  const cell = (c: number, rr: number, sc = 1, sr = 1) => ({ x: m + c * (cw + gut), y: m + rr * (ch + gut), w: sc * cw + (sc - 1) * gut, h: sr * ch + (sr - 1) * gut })
+  const cell = (c: number, rr: number, sc = 1, sr = 1) => ({ x: m + c * (cw + gut), y: T + rr * (ch + gut), w: sc * cw + (sc - 1) * gut, h: sr * ch + (sr - 1) * gut })
   // passo 1: titolo sulle prime file, a tutta larghezza
   const t = display(g, g.c.title, gw, ch * 2 + gut - U(g, 10), 200 + 60 * k.scala, 44, 3)
   if (!t) return null
@@ -428,7 +429,7 @@ export function modulare(g: G): Scene | null {
   for (let c = 0; c < cols; c++) for (let rr = 0; rr < tr; rr++) used.add(`${c},${rr}`)
   // passo 2: la griglia a vista
   if (k.densita > 0.35) {
-    for (let c = 0; c <= cols; c++) { const x = c === cols ? W - m : m + c * (cw + gut) - (c ? gut / 2 : 0); put(g, { kind: 'line', name: 'griglia', x1: x, y1: m, x2: x, y2: H - m, color: alpha(P.fg, 0.12), width: Math.max(1, g.u) }) }
+    for (let c = 0; c <= cols; c++) { const x = c === cols ? W - m : m + c * (cw + gut) - (c ? gut / 2 : 0); put(g, { kind: 'line', name: 'griglia', x1: x, y1: T, x2: x, y2: B, color: alpha(P.fg, 0.12), width: Math.max(1, g.u) }) }
   }
   // passo 3: finestre sulla stessa foto (un blocco grande e celle sparse)
   const view = cell(0, tr, cols, rows - tr)
@@ -500,7 +501,7 @@ export function modulare(g: G): Scene | null {
     else put(g, { kind: 'glyph', name: 'cella_stella', path: r.pick(s.decor.glyphs), cx: b.x + b.w / 2, cy: b.y + b.h / 2, size: Math.min(b.w, b.h) * 0.7, color: P.acc })
   })
   // titolo sopra a tutto, con brand e occhiello nell'angolo
-  putDisplay(g, 'titolo', t, m, m, P.fg)
+  putDisplay(g, 'titolo', t, m, T, P.fg)
   const head = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), gw)
   if (head && t.lines.length < 3) {
     const y = m + tr * (ch + gut) - gut - head.h - U(g, 6)
@@ -511,7 +512,7 @@ export function modulare(g: G): Scene | null {
 
 /* ═══ 7. Orbita ═════════════════════════════════════════════════════════ */
 export function orbita(g: G): Scene | null {
-  const { W, H, m, P, s, k, r } = g
+  const { W, H, m, T, B, P, s, k, r } = g
   // passo 1: fondo sfumato generativo nei colori della tavola
   put(g, { kind: 'rect', name: 'fondo', x: 0, y: 0, w: W, h: H, fill: P.bg, fx: [{ id: 'genFill', p: { mode: r.pick([0, 3]), c1: P.bg, c2: P.srf, c3: mix(P.bg, P.acc, 0.45), c4: P.bg, grain: 25, warp: 40, scale: 140 } }] })
   const side = g.landscape
@@ -522,7 +523,7 @@ export function orbita(g: G): Scene | null {
   if (!t) return null
   const textH = t.h + U(g, 30) + info.h
   const cx = side ? m + (W - 2 * m - colW) / 2 : W / 2
-  const cy = side ? H / 2 : m + (H - 2 * m - textH - U(g, 50)) / 2
+  const cy = side ? H / 2 : T + (B - T - textH - U(g, 50)) / 2
   const Rmax = Math.min(side ? (W - 2 * m - colW) / 2 : W / 2 - m * 0.6, side ? H / 2 - m * 0.6 : cy - m * 0.6)
   if (Rmax < U(g, 200)) return null
   // passo 3: anelli di testo che girano, dal più esterno
@@ -559,7 +560,7 @@ export function orbita(g: G): Scene | null {
     putDisplay(g, 'titolo', t, x, y, P.fg)
     info.place(x, y + t.h + U(g, 30), ink(g))
   } else {
-    const y = H - m - textH
+    const y = B - textH
     putDisplay(g, 'titolo', t, m, y, P.fg, 'center', W - 2 * m)
     info.place((W - info.w) / 2, y + t.h + U(g, 30), ink(g), 'center')
   }
@@ -570,7 +571,7 @@ export function orbita(g: G): Scene | null {
 
 /* ═══ 8. Foto nelle lettere ═════════════════════════════════════════════ */
 export function ritaglio(g: G): Scene | null {
-  const { W, H, m, P, s, k, r } = g
+  const { W, H, m, T, B, P, s, k, r } = g
   if (!g.photo) return null
   // il fondo delle lettere è sempre scuro: la foto dentro le lettere si legge solo così
   const dark = P.dark ? P.bg : mix(darker(P.fg, P.bg), '#000000', 0.25)
@@ -582,7 +583,7 @@ export function ritaglio(g: G): Scene | null {
   const brand = lab(g, g.c.brand, W * 0.45), kick = lab(g, g.c.kicker, W * 0.45)
   const headH = Math.max(brand?.h ?? 0, kick?.h ?? 0, U(g, 16))
   const info = infoBlock(g, side ? (W - 2 * m) * 0.42 : (W - 2 * m) * 0.7, { kicker: false })
-  const top = m + headH + U(g, 44)
+  const top = T + headH + U(g, 44)
   const maxH = H - top - info.h - U(g, 70) - m
   const st = stack(g, g.c.title, W - 2 * m, Math.min(maxH, H * (0.5 + 0.25 * k.scala)), g.portrait ? 4 : g.landscape ? 2 : 3)
   if (!s.impactSans && st.sizes.some(z => z < 60 * g.u)) return null
@@ -607,11 +608,11 @@ export function ritaglio(g: G): Scene | null {
   // passo 4: testata e informazioni, sul colore che hanno sotto
   const headBg = P.dark ? dark : P.bg
   const headFg = readable(headBg, [P.fg, light, '#111111'])
-  if (brand) putLab(g, 'brand', brand, m, m, headFg)
+  if (brand) putLab(g, 'brand', brand, m, T, headFg)
   if (kick) putLab(g, 'occhiello', kick, W - m - kick.w, m, readable(headBg, [P.acc, headFg], 3))
   const infoBg = P.dark ? dark : P.bg
-  info.place(m, H - m - info.h, { fg: readable(infoBg, [P.fg, light, '#111111']), sec: readable(infoBg, [P.sec, P.fg], 3), acc: readable(infoBg, [P.acc, P.fg], 3) })
-  if (k.densita > 0.55) put(g, { kind: 'glyph', name: 'stella', path: r.pick(s.decor.glyphs), cx: W - m - U(g, 46), cy: H - m - U(g, 46), size: U(g, 70), color: readable(infoBg, [P.acc, P.fg], 2) })
+  info.place(m, B - info.h, { fg: readable(infoBg, [P.fg, light, '#111111']), sec: readable(infoBg, [P.sec, P.fg], 3), acc: readable(infoBg, [P.acc, P.fg], 3) })
+  if (k.densita > 0.55) put(g, { kind: 'glyph', name: 'stella', path: r.pick(s.decor.glyphs), cx: W - m - U(g, 46), cy: B - U(g, 46), size: U(g, 70), color: readable(infoBg, [P.acc, P.fg], 2) })
   return finish(g, 'ritaglio', 'Foto nelle lettere')
 }
 

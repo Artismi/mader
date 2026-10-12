@@ -6,13 +6,22 @@
 import type { DesignContent, FontSpec, Format, FxSpec, Scene, SceneEl } from '../types'
 import { FORMAT_SIZE } from '../types'
 import type { Style } from '../styles'
-import { fit, lineWidth, blockHeight, type Fit } from '../text'
+import { fit, lineWidth, blockHeight, type Fit, type FitOpts } from '../text'
 import { type Knobs, type Rng, rng, hashText } from './knobs'
+import { misure, type Misure } from '../core/misure'
+import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
+import { opticalLeft, topForCaps } from '../core/metriche'
 
 export interface Pal { bg: string; fg: string; acc: string; acc2: string; sec: string; srf: string; dark: boolean }
 
 export interface G {
-  W: number; H: number; u: number; m: number; g: number
+  W: number; H: number; u: number
+  /** margine base e canale (dalle misure) */
+  m: number; g: number
+  /** limiti verticali del messaggio: nella storia escludono le zone coperte dall'interfaccia */
+  T: number; B: number
+  ms: Misure
+  sc: Scala
   format: Format; landscape: boolean; portrait: boolean
   s: Style; k: Knobs; c: DesignContent; photo?: string
   r: Rng
@@ -47,9 +56,10 @@ function palette(s: Style, inverti: boolean): Pal {
 
 export function makeG(format: Format, s: Style, k: Knobs, c: DesignContent, photo?: string, pix?: Pix): G {
   const [W, H] = FORMAT_SIZE[format]
-  const u = Math.min(W, H) / 1080
+  const ms = misure(format)
   return {
-    W, H, u, m: Math.round(72 * u), g: Math.round(22 * u), format, landscape: W > H * 1.15, portrait: H > W * 1.15,
+    W, H, u: ms.u, m: ms.m.l, g: ms.gut, T: ms.safe.y, B: ms.safe.y + ms.safe.h, ms, sc: scala(ms, rapportoDa(k.scala)),
+    format, landscape: W > H * 1.15, portrait: H > W * 1.15,
     s, k, c, photo: photo ?? c.imageUrl,
     r: rng(k.seme ^ hashText(`${c.title}|${k.sistema}`)),
     P: palette(s, k.inverti), els: [], pix,
@@ -88,23 +98,49 @@ export function txt(g: G, o: TextOpts) {
 }
 
 /** Etichetta maiuscola spaziata, ridotta se non entra. */
-export function lab(g: G, text: string | undefined, maxW: number, size = 16): Fit | null {
-  if (!text?.trim()) return null
-  return fit({ text, font: g.s.label, maxW, maxSize: size * g.u, minSize: 11 * g.u, maxLines: 1, leading: 1.2, tracking: 0.14, upper: true })
+/** Il titolo usa un graziato? (spaziatura e interlinea diverse dai bastoni) */
+const SERIF = /Fraunces|Serif|Garamond|Bodoni|Playfair|Cormorant|Lora|Libre Baskerville/i
+export const voceTitolo = (font: FontSpec): Voce => (SERIF.test(font.family) ? 'titoloGraziato' : 'titolo')
+
+/**
+ * Adatta il testo con spaziatura e interlinea della scala: si misura al corpo
+ * massimo, poi si ricalcola al corpo trovato (le correzioni ottiche dipendono dal corpo).
+ */
+function fitScaled(g: G, o: Omit<FitOpts, 'tracking' | 'leading'>, voce: Voce, upper = false): Fit | null {
+  const first = fit({ ...o, tracking: g.sc.tracking(o.maxSize, voce), leading: g.sc.leading(o.maxSize, voce, upper) })
+  if (!first) return null
+  const again = fit({ ...o, maxSize: first.size, tracking: g.sc.tracking(first.size, voce), leading: g.sc.leading(first.size, voce, upper) })
+  return again && again.size >= first.size * 0.97 ? again : first
 }
-export function para(g: G, text: string | undefined, maxW: number, maxLines = 3, size = 24): Fit | null {
+
+/** Etichetta maiuscola spaziata: mai sotto il corpo delle note (leggibile sul telefono). */
+export function lab(g: G, text: string | undefined, maxW: number, size = 0): Fit | null {
   if (!text?.trim()) return null
-  return fit({ text, font: g.s.text, maxW, maxSize: size * g.u, minSize: 17 * g.u, maxLines, leading: 1.38 })
+  return fitScaled(g, { text, font: g.s.label, maxW, maxSize: Math.max(size * g.u, g.sc.note), minSize: 16 * g.u, maxLines: 1, upper: true }, 'etichetta', true)
+}
+/** Testo corrente: parte dal corpo della scala, scende al massimo a 22. */
+export function para(g: G, text: string | undefined, maxW: number, maxLines = 3, size = 0): Fit | null {
+  if (!text?.trim()) return null
+  return fitScaled(g, { text, font: g.s.text, maxW, maxSize: Math.max(size * g.u, g.sc.testo), minSize: 22 * g.u, maxLines }, 'testo')
 }
 export function display(g: G, text: string, maxW: number, maxH: number, maxSize: number, minSize: number, maxLines: number, upper = g.s.displayUpper): Fit | null {
-  return fit({ text, font: g.s.display, maxW, maxH, maxSize: maxSize * g.u, minSize: minSize * g.u, maxLines, leading: g.s.displayLeading, tracking: g.s.displayTracking, upper, balance: true })
+  return fitScaled(g, { text, font: g.s.display, maxW, maxH, maxSize: maxSize * g.u, minSize: Math.max(minSize * g.u, g.sc.attacco), maxLines, upper, balance: true }, voceTitolo(g.s.display), !!upper)
 }
 export const putLab = (g: G, name: string, f: Fit, x: number, y: number, color: string, align: 'left' | 'center' | 'right' = 'left', w = f.w, extra: Partial<TextOpts> = {}) =>
-  txt(g, { name, lines: f.lines, font: g.s.label, size: f.size, x, y, color, align, w, leading: 1.2, tracking: 0.14, ...extra })
+  txt(g, { name, lines: f.lines, font: g.s.label, size: f.size, x, y, color, align, w, leading: f.leading ?? 1.25, tracking: f.tracking ?? 0.14, ...extra })
 export const putPara = (g: G, name: string, f: Fit, x: number, y: number, color: string, align: 'left' | 'center' | 'right' = 'left', w = f.w) =>
-  txt(g, { name, lines: f.lines, font: g.s.text, size: f.size, x, y, color, align, w, leading: 1.38 })
-export const putDisplay = (g: G, name: string, f: Fit, x: number, y: number, color: string, align: 'left' | 'center' | 'right' = 'left', w = f.w, extra: Partial<TextOpts> = {}) =>
-  txt(g, { name, lines: f.lines, font: g.s.display, size: f.size, x, y, color, align, w, leading: g.s.displayLeading, tracking: g.s.displayTracking, ...extra })
+  txt(g, { name, lines: f.lines, font: g.s.text, size: f.size, x, y, color, align, w, leading: f.leading ?? 1.43 })
+/**
+ * Titolo. `caps`: y è la sommità delle maiuscole (non il box), come allinea un
+ * tipografo; a sinistra il rientro ottico porta l'inchiostro sul margine.
+ */
+export const putDisplay = (g: G, name: string, f: Fit, x: number, y: number, color: string, align: 'left' | 'center' | 'right' = 'left', w = f.w, extra: Partial<TextOpts> & { caps?: boolean } = {}) => {
+  const leading = f.leading ?? g.s.displayLeading
+  const { caps, ...rest } = extra
+  const yy = caps ? topForCaps(y, g.s.display, f.size, leading) : y
+  const xx = align === 'left' && !rest.angle ? x + opticalLeft(f.lines[0], g.s.display, f.size) : x
+  return txt(g, { name, lines: f.lines, font: g.s.display, size: f.size, x: xx, y: yy, color, align, w, leading, tracking: f.tracking ?? g.s.displayTracking, ...rest })
+}
 
 export const detailsLine = (c: DesignContent) => (c.details ?? []).map(d => d.trim()).filter(Boolean).join('  ·  ')
 export const ctaText = (c: DesignContent) => (c.cta?.trim() ? `${c.cta.trim()}  →` : '')
@@ -144,12 +180,13 @@ export function infoBlock(g: G, w: number, opts: { kicker?: boolean; body?: bool
   const o = { kicker: true, body: true, details: true, cta: true, ...opts }
   const parts: { f: Fit; kind: 'lab' | 'para'; role: string; gap: number }[] = []
   const k = o.kicker ? lab(g, g.c.kicker, w) : null
-  if (k) parts.push({ f: k, kind: 'lab', role: 'occhiello', gap: U(g, 18) })
-  const b = o.body ? para(g, g.c.body, w, opts.bodyLines ?? 3, opts.bodySize ?? 24) : null
-  if (b) parts.push({ f: b, kind: 'para', role: 'testo', gap: U(g, 26) })
-  const d = o.details ? lab(g, detailsLine(g.c), w, 14) : null
-  if (d) parts.push({ f: d, kind: 'lab', role: 'dettagli', gap: U(g, 14) })
-  const c = o.cta ? lab(g, ctaText(g.c), w, 16) : null
+  // distanze dalla scala: le cose legate più vicine (occhiello e testo) di quelle separate (testo e dettagli)
+  if (k) parts.push({ f: k, kind: 'lab', role: 'occhiello', gap: g.sc.spazio(2) })
+  const b = o.body ? para(g, g.c.body, w, opts.bodyLines ?? 3, opts.bodySize ?? 0) : null
+  if (b) parts.push({ f: b, kind: 'para', role: 'testo', gap: g.sc.spazio(3) })
+  const d = o.details ? lab(g, detailsLine(g.c), w) : null
+  if (d) parts.push({ f: d, kind: 'lab', role: 'dettagli', gap: g.sc.spazio(2) })
+  const c = o.cta ? lab(g, ctaText(g.c), w) : null
   if (c) parts.push({ f: c, kind: 'lab', role: 'invito', gap: 0 })
   if (parts.length) parts[parts.length - 1].gap = 0
   const h = parts.reduce((n, p) => n + p.f.h + p.gap, 0)
@@ -248,6 +285,14 @@ export function grainTop(g: G) {
   put(g, { kind: 'rect', name: 'grana', x: 0, y: 0, w: g.W, h: g.H, fill: '#808080', blend: 'overlay', opacity: 0.35 + g.k.grana * 0.6, fx: [{ id: 'textureOverlay', variant: 'grana', p: { opacity: 100, blend: 0, scale: 80 + g.k.grana * 80 } }] })
 }
 
+/** Motivo di uno scarto: per il banco di prova (scripts/designer) e per il debug. */
+export function discard(g: G, why: string): false {
+  const gl = globalThis as { __designerDebug?: boolean; __designerSink?: string[] }
+  if (gl.__designerSink) gl.__designerSink.push(`${g.k.sistema}: ${why}`)
+  if (gl.__designerDebug) console.log('[designer] scartata:', g.k.sistema, why)
+  return false
+}
+
 /* ── controllo ────────────────────────────────────────────────────────── */
 type Box = { x: number; y: number; w: number; h: number }
 const touches = (a: Box, b: Box, gap: number) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap
@@ -282,8 +327,10 @@ function obbTouch(A: [number, number][], B: [number, number][]) {
 export function check(g: G): boolean {
   const pad = g.m * 0.4
   const texts = g.els.filter(e => e.kind === 'text' && !e.deco).map(e => textBox(e as Extract<SceneEl, { kind: 'text' }>))
-  const dbg = (why: string) => { if ((globalThis as { __designerDebug?: boolean }).__designerDebug) console.log('[designer] scartata:', g.k.sistema, why); return false }
+  const dbg = (why: string) => discard(g, why)
   for (const [i, b] of texts.entries()) if (b.x < pad - 1 || b.y < pad - 1 || b.x + b.w > g.W - pad + 1 || b.y + b.h > g.H - pad + 1) return dbg(`fuori bordo ${i} ${JSON.stringify(b)}`)
+  // storia: il messaggio sta fuori dalle zone coperte dall'interfaccia (nome del profilo, barra delle risposte)
+  if (g.format === 'storia') for (const [i, b] of texts.entries()) if (b.y < g.T - 4 * g.u || b.y + b.h > g.B + 4 * g.u) return dbg(`fuori dalla zona sicura ${i}`)
   // le righe di una stessa pila (nome "titolo#1", "titolo#2"…) possono stringersi tra loro
   const groups = g.els.filter(e => e.kind === 'text' && !e.deco).map(e => (e.name.includes('#') ? e.name.split('#')[0] : `${e.name}@${Math.random()}`))
   const gap = 6 * g.u
@@ -385,7 +432,7 @@ function pathBox(d: string): Box | null {
  * foto movimentata. Contorni vuoti solo grandi e con un tratto deciso.
  */
 function legible(g: G): boolean {
-  const dbg = (why: string) => { if ((globalThis as { __designerDebug?: boolean }).__designerDebug) console.log('[designer] scartata:', g.k.sistema, why); return false }
+  const dbg = (why: string) => discard(g, why)
   for (let i = 0; i < g.els.length; i++) {
     const e = g.els[i]
     if (e.kind !== 'text' || e.deco || (e.opacity ?? 1) < 0.05) continue

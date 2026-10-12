@@ -1,0 +1,70 @@
+{
+  "caffe": {
+    "foto": "caffe.jpg",
+    "c": { "brand": "Tostatura Nera", "kicker": "Nuovo blend", "title": "Notte Etiope", "numero": "250 g",
+      "body": "Note di cacao, spezie e frutti rossi. Tostato a Bologna in piccoli lotti.",
+      "details": ["250 g", "Etiopia Guji", "Tostatura media"], "cta": "Scopri il blend" }
+  },
+  "ceramica": {
+    "foto": "ceramica.jpg",
+    "c": { "brand": "Terra Mossa", "kicker": "Collezione autunno", "title": "Tazze in gres smaltate a mano",
+      "body": "Argilla toscana, smalti naturali e cottura a 1240 gradi. Ogni pezzo è diverso.",
+      "details": ["Pezzi unici", "Lavastoviglie"], "cta": "Vedi la collezione" }
+  },
+  "techno": {
+    "foto": "club.jpg",
+    "c": { "brand": "Cassero Club", "kicker": "Sabato 14 novembre", "title": "Notte Industriale", "numero": "14.11",
+      "body": "Sei ore di techno con tre live set e le luci di Studio Lumen.",
+      "details": ["Dalle 23", "Bologna", "Ingresso 15 €"], "cta": "Biglietti online" }
+  },
+  "dischi": {
+    "foto": "vinile.jpg",
+    "c": { "brand": "Lato B", "kicker": "Mercato del disco", "title": "Vinili usati, storie nuove",
+      "body": "Tremila dischi selezionati, giradischi revisionati e una sala d'ascolto.",
+      "details": ["Domenica", "Via Mascarella 12", "Ingresso libero"], "cta": "Vieni ad ascoltare" }
+  },
+  "ristorante": {
+    "foto": "verdure.jpg",
+    "c": { "brand": "Osteria Fiume", "kicker": "Menu d'autunno", "title": "L'orto entra in cucina",
+      "body": "Zucca, radicchio, funghi e cipolle di Tropea: il menu cambia con le stagioni.",
+      "details": ["Cena", "Martedì-Sabato"], "cta": "Prenota un tavolo" }
+  },
+  "mercato": {
+    "foto": "fragole.jpg",
+    "c": { "brand": "Mercato Albinelli", "kicker": "Questo weekend", "title": "Fragole di Romagna", "numero": "-20%",
+      "body": "Raccolte all'alba da tre aziende agricole della provincia.",
+      "details": ["Sabato e domenica", "Fino a esaurimento"], "cta": "Passa al banco 14" }
+  },
+  "viaggio": {
+    "foto": "lago.jpg",
+    "c": { "brand": "Altrove", "kicker": "Itinerari lenti", "title": "Sette giorni sul lago",
+      "body": "Canoa all'alba, rifugi senza segnale e cene in baita. Gruppi di otto persone.",
+      "details": ["7 giorni", "Da giugno", "Tutto incluso"], "cta": "Scopri l'itinerario" }
+  },
+  "beauty": {
+    "foto": "ritratto.jpg",
+    "c": { "brand": "Maison Lune", "kicker": "Nuovo siero", "title": "La pelle, di notte",
+      "body": "Niacinamide e peptidi per una pelle più uniforme al risveglio.",
+      "details": ["30 ml", "Vegano", "Senza profumo"], "cta": "Provalo ora" }
+  },
+  "mostra": {
+    "foto": "medusa.jpg",
+    "c": { "brand": "Museo del Mare", "kicker": "Mostra fino al 6 gennaio", "title": "Creature della luce",
+      "body": "Meduse, sifonofori e pesci abissali: la bioluminescenza raccontata da vicino.",
+      "details": ["Genova", "Martedì-Domenica"], "cta": "Acquista il biglietto" }
+  },
+  "app": {
+    "c": { "brand": "Salvadana", "kicker": "Nuova app", "title": "Metti da parte senza pensarci",
+      "body": "Arrotonda ogni spesa e risparmia la differenza, in automatico.",
+      "details": ["Gratis", "iOS e Android"], "cta": "Scarica l'app" }
+  },
+  "conferenza": {
+    "c": { "brand": "Forma Festival", "kicker": "Design e città", "title": "Progettare il vuoto", "numero": "2026",
+      "body": "Tre giorni di talk e laboratori sullo spazio pubblico, con 24 ospiti da 9 paesi.",
+      "details": ["21-23 maggio", "Milano", "Ex Ansaldo"], "cta": "Registrati" }
+  },
+  "citazione": {
+    "c": { "brand": "Studio Artismi", "kicker": "Appunti di progetto", "title": "Il bianco non è vuoto: è respiro",
+      "body": "Ogni pagina ha bisogno di spazio per farsi leggere.", "details": [], "cta": "" }
+  }
+}

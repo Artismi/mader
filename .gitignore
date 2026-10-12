@@ -52,3 +52,7 @@ ts-error.txt
 /public/vendor/
 /public/models/
 
+
+# banco di prova del motore designer
+/scripts/designer/node_modules
+/scripts/designer/out

@@ -9,20 +9,22 @@ import { loadFonts } from '../fonts'
 import { type Knobs, type SistemaId, SISTEMI, hashText, rng } from './knobs'
 import { makeG } from './tools'
 import { SYSTEMS } from './systems'
+import { loadPix } from '../core/foto'
 
 export * from './knobs'
 
 /** Una scena dai regolatori; se la composizione non regge prova qualche variante del seme. */
 export async function generateSystem(c: DesignContent, format: Format, k: Knobs, photo?: string): Promise<Scene | null> {
   const style = styleById(k.stile)
-  await loadFonts(fontsOf(style))
+  const [, pix] = await Promise.all([loadFonts(fontsOf(style)), loadPix(photo ?? c.imageUrl)])
   for (let attempt = 0; attempt < 6; attempt++) {
     const kk = attempt ? { ...k, seme: k.seme + attempt * 7919, scala: Math.max(0, k.scala - attempt * 0.08) } : k
     try {
-      const sc = SYSTEMS[k.sistema](makeG(format, style, kk, c, photo))
+      const sc = SYSTEMS[k.sistema](makeG(format, style, kk, c, photo, pix))
       if (sc) return { ...sc, knobs: { ...k } }
     } catch (e) {
       console.warn('[designer]', k.sistema, e)
+      ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: errore ${(e as Error).message}`)
       return null
     }
   }

@@ -10,6 +10,7 @@
     "build:electron": "next build && electron-builder",
     "start": "next start",
     "lint": "eslint",
+    "designer:vetrina": "node scripts/designer/vetrina.mjs",
     "postinstall": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
