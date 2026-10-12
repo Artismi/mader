@@ -281,12 +281,14 @@ import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
 import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
-import { installArtboards } from './arrange/artboards'
+import { childrenOf, installArtboards } from './arrange/artboards'
 import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
 import { TextCurveControl } from './text/TextCurveControl'
 import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
 import { runPathOp } from './vector/pathfinder'
 import { pathDoubleClick } from './vector/direct-select'
+import { describeCanvas, runDesignOps } from './ai/design-ops'
+import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
 import { isCropping, startCrop } from './image/crop'
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
@@ -479,39 +481,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
    */
   const buildSemanticManifest = () => {
     const canvas = fabricRef.current; if (!canvas) return ''
-    const artboards = canvas.getObjects().filter(o => (o as any).isArtboard)
-    const elements = canvas.getObjects().filter(o => !(o as any).isArtboard && !o.get('name')?.startsWith('label_'))
-
-    let manifest = `Il progetto contiene ${artboards.length} tavole.\n\n`
-    
-    artboards.forEach(ab => {
-      const name = ab.get('name') || 'Senza nome'
-      const abBounds = ab.getBoundingRect(false)
-      const children = elements.filter(o => 
-        o.left! >= abBounds.left && o.left! <= abBounds.left + abBounds.width &&
-        o.top! >= abBounds.top && o.top! <= abBounds.top + abBounds.height
-      )
-
-      manifest += `## Tavola: ${name}\n`
-      manifest += `- Dimensioni: ${ab.width}x${ab.height}\n`
-      manifest += `- Elementi: ${children.length}\n`
-      
-      const texts = children.filter(o => o.type === 'textbox' || o.type === 'i-text') as fabric.Textbox[]
-      if (texts.length > 0) {
-        manifest += `  - Testi:\n`
-        texts.forEach(t => {
-            manifest += `    - "${t.text}" (${t.fontFamily}, ${t.fill})\n`
-        })
-      }
-
-      const shapes = children.filter(o => o.type !== 'textbox' && o.type !== 'i-text')
-      if (shapes.length > 0) {
-        manifest += `  - Forme/Asset: ${shapes.map(s => s.type).join(', ')}\n`
-      }
-      manifest += `\n`
-    })
-
-    return manifest
+    // stato per l'IA: tavole, elementi con ID, posizioni relative alla tavola, colori
+    return describeCanvas(canvas)
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
@@ -2366,13 +2337,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const artboardMap = new Map<string, { rect: fabric.Object, children: fabric.Object[] }>()
     abs.forEach(ab => {
       const name = ab.get('name')!
-      const b = ab.getBoundingRect(false)
-      const children = canvas.getObjects().filter(o =>
-        !(o as any).isArtboard &&
-        !o.get('name')?.startsWith('label_') &&
-        o.left! >= b.left && o.left! <= b.left + b.width &&
-        o.top! >= b.top && o.top! <= b.top + b.height
-      )
+      // stessa regola del resto dello Studio: un oggetto è della tavola che contiene il suo centro
+      const children = childrenOf(canvas, ab)
 
       artboardMap.set(name, { rect: ab, children })
     })
@@ -2527,6 +2493,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         return resolveColor(el.color)
       }
 
+      const newBoards: fabric.FabricObject[] = []
       boards.forEach((b: any, bIdx: number) => {
         const boardW = b.width || 1080
         const boardH = b.height || 1080
@@ -2545,7 +2512,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         
         const rect = canvas.getObjects().find(o => o.get('name') === artboardName)
         if (!rect) return
-        const offsetX = rect.left!, offsetY = rect.top!
+        // l'IA ragiona dall'angolo in alto a sinistra della tavola (come Figma); Fabric 7 dal centro
+        const tl = boardTopLeft(rect)
+        const offsetX = tl.x, offsetY = tl.y
+        newBoards.push(rect)
 
         const elsByZIndex = [...(b.elements || [])].sort((a: any, c: any) => (a.zIndex ?? 0) - (c.zIndex ?? 0))
         elsByZIndex.forEach((el: any, index: number) => {
@@ -2571,6 +2541,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
           const common: any = {
             left: offsetX + fx, top: offsetY + fy, name: elId, parentBoard: artboardName,
+            originX: 'left', originY: 'top',
             fill: buildFill(el), ...(el.opacity !== undefined && { opacity: el.opacity }),
             ...(el.stroke && { stroke: resolveColor(el.stroke) }),
             ...(el.strokeWidth !== undefined && { strokeWidth: el.strokeWidth }),
@@ -2662,15 +2633,18 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           const loadUrl = el.url.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(el.url)}` : el.url
 
           return withTimeout(fabric.FabricImage.fromURL(loadUrl, { crossOrigin: 'anonymous' }), 8000).then(img => {
-            img.set({ left: artboard.left! + (el.x ?? 0), top: artboard.top! + (el.y ?? 0), name: el.id, parentBoard: artboardName })
+            img.set({ name: el.id, parentBoard: artboardName })
             if (el.w) img.scaleToWidth(el.w)
+            placeInBoard(img, artboard, el.x ?? 0, el.y ?? 0)
             canvas.add(img); canvas.moveObjectTo(img, canvas.getObjects().indexOf(artboard) + 1)
           }).catch(e => {
             console.error('[canvas] image load failed:', el.url, e)
             // Fallback placeholder
+            const ptl = boardTopLeft(artboard)
             const placeholder = new fabric.Rect({
-              left: artboard.left! + (el.x ?? 0),
-              top: artboard.top! + (el.y ?? 0),
+              originX: 'left', originY: 'top',
+              left: ptl.x + (el.x ?? 0),
+              top: ptl.y + (el.y ?? 0),
               width: el.w || 400,
               height: el.h || 400,
               fill: '#0f172a',
@@ -2680,8 +2654,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               parentBoard: artboardName
             })
             const labelText = new fabric.Textbox('Immagine Non Disponibile', {
-              left: artboard.left! + (el.x ?? 0) + 10,
-              top: artboard.top! + (el.y ?? 0) + 10,
+              originX: 'left', originY: 'top',
+              left: ptl.x + (el.x ?? 0) + 10,
+              top: ptl.y + (el.y ?? 0) + 10,
               fontSize: 16,
               fill: '#ef4444',
               fontFamily: 'Inter',
@@ -2693,10 +2668,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             canvas.moveObjectTo(labelText, canvas.getObjects().indexOf(artboard) + 2)
           })
         })).then(() => {
+          // tutto dentro la tavola prima di riordinarle: gli elementi seguono la loro tavola
+          newBoards.forEach(ab => fitBoard(canvas, ab))
           rearrangeArtboards('strip', 100, 1)
           canvas.requestRenderAll()
         })
       } else {
+        newBoards.forEach(ab => fitBoard(canvas, ab))
         rearrangeArtboards('strip', 100, 1)
       }
 
@@ -2755,8 +2733,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (changes.x !== undefined || changes.y !== undefined || changes.w !== undefined || changes.h !== undefined) {
           const ab = findParentArtboard(obj)
           if (ab) {
-            const abLeft = ab.left!
-            const abTop = ab.top!
+            const abTL = boardTopLeft(ab)
+            const abLeft = abTL.x
+            const abTop = abTL.y
             const abW = (ab as any).width || ab.getScaledWidth()
             const abH = (ab as any).height || ab.getScaledHeight()
             if (changes.w !== undefined) {
@@ -2766,14 +2745,14 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             if (changes.h !== undefined && obj.type !== 'textbox' && obj.type !== 'i-text') {
               obj.set('height', changes.h)
             }
-            if (changes.x !== undefined) {
-              const clamped = Math.max(0, Math.min(changes.x, abW - (obj.getScaledWidth?.() || 0)))
-              obj.set('left', abLeft + clamped)
-            }
-            if (changes.y !== undefined) {
-              const clamped = Math.max(0, Math.min(changes.y, abH - (obj.getScaledHeight?.() || 0)))
-              obj.set('top', abTop + clamped)
-            }
+            // x,y dall'angolo in alto a sinistra della tavola, qualunque sia l'origine dell'oggetto
+            obj.setCoords()
+            const ob = obj.getBoundingRect()
+            const cur = { x: ob.left - abLeft, y: ob.top - abTop }
+            const nx = changes.x !== undefined ? Math.max(0, Math.min(changes.x, abW - ob.width)) : cur.x
+            const ny = changes.y !== undefined ? Math.max(0, Math.min(changes.y, abH - ob.height)) : cur.y
+            obj.set({ left: obj.left + (nx - cur.x), top: obj.top + (ny - cur.y) })
+            obj.setCoords()
           }
         }
 
@@ -2836,6 +2815,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     }
 
     // ─── 4. deleteElements ────────────────────────────────────────────────
+    // ─── editDesign: strumenti di Disponi, Vettoriale e Colore ─────────────
+    if (command.toolName === 'editDesign') {
+      const payload = command.result ?? command.args ?? {}
+      const report = await runDesignOps(canvas, Array.isArray(payload.ops) ? payload.ops : [])
+      console.info('[editDesign]', report.join(' · '))
+    }
+
     if (command.toolName === 'deleteElements') {
       const payload = command.result ?? command.args ?? {}
       const ids = (payload.ids as string[]) || []

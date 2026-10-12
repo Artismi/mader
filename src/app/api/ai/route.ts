@@ -10,6 +10,7 @@ import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
+import { designOpSchema, designOpsToolDescription } from '@/lib/design/design-ops-spec'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
@@ -759,7 +760,7 @@ export async function POST(req: Request) {
       architecture,
       ctx.snapshot,
       canvasSnapshot
-        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements. Per modifiche chirurgiche NON usare clearBoard.\n---`
+        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements (testi, colori, posizioni) ed editDesign (allinea, distribuisci, pathfinder, offset/sticker, ripetizioni, fusioni, testo curvo, maschere, ricolora, palette, livelli, esporta). Per modifiche chirurgiche NON usare clearBoard.\n---`
         : '',
       isCreativeQuery
         ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
@@ -1077,6 +1078,12 @@ QUANTITÀ BOARD:
             success: true,
             updated: updates?.length ?? 0,
           }),
+        }),
+
+        editDesign: tool({
+          description: designOpsToolDescription,
+          inputSchema: z.object({ ops: z.array(designOpSchema).min(1) }),
+          execute: async ({ ops }) => ({ success: true, ops: ops.length }),
         }),
 
         clearBoard: tool({
