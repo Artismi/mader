@@ -290,6 +290,7 @@ import { runPathOp } from './vector/pathfinder'
 import { pathDoubleClick } from './vector/direct-select'
 import { describeCanvas, runDesignOps } from './ai/design-ops'
 import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
+import { normalizeBoards } from '@/lib/design/compose-normalize'
 import { isCropping, startCrop } from './image/crop'
 
 /** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
@@ -2427,7 +2428,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // ─── 0. composeDesign: l'AI sceglie stile e contenuti, lo Studio impagina ──
     if (command.toolName === 'composeDesign') {
       const payload = command.result ?? command.args ?? {}
-      const boards: ComposeBoard[] = Array.isArray(payload.boards) ? payload.boards : []
+      // pilota automatico: nomi scritti male, foto mancanti e layout neutri sistemati qui, per qualsiasi modello
+      const boards: ComposeBoard[] = normalizeBoards(payload)
       if (!boards.length) return
       let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
       x = Number.isFinite(x) ? x + 160 : 100
@@ -2876,7 +2878,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const { objects } = await fabric.loadSVGFromString(out.svg)
         const parts = objects.filter(Boolean) as fabric.FabricObject[]
         if (parts.length > 0) {
-          const group = new fabric.Group(parts, { name: `schema_${Date.now()}` })
+          const group = new fabric.Group(parts, { name: `schema_${Date.now()}` } as Partial<fabric.GroupProps>)
           // Al centro della vista corrente, ridotto se più grande del 80% del viewport
           const zoom = canvas.getZoom()
           const vpt = canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0]

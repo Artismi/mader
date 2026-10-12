@@ -153,13 +153,30 @@ const canvasUpdateSchema = z.object({
 
 
 // ── composeDesign: l'AI descrive, lo Studio impagina ───────────────────────
+/** Modelli abbastanza bravi da impaginare a coordinate (createDesignBoards). */
+function isStrongDesignModel(label: string) {
+  if (/:free\b/i.test(label)) return false
+  return /claude-(sonnet|opus|fable)|gpt-5|gpt-4\.1|\bo3\b|gemini-(2\.5|3)-pro|grok-4/i.test(label)
+}
+
+const COMPOSE_ONLY_NOTE = `
+
+## Come creare grafiche (obbligatorio)
+Per ogni grafica nuova chiama SOLO composeDesign: non esiste uno strumento a coordinate.
+- Scegli uno stile e un'impaginazione dagli elenchi dello strumento.
+- Scrivi contenuti veri e completi: title, subtitle, body, cta, brand, eventuali meta/tags.
+- Per foto: content.image.prompt con una descrizione visiva del soggetto (lo Studio la genera).
+- Lascia allo Studio posizioni, misure, caratteri ed effetti.
+Per modificare elementi esistenti usa updateCanvasElements ed editDesign con gli ID dello stato del canvas.`
+
 const composeBoardSchema = z.object({
   name: z.string().optional().describe('Nome della tavola'),
-  format: z.enum(Object.keys(FORMATS) as [string, ...string[]]).optional(),
+  format: z.string().optional().describe(`Formato: ${Object.keys(FORMATS).join(', ')}`),
   width: z.number().optional(),
   height: z.number().optional(),
-  style: z.enum(STYLES.map(s => s.id) as [string, ...string[]]),
-  layout: z.enum(LAYOUTS.map(l => l.id) as [string, ...string[]]),
+  // stringhe libere: lo Studio riconosce anche nomi scritti male (modelli piccoli); un enum rifiuterebbe la chiamata
+  style: z.string().describe(`Stile: ${STYLES.map(s => s.id).join(', ')}`),
+  layout: z.string().describe(`Impaginazione: ${LAYOUTS.map(l => l.id).join(', ')}`),
   palette: z.number().int().min(0).max(4).optional(),
   colors: z.object({ bg: z.string(), ink: z.string(), accent: z.string(), muted: z.string(), surface: z.string() }).partial().optional()
     .describe('Colori del brand del cliente, se noti (hex)'),
@@ -185,10 +202,10 @@ const composeBoardSchema = z.object({
   background: z.string().optional(),
   displayFont: z.string().optional(),
   textFont: z.string().optional(),
-  align: z.enum(['left', 'center']).optional(),
-  decor: z.array(z.enum(DECOR_IDS as [string, ...string[]])).optional().describe('Interventi in più rispetto a quelli dello stile'),
+  align: z.string().optional().describe('left o center'),
+  decor: z.array(z.string()).optional().describe(`Interventi in più rispetto a quelli dello stile: ${DECOR_IDS.join(', ')}`),
   noDecor: z.boolean().optional(),
-  density: z.enum(['essenziale', 'ricco', 'massimo']).optional(),
+  density: z.string().optional().describe('essenziale, ricco o massimo'),
 })
 
 // ── Crew pipeline helpers ──────────────────────────────────────────────────
@@ -724,14 +741,17 @@ export async function POST(req: Request) {
     // il resto a quello economico
     const task = isCreativeQuery || canvasSnapshot ? 'design' : 'general'
     const { model, label: modelLabel } = resolveModel(modelId, task)
-    console.log(`[ai] richiesta ${task} → ${modelLabel}`)
+    // I modelli piccoli o gratuiti impaginano male a coordinate: per loro solo composeDesign,
+    // dove lo Studio fa griglia, foto, effetti e tipografia da sé
+    const lowLevelDesign = isStrongDesignModel(modelLabel)
+    console.log(`[ai] richiesta ${task} → ${modelLabel}${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
 
     const result = tracedStreamText({
       model,
-      system: SYSTEM_PROMPT,
+      system: lowLevelDesign ? SYSTEM_PROMPT : SYSTEM_PROMPT + COMPOSE_ONLY_NOTE,
       messages: modelMessages,
       stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
@@ -958,7 +978,7 @@ export async function POST(req: Request) {
           execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
         }),
 
-        createDesignBoards: tool({
+        ...(lowLevelDesign ? { createDesignBoards: tool({
           description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
 Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
@@ -1004,7 +1024,7 @@ QUANTITÀ BOARD:
             success: true,
             rendered: boards?.length ?? 0,
           }),
-        }),
+        }) } : {}),
 
         updateCanvasElements: tool({
           description: 'Modifica coordinate, testi, font, colori ecc. in elementi esistenti del canvas.',
