@@ -36,6 +36,7 @@ import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
 import { SHAPE_LIBRARY, ICONS_LIBRARY } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
 import { GeneratePanel } from './GeneratePanel'
+import { PackPanel, type PackItem, type PackInfo } from './PackPanel'
 import {
   BRUSH_TYPES, createCrayonBrush, createSprayBrush,
   createMarkerBrush, createInkBrush, createGenerativeBrush,
@@ -3772,6 +3773,33 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     img.src = tex.url;
   }
 
+  /** asset dei pack: texture, luci e foto coprono la tavola attiva con la fusione del pack; gli elementi entrano al centro */
+  function addPackAsset(item: PackItem, pack: PackInfo) {
+    const canvas = fabricRef.current; if (!canvas) return
+    fabric.FabricImage.fromURL(item.src, { crossOrigin: 'anonymous' }).then(img => {
+      const iw = img.width || 1, ih = img.height || 1
+      const full = pack.cat !== 'elementi'
+      const id = activeArtboardIdRef.current
+      const board = id ? canvas.getObjects().find(o => (o as any).isArtboard && o.get('name') === id) : undefined
+      if (full && board) {
+        const b = board.getBoundingRect()
+        const k = Math.max(b.width / iw, b.height / ih)
+        img.set({ scaleX: k, scaleY: k, left: b.left + (b.width - iw * k) / 2, top: b.top + (b.height - ih * k) / 2 })
+        ;(img as any).parentBoard = id
+      } else {
+        const z = canvas.getZoom(), v = canvas.viewportTransform
+        const vw = canvas.getWidth() / z, vh = canvas.getHeight() / z
+        const k = full ? Math.max(vw / iw, vh / ih) * 0.6 : Math.min(vw * 0.35 / iw, vh * 0.35 / ih, 1)
+        img.set({ scaleX: k, scaleY: k, left: -v[4] / z + (vw - iw * k) / 2, top: -v[5] / z + (vh - ih * k) / 2 })
+        if (id) (img as any).parentBoard = id
+      }
+      if (pack.blend) img.set('globalCompositeOperation', pack.blend as GlobalCompositeOperation)
+      ;(img as any).name = `${pack.name} · ${item.name}`
+      canvas.add(img); canvas.setActiveObject(img); canvas.requestRenderAll()
+      pushHistory()
+    })
+  }
+
   function addBricolage(asset: any) {
     const canvas = fabricRef.current; if (!canvas) return;
     const p = new fabric.Path(asset.path, {
@@ -4269,6 +4297,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onAddIcon={addLibIcon}
           onAddGenerated={addGeneratedSvg}
           onAddBricolage={addBricolage}
+          onAddPackAsset={addPackAsset}
           onLayerSelect={layerSelect}
           onLayerToggleVisible={layerToggleVisible}
           onLayerToggleLock={layerToggleLock}
@@ -4688,6 +4717,7 @@ interface PanelProps {
   onAddGenerated: (svg: string, name: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddBricolage: (s: any) => void
+  onAddPackAsset: (item: PackItem, pack: PackInfo) => void
   onLayerSelect: (id: string) => void
   onLayerToggleVisible: (id: string) => void
   onLayerToggleLock: (id: string) => void
@@ -4960,6 +4990,7 @@ function PropertiesPanel(props: PanelProps) {
             onFont={props.onApplyFont}
             onTexture={props.onApplyTexture}
             onBricolage={props.onAddBricolage}
+            onPack={props.onAddPackAsset}
             onGrad={props.onApplyGradient}
             onClose={() => setTab('prop')}
             inline
@@ -5600,18 +5631,19 @@ function ShadowSec({ sel, onShadow }: { sel: SelState; onShadow: (u: Partial<Sel
 
 // ─── LIBRARY PANEL (Advanced Asset Explorer) ─────────────────────────────────
 
-function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
+function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onPack, onGrad, onClose, inline = false }: {
   onShape: (p: string) => void;
   onIcon: (svgPath: string) => void;
   onGenerated: (svg: string, name: string) => void;
   onFont: (f: string) => void;
   onTexture: (tex: any) => void;
   onBricolage: (asset: any) => void;
+  onPack: (item: PackItem, pack: PackInfo) => void;
   onGrad: (c: string[], a?: number) => void;
   onClose: () => void;
   inline?: boolean
 }) {
-  const [tab, setTab] = useState<'genera' | 'fonts' | 'shapes' | 'icons' | 'textures' | 'bricolage'>('genera')
+  const [tab, setTab] = useState<'genera' | 'pack' | 'fonts' | 'shapes' | 'icons' | 'textures' | 'bricolage'>('genera')
   const [search, setSearch] = useState('')
 
   return (
@@ -5626,7 +5658,7 @@ function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage
 
       {/* Tabs */}
       <div className="flex px-2 py-1.5 bg-black/20 gap-1 overflow-x-auto scrollbar-hide">
-        {(['genera', 'fonts', 'shapes', 'icons', 'textures', 'bricolage'] as const).map(t => (
+        {(['genera', 'pack', 'fonts', 'shapes', 'icons', 'textures', 'bricolage'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap',
               tab === t ? 'bg-white/10 text-accent shadow-inner' : 'text-white/30 hover:text-white/60')}>
@@ -5645,6 +5677,7 @@ function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage
 
       <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
         {tab === 'genera' && <GeneratePanel search={search} onInsert={onGenerated} />}
+        {tab === 'pack' && <PackPanel search={search} onInsert={onPack} onFill={it => onTexture({ name: it.name, type: 'overlay', url: it.src })} />}
 
         {tab === 'shapes' && (
           <div className="space-y-6">

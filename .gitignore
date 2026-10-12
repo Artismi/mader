@@ -51,3 +51,6 @@ ts-error.txt
 # binari copiati da node_modules (scripts/copy-vendor.mjs)
 /public/vendor/
 /public/models/
+
+# asset dei pack importati (rigenerabili con scripts/import-packs.py, ~350 MB)
+/public/library/

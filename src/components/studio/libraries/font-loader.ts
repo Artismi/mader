@@ -30,7 +30,10 @@ function addCss(id: string, href: string): Promise<void> {
 /** il carattere è davvero arrivato? (`fonts.check` dice sì anche quando il foglio CSS non c'è ancora) */
 const hasFace = (family: string) => [...document.fonts].some(f => f.family.replace(/["']/g, '') === family && f.status === 'loaded')
 
+const LOCAL_CSS = '/fonts/pack/fonts.css'
+
 function fullHref(e: FontEntry) {
+  if (e.source === 'local') return LOCAL_CSS
   if (e.source === 'fontshare') return `https://api.fontshare.com/v2/css?f[]=${slug(e.family)}@${e.weights.join(',')}&display=swap`
   const w = e.weights.length > 1 ? `:wght@${e.weights.join(';')}` : ''
   return `https://fonts.googleapis.com/css2?family=${gq(e.family)}${w}&display=swap`
@@ -45,7 +48,7 @@ export function ensureFont(family: string, weight: number | string = 400): Promi
   const key = `${family}|${weight}`
   if (!pending.has(key)) {
     pending.set(key, (async () => {
-      await addCss(`font-full-${slug(family)}`, fullHref(e))   // il foglio CSS deve prima arrivare
+      await addCss(e.source === 'local' ? 'font-local-pack' : `font-full-${slug(family)}`, fullHref(e))   // il foglio CSS deve prima arrivare
       for (let i = 0; i < 40; i++) {
         try { await document.fonts.load(`${weight} 40px "${family}"`) } catch { /* riprova */ }
         if (hasFace(family) && document.fonts.check(`${weight} 40px "${family}"`)) return true
@@ -67,6 +70,7 @@ export function loadPreviews(entries: FontEntry[], sample: string) {
       `https://fonts.googleapis.com/css2?${chunk.map(c => `family=${gq(c.family)}`).join('&')}&text=${text}&display=swap`)
   }
   for (const e of entries.filter(e => e.source === 'fontshare')) addCss(`font-full-${slug(e.family)}`, fullHref(e))
+  if (entries.some(e => e.source === 'local')) addCss('font-local-pack', LOCAL_CSS)
 }
 
 /** dopo il caricamento: misure nuove per i testi che usano il carattere */

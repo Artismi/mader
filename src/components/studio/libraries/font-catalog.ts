@@ -6,7 +6,7 @@
  * un carattere non arriva, il selettore lo nasconde.
  * File generato con verifica dei pesi: per aggiungere caratteri, rigenerarlo.
  */
-export type FontSource = 'google' | 'fontshare'
+export type FontSource = 'google' | 'fontshare' | 'local'
 export interface FontEntry { family: string; cat: string; source: FontSource; weights: number[] }
 
 export const FONT_CATS: { id: string; label: string }[] = [
@@ -25,6 +25,7 @@ export const FONT_CATS: { id: string; label: string }[] = [
   { id: 'futuro', label: "Tecnici e futuristici" },
   { id: 'calligrafici', label: "Calligrafici raffinati" },
   { id: 'gotici', label: "Gotici e blackletter" },
+  { id: 'pack', label: "Dai pack" },
 ]
 
 export const FONTS: FontEntry[] = [
@@ -375,4 +376,8 @@ export const FONTS: FontEntry[] = [
   { family: "Grenze", cat: 'gotici', source: 'google', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
   { family: "Grenze Gotisch", cat: 'gotici', source: 'google', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
   { family: "Jacquarda Bastarda 9", cat: 'gotici', source: 'google', weights: [400] },
+  // caratteri locali dai pack scaricati (public/fonts/pack, @font-face in fonts.css)
+  { family: "Kilo", cat: 'pack', source: 'local', weights: [400] },
+  { family: "Roadam", cat: 'pack', source: 'local', weights: [400] },
+  { family: "Vanosky", cat: 'pack', source: 'local', weights: [400] },
 ]
