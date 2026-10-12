@@ -10,7 +10,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Link2, Sparkles, Trash2, ChevronDown, ChevronLeft, Layers,
   ArrowRight, ArrowLeft, ArrowLeftRight, Library,
-  LassoSelect, Zap, Star, Scissors, PenTool, Hexagon,
+  LassoSelect, Zap, Star, Scissors, PenTool, Hexagon, LayoutTemplate,
   Eye, EyeOff, Lock, Unlock, GripVertical, Sliders, X, Palette,
   Search, Cpu, Highlighter, Play, Merge, Ghost, Maximize2, Heart, Droplets,
   Waves, Cloud, Triangle, LayoutList, LayoutGrid, Magnet,
@@ -294,6 +294,7 @@ import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
 import { normalizeBoards } from '@/lib/design/compose-normalize'
 import { resolvePhoto } from './ai/photos'
 import { applyFinish } from './ai/finish'
+import { TemplatePanel } from './templates/TemplatePanel'
 import { buildVisual, type VisualSpec } from './ai/visual'
 import { isCropping, startCrop } from './image/crop'
 
@@ -388,6 +389,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const [showAB, setShowAB] = useState(false)
   const [showCervello, setShowCervello] = useState(false)
   const [showFP, setShowFP] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
   const [showLib, setShowLib] = useState(false)
   const [showLayers, setShowLayers] = useState(false)
   const [showImgFx, setShowImgFx] = useState(false)
@@ -4148,6 +4150,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               tool === 'text' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
             <Type className="w-4 h-4" />
           </button>
+          <button onClick={() => setShowTemplates(v => !v)} title="Template: proposte procedurali, l'IA aiuta su richiesta"
+            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5', showTemplates ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
+            <LayoutTemplate className="w-4 h-4" />
+          </button>
           <button onClick={() => changeTool('image')} title="Immagine [I]"
             className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
               tool === 'image' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
@@ -4286,6 +4292,12 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {/* Maniglia d'orbita per gli oggetti con materiale 3D */}
           {canvasReady && <Orbit3D fabricRef={fabricRef} />}
           {canvasReady && <ArrangeBar canvas={fabricRef.current} />}
+          {showTemplates && (
+            <div className="absolute right-4 top-4 z-[70]">
+              <TemplatePanel onClose={() => setShowTemplates(false)}
+                onApply={b => { handleAICommand({ toolName: 'composeDesign', args: { boards: [b], variants: 1 } }) }} />
+            </div>
+          )}
 
           {/* Rulers */}
           {showRulers && <Rulers zoom={zoom} canvas={fabricRef.current} />}

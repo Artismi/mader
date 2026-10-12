@@ -107,7 +107,8 @@ async function makeSource(src: string, size: number, color: string, R: () => num
     try {
       const mod = await import('../genera/recipes')
       const rc = mod.RECIPES.find(r => r.id === norm(arg)) ?? mod.RECIPES.find(r => r.piece) ?? mod.RECIPES[0]
-      const canvasEl = mod.runRecipe(rc, mod.defaults(rc), hash(arg) % 100000, 'pezzo', 0.6)
+      // risoluzione del generatore proporzionata alla misura del visual
+      const canvasEl = mod.runRecipe(rc, mod.defaults(rc), hash(arg) % 100000, 'pezzo', Math.max(0.2, Math.min(0.8, size / 1500)))
       const img = new fabric.FabricImage(canvasEl, { originX: 'center', originY: 'center' })
       img.scale(size / Math.max(img.width, img.height))
       return img
