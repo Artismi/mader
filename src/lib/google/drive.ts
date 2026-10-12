@@ -1,48 +1,19 @@
 import { google, drive_v3 } from 'googleapis'
-import { createClient } from '@/lib/supabase/server'
+import { Readable } from 'node:stream'
+import { googleAuth } from './auth'
 
 /**
- * Restituisce un client Drive autenticato usando il token Google
- * salvato nella tabella user_tokens dopo il login OAuth.
+ * Client Drive autenticato con i token Google salvati in SQLite
+ * (stesso accesso di Gmail e Calendar, con rinnovo automatico).
  */
 export async function getDriveClient(): Promise<drive_v3.Drive> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Non autenticato')
-
-    const { data: tokenData, error } = await supabase
-        .from('user_tokens')
-        .select('provider_token, provider_refresh_token')
-        .eq('user_id', user.id)
-        .eq('provider', 'google')
-        .single()
-
-    if (error || !tokenData?.provider_token) {
-        throw new Error('Token Google non trovato. Esci e rifai il login con Google.')
-    }
-
-    const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-    )
-    oauth2Client.setCredentials({
-        access_token: tokenData.provider_token,
-        refresh_token: tokenData.provider_refresh_token ?? undefined,
-    })
-
-    // Salva il nuovo access token se viene refreshato automaticamente
-    oauth2Client.on('tokens', async (tokens) => {
-        if (tokens.access_token) {
-            await supabase
-                .from('user_tokens')
-                .update({ provider_token: tokens.access_token, updated_at: new Date().toISOString() })
-                .eq('user_id', user.id)
-                .eq('provider', 'google')
-        }
-    })
-
-    return google.drive({ version: 'v3', auth: oauth2Client })
+    const auth = googleAuth()
+    if (!auth) throw new Error('Google non collegato: accedi di nuovo con Google')
+    return google.drive({ version: 'v3', auth })
 }
+
+// gli apici nei nomi (es. "L'Officina") romperebbero la query di Drive
+const q = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 
 /**
  * Trova o crea una cartella in Drive per path.
@@ -55,8 +26,8 @@ export async function findOrCreateFolder(
 ): Promise<string> {
     // Cerca se esiste già
     const query = parentId
-        ? `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
-        : `name='${name}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`
+        ? `name='${q(name)}' and mimeType='application/vnd.google-apps.folder' and '${q(parentId)}' in parents and trashed=false`
+        : `name='${q(name)}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`
 
     const existing = await drive.files.list({
         q: query,
@@ -146,11 +117,34 @@ export async function createDocument(
  */
 export async function listFolderFiles(drive: drive_v3.Drive, folderId: string) {
     const res = await drive.files.list({
-        q: `'${folderId}' in parents and trashed=false`,
+        q: `'${q(folderId)}' in parents and trashed=false`,
         fields: 'files(id, name, mimeType, modifiedTime, webViewLink, iconLink)',
         orderBy: 'modifiedTime desc',
         pageSize: 20,
         spaces: 'drive',
     })
     return res.data.files || []
+}
+
+/**
+ * Carica (o sostituisce, se c'è già un file con lo stesso nome) un file binario in una cartella.
+ */
+export async function uploadFile(
+    drive: drive_v3.Drive,
+    name: string,
+    folderId: string,
+    mimeType: string,
+    data: Uint8Array,
+): Promise<{ id: string; webViewLink: string }> {
+    const media = { mimeType, body: Readable.from(Buffer.from(data)) }
+    const existing = await drive.files.list({
+        q: `name='${q(name)}' and '${q(folderId)}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive',
+    })
+    const id = existing.data.files?.[0]?.id
+    const file = id
+        ? await drive.files.update({ fileId: id, media, fields: 'id, webViewLink' })
+        : await drive.files.create({ requestBody: { name, parents: [folderId] }, media, fields: 'id, webViewLink' })
+    return { id: file.data.id!, webViewLink: file.data.webViewLink! }
 }

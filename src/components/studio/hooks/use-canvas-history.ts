@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import * as fabric from 'fabric'
+import { serializeCanvas } from '../canvas-serial'
 
 // 1×1 transparent GIF — smallest valid image Fabric can decode without errors.
 const BLANK_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
@@ -34,6 +35,15 @@ export function useCanvasHistory(
   const historyRef = useRef<string[]>([])
   const histIdxRef = useRef<number>(-1)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  // true mentre si ricarica uno stato (annulla, ripeti, apertura progetto):
+  // gli eventi object:added/removed generati dal caricamento non sono modifiche
+  const restoringRef = useRef(false)
+
+  /** Esegue un caricamento senza registrare passi di cronologia */
+  async function restoring<T>(fn: () => Promise<T>): Promise<T> {
+    restoringRef.current = true
+    try { return await fn() } finally { restoringRef.current = false }
+  }
 
   /** Append the current canvas state to the history stack. */
   function pushHistory(immediate = false) {
@@ -42,17 +52,14 @@ export function useCanvasHistory(
       debounceTimerRef.current = null
     }
 
+    if (restoringRef.current) return
     const performPush = () => {
       const canvas = fabricRef.current; if (!canvas) return
       
       // Optimization: use requestIdleCallback if available to avoid blocking the main thread
       const runSerialization = () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const json = JSON.stringify((canvas as any).toJSON([
-          'objId', 'name', 'hasStartArrow', 'hasEndArrow', 'isConnector',
-          'startObjId', 'endObjId', 'vertexConnections', 'isArtboard', 'artboardExportType',
-          '_appliedFX', 'fxProps', 'isSubtitle', 'startTime', 'endTime', 'isVideo',
-        ]))
+        if (restoringRef.current) return
+        const json = serializeCanvas(canvas)
 
         // If we moved back and then made a new change, discard the "future" history
         if (histIdxRef.current < historyRef.current.length - 1) {
@@ -117,28 +124,30 @@ export function useCanvasHistory(
       .forEach(o => canvas.remove(o))
   }
 
+  function load(canvas: fabric.Canvas, json: string) {
+    const keepBg = canvas.backgroundColor
+    restoring(() => canvas.loadFromJSON(JSON.parse(sanitizeCanvasJSON(json)))).then(() => {
+      if (!canvas.backgroundColor) canvas.backgroundColor = keepBg
+      purgeVideoPlaceholders(canvas)
+      canvas.discardActiveObject()
+      canvas.renderAll()
+      syncActiveArtboardAfterLoad(canvas)
+      canvas.fire('history:restored' as never)
+    })
+  }
+
   function undo() {
     const canvas = fabricRef.current
     if (!canvas || histIdxRef.current <= 0) return
     histIdxRef.current--
-    const raw = sanitizeCanvasJSON(historyRef.current[histIdxRef.current])
-    canvas.loadFromJSON(JSON.parse(raw)).then(() => {
-      purgeVideoPlaceholders(canvas)
-      canvas.renderAll()
-      syncActiveArtboardAfterLoad(canvas)
-    })
+    load(canvas, historyRef.current[histIdxRef.current])
   }
 
   function redo() {
     const canvas = fabricRef.current
     if (!canvas || histIdxRef.current >= historyRef.current.length - 1) return
     histIdxRef.current++
-    const raw = sanitizeCanvasJSON(historyRef.current[histIdxRef.current])
-    canvas.loadFromJSON(JSON.parse(raw)).then(() => {
-      purgeVideoPlaceholders(canvas)
-      canvas.renderAll()
-      syncActiveArtboardAfterLoad(canvas)
-    })
+    load(canvas, historyRef.current[histIdxRef.current])
   }
 
   /** Clear the history stack (call on loadProject / newProject). */
@@ -147,5 +156,5 @@ export function useCanvasHistory(
     histIdxRef.current = -1
   }
 
-  return { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory }
+  return { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory, restoring, restoringRef }
 }
