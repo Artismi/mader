@@ -58,48 +58,41 @@ export function wingGeom(r: Rnd, x: number, y: number, angle: number, L: number,
   // dalla lama, così due smerli vicini si incrociano a X sulla punta
   const biteU = (u: number, d: number) => { const s = Math.sin(Math.PI * u); return d * Math.sign(s) * Math.pow(Math.abs(s), 0.45) }
   const steps = (dt: number) => Math.max(8, Math.ceil(dt * n))
-  // aghi: nascono dalla cuspide e sono fatti dagli stessi due smerli che vi arrivano,
-  // prolungati fino alla punta. Un solo segno continuo, non un artiglio appoggiato.
+  // punte: non sono pezzi aggiunti. Vicino alla cuspide i due smerli che vi arrivano
+  // piegano in fuori e si chiudono nello stesso punto, come le dita di un'ala di
+  // pipistrello: fianchi concavi, una sola punta affilata.
   const spikes: { pts: Pt[]; w: number; cusp?: number }[] = []
   const cusps: { p: Pt; a: number; w: number }[] = []
-  const edges: ({ before: Pt[]; after: Pt[] } | null)[] = [null]
+  const horns: ({ len: number; dt: number } | null)[] = [null]
   for (let c = 1; c < k; c++) {
     const t = cuts[c], i = at(t), nv = nrm(i), w = th(t)
-    const out = Math.atan2(nv[1], nv[0]) + side * range(r, 0.7, 1.05)
-    const base = off(t, w)
-    cusps.push({ p: base, a: out, w })
-    if (r() > o.spikes) { edges.push(null); continue }
-    const sp = whip(base[0], base[1], out, w * range(r, 0.55, 1.05), side * 0.2, side * range(r, 1.2, 2.4), 1.6, 1)
-    const w0 = w * range(r, 0.07, 0.1), m = sp.pts.length
-    const A: Pt[] = [], B: Pt[] = []
-    sp.pts.forEach((p, j) => {
-      const s = j / (m - 1), hw = w0 * Math.pow(1 - s, 1.15)
-      const a = sp.angles[j], nx = -Math.sin(a), ny = Math.cos(a)
-      A.push([p[0] + nx * hw, p[1] + ny * hw]); B.push([p[0] - nx * hw, p[1] - ny * hw])
-    })
-    // il fianco che guarda verso la radice continua lo smerlo che arriva da lì
-    const tg: Pt = [Math.cos(angles[i]), Math.sin(angles[i])]
-    const back = (q: Pt[]) => { const p = q[Math.floor(m * 0.2)]; return (p[0] - base[0]) * tg[0] + (p[1] - base[1]) * tg[1] }
-    const [before, after] = back(A) < back(B) ? [A, B] : [B, A]
-    edges.push({ before, after })
-    spikes.push({ pts: sp.pts, w: w0 * 0.7, cusp: c - 1 })
+    const hasHorn = r() <= o.spikes
+    const horn = hasHorn ? { len: w * range(r, 0.35, 0.7), dt: (t1 - t0) / k * range(r, 0.12, 0.35) } : null
+    horns.push(horn)
+    const tip = horn ? off(t + horn.dt, w + horn.len) : off(t, w)
+    cusps.push({ p: tip, a: Math.atan2(nv[1], nv[0]) + side * range(r, 0.3, 0.6), w })
   }
-  edges.push(null)
+  horns.push(null)
   const arcs: Pt[][] = []
   // radice → prima cuspide e ultima cuspide → punta: ventre pieno
   const plain = (ta: number, tb: number) => { const q: Pt[] = []; const m = steps(tb - ta); for (let j = 0; j <= m; j++) { const t = ta + (tb - ta) * j / m; q.push(off(t, th(t))) } return q }
   arcs.push(plain(0, t0))
   for (let i = 0; i < k; i++) {
-    const ta = cuts[i], tb = cuts[i + 1], eIn = edges[i], eOut = edges[i + 1]
-    // senza ago, lo smerlo sfora la cuspide e incrocia il vicino
-    const e0 = eIn ? 0 : range(r, 0.04, 0.12), e1 = eOut ? 0 : range(r, 0.04, 0.12)
-    const q: Pt[] = [], m = steps(tb - ta)
-    if (eIn) q.push(...[...eIn.after].reverse())
+    const ta = cuts[i], tb = cuts[i + 1], hIn = horns[i], hOut = horns[i + 1]
+    // senza punta lo smerlo sfora la cuspide e incrocia il vicino
+    const e0 = hIn ? 0 : range(r, 0.04, 0.12), e1 = hOut ? 0 : range(r, 0.04, 0.12)
+    const q: Pt[] = [], m = steps(tb - ta) * 2
+    const reach = range(r, 0.3, 0.45)
     for (let j = 0; j <= m; j++) {
-      const u = -e0 + (1 + e0 + e1) * j / m, t = ta + (tb - ta) * u
-      q.push(off(t, th(t) * (1 - biteU(u, depths[i]))))
+      const u = -e0 + (1 + e0 + e1) * j / m
+      let t = ta + (tb - ta) * u, w = th(t) * (1 - biteU(u, depths[i]))
+      // rampa dolce che porta lo smerlo fino alla punta: tangente, poi sempre più tesa
+      const gOut = hOut ? Math.pow(Math.max(0, (u - (1 - reach)) / reach), 2.4) : 0
+      const gIn = hIn ? Math.pow(Math.max(0, (reach - u) / reach), 2.4) : 0
+      if (hOut) { t += hOut.dt * gOut; w += hOut.len * gOut }
+      if (hIn) { t += hIn.dt * gIn; w += hIn.len * gIn }
+      q.push(off(t, w))
     }
-    if (eOut) q.push(...eOut.before)
     arcs.push(q)
   }
   arcs.push(plain(t1, 1))
