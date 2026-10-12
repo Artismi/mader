@@ -278,23 +278,7 @@ export function shapeKey(src: HTMLCanvasElement) {
   return `${src.width}x${src.height}:${(h >>> 0).toString(36)}`
 }
 
-type Kind = 'metal' | 'heat' | 'gem'
-/** la mappa termica vuole un logo scuro su bianco: la sagoma diventa nera */
-function silhouette(src: HTMLCanvasElement) {
-  const cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height
-  const x = cv.getContext('2d')!
-  x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#000'; x.fillRect(0, 0, cv.width, cv.height)
-  return cv
-}
-/** Paper aggiunge un margine attorno al logo: si ritaglia per tornare sulla sagoma originale */
-async function uncropHeat(blob: Blob, w: number, h: number): Promise<Blob> {
-  const bmp = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' })
-  const size = 1000, pad = Math.ceil(Math.floor(size * 0.15) * 2.5), ratio = w / h
-  const iw = ratio > 1 ? size : Math.floor(size * ratio), ih = ratio > 1 ? Math.floor(size / ratio) : size
-  const cv = document.createElement('canvas'); cv.width = iw; cv.height = ih
-  cv.getContext('2d')!.drawImage(bmp, pad, pad, iw, ih, 0, 0, iw, ih)
-  return new Promise(res => cv.toBlob(b => res(b!), 'image/png'))
-}
+type Kind = 'metal' | 'gem'
 const processed = new Map<string, ImageBitmap | 'pending' | 'error'>()
 /** sagoma preparata da Paper (campo di Poisson): asincrona, poi l'effetto si ridisegna */
 function prepared(kind: Kind, src: HTMLCanvasElement): ImageBitmap | null {
@@ -305,7 +289,6 @@ function prepared(kind: Kind, src: HTMLCanvasElement): ImageBitmap | null {
     processed.set(key, 'pending')
     const url = src.toDataURL('image/png')
     const job = kind === 'metal' ? toProcessedLiquidMetal(url).then(r => r.pngBlob)
-      : kind === 'heat' ? toProcessedHeatmap(silhouette(src).toDataURL('image/png')).then(r => uncropHeat(r.blob, src.width, src.height))
       : toProcessedGemSmoke(url).then(r => r.pngBlob)
     job.then(b => createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' })).then(bmp => {
       processed.set(key, bmp); if (processed.size > 40) processed.delete(processed.keys().next().value!); assetReady() })
