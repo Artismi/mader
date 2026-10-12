@@ -502,6 +502,107 @@ function toPath(geom, eps = 0.035) {
   })).join('')
 }
 
+
+// ── Cyber sigilism ────────────────────────────────────────────────────────
+// Tratti affilati e fluidi, simmetrici: una spina centrale ad ago, coppie di tratti
+// che partono tangenti alla spina, curvano verso l'esterno e chiudono in punta,
+// con spine secondarie (barbe) che si diramano verso la punta. Tutto unito in un segno.
+
+// Tratto su cubica: nasce sottile, si gonfia presto (peak) e si allunga in un ago.
+function sigStroke(p0, p1, p2, p3, w, { peak = 0.28, tail = 1.25 } = {}) {
+  return brush(t => cubic(p0, p1, p2, p3, t), t => w * (t < peak ? Math.pow(t / peak, 0.55) : Math.pow((1 - t) / (1 - peak), tail)), { N: 160, needle: 0 })
+}
+// Spina secondaria che esce da un tratto e punta verso la sua estremita'.
+function barb(at, t, side, len, w, { ang = 38, bend = 0.25 } = {}) {
+  const a = at(t), b = at(Math.min(1, t + 0.01)), tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+  const tan = [(b[0] - a[0]) / tl, (b[1] - a[1]) / tl], nrm = [-tan[1] * side, tan[0] * side]
+  const c = Math.cos(rad(ang)), sn = Math.sin(rad(ang)), dir = [tan[0] * c + nrm[0] * sn, tan[1] * c + nrm[1] * sn]
+  const tip = [a[0] + dir[0] * len, a[1] + dir[1] * len], mid = [a[0] + dir[0] * len * 0.5 - nrm[0] * len * bend, a[1] + dir[1] * len * 0.5 - nrm[1] * len * bend]
+  return brush(u => quad(a, mid, tip, u), u => w * Math.pow(1 - u, 1.3), { N: 60, needle: 0 })
+}
+const mirrorX = g => g.map(r => r.map(([x, y]) => [100 - x, y]))
+const clampBox = ([x, y]) => [Math.max(5, Math.min(95, x)), Math.max(4, Math.min(96, y))]
+
+// Sigillo generato da un seme. core: 'spine' | 'sparkle' | 'blade' | 'none'.
+// Ogni tratto laterale: parte tangente alla spina, si apre in una lunga S e chiude
+// con un uncino (curl = rotazione della direzione finale rispetto alla corda).
+function sigil(seed, { pairs = 3, core = 'spine', w = 3.4, barbs = 1, reach = 1, curl = 1, mirror = true, spineW = 1 } = {}) {
+  const R = rng(seed * 7919 + 13), parts = []
+  if (core === 'spine') parts.push(sigStroke([50, 2], [50, 30], [50, 70], [50, 98], w * spineW, { peak: 0.5, tail: 1.6 }))
+  if (core === 'sparkle') parts.push(sparkle(50, 50, 9, 47, { pinch: 0.12 }))
+  if (core === 'blade') parts.push(...asPolys(blade(50, 50, 1.3, { rot: -90, bend: 0 }).joined))
+  const side = []
+  const ys = Array.from({ length: pairs }, (_, i) => 12 + 76 * (i + 0.5) / pairs + (R() - 0.5) * 8)
+  ys.forEach((y0, i) => {
+    const up = i < pairs / 2 ? -1 : (i > (pairs - 1) / 2 ? 1 : (R() < 0.5 ? -1 : 1))
+    const L = (30 + R() * 26) * reach
+    const th = rad(up < 0 ? -(18 + R() * 50) : (18 + R() * 50))         // direzione della corda (0 = orizzontale verso destra)
+    const p0 = [50.5, y0]
+    let p3 = [p0[0] + Math.cos(th) * L, p0[1] + Math.sin(th) * L]
+    p3 = clampBox(p3)
+    const cl = rad((R() < 0.5 ? 1 : -1) * (40 + R() * 70) * curl)          // uncino finale
+    const ch = Math.atan2(p3[1] - p0[1], p3[0] - p0[0]), dEnd = [Math.cos(ch + cl), Math.sin(ch + cl)]
+    const p1 = [p0[0] + 3, p0[1] + up * L * 0.42]
+    const p2 = [p3[0] - dEnd[0] * L * 0.45, p3[1] - dEnd[1] * L * 0.45]
+    const at = t => cubic(p0, p1, p2, p3, t)
+    side.push(sigStroke(p0, p1, p2, p3, w * (0.8 + R() * 0.35), { peak: 0.22 + R() * 0.12, tail: 1.3 }))
+    for (let k = 0; k < barbs; k++) side.push(barb(at, 0.38 + R() * 0.28, R() < 0.5 ? 1 : -1, 7 + R() * 9, w * 0.7, { ang: 30 + R() * 25, bend: 0.3 }))
+    if (R() < 0.5) {                                                         // ramo secondario
+      const t = 0.3 + R() * 0.25, a0 = at(t), L2 = L * (0.35 + R() * 0.25), th2 = ch + (R() < 0.5 ? 1 : -1) * rad(35 + R() * 35)
+      const e = clampBox([a0[0] + Math.cos(th2) * L2, a0[1] + Math.sin(th2) * L2])
+      side.push(sigStroke(a0, lerp(a0, at(t + 0.08), 1.6), lerp(a0, e, 0.6), e, w * 0.6, { peak: 0.25 }))
+    }
+  })
+  parts.push(...side)
+  if (mirror) parts.push(...side.map(mirrorX))
+  return { joined: pc.union(...parts) }
+}
+
+// Adatta una geometria al riquadro (margine m), mantenendo le proporzioni.
+function fitBox(g, m = 4) {
+  const pts = asPolys(g).flatMap(p => p.flat())
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+  const k = (100 - 2 * m) / Math.max(x1 - x0, y1 - y0), ox = 50 - (x0 + x1) / 2 * k, oy = 50 - (y0 + y1) / 2 * k
+  return asPolys(g).map(p => p.map(r => r.map(([x, y]) => [x * k + ox, y * k + oy])))
+}
+
+// Ventaglio di tratti da una radice: tutte le corde ruotano tra a0 e a1 (gradi),
+// lunghezze che calano verso i bordi del ventaglio, uncino finale coerente (flow).
+function fan(root, { n = 4, a0 = -15, a1 = -80, L = 50, Lmin = 0.55, curl = 70, w = 3.4, start = [0, -1], barbs = 1, seed = 1, jitter = 1 } = {}) {
+  const R = rng(seed * 104729 + 7), out = []
+  for (let i = 0; i < n; i++) {
+    const u = n === 1 ? 0.5 : i / (n - 1), th = rad(a0 + (a1 - a0) * u + (R() - 0.5) * 8 * jitter)
+    const len = L * (Lmin + (1 - Lmin) * Math.sin(Math.PI * (0.25 + 0.6 * u))) * (0.9 + R() * 0.2)
+    const p0 = [root[0] + (R() - 0.5) * 2 * jitter, root[1] + i * 1.2], p3 = [p0[0] + Math.cos(th) * len, p0[1] + Math.sin(th) * len]
+    const cl = rad(curl * (0.7 + R() * 0.6)), dEnd = [Math.cos(th + cl), Math.sin(th + cl)]
+    const p1 = [p0[0] + start[0] * len * 0.35 + Math.cos(th) * len * 0.1, p0[1] + start[1] * len * 0.35 + Math.sin(th) * len * 0.1]
+    const p2 = [p3[0] - dEnd[0] * len * 0.42, p3[1] - dEnd[1] * len * 0.42]
+    const at = t => cubic(p0, p1, p2, p3, t)
+    out.push(sigStroke(p0, p1, p2, p3, w * (0.75 + 0.45 * Math.sin(Math.PI * u)), { peak: 0.2 + R() * 0.1, tail: 1.35 }))
+    for (let k = 0; k < barbs; k++) if (R() < 0.75) out.push(barb(at, 0.36 + R() * 0.3, Math.sign(curl) || 1, 10 + R() * 9, w * 0.5, { ang: 24 + R() * 16, bend: 0.12 }))
+  }
+  return out
+}
+// Sigillo: combina spina e ventagli, specchia, unisce e adatta al riquadro.
+function sigilOf(parts, { mirror = true, core = [] } = {}) {
+  const all = [...core, ...parts, ...(mirror ? parts.map(mirrorX) : [])]
+  return { joined: fitBox(pc.union(...all)) }
+}
+const spine = (y0 = 4, y1 = 96, w = 3, x = 50) => sigStroke([x, y0], [x, y0 + (y1 - y0) * 0.3], [x, y0 + (y1 - y0) * 0.7], [x, y1], w, { peak: 0.5, tail: 1.6 })
+// Ricette: ogni seme dà una variante della stessa famiglia.
+const SIGILS = {
+  wing:  s => { const R = rng(s); return sigilOf([...fan([51, 54], { n: 3 + (s % 3), a0: -8 - R() * 10, a1: -70 - R() * 15, L: 48, curl: -(50 + R() * 40), seed: s }), ...fan([51, 62], { n: 2, a0: 25, a1: 55, L: 30, curl: 60, start: [0, 1], seed: s + 50 })], { core: [spine(6, 96, 3.2)] }) },
+  flame: s => { const R = rng(s); return sigilOf(fan([51, 94], { n: 4 + (s % 2), a0: -30 - R() * 10, a1: -85, L: 80, Lmin: 0.45, curl: -(60 + R() * 50), seed: s, w: 3.6 }), { core: [spine(4, 96, 3.6)] }) },
+  halo:  s => { const R = rng(s); return sigilOf([...fan([52, 44], { n: 3, a0: -10, a1: -60, L: 40, curl: 90 + R() * 40, seed: s }), ...fan([52, 56], { n: 3, a0: 10, a1: 60, L: 40, curl: -(90 + R() * 40), start: [0, 1], seed: s + 9 })], { core: [sparkle(50, 50, 10, 46, { pinch: 0.12 })] }) },
+  crown: s => { const R = rng(s); return sigilOf([...fan([51, 70], { n: 4, a0: -20, a1: -82, L: 52, Lmin: 0.5, curl: 70 + R() * 50, seed: s, w: 3.2 }), ...fan([51, 74], { n: 1, a0: 8, a1: 8, L: 40, curl: -(40 + R() * 40), start: [1, 0], seed: s + 4, barbs: 2 })], { core: [spine(8, 92, 3.2)] }) },
+  flow:  s => { const R = rng(s); const parts = [sigStroke([8, 94], [30, 60], [70, 40], [92, 6], 3.6, { peak: 0.5, tail: 1.5 }),
+      ...fan([34, 64], { n: 2, a0: -60, a1: -100, L: 34, curl: -80, seed: s, start: [0.6, -0.8] }), ...fan([62, 38], { n: 2, a0: 10, a1: 50, L: 30, curl: 80, seed: s + 1, start: [0.6, -0.8] }),
+      ...fan([50, 50], { n: 1, a0: 160, a1: 160, L: 30, curl: 80, seed: s + 2, start: [-0.8, 0.6] })]
+    return { joined: fitBox(pc.union(...parts)) } },
+  cross: s => { const R = rng(s); return sigilOf([...fan([51, 40], { n: 2, a0: -20, a1: -55, L: 44, curl: -(70 + R() * 40), seed: s }), ...fan([51, 50], { n: 1, a0: 0, a1: 0, L: 46, curl: 50 + R() * 50, start: [1, 0], seed: s + 3 }), ...fan([51, 60], { n: 2, a0: 25, a1: 60, L: 40, curl: 70 + R() * 40, start: [0, 1], seed: s + 5 })], { core: [spine(2, 98, 3)] }) },
+}
+
 // ── Composizioni ──────────────────────────────────────────────────────────
 // Orbita completa attorno a dei corpi: spezzata automaticamente dove li incontra.
 const ringAround = (bodies, cx, cy, rx, ry, o = {}) => [...bodies, ...orbit(cx, cy, rx, ry, -90, 270, { avoid: bodies, echo: [40, 140], ...o })]
@@ -521,6 +622,27 @@ function facetSparkle(cx, cy, rx, ry = rx, o = {}) {
 const S = (cx, cy, rx, ry = rx, o = {}) => (Math.max(rx, ry) >= 30 ? facetSparkle(cx, cy, rx, ry, o) : sparkle(cx, cy, rx, ry, o))
 
 const CATS = {
+  'SIGIL · Cyber': {
+    'Sigil Flame 1':       [SIGILS.flame(1)],
+    'Sigil Flame 2':       [SIGILS.flame(2)],
+    'Sigil Flame 3':       [SIGILS.flame(4)],
+    'Sigil Flame 4':       [SIGILS.flame(8)],
+    'Sigil Halo 1':        [SIGILS.halo(2)],
+    'Sigil Halo 2':        [SIGILS.halo(3)],
+    'Sigil Halo 3':        [SIGILS.halo(6)],
+    'Sigil Halo 4':        [SIGILS.halo(7)],
+    'Sigil Cross 1':       [SIGILS.cross(2)],
+    'Sigil Cross 2':       [SIGILS.cross(3)],
+    'Sigil Cross 3':       [SIGILS.cross(6)],
+    'Sigil Crown 1':       [SIGILS.crown(1)],
+    'Sigil Crown 2':       [SIGILS.crown(4)],
+    'Sigil Crown 3':       [SIGILS.crown(7)],
+    'Sigil Wing 1':        [SIGILS.wing(1)],
+    'Sigil Wing 2':        [SIGILS.wing(3)],
+    'Sigil Wing 3':        [SIGILS.wing(6)],
+    'Sigil Flow 1':        [SIGILS.flow(3)],
+    'Sigil Flow 2':        [SIGILS.flow(6)],
+  },
   'CELESTIAL · Sparkle': {
     'Sparkle':          [S(50, 50, 36, 48, { pinch: 0.08 })],
     'Sparkle Tall':     [S(50, 50, 20, 48, { pinch: 0.12 })],
@@ -529,61 +651,19 @@ const CATS = {
     'Sparkle Duo':      [S(40, 58, 28, 38, { pinch: 0.08 }), S(82, 20, 12, 16)],
     'Sparkle Trio':     [S(42, 52, 20, 46, { pinch: 0.12 }), S(78, 24, 10, 15), S(16, 84, 7, 10)],
     'Sparkle Pair':     [S(32, 40, 18, 38, { pinch: 0.12 }), S(72, 62, 14, 32, { pinch: 0.12 })],
-    'Sparkle Steps':    [S(22, 74, 10, 16), S(48, 52, 13, 22), S(78, 26, 18, 24)],
-    'Twinkle Field':    [S(26, 30, 12, 20), S(70, 24, 7, 11), S(64, 68, 16, 26), S(20, 80, 5, 8), dot(44, 54, 1.8)],
-    'Dot Sparkle':      [S(50, 50, 28, 42, { pinch: 0.08 }), dot(86, 14, 3.2), dot(14, 86, 2.4)],
-    'Constellation':    [S(18, 70, 8, 12), dot(36, 52, 2), S(56, 44, 11, 17), dot(74, 30, 2), S(86, 14, 6, 10), dot(30, 86, 1.6)],
   },
   'CELESTIAL · Burst & Star': {
     'Starburst':        [burst(50, 50, 47)],
     'Starburst Alt':    [burst(50, 50, 47, { alt: 0.58 })],
-    'Starburst 12':     [needles(50, 50, 47, { n: 12, inner: 0.08, alt: 0.6 })],
-    'Starburst 16':     [needles(50, 50, 47, { n: 16, inner: 0.09, alt: 0.45 })],
-    'Starburst 6':      [needles(50, 50, 47, { n: 6, inner: 0.08 })],
     'Flare':            [needles(50, 50, 48, { n: 8, inner: 0.06, alt: 0.3 })],
-    'Flare Wide':       [needles(50, 50, 48, { n: 4, inner: 0.08, ry: 30 })],
     'Cross X':          [cross(50, 50, 46)],
-    'Cross Plus':       [plus(50, 50, 46)],
     'Cross X Duo':      [cross(58, 42, 40), cross(14, 86, 12, { inner: 0.13 })],
     'Burst Cluster':    [burst(40, 42, 37, { alt: 0.62 }), S(82, 78, 10, 14)],
-    'Burst Spark':      [burst(60, 54, 36), S(16, 26, 8, 14)],
-    'Burst Twins':      [burst(32, 34, 28, { alt: 0.6 }), burst(72, 72, 24, { alt: 0.6 })],
   },
   'CELESTIAL · Fine Line': {
     'Sparkle Outline':  [sparkleLine(50, 50, 34, 48, 1.4, { pinch: 0.1 })],
     'Sparkle Inlay':    [sparkleLine(50, 50, 34, 48, 1.4, { pinch: 0.1 }), S(50, 50, 9, 16, { pinch: 0.12 })],
-    'Sparkle Halo':     [S(50, 50, 14, 30, { pinch: 0.12 }), ...Array.from({ length: 24 }, (_, i) => dot(50 + 42 * Math.cos(i * Math.PI / 12), 50 + 42 * Math.sin(i * Math.PI / 12), i % 2 ? 0.8 : 1.4))],
-    'Sparkle Frame':    [S(50, 50, 12, 26, { pinch: 0.12 }), ringO(50, 50, 34, 1), ...[0, 90, 180, 270].map(d => ray(50, 50, d, 38, 48, 1.6)), ...[45, 135, 225, 315].map(d => dot(50 + 40 * Math.cos(rad(d)), 50 + 40 * Math.sin(rad(d)), 1.2))],
     'Fine Flare':       [join(needles(50, 50, 48, { n: 4, inner: 0.03, concave: 0.55 }), needles(50, 50, 22, { n: 4, inner: 0.06, rotate: 45, concave: 0.5 }))],
-    'Constellation Line': (() => {
-      const st = [[16, 74, 6], [36, 56, 4], [56, 62, 8], [70, 36, 5], [88, 16, 7]]
-      return [...st.map(([x, y, r]) => S(x, y, r * 0.7, r * 1.15)), ...st.slice(1).map((b, i) => link(st[i], b, st[i][2] + 3, b[2] + 3))]
-    })(),
-    'Constellation Hunter': (() => {
-      const st = [[22, 14, 5], [74, 18, 6], [42, 50, 3], [50, 50, 3], [58, 50, 3], [26, 86, 6], [78, 84, 5]]
-      const e = [[0, 2], [1, 4], [2, 5], [4, 6]]
-      return [...st.map(([x, y, r]) => (r > 3 ? S(x, y, r * 0.75, r * 1.2) : dot(x, y, 1.6))), ...e.map(([a, b]) => link(st[a], st[b], st[a][2] + 2.5, st[b][2] + 2.5))]
-    })(),
-    'Crescent Fine':    [crescent(50, 50, 42)],
-    'Crescent Sparkle': [crescent(42, 54, 36), S(78, 24, 8, 16, { pinch: 0.12 }), S(86, 50, 4, 7)],
-    'Crescent Hanging': (() => {
-      const m = crescent(50, 34, 26, { dir: -90 })
-      return [m, line([38, 64], [38, 74]), S(38, 86, 4, 7), line([50, 66], [50, 82]), S(50, 94, 3, 5), line([62, 64], [62, 69]), S(62, 80, 4, 7)]
-    })(),
-    'Moon Phases':      [circle(10, 50, 7), pc.union(ringO(30, 50, 7, 1), poly(Array.from({ length: 41 }, (_, i) => [30 + 7 * Math.cos(rad(90 + i * 4.5)), 50 + 7 * Math.sin(rad(90 + i * 4.5))]))), ringO(50, 50, 7, 1), pc.union(ringO(70, 50, 7, 1), poly(Array.from({ length: 41 }, (_, i) => [70 + 7 * Math.cos(rad(-90 + i * 4.5)), 50 + 7 * Math.sin(rad(-90 + i * 4.5))]))), circle(90, 50, 7)],
-    'Moon Phases Arc':  [0, 1, 2, 3, 4].map(i => { const a = rad(200 + i * 35), x = 50 + 40 * Math.cos(a), y = 70 + 40 * Math.sin(a); return i === 2 ? S(x, y, 7, 12) : moon(x, y, 7, { phase: 0.55, rotate: i < 2 ? 160 : -20 }) }),
-    'Dot Orbit':        [S(50, 48, 13, 42, { pinch: 0.12 }), ...dotOrbit(50, 54, 46, 14, 30, { avoid: [S(50, 48, 13, 42, { pinch: 0.12 })] })],
-    'Sacred Triangle':  [join(line([50, 8], [92, 82], 1.2, 0.02), line([92, 82], [8, 82], 1.2, 0.02), line([8, 82], [50, 8], 1.2, 0.02)), S(50, 58, 9, 16, { pinch: 0.12 }), dot(50, 92, 1.4), dot(50, 97, 0.9)],
-    'Sacred Circle':    [ringO(50, 50, 40, 1.1), ringO(50, 50, 30, 0.8), S(50, 50, 10, 20, { pinch: 0.12 }), ...[0, 90, 180, 270].map(d => dot(50 + 35 * Math.cos(rad(d)), 50 + 35 * Math.sin(rad(d)), 1.3))],
-    'Comet Fine':       [S(78, 22, 10, 16, { pinch: 0.12 }), line([8, 92], [66, 34], 1.2, 0.5), line([18, 94], [64, 46], 0.9, 0.5), line([6, 80], [56, 36], 0.8, 0.5)],
-  },
-  'CELESTIAL · Flash Tattoo': {
-    'Sun Flame':        [ringO(50, 50, 16, 1.6), dot(50, 50, 3), ...Array.from({ length: 16 }, (_, i) => ray(50, 50, i * 22.5 - 90, 21, i % 2 ? 40 : 48, i % 2 ? 2.4 : 2.8, { wave: i % 2 ? 2.2 : 0 }))],
-    'Sun Black':        [circle(50, 50, 15), ...Array.from({ length: 24 }, (_, i) => ray(50, 50, i * 15, 20, i % 3 === 0 ? 48 : i % 3 === 1 ? 34 : 40, i % 3 === 0 ? 2.6 : 1.6))],
-    'Sun Sparkle':      [ringO(50, 50, 20, 1.4), S(50, 50, 9, 15, { pinch: 0.12 }), ...Array.from({ length: 12 }, (_, i) => ray(50, 50, i * 30 - 90, 25, i % 2 ? 38 : 48, 2.2, { wave: i % 2 ? 0 : 1.8, waves: 1 }))],
-    'Sun Moon':         [crescent(44, 52, 38, { dir: -25 }), circle(62, 44, 8), ...Array.from({ length: 8 }, (_, i) => ray(62, 44, i * 45, 12, i % 2 ? 17 : 21, 1.6)).filter((_, i) => ![3, 4, 5].includes(i))],
-    'Burst Seal':       [join(needles(50, 50, 48, { n: 8, inner: 0.06, alt: 0.6 }), ringO(50, 50, 24, 1.2))],
-    'Sparkle Cross':    [S(50, 50, 12, 46, { pinch: 0.1 }), ...[45, 135, 225, 315].map(d => ray(50, 50, d, 12, 36, 1.8))],
   },
   'TATTOO · Spine': {
     'Thorn Branch':     [thornBranch([6, 84], [34, 54], [58, 66], [94, 16], { n: 7, len: 15 })],
@@ -596,7 +676,6 @@ const CATS = {
         parts.push(thorn(c, tan, i % 2 ? 1 : -1, i % 2 ? 9 : 16, 2.6, { lean: 0.4 })) }
       return [{ joined: pc.union(...parts) }]
     })(),
-    'Thorn Dotwork':    [htGlow(thornBranch([6, 86], [30, 60], [60, 52], [94, 14], { n: 7, len: 15, w: 8 }), 6, { step: 2.4 })],
   },
   'TATTOO · Ink & Blade': {
     'Sparkle Blade':    [blade(50, 50, 1.35)],
@@ -613,22 +692,10 @@ const CATS = {
   'OP ART · Archi': {
     'Arc Wave':         [serpentine(8, 10.5, [{ top: 16, bot: 70 }, { top: 40, bot: 92 }, { top: 30, bot: 84 }, { top: 8, bot: 60 }], { n: 7 }), dot(39.5, 24, 6), dot(81.5, 80, 6)],
     'Arc Serpent':      [serpentine(5, 7.5, [{ top: 10, bot: 60 }, { top: 40, bot: 90 }, { top: 10, bot: 60 }, { top: 40, bot: 90 }, { top: 10, bot: 60 }, { top: 40, bot: 90 }], { n: 6, gap: 3 })],
-    'Arc Rainbow':      [{ joined: pc.union(...Array.from({ length: 8 }, (_, i) => arcLine(50, 74, 44 - i * 4.6, 180, 360, 1.1, { needle: 0 }))) }, dot(50, 86, 5)],
-    'Arc Sunset':       [dot(50, 22, 11), ...Array.from({ length: 6 }, (_, i) => arcLine(50, 12 + i * 7.5, 40, 20, 160, 1.2, { needle: 0.05 }))],
-    'Arc Tunnel':       Array.from({ length: 7 }, (_, i) => { const r = 44 - i * 6; return { joined: pc.union(arcLine(50, 50, r, 180, 360, 1.1, { needle: 0 }), line([50 - r, 50], [50 - r, 96], 1.1, 0), line([50 + r, 50], [50 + r, 96], 1.1, 0)) } }),
-    'Arc Moons':        [0, 1, 2, 3, 4].map(i => arcLine(50, 4 + i * 12, 30, 20 + i * 5, 160 - i * 5, 1.4 + i * 0.5, { needle: 0.3 })).concat([dot(50, 8, 4)]),
   },
   'HALFTONE': {
-    'Halftone Star':       [htFill(star5(50, 54, 44), 10)],
-    'Halftone Star Line':  [htLine(star5(50, 54, 42), 4.5, { step: 2.8 })],
-    'Halftone Star Glow':  [htGlow(star5(50, 54, 34), 12)],
-    'Halftone Star Hollow':[halftone((x, y) => { const d = sdGeom([x, y], star5(50, 54, 44)); return d > 0 ? clamp01(0.7 - d / 8) : clamp01(1.1 - Math.abs(d + 6) / 6) })],
     'Halftone Sparkle':    [htGlow(sparkle(50, 50, 22, 38, { pinch: 0.1 }), 10, { step: 3 })],
     'Halftone Burst':      [htFill(burst(50, 50, 46, { inner: 0.1, alt: 0.6 }), 6, { step: 2.6 })],
-    'Halftone Moon':       [htGlow(moon(50, 50, 34, { phase: 0.55 }), 10)],
-    'Halftone Sun':        [halftone((x, y) => { const d = Math.hypot(x - 50, y - 50); return d < 20 ? 1 : clamp01(1 - (d - 20) / 28) * (0.55 + 0.45 * Math.cos(Math.atan2(y - 50, x - 50) * 12)) })],
-    'Halftone Orbit':      [S(50, 46, 12, 30, { pinch: 0.1 }), halftone((x, y) => { const u = (x - 50) / 46, v = (y - 58) / 13, d = Math.abs(Math.hypot(u, v) - 1) * 13; const front = y > 52 ? 1 : 0.55
-      return Math.hypot(x - 50, y - 46) < 16 ? 0 : clamp01((1 - d / 3.5) * front) })],
   },
   'DOTWORK · Ombre': {
     'Thorn Stipple':    (() => { const g = thornBranch([6, 84], [34, 54], [58, 66], [94, 16], { n: 7, len: 15, w: 9 })
@@ -639,22 +706,13 @@ const CATS = {
       return [sparkleLine(50, 50, 32, 46, 0.9, { pinch: 0.1 }), stipple(shade(g, { inset: 2.2, edge: 7, base: 0.05, side: 1 }), { seed: 2 })] })(),
     'Burst Glow':       (() => { const g = burst(50, 50, 46, { alt: 0.55 })
       return [g, stipple((x, y) => { const d = Math.hypot(x - 50, y - 50); return sdGeom([x, y], g) < 1.6 ? 0 : 0.7 * Math.pow(clamp01(1 - d / 26), 1.6) }, { seed: 3 })] })(),
-    'Moon Stipple':     (() => { const g = crescentInside(50, 50, 42, { phase: 0.45, dir: -20 })
-      return [crescent(50, 50, 42, { phase: 0.45, dir: -20, wo: 1.6, wi: 0.9 }), stipple((x, y) => (sdGeom([x, y], g) > 0 ? 0 : clamp01(0.95 - Math.hypot(x - 50, y - 50) / 70 - 0.5 * clamp01((x - 30) / 50))), { seed: 14 })]
-    })(),
-    'Sun Stipple':      [stipple((x, y) => { const d = Math.hypot(x - 50, y - 50); return d < 15 ? 0.25 + 0.75 * clamp01((d - 6) / 9) : 0 }, { seed: 16 }), ringO(50, 50, 16.4, 1), ...Array.from({ length: 16 }, (_, i) => ray(50, 50, i * 22.5, 21, i % 2 ? 36 : 47, i % 2 ? 1.4 : 2.2))],
   },
   'INCISIONE · Tratteggio': {
     'Sparkle Hatch':    (() => { const g = sparkle(50, 50, 32, 46, { pinch: 0.1 })
       return [join(sparkleLine(50, 50, 32, 46, 0.9, { pinch: 0.1 }), hatch(sparkle(50, 50, 31.3, 45.3, { pinch: 0.1 }), { shadeAt: sideShade(-135), gap: 2.2 }))] })(),
-    'Moon Hatch':       [join(crescent(50, 50, 42, { phase: 0.45, dir: -20, wo: 1.6, wi: 0.9 }), hatch(crescentInside(50, 50, 42, { phase: 0.45, dir: -20, k: 0.6 }), { angle: 30, gap: 2.2, shadeAt: (x, y) => clamp01(1.1 - (x - 8) / 50) }))],
-    'Sun Hatch':        [join(ringO(50, 50, 18, 1.1), hatch(circle(50, 50, 17.8, 120), { angle: 0, gap: 2, wmin: 0.5, wmax: 1.6, shadeAt: (x, y) => clamp01((y - 36) / 28) })), ...Array.from({ length: 12 }, (_, i) => ray(50, 50, i * 30, 23, i % 2 ? 38 : 48, 2.2, { wave: i % 2 ? 0 : 1.6, waves: 1 }))],
-    'Burst Hatch':      (() => { const g = circle(50, 50, 13, 90)
-      return [join(ringO(50, 50, 14.4, 1), hatch(circle(50, 50, 14.2, 90), { angle: -45, gap: 1.7, shadeAt: sideShade(-135) })), ...Array.from({ length: 16 }, (_, i) => ray(50, 50, i * 22.5 - 90, 19, i % 2 ? 34 : 48, i % 2 ? 1.6 : 2.6))] })(),
   },
   'CELESTIAL · Orbit': {
     'Orbit Swoosh':     orbit(50, 44, 46, 16, 20, 300, { echo: [45, 150] }),
-    'Orbit Smile':      orbit(50, 36, 46, 18, 0, 180, { wb: 1.4, tilt: 0 }),
     'Orbit Dust':       [...orbit(50, 56, 46, 15, 20, 300, { echo: [45, 150] }), S(55, 22, 6, 10), S(68, 20, 4, 7), dot(43, 23, 1.8)],
     'Orbit Open':       [...orbit(50, 46, 46, 17, 15, 205), ...orbit(50, 46, 46, 17, 225, 330, { wf: 4 }), S(48, 46, 6, 11), S(60, 42, 4, 7)],
     'Comet Trail':      [...orbit(50, 48, 46, 15, 25, 300, { wb: 0.6, tilt: -16, echo: [50, 150] }), S(82, 18, 6, 10), S(14, 82, 4, 7)],
@@ -666,24 +724,24 @@ const CATS = {
     'Halo Sparkle':     ringAround([S(46, 44, 14, 42, { pinch: 0.12 }), S(80, 84, 6, 10)], 47, 54, 44, 13),
     'Halo Wide':        ringAround([S(50, 50, 30, 44, { pinch: 0.08 })], 50, 56, 47, 12, { wf: 5.5 }),
   },
-  'CELESTIAL · Luna & Scie': {
-    'Moon Burst':       [crescent(40, 58, 34, { dir: -40 }), burst(78, 24, 20, { alt: 0.6 })],
-    'Wave Trail':       [swoosh([6, 64], [30, 20], [58, 92], [86, 40], 7), S(86, 16, 8, 12)],
-    'Comet Line':       [swoosh([6, 70], [24, 92], [56, 66], [68, 36], 8), S(80, 18, 12, 16)],
-    'Comet Double':     [swoosh([4, 56], [14, 84], [44, 72], [62, 38], 7), swoosh([14, 92], [36, 98], [64, 84], [76, 52], 4), S(78, 22, 12, 16)],
-    'Shooting Sparkle': [swoosh([4, 74], [16, 98], [44, 80], [58, 50], 7), S(74, 28, 16, 22)],
-    'Dust Arc':         [swoosh([6, 78], [16, 36], [54, 14], [88, 22], 6), dot(30, 72, 2), S(48, 60, 6, 10), dot(64, 50, 1.6), S(80, 46, 4, 7)],
-    'Comet Burst':      [swoosh([6, 88], [12, 60], [36, 48], [52, 50], 7), burst(74, 40, 24, { alt: 0.55 })],
-    'Meteor Shower':    [swoosh([8, 50], [16, 36], [30, 26], [42, 22], 4.5), S(52, 20, 6, 9), swoosh([20, 84], [30, 66], [50, 56], [64, 52], 6), S(76, 48, 9, 13), swoosh([46, 96], [56, 86], [70, 80], [80, 80], 3.5), S(90, 80, 4, 7)],
-  },
 }
 
 // ── ICONE (viewBox 24): stesse forme in scala, piene ───────────────────────
 const ICON_FROM = {
-  Sparkle: 'Sparkle', Sparkles: 'Sparkle Duo', Twinkle: 'Twinkle Field', Constellation: 'Constellation',
-  Starburst: 'Starburst', Flare: 'Flare', 'Cross X': 'Cross X', Sun: 'Sun Flame', Burst: 'Burst Glow',
-  Orbit: 'Saturn Sparkle', Comet: 'Comet Line', Arcs: 'Arc Wave',
-  Moon: 'Crescent Fine', 'Moon Sparkle': 'Crescent Sparkle', Halo: 'Halo Wide', Wave: 'Wave Trail', Meteor: 'Meteor Shower', Thorn: 'Thorn Branch', Blade: 'Sparkle Blade', Crown: 'Thorn Crown',
+  Sparkle: 'Sparkle', Sparkles: 'Sparkle Duo', Starburst: 'Starburst', Flare: 'Flare', 'Cross X': 'Cross X', Burst: 'Burst Glow',
+  Orbit: 'Saturn Sparkle', Halo: 'Halo Wide', Arcs: 'Arc Wave', Thorn: 'Thorn Branch', Blade: 'Sparkle Blade', 'Thorn Crown': 'Thorn Crown',
+  Sigil: 'Sigil Flame 1', 'Sigil Halo': 'Sigil Halo 1', 'Sigil Cross': 'Sigil Cross 1', 'Sigil Crown': 'Sigil Crown 1',
+}
+
+// ── Esplorazione: SIGIL_EXPLORE=<cartella> genera candidati e si ferma ─────
+if (process.env.SIGIL_EXPLORE) {
+  const dir = process.env.SIGIL_EXPLORE, conf = JSON.parse(process.env.SIGIL_CONF || '{}')
+  mkdirSync(dir, { recursive: true })
+  for (let i = 1; i <= (conf.count || 48); i++) {
+    const g = SIGILS[conf.type || 'wing'](i)
+    writeFileSync(`${dir}/s${String(i).padStart(2, '0')}.svg`, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="${toPath(g.joined)}" fill="currentColor"/></svg>`)
+  }
+  process.exit(0)
 }
 
 // ── Scrittura ──────────────────────────────────────────────────────────────
