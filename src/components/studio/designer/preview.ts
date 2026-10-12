@@ -17,6 +17,7 @@ export function renderPreview(sc: Scene, width = 360): Promise<string> {
     try {
       const ab = new fabric.Rect({ left: sc.w / 2, top: sc.h / 2, width: sc.w, height: sc.h, fill: sc.bg, strokeWidth: 0 })
       ab.set('name', 'anteprima')
+      ;(ab as fabric.Rect & { isArtboard?: boolean }).isArtboard = true
       c.add(ab)
       await renderScene(c, ab, sc, 'anteprima')
       c.renderAll()

@@ -7,6 +7,7 @@
 import type { Scene } from './types'
 import {
   type Ctx, label, title, body, detailsLine, ctaText, put, putLabel, putTitle, putBody, hairline, alpha, accentOn, scene,
+  ornament, seal,
 } from './kit'
 
 const S = (x: Ctx, n: number) => Math.round(n * x.u)
@@ -48,6 +49,8 @@ export function fotografia(x: Ctx): Scene | null {
   y -= t.h; putTitle(x, t, m, y, textW, P.ink)
   // sopra la foto l'occhiello resta chiaro: l'accento sulla foto non si legge
   if (kick) { y -= S(x, 22) + kick.h; putLabel(x, 'occhiello', kick, m, y, textW, P.ink) }
+  const r = S(x, 82)
+  seal(x, W - m - r, m + r, r, P.ink, 'fotografia')
   return scene(x, 'fotografia', 'Fotografia a tutta tavola')
 }
 
@@ -91,6 +94,9 @@ export function diviso(x: Ctx): Scene | null {
   yt = putTitle(x, t, tx, yt, tw, s.ink) + S(x, 24)
   if (b) yt = putBody(x, b, tx, yt, Math.min(tw, x.colW(9)), s.muted) + S(x, 20)
   if (det) putLabel(x, 'dettagli', det, tx, yt, tw, s.muted)
+  const r = S(x, 78)
+  if (x.landscape) seal(x, Math.round(W * 0.5), H - m - r, r, s.ink, 'diviso', s.bg)
+  else seal(x, W - m - r, top - S(x, 56), r, s.ink, 'diviso', s.bg)
   return scene(x, 'diviso', 'Foto e colore')
 }
 
@@ -152,6 +158,8 @@ export function editoriale(x: Ctx): Scene | null {
     putLabel(x, `dettaglio_${i}`, f, x.colX(8), ly, x.colW(4), s.ink)
     ly += f.h + S(x, 14)
   })
+  const oy = Math.max(ly, y) + S(x, 28)
+  ornament(x, 'ornamento', { x: x.colX(8), y: oy, w: W - m - x.colX(8), h: H - m - oy }, { salt: 'editoriale', prefer: ['archi', 'tessere', 'puntinato', 'strisce', 'anelli', 'raggiera', 'sovrastampa'] })
   return scene(x, 'editoriale', 'Editoriale')
 }
 
@@ -190,6 +198,11 @@ export function tipografico(x: Ctx): Scene | null {
   const free = bottomTop - S(x, 56) - minTop - (t.h + barGap + barH)
   const ty = putTitle(x, t, m, Math.round(minTop + free * 0.4), W - 2 * m, s.ink)
   put(x, { kind: 'rect', name: 'barra_accento', x: m, y: ty + barGap, w: x.colW(2), h: barH, fill: s.accent })
+  const oy = ty + barGap + barH + S(x, 48)
+  ornament(x, 'ornamento', { x: m, y: oy, w: W - 2 * m, h: bottomTop - S(x, 48) - oy }, { salt: 'tipografico' })
+  // sigillo a destra del titolo, dove le righe corte lasciano spazio (se tocca il titolo viene tolto)
+  const r = S(x, 80)
+  seal(x, W - m - r, ty - r, r, s.ink, 'tipografico')
   return scene(x, 'tipografico', 'Tipografico')
 }
 
@@ -208,6 +221,7 @@ export function arco(x: Ctx): Scene | null {
   if (brand) y = putLabel(x, 'brand', brand, m, y, W - 2 * m, s.ink, 'center') + S(x, 44)
   const aw = x.format === 'storia' ? x.colW(9) : x.format === 'verticale' ? x.colW(7) : x.colW(5)
   const ah = Math.min(Math.round(aw * 1.3), Math.round(H * (x.format === 'quadrato' ? 0.46 : 0.5)))
+  ornament(x, 'ornamento', { x: m, y, w: W - 2 * m, h: ah }, { salt: 'arco', opacity: 0.55 })
   put(x, { kind: 'image', name: 'foto', x: Math.round((W - aw) / 2), y, w: aw, h: ah, url: x.photo, fallback: s.surface, shape: 'arch' })
   return centeredText(x, m, W - 2 * m, y + ah + S(x, 44), H - m, 'arco', 'Arco')
 }
@@ -280,6 +294,9 @@ export function colonna(x: Ctx): Scene | null {
   if (kick) yc = putLabel(x, 'occhiello', kick, tx, yc, tw, accentOn(x, s.bg, s.ink)) + S(x, 18)
   yc = putTitle(x, t, tx, yc, tw, s.ink) + S(x, 26)
   if (b) putBody(x, b, tx, yc, tw, s.muted)
+  const r = S(x, 74)
+  if (x.format === 'storia') seal(x, W - m - r, H - Math.round(H * 0.5), r, s.ink, 'colonna', s.bg)
+  else seal(x, Math.round(W * (x.landscape ? 0.5 : 0.46)), H - m - r, r, s.ink, 'colonna', s.bg)
   return scene(x, 'colonna', 'Colonna e foto')
 }
 

@@ -5,6 +5,7 @@
 import type { Scene } from './types'
 import {
   type Ctx, label, title, body, detailsLine, ctaText, put, putLabel, putTitle, putBody, hairline, alpha, accentOn, contrast, scene,
+  ornament, glyph,
 } from './kit'
 import { tipografico } from './layouts-lancio'
 
@@ -38,6 +39,7 @@ export function manifesto(x: Ctx): Scene | null {
   const t = title(x, c.title, W - 2 * m, y - top, 280, 80, x.landscape ? 2 : 5)
   if (!t) return null
   putTitle(x, t, m, y - t.h, W - 2 * m, ink)
+  ornament(x, 'trama', { x: 0, y: 0, w: W, h: H }, { salt: 'manifesto', under: true, opacity: 0.16, pal: { bg, ink, accent: ink, muted: ink, surface: bg } })
   return scene(x, 'manifesto', 'Manifesto')
 }
 
@@ -59,6 +61,7 @@ export function fascia(x: Ctx): Scene | null {
   let y = bandY + pad
   if (kick) y = putLabel(x, 'occhiello', kick, m + pad, y, W - 2 * m - 2 * pad, onBand) + S(x, 20)
   putTitle(x, t, m + pad, y, W - 2 * m - 2 * pad, onBand)
+  ornament(x, 'trama_fascia', { x: m, y: bandY, w: W - 2 * m, h: bandH }, { salt: 'fascia', under: true, opacity: 0.22, pal: { bg: s.accent, ink: onBand, accent: onBand, muted: onBand, surface: s.accent } })
 
   let yb = H - m
   if (cta) { yb -= cta.h; putLabel(x, 'invito', cta, m, yb, x.colW(6), accentOn(x, s.bg, s.ink)); yb -= S(x, 40) }
@@ -74,11 +77,16 @@ export function fascia(x: Ctx): Scene | null {
     yb -= S(x, 16) + S(x, 40)
   }
   const b = body(x, c.body, x.landscape ? x.colW(6) : x.colW(9), 3, 26)
+  let freeBottom = yb
   if (b) {
     const by = Math.max(bandY + bandH + S(x, 48), yb - b.h)
     if (by + b.h > yb) return null
     putBody(x, b, m, by, x.colW(9), s.muted)
+    freeBottom = by
   }
+  // lo spazio tra la fascia e il testo diventa un pezzo grafico
+  const oy = bandY + bandH + S(x, 40)
+  ornament(x, 'ornamento', { x: m, y: oy, w: W - 2 * m, h: freeBottom - S(x, 40) - oy }, { salt: 'fascia_sotto' })
   return scene(x, 'fascia', 'Fascia di colore')
 }
 
@@ -101,7 +109,7 @@ export function centrato(x: Ctx): Scene | null {
   const blockH = fixed + t.h
   let y = Math.round((H - blockH) / 2)
   if (kick) y = putLabel(x, 'occhiello', kick, left, y, w, accentOn(x, s.bg, s.ink), 'center') + S(x, 28)
-  hairline(x, 'filetto_alto', W / 2 - rule / 2, y, W / 2 + rule / 2, s.accent, 3)
+  glyph(x, 'glifo', W / 2, y + S(x, 4), S(x, 34), s.accent, 'centrato')
   y += S(x, 40)
   y = putTitle(x, t, left, y, w, s.ink, 'center') + S(x, 40)
   hairline(x, 'filetto_basso', W / 2 - rule / 2, y, W / 2 + rule / 2, s.accent, 3)
@@ -110,6 +118,8 @@ export function centrato(x: Ctx): Scene | null {
   let yb = H - m
   if (cta) { yb -= cta.h; putLabel(x, 'invito', cta, left, yb, w, accentOn(x, s.bg, s.ink), 'center'); yb -= S(x, 24) }
   if (det) { yb -= det.h; putLabel(x, 'dettagli', det, left, yb, w, s.muted, 'center') }
+  const side = Math.min(W, H) * 0.92
+  ornament(x, 'trama', { x: (W - side) / 2, y: (H - side) / 2, w: side, h: side }, { salt: 'centrato', under: true, opacity: 0.1, id: 'anelli' })
   return scene(x, 'centrato', 'Centrato')
 }
 
@@ -143,13 +153,17 @@ export function griglia(x: Ctx): Scene | null {
     hairline(x, 'filetto', m, yb - S(x, 24), W - m, alpha(s.ink, 0.3), 2)
     yb -= S(x, 24) + S(x, 56)
   }
+  const gridBottom = yb
   // titolo e testo in alto
   const top = m + headH + S(x, 40) + S(x, 28) + S(x, 40)
   const b = body(x, c.body, x.landscape ? x.colW(6) : x.colW(8), 3, 26)
   const t = title(x, c.title, x.landscape ? x.colW(9) : W - 2 * m, yb - top - (b ? b.h + S(x, 32) : 0), 200, 64, 4)
   if (!t) return null
   const y = putTitle(x, t, m, top, W - 2 * m, s.ink) + S(x, 32)
-  if (b) putBody(x, b, m, y, x.colW(8), s.muted)
+  const yEnd = b ? putBody(x, b, m, y, x.colW(8), s.muted) : y
+  // il blocco grafico prende la fascia libera a destra del testo, fino alle colonne
+  const ox = b ? x.colX(9) : m, oy = b ? y : yEnd + S(x, 24)
+  ornament(x, 'ornamento', { x: ox, y: oy, w: W - m - ox, h: gridBottom - oy }, { salt: 'griglia', r: S(x, 6), prefer: ['tessere', 'puntinato', 'strisce', 'anelli', 'vetrata', 'sfaccettato', 'archi', 'raggiera'] })
   return scene(x, 'griglia', 'Griglia')
 }
 

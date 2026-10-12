@@ -45,14 +45,30 @@ export type SceneEl =
       lines: string[]; font: FontSpec; size: number; color: string
       align: 'left' | 'center' | 'right'; lineHeight: number; tracking: number
     }
-  | { kind: 'image'; name: string; x: number; y: number; w: number; h: number; url?: string; fallback: string; shape?: 'rect' | 'arch' | 'circle' }
+  | {
+      kind: 'image'; name: string; x: number; y: number; w: number; h: number; url?: string; fallback: string; shape?: 'rect' | 'arch' | 'circle'
+      /** look pellicola del motore effetti (portra, trix, kodachrome…) e regolazioni (grana, vignettatura) */
+      look?: string; adjust?: Record<string, number>
+    }
+  /** ornamento generativo del laboratorio in una zona; `under` = trama leggera che può stare sotto i testi */
+  | { kind: 'ornament'; name: string; id: string; x: number; y: number; w: number; h: number; seed: number; opacity: number; under?: boolean; r?: number; pal?: Palette }
+  /** glifo vettoriale (set Celestial e forme) centrato in (cx, cy) */
+  | { kind: 'glyph'; name: string; path: string; cx: number; cy: number; size: number; color: string; angle?: number; opacity?: number }
+  /** sigillo: anello con testo che gira e un glifo al centro */
+  | { kind: 'seal'; name: string; cx: number; cy: number; r: number; text: string; color: string; font: FontSpec; glyph?: string; bg?: string }
+
+export interface Palette { bg: string; ink: string; accent: string; muted: string; surface: string }
 
 export interface Scene {
   w: number
   h: number
   bg: string
+  /** colori dello stile, per gli ornamenti */
+  palette?: Palette
   els: SceneEl[]
   layout: string
   style: string
   label: string
+  /** finiture dai pack dell'utente (carta, grana, luce…) e seme per sceglierle; ripiego procedurale se non ci sono pack */
+  finish?: { ids: string[]; seed: string; fallback?: 'grana' | 'carta' }
 }

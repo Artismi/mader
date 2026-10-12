@@ -3,7 +3,7 @@
  * proporzionali, scala tipografica, blocchi di testo misurati e il controllo
  * finale (niente testi sovrapposti o fuori dai margini).
  */
-import type { DesignContent, Format, FontSpec, Scene, SceneEl } from './types'
+import type { DesignContent, Format, FontSpec, Palette, Scene, SceneEl } from './types'
 import { FORMAT_SIZE } from './types'
 import type { Style } from './styles'
 import { fit, type Fit } from './text'
@@ -105,27 +105,90 @@ export const accentOn = (x: Ctx, bg: string, fallback: string) => (contrast(x.s.
 
 /* ── controllo finale ──────────────────────────────────────────────────── */
 /** I testi devono stare dentro la tavola (con un minimo di respiro) e non toccarsi. */
-export function valid(x: Ctx): boolean {
-  const pad = x.m * 0.45
-  const boxes = x.els.filter(e => e.kind === 'text').map(e => {
+type Box = { x: number; y: number; w: number; h: number }
+const touches = (a: Box, b: Box, gap: number) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap
+
+/** Ingombri dei testi (riga più lunga, non la colonna). */
+function textBoxes(x: Ctx): Box[] {
+  return x.els.filter(e => e.kind === 'text').map(e => {
     const t = e as Extract<SceneEl, { kind: 'text' }>
     const left = t.align === 'left' ? t.x : t.align === 'right' ? t.x + t.w - t.tw : t.x + (t.w - t.tw) / 2
-    return { name: t.name, x: left, y: t.y, w: t.tw, h: t.h }
+    return { x: left, y: t.y, w: t.tw, h: t.h }
   })
-  for (const b of boxes) {
+}
+
+/** Ingombro di un dettaglio grafico che non deve mai coprire un testo (null se può stare sotto). */
+function decorBox(e: SceneEl): Box | null {
+  if (e.kind === 'seal') return { x: e.cx - e.r, y: e.cy - e.r, w: 2 * e.r, h: 2 * e.r }
+  if (e.kind === 'glyph') return { x: e.cx - e.size / 2, y: e.cy - e.size / 2, w: e.size, h: e.size }
+  if (e.kind === 'ornament' && !e.under) return { x: e.x, y: e.y, w: e.w, h: e.h }
+  return null
+}
+
+/** I testi devono stare dentro la tavola (con un minimo di respiro), non toccarsi e non stare sotto i dettagli grafici. */
+export function valid(x: Ctx): boolean {
+  const pad = x.m * 0.45
+  const texts = textBoxes(x)
+  for (const b of texts) {
     if (b.x < pad - 1 || b.y < pad - 1 || b.x + b.w > x.W - pad + 1 || b.y + b.h > x.H - pad + 1) return false
   }
   const gap = 6 * x.u
-  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
-    const a = boxes[i], b = boxes[j]
-    if (a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap) {
-      return false
-    }
-  }
+  for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) if (touches(texts[i], texts[j], gap)) return false
+  for (const e of x.els) { const d = decorBox(e); if (d && texts.some(t => touches(d, t, 10 * x.u))) return false }
   return true
 }
 
+/** Toglie i dettagli grafici che toccano un testo: meglio una tavola più sobria che un testo coperto. */
+function pruneDecor(x: Ctx) {
+  const texts = textBoxes(x)
+  x.els = x.els.filter(e => { const d = decorBox(e); return !d || !texts.some(t => touches(d, t, 10 * x.u)) })
+}
+
 export function scene(x: Ctx, layout: string, label: string): Scene | null {
+  pruneDecor(x)
   if (!valid(x)) return null
-  return { w: x.W, h: x.H, bg: x.s.bg, els: x.els, layout, style: x.s.id, label }
+  const d = x.s.decor
+  // la foto prende il look pellicola dello stile
+  for (const e of x.els) if (e.kind === 'image' && e.url && !e.look) { e.look = d.look; e.adjust = { ...d.adjust, ...(e.adjust ?? {}) } }
+  return {
+    w: x.W, h: x.H, bg: x.s.bg, els: x.els, layout, style: x.s.id, label,
+    palette: { bg: x.s.bg, ink: x.s.ink, accent: x.s.accent, muted: x.s.muted, surface: x.s.surface },
+    finish: { ids: d.finishes, seed: `${x.c.title}|${layout}`, fallback: d.fallback },
+  }
+}
+
+/* ── dettagli grafici: ornamenti del laboratorio, glifi, sigilli ───────── */
+const hash = (t: string) => [...t].reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) | 0, 7) >>> 0
+
+/** Seme del contenuto: stesso testo, stessi dettagli; testo diverso, tavola diversa. */
+export const seedOf = (x: Ctx, salt = '') => hash(`${x.c.brand ?? ''}|${x.c.title}|${salt}`)
+
+/** Sceglie dall'elenco in modo deterministico per contenuto e impaginazione. */
+export const pickFor = <T,>(x: Ctx, list: T[], salt: string): T => list[seedOf(x, salt) % list.length]
+
+export function ornament(x: Ctx, name: string, box: Box, opts: { salt: string; opacity?: number; under?: boolean; id?: string; r?: number; pal?: Palette; prefer?: string[] }) {
+  // un ornamento piccolo sembra un adesivo messo a caso: solo se c'è spazio vero
+  if (!opts.under && (box.w < 150 * x.u || box.h < 110 * x.u)) return
+  if (box.w < 40 * x.u || box.h < 40 * x.u) return
+  // `prefer`: forme che reggono in quella zona (es. geometriche in un blocco piccolo), tra quelle dello stile
+  const pool = opts.prefer ? x.s.decor.ornaments.filter(o => opts.prefer!.includes(o)) : x.s.decor.ornaments
+  if (!opts.id && !pool.length) return
+  const id = opts.id ?? pickFor(x, pool, opts.salt)
+  const el: SceneEl = { kind: 'ornament', name, id, x: box.x, y: box.y, w: box.w, h: box.h, seed: seedOf(x, opts.salt), opacity: opts.opacity ?? 1, under: opts.under, r: opts.r, pal: opts.pal }
+  // la trama "sotto" va prima dei testi, gli altri dettagli sopra lo sfondo nell'ordine dato
+  const firstText = x.els.findIndex(e => e.kind === 'text')
+  if (opts.under && firstText >= 0) x.els.splice(firstText, 0, el)
+  else put(x, el)
+}
+
+export function glyph(x: Ctx, name: string, cx: number, cy: number, size: number, color: string, salt: string, angle = 0) {
+  put(x, { kind: 'glyph', name, path: pickFor(x, x.s.decor.glyphs, salt), cx, cy, size, color, angle })
+}
+
+/** Sigillo con brand e occhiello (o primo dettaglio) che girano attorno a un glifo. */
+export function seal(x: Ctx, cx: number, cy: number, r: number, color: string, salt: string, bg?: string) {
+  const words = [x.c.brand, x.c.kicker ?? x.c.details?.[0]].filter(Boolean) as string[]
+  if (!words.length) return
+  const text = `${words.join('  ·  ')}  ·  `.toUpperCase()
+  put(x, { kind: 'seal', name: 'sigillo', cx, cy, r, text, color, font: x.s.label, glyph: pickFor(x, x.s.decor.glyphs, salt), bg })
 }
