@@ -407,7 +407,9 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
         // tangente a due bolle vicine: l'impacchettamento resta compatto
         const nb = circles.filter(c => c !== host && Math.hypot(c.x - host.x, c.y - host.y) < host.r + c.r + rad * 2.2)
         const other = nb.length ? nb[Math.floor(r() * nb.length)] : null
-        const pts = other ? intersect({ x: host.x, y: host.y, r: host.r + rad + touch, big: true }, { x: other.x, y: other.y, r: other.r + rad + touch, big: true }) : []
+        // sovrapposizione: da appena sfiorate a schiacciate (fino a un terzo della bolla più piccola)
+        const ov = r() < 0.55 ? touch : -rad * range(r, 0.08, 0.33)
+        const pts = other ? intersect({ x: host.x, y: host.y, r: host.r + rad + ov, big: true }, { x: other.x, y: other.y, r: other.r + rad + ov, big: true }) : []
         if (pts.length) { const p = pts[Math.floor(r() * pts.length)]; x = p[0]; y = p[1] }
         else { const a = r() * Math.PI * 2, d = host.r + rad + touch; x = host.x + Math.cos(a) * d; y = host.y + Math.sin(a) * d }
       }
@@ -417,18 +419,43 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
       const d = Math.hypot(c.x - x, c.y - y)
       if (d + rad <= c.r - touch * 0.6) return true                       // dentro c, con un filo di distanza
       if (d + c.r <= rad - touch * 0.6) return false                     // non inghiottire bolle esistenti
-      return d >= c.r + rad + touch * 0.6
+      // si può sovrapporre, ma senza che il centro di una entri nell'altra
+      return d >= Math.max(c.r, rad) * 0.98 && d >= c.r + rad - Math.min(c.r, rad) * 0.36
     })
     if (ok) circles.push({ x, y, r: rad })
+  }
+  // riempimento dei vuoti: bollicine sempre più piccole negli spazi tra le bolle
+  // (impacchettamento apolloniano), da cui nascono la ragnatela fitta e le lenti minute
+  const free = (x: number, y: number) => {
+    let f = Infinity
+    for (const c of circles) {
+      const d = Math.hypot(x - c.x, y - c.y)
+      if (d < c.r) { if (c.r - d < f) f = c.r - d } else if (d - c.r < f) f = d - c.r
+    }
+    return f
+  }
+  const minTiny = g * 0.7, maxTiny = R * 0.05
+  for (let i = 0, added = 0; i < 6000 && added < o.count * 0.9; i++) {
+    const x = cx + range(r, -1, 1) * R * 0.85 * o.spread, y = cy + range(r, -1, 1) * R
+    // solo dentro il grappolo: vicino ad almeno due bolle
+    const near = circles.filter(c => Math.abs(Math.hypot(x - c.x, y - c.y) - c.r) < R * 0.12).length
+    if (near < 2) continue
+    const f = free(x, y)
+    if (f < minTiny || f > maxTiny) continue
+    // poche grandi, molte minuscole: scala geometrica
+    const rr = minTiny + (f - minTiny) * Math.pow(r(), 1.6)
+    circles.push({ x, y, r: rr })
+    added++
   }
   const w = R * 0.011 * o.line
   // unione morbida (smooth-min esponenziale) di tutti i contorni: dove due linee si
   // avvicinano l'inchiostro si gonfia in un menisco curvo e si richiude ad ago lungo
   // ciascuna linea. Copertura calcolata al sub-pixel: bordi netti, niente tremolio.
-  const k = g * 0.19
+  const k = g * 0.16
   const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
   const x0 = Math.max(0, Math.floor(cx - R * 1.2)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.2))
   const y0 = Math.max(0, Math.floor(cy - R * 1.2)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.2))
+  const F = new Float32Array(W * H).fill(1e9)
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     let dmin = Infinity
     const ds: number[] = []
@@ -436,9 +463,17 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     if (dmin > k * 8 + w) continue
     let sum = 0
     for (const d of ds) sum += Math.exp(-(d - dmin) / k)
-    const f = dmin - k * Math.log(sum) - w / 2
-    const cov = Math.max(0, Math.min(1, 0.5 - f))
-    if (cov > 0) m.a[y * W + x] = cov * 255
+    F[y * W + x] = dmin - k * Math.log(sum) - w / 2
+  }
+  // bordo netto: la distanza "morbida" si normalizza con il suo gradiente
+  for (let y = Math.max(1, y0); y < Math.min(H - 1, y1); y++) for (let x = Math.max(1, x0); x < Math.min(W - 1, x1); x++) {
+    const i = y * W + x, f = F[i]
+    if (f > 3) continue
+    const gx = (F[i + 1] - F[i - 1]) / 2, gy = (F[i + W] - F[i - W]) / 2
+    const gl = Math.hypot(gx, gy)
+    const fn = gl > 0.05 && gl < 1e3 ? f / gl : f
+    const cov = Math.max(0, Math.min(1, 0.5 - fn))
+    if (cov > 0) m.a[i] = cov * 255
   }
   return m
 }
