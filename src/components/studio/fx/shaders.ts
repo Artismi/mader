@@ -844,18 +844,45 @@ void main() { o = mix(texture(uA, vUv), texture(uB, vUv), uK); }`
 /* ─── effetti testo da "stile Photoshop" ─── */
 
 /** usura: l'inchiostro si consuma con macchie e puntini, più sui bordi */
+/**
+ * timbro / inchiostro consumato. Un timbro vero non è rumore uniforme:
+ * - la pressione varia a chiazze larghe (zone più scariche, mai a scacchiera);
+ * - le fibre della carta, allungate, lasciano vuoti sottili dove la pressione cala;
+ * - il bordo trattiene più inchiostro (alone più scuro) ma è sbocconcellato;
+ * - i puntini sono tondi e di misura diversa, non quadratini.
+ * Ogni soglia è antialiasata con fwidth: bordi netti a qualunque zoom.
+ */
 export const GRUNGE = FX + `uniform float uWear, uScale, uSpeck;
 void main() {
   vec4 s = texture(uSrc, vUv);
   if (s.a <= 0.0) { o = s; return; }
   vec2 p = vUv * uRes / (uZ * uScale);
-  float n = fbm(p * 0.018) * 0.55 + fbm(p * 0.085 + 7.0) * 0.3 + vnoise(p * 0.6) * 0.15;
   float d = -sd(vUv) / uZ;
-  float edge = smoothstep(0.0, 7.0, d);
-  float keep = smoothstep(uWear - 0.06, uWear + 0.06, n + edge * 0.22);
-  float spk = step(1.0 - uSpeck * 0.12, hash12(floor(p * 0.55)));
+  float press = fbm(p * 0.0045 + 3.1);
+  float fib = vnoise(p * vec2(0.16, 0.3)) * 0.45 + vnoise(p * 0.7 + 5.0) * 0.35 + vnoise(p * 1.6 + 9.0) * 0.2;
+  float rim = 1.0 - smoothstep(0.0, 3.5, d);
+  float v = press * 0.74 + fib * 0.26 + rim * 0.12;
+  float thr = mix(0.18, 0.62, uWear);
+  float fw = max(fwidth(v), 1e-4);
+  float keep = smoothstep(thr - fw, thr + fw, v);
+  // bordo sbocconcellato: solo in una fascia sottile
+  float chip = vnoise(p * 0.22 + 11.0) * 0.7 + vnoise(p * 0.7) * 0.3;
+  float band = 1.0 - smoothstep(0.6, 2.6, d);
+  float ct = 1.0 - 0.32 * uWear;
+  float cw = max(fwidth(chip), 1e-4);
+  keep *= 1.0 - band * smoothstep(ct - cw, ct + cw, chip);
+  // puntini tondi: un candidato per cella, centro e raggio casuali
+  vec2 cell = floor(p * 0.09), f = p * 0.09 - cell;
+  vec2 c = 0.2 + 0.6 * hash22(cell);
+  float rad = (0.03 + 0.09 * hash12(cell + 7.3)) * (0.6 + uSpeck);
+  float dd = length(f - c);
+  float aa = 0.09 / max(uZ * uScale, 0.25) * 0.9;
+  float spk = step(hash12(cell + 2.1), uSpeck * 0.55) * (1.0 - smoothstep(rad - aa, rad + aa, dd));
   keep *= 1.0 - spk;
-  o = mix(s, s * keep, uAmt);
+  // densità: dove si preme meno l'inchiostro è più trasparente, sul bordo più carico
+  float dens = mix(0.8, 1.0, smoothstep(0.25, 0.7, press)) * (1.0 + rim * 0.08);
+  vec4 ink = vec4(s.rgb * (1.0 - rim * 0.1), s.a) * min(1.0, dens);
+  o = mix(s, ink * keep, uAmt);
 }`
 
 /** ricamo: fili in diagonale, rilievo morbido, punto filo lungo il bordo */
