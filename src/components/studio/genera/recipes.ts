@@ -1861,13 +1861,130 @@ const gonfiabile: Recipe = {
   },
 }
 
+const ECO_PALETTES = [
+  { label: 'Inchiostro', ink: '#141414', fill: '#141414', acc: '#e8283c' },
+  { label: 'Rosso', ink: '#e8283c', fill: '#e8283c', acc: '#141414' },
+  { label: 'Blu elettrico', ink: '#2343ff', fill: '#2343ff', acc: '#ff5a1f' },
+  { label: 'Lime su nero', ink: '#c8ff2e', fill: '#c8ff2e', acc: '#ff4fd1' },
+  { label: 'Bianco', ink: '#ffffff', fill: '#ffffff', acc: '#ffd23f' },
+]
+
+const eco: Recipe = {
+  id: 'eco', label: 'Scritta eco', cat: 'Testo grafico', hint: 'la parola ripetuta in contorno: scia, zoom, pila, onda — come un poster cinetico fermo',
+  piece: true,
+  params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 2), P.sel('mode', 'Movimento', ['Scia', 'Zoom', 'Pila', 'Onda', 'Vortice']),
+    P.range('copies', 'Ripetizioni', 2, 14, 6), P.range('spread', 'Distanza', 20, 200, 100), P.range('lw', 'Filo', 20, 200, 100),
+    P.sel('pal', 'Colori', ECO_PALETTES.map(x => x.label)), P.tog('last', 'Ultima in colore', false), P.tone(1), P.grain(8)],
+  render: o => {
+    const t = tone(o), S = SS(o), W = o.W, H = o.H
+    const pal = ECO_PALETTES[num(o, 'pal')] ?? ECO_PALETTES[0]
+    const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.espanso
+    const mode = num(o, 'mode'), n = num(o, 'copies'), sp = num(o, 'spread') / 100
+    // lo spazio per le copie si toglie al riquadro della parola
+    const box = [
+      { w: W * 0.84 - S * 0.22 * sp, h: H * 0.8 - S * 0.3 * sp },
+      { w: W * 0.84 / (1 + 0.5 * sp), h: H * 0.8 / (1 + 0.5 * sp) },
+      { w: W * 0.84, h: H * 0.84 / ((n + 1) * (1 + 0.12 * Math.min(1, sp))) },
+      { w: W * 0.84 - S * 0.16 * sp, h: H * 0.8 / (1 + n * 0.62 * sp) },
+      { w: W * 0.84 / (1 + 0.7 * sp), h: H * 0.8 / (1 + 0.7 * sp) },
+    ][mode]
+    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, 0, 0, { room: 0, boxW: box.w, boxH: box.h, lead: 0.05 })
+    const b = inkBox(m)!, wh = b.y1 - b.y0, ww = b.x1 - b.x0
+    const din = distance(m)
+    const lw = Math.max(1.2, S * 0.0026 * num(o, 'lw') / 100)
+    const edge = maskToCanvas(distBand(din, W, H, 0.7, lw + 0.7), pal.ink)
+    const solid = maskToCanvas(m, on(o, 'last') ? pal.acc : pal.fill)
+    const { c, ctx } = stage(o, t)
+    const at = (k: number, draw: HTMLCanvasElement) => {
+      // k = 0 è la parola piena, le copie si allontanano con k
+      const u = k / n
+      ctx.save(); ctx.translate(W / 2, H / 2)
+      if (mode === 0) ctx.translate(-S * 0.11 * sp * u * 2 + S * 0.11 * sp, -S * 0.15 * sp * u * 2 + S * 0.15 * sp)
+      if (mode === 1) { const z = 1 + 0.5 * sp * u; ctx.scale(z, z) }
+      if (mode === 2) { const side = k % 2 ? 1 : -1; ctx.translate(0, side * Math.ceil(k / 2) * wh * (1 + 0.12 * Math.min(1, sp))) }
+      if (mode === 3) ctx.translate(Math.sin((k - Math.round(n / 2)) * 0.9) * S * 0.08 * sp, (k - Math.round(n / 2)) * wh * 0.62 * sp)
+      if (mode === 4) { const z = 1 + 0.7 * sp * u; ctx.rotate(u * 0.5 * sp); ctx.scale(z, z) }
+      ctx.translate(-W / 2, -H / 2)
+      ctx.drawImage(draw, 0, 0); ctx.restore()
+    }
+    void ww
+    // la parola piena copre i fili che le passano sotto: in testa alla scia, al centro dell'onda
+    const main = mode === 0 ? n : mode === 3 ? Math.round(n / 2) : 0
+    for (let k = n; k >= (mode === 3 ? 0 : 1); k--) if (k !== main) at(k, edge)
+    at(main, solid)
+    return finish(c, o, t, 'eco', null)
+  },
+}
+
+const TRAMA_PALETTES = [
+  { label: 'Rosso e crema', a: '#e8283c', b: '#fff3e0', ink: '#141414' },
+  { label: 'Blu e giallo', a: '#2343ff', b: '#ffd23f', ink: '#141414' },
+  { label: 'Verde bottiglia', a: '#14593c', b: '#f3e6c4', ink: '#0d2a1d' },
+  { label: 'Rosa e bordeaux', a: '#ff8fb8', b: '#6b0f2a', ink: '#2a0712' },
+  { label: 'Bianco e nero', a: '#141414', b: '#ffffff', ink: '#141414' },
+  { label: 'Arancio e viola', a: '#ff6a1a', b: '#3a1c71', ink: '#1c0d38' },
+]
+
+/** riempimento a motivo su tutto il foglio: righe, scacchi, mezzatinta, zebra, pois */
+function patternCanvas(W: number, H: number, kind: number, a: string, b: string, cell: number, ang: number) {
+  const { c, ctx } = makeCanvas(W, H)
+  ctx.fillStyle = b; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = a
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(ang)
+  const R = Math.hypot(W, H) / 2 + cell * 2
+  if (kind === 0) for (let x = -R; x < R; x += cell) ctx.fillRect(x, -R, cell / 2, R * 2)
+  else if (kind === 1) for (let y = -R, j = 0; y < R; y += cell, j++) for (let x = -R + (j % 2) * cell; x < R; x += cell * 2) ctx.fillRect(x, y, cell, cell)
+  else if (kind === 2) {
+    // mezzatinta: punti che crescono dall'alto verso il basso
+    for (let y = -R, j = 0; y < R; y += cell * 0.5, j++) for (let x = -R + (j % 2) * cell * 0.25; x < R; x += cell * 0.5) {
+      const k = Math.min(1, Math.max(0, (y + H * 0.25) / (H * 0.5)))
+      ctx.beginPath(); ctx.arc(x, y, cell * 0.28 * Math.sqrt(k) + 0.3, 0, Math.PI * 2); ctx.fill()
+    }
+  } else if (kind === 3) {
+    for (let x = -R; x < R; x += cell) {
+      ctx.beginPath(); ctx.moveTo(x, -R)
+      for (let y = -R; y <= R; y += cell * 0.25) ctx.lineTo(x + Math.sin(y / cell * 1.3) * cell * 0.35, y)
+      for (let y = R; y >= -R; y -= cell * 0.25) ctx.lineTo(x + cell * 0.42 + Math.sin(y / cell * 1.3 + 0.6) * cell * 0.35, y)
+      ctx.closePath(); ctx.fill()
+    }
+  } else for (let y = -R, j = 0; y < R; y += cell, j++) for (let x = -R + (j % 2) * cell / 2; x < R; x += cell) { ctx.beginPath(); ctx.arc(x, y, cell * 0.24, 0, Math.PI * 2); ctx.fill() }
+  ctx.restore()
+  return c
+}
+
+const trama: Recipe = {
+  id: 'trama', label: 'Scritta a trama', cat: 'Testo grafico', hint: 'lettere piene di righe, scacchi, mezzatinta o zebra, contorno e ombra sfalsata piena',
+  piece: true,
+  params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 3), P.sel('warp', 'Busta', [...WARPS]), P.range('amt', 'Piega', 0, 100, 30),
+    P.sel('pat', 'Trama', ['Righe', 'Scacchi', 'Mezzatinta', 'Zebra', 'Pois']), P.range('cell', 'Passo trama', 20, 200, 100), P.range('ang', 'Inclinazione', -60, 60, 35),
+    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.range('shadow', 'Ombra sfalsata', 0, 100, 60), P.tog('outline', 'Contorno', true), P.tone(1), P.grain(12)],
+  render: o => {
+    const t = tone(o), S = SS(o), W = o.W, H = o.H
+    const pal = TRAMA_PALETTES[num(o, 'pal')] ?? TRAMA_PALETTES[0]
+    const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.condensato
+    const sh = S * 0.03 * num(o, 'shadow') / 100, lw = on(o, 'outline') ? Math.max(1.5, S * 0.0045) : 0
+    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room: sh + lw + S * 0.01, lead: 0.06 })
+    const { c, ctx } = stage(o, t)
+    const out = lw ? distance(invert(m)) : null
+    const body = out ? grow(out, m, lw) : m
+    if (sh > 0) ctx.drawImage(maskToCanvas(body, pal.ink), sh * 0.7, sh)
+    if (out) ctx.drawImage(maskToCanvas(body, pal.ink), 0, 0)
+    // la trama riempie solo le lettere
+    const pat = patternCanvas(W, H, num(o, 'pat'), pal.a, pal.b, S * 0.022 * num(o, 'cell') / 100, num(o, 'ang') * Math.PI / 180)
+    const pc = pat.getContext('2d')!
+    pc.globalCompositeOperation = 'destination-in'; pc.drawImage(maskToCanvas(m, '#000000'), 0, 0)
+    ctx.drawImage(pat, 0, 0)
+    return finish(c, o, t, 'trama', null)
+  },
+}
+
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
   tattoo,
-  groovy, gonfiabile,
+  groovy, gonfiabile, eco, trama,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
