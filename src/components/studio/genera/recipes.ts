@@ -4,7 +4,7 @@
  * Restituiscono un canvas ad alta risoluzione: tavola intera o pezzo scontornato.
  */
 import {
-  blurMask, combine, dither, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
+  blurMask, combine, dither, fontCss, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
   newMask, noise2, polar, range, remap, rng, slices, smoothstep, stretch, text, xerox,
   type Ctx, type Face, type Mask, type Rnd,
 } from './raster'
@@ -12,7 +12,7 @@ import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, 
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
-import { burst, dieCut, inkPress, stampPlate, stickerCanvas, type Finish } from './stamps'
+import { burst, castShadow, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -95,7 +95,8 @@ function paint(ctx: Ctx, m: Mask, o: Job, t: Tone, matIdx: number, glow: boolean
   ctx.drawImage(mat ? shade(m, mat, S * round, 0.85, t.acc) : maskToCanvas(m, color ?? t.ink), 0, 0)
 }
 
-const ROMAN_YEAR = 'MMXXVI'
+/** firma dello studio nelle didascalie delle tavole */
+const BRAND = 'ARTISMI DESIGN STUDIO — TORINO'
 
 /** micro-didascalie agli angoli e tacche di registro: il dettaglio da studio */
 function captions(ctx: Ctx, o: Job, color: string, items: [string, string, string, string]) {
@@ -186,7 +187,7 @@ const membrana: Recipe = {
         paint(ctx, front, o, t, num(o, 'mat'), on(o, 'glow'), 0.012)
       } else paint(ctx, membrane(o.W, o.H, cx, cy, R, rng(o.seed), opts), o, t, num(o, 'mat'), on(o, 'glow'), 0.012)
     }
-    return finish(c, o, t, 'membrana', ['CELLULA', code(o, 'cell'), ROMAN_YEAR, 'BIO—GOTHIC'])
+    return finish(c, o, t, 'membrana', ['CELLULA', code(o, 'cell'), BRAND, 'BIO—GOTHIC'])
   },
 }
 
@@ -198,7 +199,7 @@ const rete: Recipe = {
     const m = drawMask(o.W, o.H, ctx => neuralNet(ctx, r, o.W * 0.12, o.H * 0.1, o.W * 0.76, o.H * 0.8, S, { nodes: num(o, 'nodes'), links: num(o, 'links'), tendrils: num(o, 'tendrils'), weight: num(o, 'weight') / 100, reach: num(o, 'reach') / 100 }))
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.008)
-    return finish(c, o, t, 'rete', ['SYNAPSE', code(o, 'nrn'), ROMAN_YEAR, 'INK NETWORK'])
+    return finish(c, o, t, 'rete', ['SYNAPSE', code(o, 'nrn'), BRAND, 'INK NETWORK'])
   },
 }
 
@@ -222,7 +223,7 @@ const falce: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
-    return finish(c, o, t, 'falce', ['FALX', code(o, 'falx'), ROMAN_YEAR, 'NOX'])
+    return finish(c, o, t, 'falce', ['FALX', code(o, 'falx'), BRAND, 'NOX'])
   },
 }
 
@@ -291,7 +292,7 @@ const quaderno: Recipe = {
     const { c, ctx } = stage(o, t)
     if (on(o, 'grid') && !o.transparent) gridPaper(ctx, W, H, S * 0.024, t.ink, t.dark ? 0.22 : 0.24)
     ctx.drawImage(maskToCanvas(m, t.ink), 0, 0)
-    return finish(c, o, t, 'quaderno', ['LIBER NOCTIS', code(o, 'lbr'), ROMAN_YEAR, 'MANU'])
+    return finish(c, o, t, 'quaderno', ['LIBER NOCTIS', code(o, 'lbr'), BRAND, 'MANU'])
   },
 }
 
@@ -322,7 +323,7 @@ const sigillo: Recipe = {
       const f = face(o), w = Math.min(o.W * 0.62, S * 0.7)
       text(ctx, title, o.W / 2, o.H / 2 + S * 0.43, f, Math.min(wordSize(title, f, w), S * 0.11), 'center')
     }
-    return finish(c, o, t, 'sigillo', ['CREATIVE OS ⁄ LAB', code(o, 'sigil'), ROMAN_YEAR, 'NEO—TRIBAL'])
+    return finish(c, o, t, 'sigillo', ['ARTISMI ⁄ LAB', code(o, 'sigil'), BRAND, 'NEO—TRIBAL'])
   },
 }
 
@@ -338,7 +339,7 @@ const corona: Recipe = {
     const { c, ctx } = stage(o, t)
     paint(ctx, ring, o, t, num(o, 'mat'), on(o, 'glow'))
     paint(ctx, w, o, t, num(o, 'mat'), false, 0.006)
-    return finish(c, o, t, 'corona', ['CORONA SPINARUM', code(o, 'crwn'), ROMAN_YEAR, word.toUpperCase()])
+    return finish(c, o, t, 'corona', ['CORONA SPINARUM', code(o, 'crwn'), BRAND, word.toUpperCase()])
   },
 }
 
@@ -354,7 +355,7 @@ const fascia: Recipe = {
     void r
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'))
-    return finish(c, o, t, 'fascia', ['ARMBAND', code(o, 'band'), ROMAN_YEAR, '—'])
+    return finish(c, o, t, 'fascia', ['ARMBAND', code(o, 'band'), BRAND, '—'])
   },
 }
 
@@ -394,7 +395,7 @@ const ghirigoro: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.006)
-    return finish(c, o, t, 'gotico', ['LITTERA GOTHICA', code(o, 'goth'), ROMAN_YEAR, word.toUpperCase()])
+    return finish(c, o, t, 'gotico', ['LITTERA GOTHICA', code(o, 'goth'), BRAND, word.toUpperCase()])
   },
 }
 
@@ -418,7 +419,7 @@ const alieno: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
-    return finish(c, o, t, 'alieno', ['XENO—FORM', code(o, 'xeno'), ROMAN_YEAR, 'BIOMECH'])
+    return finish(c, o, t, 'alieno', ['XENO—FORM', code(o, 'xeno'), BRAND, 'BIOMECH'])
   },
 }
 
@@ -448,7 +449,7 @@ const cromo: Recipe = {
     }
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.016)
-    return finish(c, o, t, 'cromo', ['LIQUID METAL', code(o, 'chrm'), ROMAN_YEAR, '©'])
+    return finish(c, o, t, 'cromo', ['LIQUID METAL', code(o, 'chrm'), BRAND, '©'])
   },
 }
 
@@ -479,7 +480,7 @@ const goccia: Recipe = {
     ctx.drawImage(layer(o.seed, t.ink, o.W / 2, 1), 0, 0)
     if (num(o, 'inks') === 1) ctx.drawImage(layer(o.seed + 50, t.acc, o.W / 2 + range(r, -0.06, 0.06) * S, 0.55), 0, 0)
     ctx.globalCompositeOperation = 'source-over'
-    return finish(c, o, t, 'goccia', ['INK IN WATER', code(o, 'ink'), ROMAN_YEAR, '0.5 ML'])
+    return finish(c, o, t, 'goccia', ['INK IN WATER', code(o, 'ink'), BRAND, '0.5 ML'])
   },
 }
 
@@ -529,7 +530,7 @@ const macchia: Recipe = {
     ctx.drawImage(maskToCanvas(tex, t.ink), 0, 0)
     if (on(o, 'riso')) ctx.drawImage(maskToCanvas(liquid(blot(o.seed + 7), S * 0.004, 0.5, 0.12), t.acc, 0.9), S * 0.008, S * 0.004)
     ctx.globalCompositeOperation = 'source-over'
-    return finish(c, o, t, 'macchia', ['PLATE № ' + (1 + (o.seed % 10)), code(o, 'blot'), ROMAN_YEAR, 'COSA VEDI?'])
+    return finish(c, o, t, 'macchia', ['PLATE № ' + (1 + (o.seed % 10)), code(o, 'blot'), BRAND, 'COSA VEDI?'])
   },
 }
 
@@ -561,7 +562,7 @@ const colata: Recipe = {
     if (on(o, 'riso')) ctx.drawImage(maskToCanvas(run(Math.min(0.95, cut + 0.13)), t.acc, 0.95), S * 0.006, S * 0.003)
     ctx.drawImage(maskToCanvas(run(cut), t.ink), 0, 0)
     ctx.globalCompositeOperation = 'source-over'
-    return finish(c, o, t, 'colata', ['SLIT—SCAN', code(o, 'melt'), ROMAN_YEAR, word.toUpperCase()])
+    return finish(c, o, t, 'colata', ['SLIT—SCAN', code(o, 'melt'), BRAND, word.toUpperCase()])
   },
 }
 
@@ -586,7 +587,7 @@ const fette: Recipe = {
     ctx.drawImage(maskToCanvas(b, t.acc, 0.95), S * 0.007, -S * 0.004)
     ctx.drawImage(maskToCanvas(a, t.ink), 0, 0)
     ctx.globalCompositeOperation = 'source-over'
-    return finish(c, o, t, 'fette', ['RISO 2—INK', code(o, 'riso'), ROMAN_YEAR, ls.join(' ').toUpperCase()])
+    return finish(c, o, t, 'fette', ['RISO 2—INK', code(o, 'riso'), BRAND, ls.join(' ').toUpperCase()])
   },
 }
 
@@ -620,7 +621,7 @@ const fotocopia: Recipe = {
       }
       ctx.restore()
     }
-    return finish(c, o, t, 'fotocopia', ['ZINE / XEROX', code(o, 'zine'), ROMAN_YEAR, 'FAI DA TE'])
+    return finish(c, o, t, 'fotocopia', ['ZINE / XEROX', code(o, 'zine'), BRAND, 'FAI DA TE'])
   },
 }
 
@@ -651,7 +652,7 @@ const vortice: Recipe = {
     const { c, ctx } = stage(o, t)
     ctx.drawImage(maskToCanvas(m, t.ink), 0, 0)
     ctx.fillStyle = t.acc; lozenge(ctx, o.W / 2, o.H / 2, S * 0.05)
-    return finish(c, o, t, 'vortice', ['POLAR TYPE', code(o, 'orbt'), ROMAN_YEAR, '360°'])
+    return finish(c, o, t, 'vortice', ['POLAR TYPE', code(o, 'orbt'), BRAND, '360°'])
   },
 }
 
@@ -672,7 +673,7 @@ const bit: Recipe = {
     const dm = dither(gray, px, num(o, 'mode') === 0 ? 'atkinson' : 'bayer')
     const { c, ctx } = stage(o, t)
     ctx.drawImage(maskToCanvas(combine(dm, m, 'min'), t.ink), 0, 0)
-    return finish(c, o, t, 'bit', ['1—BIT', code(o, 'dthr'), ROMAN_YEAR, 'ATKINSON'])
+    return finish(c, o, t, 'bit', ['1—BIT', code(o, 'dthr'), BRAND, 'ATKINSON'])
   },
 }
 
@@ -729,7 +730,7 @@ const rametto: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), false, 0.004)
-    return finish(c, o, t, 'rametto', ['HERBARIUM', code(o, 'herb'), ROMAN_YEAR, 'FOLIA'])
+    return finish(c, o, t, 'rametto', ['HERBARIUM', code(o, 'herb'), BRAND, 'FOLIA'])
   },
 }
 
@@ -772,7 +773,7 @@ const costellazione: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), false, 0.004)
-    return finish(c, o, t, 'stelle', ['ASTRA', code(o, 'astr'), ROMAN_YEAR, '✦'])
+    return finish(c, o, t, 'stelle', ['ASTRA', code(o, 'astr'), BRAND, '✦'])
   },
 }
 
@@ -797,7 +798,7 @@ const fregio: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), false, 0.004)
-    return finish(c, o, t, 'fregio', ['ORNAMENTUM', code(o, 'orn'), ROMAN_YEAR, '—'])
+    return finish(c, o, t, 'fregio', ['ORNAMENTUM', code(o, 'orn'), BRAND, '—'])
   },
 }
 
@@ -860,7 +861,7 @@ const simbolo: Recipe = {
     const m = drawMask(o.W, o.H, ctx => { ctx.lineCap = 'round'; ctx.lineJoin = 'round'; flash(ctx, num(o, 'kind'), o.W / 2, o.H / 2, S, r, num(o, 'weight') / 100) })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.006)
-    return finish(c, o, t, 'flash', ['FLASH SHEET', code(o, 'flsh'), ROMAN_YEAR, '✝'])
+    return finish(c, o, t, 'flash', ['FLASH SHEET', code(o, 'flsh'), BRAND, '✝'])
   },
 }
 
@@ -875,7 +876,7 @@ const timbro: Recipe = {
   id: 'timbro', label: 'Timbro', cat: 'Timbri & adesivi', hint: 'timbro di gomma: testo sul cerchio, stelline, inchiostro vero con pressione e grana',
   piece: true,
   params: [P.sel('kind', 'Forma', ['Cerchio', 'Sigillo dentellato', 'Rettangolo', 'Ovale']), P.text('Approvato', 'Parola'),
-    { key: 'top', label: 'Testo in alto', type: 'text', def: 'Creative OS Studio' }, { key: 'bottom', label: 'Testo in basso', type: 'text', def: 'Milano' },
+    { key: 'top', label: 'Testo in alto', type: 'text', def: 'Artismi Design Studio' }, { key: 'bottom', label: 'Testo in basso', type: 'text', def: 'Torino' },
     { key: 'small', label: 'Riga piccola', type: 'text', def: 'MMXXVI' },
     P.sel('ink', 'Inchiostro', STAMP_INKS.map(i => i.label)), P.face('condensato'), P.range('weight', 'Spessore', 50, 180, 100),
     P.range('wear', 'Consumo', 0, 100, 38), P.range('tilt', 'Pressione storta', 0, 100, 45), P.range('angle', 'Rotazione', -30, 30, -8),
@@ -907,7 +908,7 @@ const timbro: Recipe = {
 const adesivo: Recipe = {
   id: 'adesivo', label: 'Adesivo', cat: 'Timbri & adesivi', hint: 'adesivo fustellato: bordo bianco morbido, ombra, finitura lucida o olografica',
   piece: true,
-  params: [P.sel('kind', 'Contenuto', ['Parola', 'Simbolo', 'Bollino']), P.text('Fresh|Drop', 'Testo'), P.face('espanso'),
+  params: [P.sel('kind', 'Contenuto', ['Parola', 'Simbolo', 'Bollino']), P.text('Artismi|Torino', 'Testo'), P.face('espanso'),
     P.sel('sym', 'Simbolo', ['Sole', 'Luna', 'Occhio', 'Stella', 'Cuore sacro', 'Pugnale']),
     P.sel('color', 'Colore', ['Due toni', 'Accento', 'Inchiostro']), P.sel('finish', 'Finitura', ['Lucida', 'Opaca', 'Olografica']),
     P.range('border', 'Bordo', 20, 200, 100), P.tog('shadow', 'Ombra', true), P.range('angle', 'Rotazione', -20, 20, -5), P.tone(4), P.grain(0)],
@@ -959,13 +960,147 @@ const adesivo: Recipe = {
   },
 }
 
+const WAX = [{ label: 'Rosso', c: '#8e1420' }, { label: 'Bordeaux', c: '#5c0f1c' }, { label: 'Oro', c: '#b0862d' }, { label: 'Nero', c: '#1b1a1d' }, { label: 'Blu notte', c: '#1d2a55' }, { label: 'Verde', c: '#1f4a35' }]
+
+const ceralacca: Recipe = {
+  id: 'ceralacca', label: 'Ceralacca', cat: 'Timbri & adesivi', hint: 'sigillo di cera in rilievo: colata irregolare, impronta con monogramma',
+  piece: true,
+  params: [P.text('A', 'Monogramma'), { key: 'ring', label: 'Scritta in giro', type: 'text', def: 'Artismi · Torino' }, P.face('gotico'),
+    P.sel('wax', 'Cera', WAX.map(w => w.label)), P.range('gloss', 'Lucido', 0, 100, 70), P.tog('shadow', 'Ombra', true), P.tone(1), P.grain(0)],
+  render: o => {
+    const t = tone(o), S = SS(o)
+    const seal = waxSeal(o.W, o.H, o.W / 2, o.H / 2, S * 0.36, o.seed, str(o, 'text') || 'A', face(o), WAX[num(o, 'wax')]?.c ?? WAX[0].c, { ring: str(o, 'ring'), gloss: num(o, 'gloss') / 100 })
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'shadow')) castShadow(ctx, seal.blob, S, 0.4)
+    ctx.drawImage(seal.canvas, 0, 0)
+    return finish(c, o, t, 'ceralacca', null)
+  },
+}
+
+const THREADS = [
+  { label: 'Nero e oro', base: '#16161a', border: '#c9a24a', thread: '#e7c66b' },
+  { label: 'Blu e bianco', base: '#1f3270', border: '#f2efe6', thread: '#f2efe6' },
+  { label: 'Rosso e crema', base: '#b3212b', border: '#f0e6cf', thread: '#f0e6cf' },
+  { label: 'Verde militare', base: '#4a5233', border: '#d8cfa8', thread: '#e8dfb6' },
+  { label: 'Rosa e nero', base: '#ff6fae', border: '#141414', thread: '#141414' },
+]
+
+const toppa: Recipe = {
+  id: 'toppa', label: 'Toppa ricamata', cat: 'Timbri & adesivi', hint: 'patch ricamata: punto pieno, cordoncino in rilievo, scritta a filo',
+  piece: true,
+  params: [P.sel('kind', 'Forma', ['Tonda', 'Scudo', 'Nastro']), P.text('Artismi', 'Scritta'), { key: 'sub', label: 'Seconda riga', type: 'text', def: 'Torino' }, P.face('pirata'),
+    P.sel('col', 'Fili', THREADS.map(x => x.label)), P.tog('shadow', 'Ombra', true), P.tone(1), P.grain(0)],
+  render: o => {
+    const t = tone(o), S = SS(o), kind = num(o, 'kind')
+    const th = THREADS[num(o, 'col')] ?? THREADS[0]
+    const poly = patchShape(kind, o.W / 2, o.H / 2, S)
+    const f: Face = face(o), word = str(o, 'text') || ' ', sub = str(o, 'sub')
+    const label = drawMask(o.W, o.H, ctx => {
+      const { ctx: m } = makeCanvas(4, 4)
+      const maxW = kind === 2 ? S * 0.66 : S * 0.56
+      const big = Math.min(fitSize(m, f.upper ? word.toUpperCase() : word, f, maxW), kind === 2 ? S * 0.2 : S * 0.24)
+      const small = sub ? Math.min(fitSize(m, sub.toUpperCase(), FACES.grotesk, maxW * 0.6), big * 0.36) : 0
+      const cy = o.H / 2 + (kind === 1 ? -S * 0.04 : 0)
+      if (kind === 2 || !sub) text(ctx, word + (kind === 2 && sub ? '' : ''), o.W / 2, cy + big * 0.34, f, big, 'center')
+      else {
+        text(ctx, word, o.W / 2, cy + big * 0.12, f, big, 'center')
+        text(ctx, sub, o.W / 2, cy + big * 0.12 + small * 1.7, FACES.grotesk, small, 'center')
+      }
+    })
+    const em = embroidery(o.W, o.H, S, poly, label, o.seed, th)
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'shadow')) castShadow(ctx, em.shape, S, 0.32, 0.6)
+    ctx.drawImage(em.canvas, 0, 0)
+    return finish(c, o, t, 'toppa', null)
+  },
+}
+
+const biglietto: Recipe = {
+  id: 'biglietto', label: 'Biglietto', cat: 'Timbri & adesivi', hint: 'biglietto d\'ingresso: perforazione, matrice numerata, codice a barre',
+  piece: true,
+  params: [P.text('Artismi', 'Titolo'), { key: 'sub', label: 'Sopratitolo', type: 'text', def: 'Design Studio — Ingresso' },
+    { key: 'date', label: 'Data', type: 'text', def: '12.10.2026 · 21:00' }, { key: 'place', label: 'Luogo', type: 'text', def: 'Torino' },
+    P.face('condensato'), P.sel('paper', 'Carta', ['Crema', 'Bianca', 'Kraft', 'Colore del tono']), P.range('angle', 'Rotazione', -20, 20, -6),
+    P.tog('shadow', 'Ombra', true), P.tone(5), P.grain(20)],
+  render: o => {
+    const t = tone(o), S = SS(o)
+    const paper = ['#f1e9d6', '#fbfaf6', '#c49a63', t.acc][num(o, 'paper')] ?? '#f1e9d6'
+    const inkC = num(o, 'paper') === 3 ? (luma(t.acc) > 0.5 ? '#111111' : '#f5f2ea') : '#1b1b1b'
+    const numStr = String(100000 + (o.seed * 7919) % 900000)
+    const tk = ticketMasks(o.W, o.H, o.W / 2, o.H / 2, S, o.seed, { title: str(o, 'text') || ' ', sub: str(o, 'sub'), date: str(o, 'date'), place: str(o, 'place'), num: numStr }, { title: face(o), mono: FACES.mono })
+    // tutto ruotato insieme
+    const ang = num(o, 'angle') * Math.PI / 180
+    const rot = (m: Mask) => remap(m, (x, y) => { const dx = x - o.W / 2, dy = y - o.H / 2, cs = Math.cos(-ang), sn = Math.sin(-ang); return [o.W / 2 + dx * cs - dy * sn, o.H / 2 + dx * sn + dy * cs] })
+    const body = rot(tk.body), ink = combine(rot(tk.ink), body, 'min')
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'shadow')) castShadow(ctx, body, S, 0.3, 0.7)
+    ctx.drawImage(maskToCanvas(body, paper), 0, 0)
+    // inchiostro tipografico: leggermente scarico e fuori registro di un soffio
+    ctx.save(); ctx.globalAlpha = 0.9
+    ctx.drawImage(maskToCanvas(inkPress(ink, o.seed + 2, S, 0.12, { tilt: 0.25 }), inkC), S * 0.0015, 0); ctx.restore()
+    return finish(c, o, t, 'biglietto', null)
+  },
+}
+
+const nastro: Recipe = {
+  id: 'nastro', label: 'Nastro adesivo', cat: 'Timbri & adesivi', hint: 'striscia di nastro strappata a mano: carta washi, telato o trasparente',
+  piece: true,
+  params: [P.sel('kind', 'Nastro', ['Carta crespa', 'Washi a righe', 'Washi a pois', 'Trasparente', 'Telato nero']), { key: 'print', label: 'Stampa', type: 'text', def: 'Artismi Design Studio · Torino' },
+    P.range('len', 'Lunghezza', 40, 100, 78), P.range('angle', 'Rotazione', -45, 45, -12), P.tone(4), P.grain(10)],
+  render: o => {
+    const t = tone(o), S = SS(o), kind = num(o, 'kind')
+    const len = S * 0.9 * num(o, 'len') / 100, wid = S * 0.16, ang = num(o, 'angle') * Math.PI / 180
+    const m = tapeStrip(o.W, o.H, o.W / 2, o.H / 2, len, wid, ang, o.seed)
+    const base = ['#e9dcb8', '#f4efe4', '#f4efe4', '#ffffff', '#1c1c1e'][kind]
+    const alpha = [0.86, 0.9, 0.9, 0.32, 0.95][kind]
+    const pat = makeCanvas(o.W, o.H)
+    const p = pat.ctx
+    p.fillStyle = base; p.fillRect(0, 0, o.W, o.H)
+    p.save(); p.translate(o.W / 2, o.H / 2); p.rotate(ang)
+    if (kind === 1) { p.fillStyle = t.acc; for (let x = -len; x < len; x += wid * 0.32) { p.save(); p.translate(x, 0); p.rotate(Math.PI / 4); p.fillRect(-wid * 0.06, -wid, wid * 0.12, wid * 2); p.restore() } }
+    if (kind === 2) { p.fillStyle = t.acc; for (let x = -len; x < len; x += wid * 0.3) for (let y = -wid; y < wid; y += wid * 0.3) { p.beginPath(); p.arc(x + ((Math.round(y / (wid * 0.3)) & 1) * wid * 0.15), y, wid * 0.05, 0, Math.PI * 2); p.fill() } }
+    if (kind === 0 || kind === 4) {
+      // fibre e crespe: righe sottili lungo il nastro
+      const r = rng(o.seed + 4)
+      for (let i = 0; i < 160; i++) { p.globalAlpha = 0.05 + r() * 0.07; p.fillStyle = kind === 4 ? '#ffffff' : '#7a6440'; p.fillRect(-len, -wid / 2 + r() * wid, len * 2, Math.max(0.6, S * 0.0008)) }
+      p.globalAlpha = 1
+    }
+    const pr = str(o, 'print')
+    if (pr && kind !== 3) {
+      p.fillStyle = kind === 4 ? '#f2efe6' : t.ink; p.globalAlpha = 0.85
+      const fs = wid * 0.2
+      p.font = fontCss(FACES.mono, fs); p.textAlign = 'left'
+      const tw = p.measureText(pr.toUpperCase() + '   ').width
+      for (let x = -len; x < len; x += tw) p.fillText(pr.toUpperCase(), x, fs * 0.36)
+    }
+    p.restore()
+    // grinze: due pieghe in diagonale, una chiara e una scura
+    const tape = makeCanvas(o.W, o.H)
+    tape.ctx.drawImage(pat.c, 0, 0)
+    tape.ctx.save(); tape.ctx.translate(o.W / 2, o.H / 2); tape.ctx.rotate(ang)
+    const r2 = rng(o.seed + 8)
+    for (let i = 0; i < 3; i++) {
+      const x = (r2() - 0.5) * len * 0.8, g = tape.ctx.createLinearGradient(x - wid * 0.1, 0, x + wid * 0.1, 0)
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.45, 'rgba(0,0,0,0.12)'); g.addColorStop(0.55, 'rgba(255,255,255,0.22)'); g.addColorStop(1, 'rgba(255,255,255,0)')
+      tape.ctx.fillStyle = g; tape.ctx.save(); tape.ctx.translate(x, 0); tape.ctx.rotate((r2() - 0.5) * 0.6); tape.ctx.fillRect(-wid * 0.1, -wid, wid * 0.2, wid * 2); tape.ctx.restore()
+    }
+    tape.ctx.restore()
+    tape.ctx.globalCompositeOperation = 'destination-in'
+    tape.ctx.drawImage(maskToCanvas(m, '#000000'), 0, 0)
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, m, S, kind === 3 ? 0.12 : 0.2, 0.25)
+    ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(tape.c, 0, 0); ctx.restore()
+    return finish(c, o, t, 'nastro', null)
+  },
+}
+
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
-  timbro, adesivo,
+  timbro, adesivo, ceralacca, toppa, biglietto, nastro,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
 
