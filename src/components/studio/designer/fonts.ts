@@ -11,9 +11,17 @@ const timeout = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<
 
 const sheets = new Map<string, Promise<void>>()
 
+/** Varianti richieste per una famiglia: [corsivo 0/1, peso], in ordine come vuole Google Fonts. */
+type Variant = [0 | 1, number]
+const key = (vs: Variant[]) => [...new Set(vs.map(v => v.join(',')))].sort((a, b) => (a < b ? -1 : 1))
+
 /** Aggiunge il foglio di Google Fonts e aspetta che sia arrivato (prima i @font-face non esistono). */
-function sheet(family: string, weights: number[]): Promise<void> {
-  const href = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, '+')}:wght@${[...new Set(weights)].sort((a, b) => a - b).join(';')}&display=swap`
+function sheet(family: string, vs: Variant[]): Promise<void> {
+  const tuples = key(vs).map(t => t.split(',').map(Number) as Variant).sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  const axis = tuples.some(t => t[0])
+    ? `ital,wght@${tuples.map(t => `${t[0]},${t[1]}`).join(';')}`
+    : `wght@${tuples.map(t => t[1]).join(';')}`
+  const href = `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, '+')}:${axis}&display=swap`
   if (!sheets.has(href)) {
     sheets.set(href, new Promise<void>(resolve => {
       const link = document.createElement('link')
@@ -27,24 +35,25 @@ function sheet(family: string, weights: number[]): Promise<void> {
   return sheets.get(href)!
 }
 
-async function ready(family: string, weight: number) {
+async function ready(family: string, [ital, weight]: Variant) {
   for (let i = 0; i < 30; i++) {
-    try { await document.fonts.load(`${weight} 40px "${family}"`, 'AaÈè0') } catch { /* riprova */ }
-    if ([...document.fonts].some(f => f.family.replace(/["']/g, '') === family && f.status === 'loaded')) return
+    try { await document.fonts.load(`${ital ? 'italic ' : ''}${weight} 40px "${family}"`, 'AaÈè0') } catch { /* riprova */ }
+    if ([...document.fonts].some(f => f.family.replace(/["']/g, '') === family && f.status === 'loaded' && (f.style === 'italic') === !!ital)) return
     await new Promise(r => setTimeout(r, 120))
   }
 }
 
 export async function loadFonts(specs: FontSpec[]) {
   if (typeof document === 'undefined') return
-  const byFamily = new Map<string, number[]>()
-  for (const f of specs) byFamily.set(f.family, [...(byFamily.get(f.family) ?? []), f.weight])
-  await Promise.all([...byFamily].map(([family, weights]) => {
-    const key = `${family}|${[...new Set(weights)].sort().join(',')}`
-    if (!loaded.has(key)) {
-      loaded.set(key, timeout(sheet(family, weights).then(() => Promise.all([...new Set(weights)].map(w => ready(family, w)))).then(() => undefined), 10000))
+  const byFamily = new Map<string, Variant[]>()
+  for (const f of specs) byFamily.set(f.family, [...(byFamily.get(f.family) ?? []), [f.italic ? 1 : 0, f.weight]])
+  await Promise.all([...byFamily].map(([family, vs]) => {
+    const k = `${family}|${key(vs).join(';')}`
+    if (!loaded.has(k)) {
+      const uniq = key(vs).map(t => t.split(',').map(Number) as Variant)
+      loaded.set(k, timeout(sheet(family, uniq).then(() => Promise.all(uniq.map(v => ready(family, v)))).then(() => undefined), 10000))
     }
-    return loaded.get(key)!
+    return loaded.get(k)!
   }))
 }
 

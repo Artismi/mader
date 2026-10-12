@@ -150,6 +150,20 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
         lineHeight: el.lineHeight / 1.13, charSpacing: el.tracking * 1000,
         stroke: el.stroke, strokeWidth: el.stroke ? (el.sw ?? 2) * k : 0, paintFirst: el.hollow ? 'fill' : 'stroke', strokeLineJoin: 'round',
       })
+      // stili per lettera: colore, saltello (deltaY), corsivo
+      if (el.chars?.length) {
+        const styles: Record<number, Record<number, Record<string, unknown>>> = {}
+        el.chars.forEach((line, li) => line.forEach((ch, ci) => {
+          if (!ch) return
+          const st: Record<string, unknown> = {}
+          if (ch.c) st.fill = ch.c
+          if (ch.dy) st.deltaY = ch.dy * el.size * k
+          if (ch.it) st.fontStyle = 'italic'
+          ;(styles[li] ??= {})[ci] = st
+        }))
+        t.set('styles', styles)
+        t.initDimensions()
+      }
       const tw = t.width ?? 0
       // allineamento dentro la colonna, poi rotazione attorno all'angolo del box (come nel motore)
       const dx = el.align === 'left' ? 0 : el.align === 'right' ? el.w - tw / k : (el.w - tw / k) / 2
@@ -215,6 +229,11 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       const sx = { ...el, x: el.x * k, y: el.y * k, w: el.w * k, h: el.h * k }
       o = await imageObj({ ...sx, view: el.view && { x: el.view.x * k, y: el.view.y * k, w: el.view.w * k, h: el.view.h * k } }, OX + sx.x, OY + sx.y)
       if (el.clipText) o.clipPath = textClip(el.clipText, k, OX, OY)
+      else if (el.mask) {
+        const mp = new fabric.Path(el.mask, { absolutePositioned: true, originX: 'left', originY: 'top' })
+        mp.set({ scaleX: k, scaleY: k, left: (mp.pathOffset.x - mp.width / 2) * k + OX, top: (mp.pathOffset.y - mp.height / 2) * k + OY })
+        o.clipPath = mp
+      }
       // look pellicola e regolazioni del motore effetti
       if (el.url && (el.look || el.adjust)) {
         const im = o as Obj

@@ -60,6 +60,8 @@ export type SceneEl =
       stroke?: string; sw?: number; hollow?: boolean
       /** testo decorativo (ripetizioni, scritte che escono dalla tavola): fuori dai controlli */
       deco?: boolean
+      /** stili per lettera, riga per riga: colore, spostamento verticale (in em), corsivo */
+      chars?: ({ c?: string; dy?: number; it?: boolean } | null)[][]
     } & Look)
   /** testo che gira su un cerchio; `full` distribuisce il testo su tutto il giro */
   | ({ kind: 'arcText'; name: string; cx: number; cy: number; r: number; text: string; font: FontSpec; size: number; color: string; start?: number; full?: boolean; tracking?: number } & Look)
@@ -69,6 +71,8 @@ export type SceneEl =
       look?: string; adjust?: Record<string, number>
       /** la foto è adattata a questo riquadro e poi ritagliata sull'elemento (strisce, celle della stessa foto) */
       view?: { x: number; y: number; w: number; h: number }
+      /** maschera libera (tracciato SVG in coordinate della tavola): blob, forme morbide */
+      mask?: string
       /** la foto si vede solo dentro queste lettere (coordinate della tavola) */
       clipText?: { lines: string[]; font: FontSpec; size: number; x: number; y: number; lineHeight: number; tracking: number }
     } & Look)

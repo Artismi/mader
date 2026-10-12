@@ -5,7 +5,7 @@
  * solo questi: la composizione la costruisce il sistema.
  */
 
-export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio'
+export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista'
 export type Trattamento = 'pellicola' | 'duotone' | 'retino' | 'riso' | 'serigrafia' | 'bn' | 'poster'
 
 export interface Knobs {
@@ -40,6 +40,9 @@ export const SISTEMI: SistemaInfo[] = [
   { id: 'riso', nome: 'Risograph', idea: 'forme piene in due inchiostri che si sovrappongono fuori registro, foto in riso, campo di puntini sfumato, carta granulosa', foto: 'meglio' },
   { id: 'modulare', nome: 'Griglia modulare', idea: 'griglia svizzera a moduli: la foto si vede solo in alcune celle, celle di colore, numero gigante, dettagli numerati nelle celle', foto: 'meglio' },
   { id: 'orbita', nome: 'Orbita', idea: 'anelli di testo che girano attorno alla foto tonda, fondo sfumato generativo, stelle del set Celestial', foto: 'meglio' },
+  { id: 'giocoso', nome: 'Giocoso', idea: 'blob morbidi, foto in una forma con contorno spesso e ombra piena, titolo che saltella in più colori, adesivo, stelline e coriandoli', foto: 'meglio' },
+  { id: 'decostruito', nome: 'Decostruito', idea: 'le parole del titolo sparse sulla griglia con forti scarti di scala, striscia di foto retinata, filetti tecnici, segno a mano attorno alla parola chiave', foto: 'meglio' },
+  { id: 'rivista', nome: 'Rivista', idea: 'testata come il nome di una rivista, foto grande, titolo con la parola chiave in corsivo, capolettera, folio', foto: 'meglio' },
   { id: 'ritaglio', nome: 'Foto nelle lettere', idea: 'la parola chiave enorme con la foto dentro le lettere, contorno fuori registro dietro, titolo completo sotto', foto: 'serve' },
 ]
 

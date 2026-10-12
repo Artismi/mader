@@ -5,20 +5,19 @@
  * vengono dai testi veri, mai da coordinate inventate.
  */
 import type { Scene } from '../types'
-import type { SistemaId } from './knobs'
 import {
   type G, put, U, txt, lab, para, display, putLab, putPara, putDisplay, infoBlock, photo, treat, printMarks, regMark, ticker,
-  dotField, finish, keyword, stackLines, sizeForWidth, detailsLine, ctaText, mix, alpha, readable, darker, lighter, words, up, lum,
+  dotField, finish, keyword, stackLines, accentChars, sizeForWidth, detailsLine, ctaText, mix, alpha, readable, darker, lighter, words, up, lum,
 } from './tools'
 import { lineWidth } from '../text'
 
-const ink = (g: G) => ({ fg: g.P.fg, sec: g.P.sec, acc: readable(g.P.bg, [g.P.acc, g.P.fg], 3) })
+export const ink = (g: G) => ({ fg: g.P.fg, sec: g.P.sec, acc: readable(g.P.bg, [g.P.acc, g.P.fg], 3) })
 /** Sovrastampa che funziona sul fondo: moltiplica sul chiaro, schiarisce sul buio. */
-const over = (g: G, under = g.P.bg): GlobalCompositeOperation => (lum(under) < 0.18 ? 'screen' : 'multiply')
+export const over = (g: G, under = g.P.bg): GlobalCompositeOperation => (lum(under) < 0.18 ? 'screen' : 'multiply')
 
 /* ═══ 1. Tipo gigante ═══════════════════════════════════════════════════ */
 /** Pila tipografica col carattere da manifesto: righe a tutta larghezza (bastoni) o di corpo uguale (graziati). */
-function stack(g: G, text: string, w: number, maxH: number, maxLines: number) {
+export function stack(g: G, text: string, w: number, maxH: number, maxLines: number) {
   const { s } = g
   const font = s.impact, tr = s.impactSans ? -0.01 : -0.015
   const lines = stackLines(up(text, true), maxLines)
@@ -31,11 +30,15 @@ function stack(g: G, text: string, w: number, maxH: number, maxLines: number) {
   return { lines, sizes, lead, font, tr, h: total(sizes), w: Math.max(...lines.map((l, i) => lineWidth(l, font, sizes[i], tr))) }
 }
 
-function putStack(g: G, st: ReturnType<typeof stack>, x: number, y: number, color: string, accent: string, align: 'left' | 'center' = 'left', boxW = st.w) {
+export function putStack(g: G, st: ReturnType<typeof stack>, x: number, y: number, color: string, accent: string, align: 'left' | 'center' = 'left', boxW = st.w) {
   const key = keyword(g).toUpperCase()
   let yy = y
   st.lines.forEach((l, i) => {
-    txt(g, { name: `titolo#${i}`, lines: [l], font: st.font, size: st.sizes[i], x, y: yy, w: boxW, align, color: l.includes(key) ? accent : color, tracking: st.tr, leading: 1 })
+    // accento del registro: saltello su tutte le righe, corsivo se il carattere da manifesto è il titolo, altrimenti la riga chiave in colore
+    const chars = g.s.accento === 'saltello' ? accentChars(g, [l], color)
+      : g.s.accento === 'corsivo' && st.font.family === g.s.display.family && l.includes(key) ? accentChars(g, [l], color) : undefined
+    const lineColor = !chars && l.includes(key) ? accent : color
+    txt(g, { name: `titolo#${i}`, lines: [l], font: st.font, size: st.sizes[i], x, y: yy, w: boxW, align, color: lineColor, tracking: st.tr, leading: 1, chars })
     yy += st.sizes[i] * st.lead
   })
   return y + st.h
@@ -616,4 +619,4 @@ export function ritaglio(g: G): Scene | null {
   return finish(g, 'ritaglio', 'Foto nelle lettere')
 }
 
-export const SYSTEMS: Record<SistemaId, (g: G) => Scene | null> = { supertipo, eco, strisce, costruttivo, riso, modulare, orbita, ritaglio }
+export const SYSTEMS_BASE = { supertipo, eco, strisce, costruttivo, riso, modulare, orbita, ritaglio }

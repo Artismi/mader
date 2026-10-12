@@ -11,6 +11,7 @@ import { type Knobs, type Rng, rng, hashText } from './knobs'
 import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { opticalLeft, topForCaps } from '../core/metriche'
+import { bounce, emphasize } from './forme'
 
 export interface Pal { bg: string; fg: string; acc: string; acc2: string; sec: string; srf: string; dark: boolean }
 
@@ -83,6 +84,7 @@ export interface TextOpts {
   align?: 'left' | 'center' | 'right'; w?: number; leading?: number; tracking?: number; angle?: number
   hollow?: boolean; stroke?: string; sw?: number; deco?: boolean
   blend?: GlobalCompositeOperation; opacity?: number; fx?: FxSpec[]
+  chars?: Extract<SceneEl, { kind: 'text' }>['chars']
 }
 
 /** Testo misurato (righe già decise). */
@@ -93,7 +95,7 @@ export function txt(g: G, o: TextOpts) {
     kind: 'text', name: o.name, x: o.x, y: o.y, w: o.w ?? tw, h: blockHeight(o.size, o.lines.length, leading), tw,
     lines: o.lines, font: o.font, size: o.size, color: o.color, align: o.align ?? 'left', lineHeight: leading, tracking,
     angle: o.angle, hollow: o.hollow, stroke: o.stroke ?? (o.hollow ? o.color : undefined), sw: o.sw, deco: o.deco,
-    blend: o.blend, opacity: o.opacity, fx: o.fx,
+    blend: o.blend, opacity: o.opacity, fx: o.fx, chars: o.chars,
   })
 }
 
@@ -139,7 +141,26 @@ export const putDisplay = (g: G, name: string, f: Fit, x: number, y: number, col
   const { caps, ...rest } = extra
   const yy = caps ? topForCaps(y, g.s.display, f.size, leading) : y
   const xx = align === 'left' && !rest.angle ? x + opticalLeft(f.lines[0], g.s.display, f.size) : x
-  return txt(g, { name, lines: f.lines, font: g.s.display, size: f.size, x: xx, y: yy, color, align, w, leading, tracking: f.tracking ?? g.s.displayTracking, ...rest })
+  // il titolo prende l'accento del registro sulla parola chiave
+  const chars = rest.chars ?? (name.startsWith('titolo') ? accentChars(g, f.lines, color) : undefined)
+  return txt(g, { name, lines: f.lines, font: g.s.display, size: f.size, x: xx, y: yy, color, align, w, leading, tracking: f.tracking ?? g.s.displayTracking, ...rest, chars })
+}
+
+/**
+ * Accento del registro sul titolo: lettere che saltellano in più colori
+ * (infantile), parola chiave in corsivo (editoriale, lusso, artigianale) o
+ * nel colore d'accento (gli altri). I colori devono leggersi sul fondo.
+ */
+export function accentChars(g: G, lines: string[], base: string, bg = g.P.bg) {
+  const { s, P } = g
+  if (s.accento === 'saltello') {
+    const cols = [P.acc, base, P.acc2].filter(c => contrast(c, bg) >= 2.4)
+    return bounce(lines, cols.length > 1 ? cols : [base], 0.05, g.k.seme % 3)
+  }
+  const key = keyword(g)
+  if (s.accento === 'corsivo') return emphasize(lines, key, { italic: true })
+  const acc = readable(bg, [P.acc, P.acc2], 2.4)
+  return contrast(acc, bg) >= 2.4 && acc !== base ? emphasize(lines, key, { color: acc }) : undefined
 }
 
 export const detailsLine = (c: DesignContent) => (c.details ?? []).map(d => d.trim()).filter(Boolean).join('  ·  ')
