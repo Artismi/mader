@@ -637,7 +637,6 @@ const CATS = {
       return [stipple(shade(g, { light: -90, edge: 2.4, base: 0.03, side: 0.8 }), { step: 0.62, r: 0.4, seed: 8 })] })(),
     'Sparkle Stipple':  (() => { const g = sparkle(50, 50, 32, 46, { pinch: 0.1 })
       return [sparkleLine(50, 50, 32, 46, 0.9, { pinch: 0.1 }), stipple(shade(g, { inset: 2.2, edge: 7, base: 0.05, side: 1 }), { seed: 2 })] })(),
-      return [g, stipple(glow(g, 22, 0.75), { seed: 6 })] })(),
     'Burst Glow':       (() => { const g = burst(50, 50, 46, { alt: 0.55 })
       return [g, stipple((x, y) => { const d = Math.hypot(x - 50, y - 50); return sdGeom([x, y], g) < 1.6 ? 0 : 0.7 * Math.pow(clamp01(1 - d / 26), 1.6) }, { seed: 3 })] })(),
     'Moon Stipple':     (() => { const g = crescentInside(50, 50, 42, { phase: 0.45, dir: -20 })
