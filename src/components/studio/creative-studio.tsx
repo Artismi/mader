@@ -294,7 +294,9 @@ import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
 import { normalizeBoards } from '@/lib/design/compose-normalize'
 import { resolvePhoto } from './ai/photos'
 import { applyFinish } from './ai/finish'
-import { TemplatePanel } from './templates/TemplatePanel'
+import { DesignPanel } from './designer/DesignPanel'
+import { renderScene } from './designer/render'
+import type { Scene as DesignScene } from './designer/types'
 import { buildVisual, type VisualSpec } from './ai/visual'
 import { isCropping, startCrop } from './image/crop'
 
@@ -2346,6 +2348,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
 
   /** Adatta la vista alle tavole (Ctrl+0 o clic sulla percentuale) */
+  /** Template del motore designer: una tavola nuova accanto alle altre, con la scena disegnata. */
+  async function placeDesign(sc: DesignScene) {
+    const canvas = fabricRef.current; if (!canvas) return
+    let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
+    x = Number.isFinite(x) ? x + 160 : 100
+    const title = sc.els.find(e => e.kind === 'text' && e.name === 'titolo') as Extract<DesignScene['els'][number], { kind: 'text' }> | undefined
+    const label = title ? title.lines.join(' ').slice(0, 32) : sc.label
+    const name = addArtboard(sc.w, sc.h, label, 'social', x + sc.w / 2, 100 + sc.h / 2)
+    const ab = canvas.getObjects().find(o => o.get('name') === name)
+    if (!ab) return
+    const slug = label.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'tavola'
+    await renderScene(canvas, ab, sc, slug)
+    fitToArtboards()
+    pushSnapshot()
+  }
+
   function fitToArtboards() {
     const canvas = fabricRef.current; if (!canvas) return
     const abs = canvas.getObjects().filter(o => (o as any).isArtboard)
@@ -4294,8 +4312,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {canvasReady && <ArrangeBar canvas={fabricRef.current} />}
           {showTemplates && (
             <div className="absolute right-4 top-4 z-[70]">
-              <TemplatePanel onClose={() => setShowTemplates(false)}
-                onApply={b => { handleAICommand({ toolName: 'composeDesign', args: { boards: [b], variants: 1 } }) }} />
+              <DesignPanel onClose={() => setShowTemplates(false)} onApply={placeDesign} />
             </div>
           )}
 
