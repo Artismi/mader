@@ -12,7 +12,7 @@ import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, 
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
-import { drawWing, gridPaper, mapWing, organism, penLine, wingBox, wingTree, type Hand, type Space, type WingGeom } from './notebook'
+import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
 
@@ -257,14 +257,23 @@ const quaderno: Recipe = {
       fit(0.86)
     } else if (lay === 2) {
       // corona: un anello da cui le ali partono tangenti e si avvitano tutte nello stesso verso
-      const space: Space = { polys: [] }
-      const R0 = S * range(r, 0.07, 0.11), cnt = 3 + Math.floor(r() * 3), rot = r() * Math.PI * 2
+      const space: Space = { polys: [] }, mains: { g: WingGeom; L: number }[] = []
+      // corona: un anello da cui le ali partono tangenti e si avvitano nello stesso verso.
+      // Ogni ala deve trovare il suo spicchio: se cadrebbe sulle precedenti si accorcia.
+      const R0 = S * range(r, 0.08, 0.11), cnt = 3 + Math.floor(r() * 2), rot = r() * Math.PI * 2
       for (let i = 0; i < cnt; i++) {
-        const a = rot + i * Math.PI * 2 / cnt
-        wings.push(...wingTree(r, Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - range(r, 0.3, 0.6), S * range(r, 0.4, 0.5), opts(range(r, 0.16, 0.22)), branch, 2, space))
+        const a = rot + i * Math.PI * 2 / cnt, sd = Math.floor(r() * 1e6)
+        for (const k of [1, 0.8, 0.62]) {
+          const g = wingGeom(rng(sd), Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - 0.45, S * 0.46 * k, opts(0.19))
+          if (k > 0.62 && wingOverlap(g.poly, space) > 0.12) continue
+          space.polys.push(g.poly); mains.push({ g, L: S * 0.46 * k }); break
+        }
       }
+      // prima tutte le ali principali, poi le figlie nello spazio rimasto
+      wings.push(...mains.map(m => m.g))
+      for (const m of mains) wings.push(...growWing(r, m.g, m.L, opts(0.19), branch, 2, space))
       const ring = (rr: number) => { const q: Pt[] = []; for (let j = 0; j <= 120; j++) { const a = j / 120 * Math.PI * 2; q.push([Math.cos(a) * rr, Math.sin(a) * rr]) } return q }
-      lines.push(ring(R0), ring(R0 * range(r, 0.55, 0.75)))
+      lines.push(ring(R0 * 0.92))
       fit(0.84)
     } else {
       const org = organism(r, 0, 0, S * 1.3, S, opts(0.2), branch, num(o, 'pairs'))
