@@ -260,13 +260,17 @@ const paperRun = (id: string): Run => (c, cur, p, amt) => {
   try { r = fn(src, p, c.t) } catch (e) { console.warn('[paper]', e); return cur }
   if (!r) return cur        // sagoma o risorsa ancora in preparazione: si ridisegna appena pronta
   const t = c.g.upload(r.out, c.W, c.H)
-  const out = c.g.pass('paperMix', PAPER_MIX, c.W, c.H, std(c, cur, amt, { uP: t, uMask: r.mask === 'none' ? 0 : 1, uM: cur, uSoft: 0 }))
-  c.g.release(t)
+  // alone morbido: la forma allargata e sfumata, così niente bordi del riquadro
+  const soft = r.mask === 'soft' ? c.g.blur(c.mask(-14 * c.z), 18 * c.z) : null
+  const out = c.g.pass('paperMix', PAPER_MIX, c.W, c.H, std(c, cur, amt, { uP: t, uMask: r.mask === 'none' ? 0 : 1, uM: soft ?? cur, uSoft: soft ? 1 : 0 }))
+  c.g.release(t, soft)
   return out
 }
 
 const RUN: Partial<Record<string, Run>> = {
-  mezzetinteCmyk: paperRun('mezzetinteCmyk'), retinoPunti: paperRun('retinoPunti'), cartaPaper: paperRun('cartaPaper'), acqua: paperRun('acqua'),
+  metalloLiquido: paperRun('metalloLiquido'), mappaTermica: paperRun('mappaTermica'), fumoGemma: paperRun('fumoGemma'),
+  mezzetinteCmyk: paperRun('mezzetinteCmyk'), retinoPunti: paperRun('retinoPunti'), ditheringPaper: paperRun('ditheringPaper'),
+  cartaPaper: paperRun('cartaPaper'), vetroPaper: paperRun('vetroPaper'), acqua: paperRun('acqua'),
   dropShadow: (c, cur, p) => {
     const m = c.mask(-num(p.spread) * c.z)
     const b = num(p.size, 20) > 0 ? c.g.blur(m, num(p.size, 20) * c.z) : m
