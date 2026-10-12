@@ -448,32 +448,66 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
     added++
   }
   const w = R * 0.011 * o.line
-  // unione morbida (smooth-min esponenziale) di tutti i contorni: dove due linee si
-  // avvicinano l'inchiostro si gonfia in un menisco curvo e si richiude ad ago lungo
-  // ciascuna linea. Copertura calcolata al sub-pixel: bordi netti, niente tremolio.
-  const k = g * 0.16
-  const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
-  const x0 = Math.max(0, Math.floor(cx - R * 1.2)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.2))
-  const y0 = Math.max(0, Math.floor(cy - R * 1.2)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.2))
-  const F = new Float32Array(W * H).fill(1e9)
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    let dmin = Infinity
-    const ds: number[] = []
-    for (const c of circles) { const ad = Math.abs(Math.hypot(x - c.x, y - c.y) - c.r); ds.push(ad); if (ad < dmin) dmin = ad }
-    if (dmin > k * 8 + w) continue
-    let sum = 0
-    for (const d of ds) sum += Math.exp(-(d - dmin) / k)
-    F[y * W + x] = dmin - k * Math.log(sum) - w / 2
+  // inchiostro semimagnetico: in ogni giunzione (contatto o incrocio di due contorni)
+  // l'inchiostro si raccoglie e si allunga lungo le due linee, nei due versi, in punte
+  // affusolate come un ferrofluido. Su ogni cerchio si registra dove sono le sue giunzioni.
+  type Spike = { a: number; W0: number; L: number }
+  const spikes: Spike[][] = circles.map(() => [])
+  const angOf = (c: { x: number; y: number }, p: Pt) => Math.atan2(p[1] - c.y, p[0] - c.x)
+  for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) {
+    const A = circles[i], B = circles[j], d = Math.hypot(B.x - A.x, B.y - A.y)
+    const small = Math.min(A.r, B.r)
+    let pts: Pt[] = []
+    const gapOut = d - A.r - B.r, gapIn = Math.max(A.r, B.r) - (d + small)
+    if (Math.abs(gapOut) < g * 0.9) {
+      // quasi tangenti all'esterno: un punto di contatto
+      const t = (A.r + gapOut / 2) / d
+      pts = [[A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t]]
+    } else if (gapIn >= 0 && gapIn < g * 0.9) {
+      // annidata e quasi tangente all'interno
+      const big = A.r > B.r ? A : B, sm = big === A ? B : A, ux = (sm.x - big.x) / (d || 1), uy = (sm.y - big.y) / (d || 1)
+      pts = [[big.x + ux * (big.r - gapIn / 2), big.y + uy * (big.r - gapIn / 2)]]
+    } else pts = intersect({ ...A, big: true }, { ...B, big: true })
+    for (const p of pts) {
+      const hv = r()
+      const L = small * range(r, 0.4, 0.85) * o.gap          // lunghezza dei bracci
+      const W0 = Math.min(small * 0.42, g * range(r, 2.2, 3.6))  // spessore alla giunzione
+      spikes[i].push({ a: angOf(A, p), W0, L: L * (hv < 0.5 ? 1 : 0.7) })
+      spikes[j].push({ a: angOf(B, p), W0, L: L * (hv < 0.5 ? 0.7 : 1) })
+    }
   }
-  // bordo netto: la distanza "morbida" si normalizza con il suo gradiente
-  for (let y = Math.max(1, y0); y < Math.min(H - 1, y1); y++) for (let x = Math.max(1, x0); x < Math.min(W - 1, x1); x++) {
-    const i = y * W + x, f = F[i]
-    if (f > 3) continue
-    const gx = (F[i + 1] - F[i - 1]) / 2, gy = (F[i + W] - F[i - W]) / 2
-    const gl = Math.hypot(gx, gy)
-    const fn = gl > 0.05 && gl < 1e3 ? f / gl : f
-    const cov = Math.max(0, Math.min(1, 0.5 - fn))
-    if (cov > 0) m.a[i] = cov * 255
+  // l'inchiostro vive solo nello spazio stretto tra due contorni: in ogni giunzione la
+  // soglia su (dA + dB) è massima e decresce allontanandosi, così il nero si affusola
+  // lungo il canale e negli incroci riempie solo le punte acute. L'interno delle bolle
+  // resta tondo e bianco.
+  type Junc = { p: Pt; A: number; B: number; W: number; L: number }
+  const juncs: Junc[] = []
+  for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) {
+    const A = circles[i], B = circles[j], d = Math.hypot(B.x - A.x, B.y - A.y), small = Math.min(A.r, B.r)
+    const gapOut = d - A.r - B.r, gapIn = Math.max(A.r, B.r) - (d + small)
+    let pts: Pt[] = []
+    if (Math.abs(gapOut) < g * 0.9) { const t = (A.r + gapOut / 2) / d; pts = [[A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t]] }
+    else if (gapIn >= 0 && gapIn < g * 0.9) { const big = A.r > B.r ? A : B, sm = big === A ? B : A, ux = (sm.x - big.x) / (d || 1), uy = (sm.y - big.y) / (d || 1); pts = [[big.x + ux * (big.r - gapIn / 2), big.y + uy * (big.r - gapIn / 2)]] }
+    else pts = intersect({ ...A, big: true }, { ...B, big: true })
+    for (const p of pts) juncs.push({ p, A: i, B: j, W: Math.min(small * 0.45, g * range(r, 2.6, 4)), L: small * range(r, 0.5, 0.9) * o.gap })
+  }
+  const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
+  const x0 = Math.max(0, Math.floor(cx - R * 1.3)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.3))
+  const y0 = Math.max(0, Math.floor(cy - R * 1.3)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.3))
+  const sd = (c: { x: number; y: number; r: number }, x: number, y: number) => Math.abs(Math.hypot(x - c.x, y - c.y) - c.r)
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    let cov = 0
+    for (const c of circles) { const v = 0.5 - (sd(c, x, y) - w / 2); if (v > cov) cov = v }
+    if (cov < 1) for (const J of juncs) {
+      const dp = Math.hypot(x - J.p[0], y - J.p[1])
+      if (dp > J.L) continue
+      const t = dp / J.L
+      // menisco: pieno all'incrocio, poi la soglia scende con fianchi concavi fino all'ago
+      const f = sd(circles[J.A], x, y) + sd(circles[J.B], x, y) - (w + J.W * Math.pow(1 - t, 1.8))
+      const v = 0.5 - f / 1.6
+      if (v > cov) cov = v
+    }
+    if (cov > 0) m.a[y * W + x] = Math.min(1, cov) * 255
   }
   return m
 }
