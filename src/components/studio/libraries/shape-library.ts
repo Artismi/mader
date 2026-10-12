@@ -1,4 +1,5 @@
 import { CELESTIAL_LIBRARY, CELESTIAL_ICONS } from './celestial-library'
+import { ICON_CATEGORIES } from './icon-library'
 
 // Categorie con forme piene (fill invece di tratto): anteprima e inserimento pieni.
 export const FILLED_SHAPE_CATEGORIES = new Set<string>(Object.keys(CELESTIAL_LIBRARY))
@@ -121,3 +122,9 @@ export const ICONS_LIBRARY = [
   { name:'Grid',    path:'M 3 3 H 10 V 10 H 3 Z M 14 3 H 21 V 10 H 14 Z M 3 14 H 10 V 21 H 3 Z M 14 14 H 21 V 21 H 14 Z' },
   ...CELESTIAL_ICONS
 ];
+
+// Icone raggruppate per il pannello: glifi Celestial (pieni) e set a tratto per categoria.
+export const ICON_GROUPS: Record<string, { name: string; path: string }[]> = {
+  'Celestial': CELESTIAL_ICONS,
+  ...ICON_CATEGORIES,
+}

@@ -2,6 +2,7 @@
 // da usare come shapeId) e le regole d'uso. Generato dalla libreria vera, così resta
 // allineato quando le forme cambiano. Solo lato server.
 import { CELESTIAL_LIBRARY } from '@/components/studio/libraries/celestial-library'
+import { ICON_CATEGORIES } from '@/components/studio/libraries/icon-library'
 
 const USO: Record<string, string> = {
   'GLIFI · PIENI': 'accenti decisi: un glifo eroe grande oppure 2-3 piccoli vicino ai testi',
@@ -31,5 +32,10 @@ ${cats}
 4. **Mezzatinta** (forme "Dot …", "Halftone …", "Stella …"): sempre grande e dietro (zIndex 1-2), mai sopra il testo.
 5. **Linea** (\`… Line\`, "Echo …", "Globe", "Lens Grid", "Squares"): allineale a margini e griglia, spessore percepito simile ai filetti tipografici.
 6. **Respiro**: lascia vuoto attorno al titolo; i glifi accompagnano la tipografia, non la coprono. Una leggera rotazione (\`angle\` 8-20°) su un accento rende la composizione meno rigida.
-7. **Coerenza**: in una tavola usa una sola famiglia di trattamento (pieno, linea o mezzatinta), più al massimo un accento di un'altra.`
+7. **Coerenza**: in una tavola usa una sola famiglia di trattamento (pieno, linea o mezzatinta), più al massimo un accento di un'altra.
+
+## ICONE (a tratto, per informazioni pratiche)
+Per inserire un'icona: \`type: "icon"\`, \`iconId\` con il nome esatto, \`w\` = \`h\` (24-40px per testi informativi), \`color\` uguale al testo che accompagna.
+Usale per contatti, orari, indirizzi, social, prezzi e CTA, sempre allineate alla riga di testo a cui si riferiscono. Mai come decorazione grande.
+${Object.entries(ICON_CATEGORIES).map(([c, l]) => `- **${c}**: ${l.map(i => i.name).join(', ')}`).join('\n')}`
 }

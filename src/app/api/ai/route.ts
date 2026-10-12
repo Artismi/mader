@@ -52,7 +52,7 @@ const gradientStopSchema = z.object({
 
 const canvasElementSchema = z.object({
   id: z.string().optional().describe("ID descrittivo unico (es. 'bg_photo', 'headline_main')."),
-  type: z.enum(['text', 'rect', 'circle', 'image', 'path', 'line', 'procedural']),
+  type: z.enum(['text', 'rect', 'circle', 'image', 'path', 'icon', 'line', 'procedural']),
   // Posizione e dimensione
   x: z.number().optional().describe("Coordinata RELATIVA alla tavola (0..width). Per centrare: x = width/2."),
   y: z.number().optional().describe("Coordinata RELATIVA alla tavola (0..height). Per centrare: y = height/2."),
@@ -99,6 +99,7 @@ const canvasElementSchema = z.object({
   // Path / Shape
   shapeId: z.string().optional().describe("Nome esatto di una forma della LIBRERIA GRAFICA (es. 'Sparkle', 'Bloom Line', 'Dot Sparkle', 'Saturn Sparkle'). Usalo con type 'path'."),
   angle: z.number().optional().describe("Rotazione in gradi (es. 12 per un accento inclinato)."),
+  iconId: z.string().optional().describe("Nome di un'icona dell'elenco ICONE (es. 'Phone', 'Map Pin', 'Instagram'). Usalo con type 'icon'."),
   pathData: z.string().optional(),
   scaleX: z.number().optional(),
   scaleY: z.number().optional(),
@@ -979,11 +980,12 @@ DIMENSIONI STANDARD — scegli in base al contenuto:
 
 REGOLA FONDAMENTALE — ogni board DEVE avere OBBLIGATORIAMENTE:
 1) Background rect: { type:"rect", x:0, y:0, w:<boardWidth>, h:<boardHeight>, color:"<hex>", zIndex:0 }
-2) Almeno 4-8 elementi visibili (titolo, sottotitolo, forme decorative, etc.)
+2) Almeno 4-8 elementi visibili (titolo, sottotitolo, forme della libreria grafica, icone dove servono, etc.)
 3) Colori testo sempre contrastanti col background (testo chiaro su sfondo scuro, scuro su chiaro)
 
 TIPI ELEMENTO — usa ESATTAMENTE questi valori stringa:
-"rect" | "text" | "circle" | "image" | "path" | "line" | "procedural"
+"rect" | "text" | "circle" | "image" | "path" | "icon" | "line" | "procedural"
+Forme decorative: "path" + shapeId della LIBRERIA GRAFICA. Icone informative: "icon" + iconId.
 NON usare: "rectangle", "textbox", "shape", "background", "square" — verrebbero ignorati.
 
 FONT SIZE — valori numerici puri (NO "px", NO stringhe con unità):

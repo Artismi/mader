@@ -1,0 +1,12 @@
+{
+"Interfaccia": ["ArrowRight","ArrowLeft","ArrowUp","ArrowDown","ArrowUpRight","ArrowDownRight","MoveRight","CornerDownRight","ChevronRight","ChevronLeft","ChevronDown","ChevronsRight","Check","CheckCheck","X","Plus","Minus","Menu","Ellipsis","Search","SlidersHorizontal","Settings","Info","CircleHelp","CircleAlert","CircleCheck","Lock","LockOpen","Eye","EyeOff","Bell","Download","Upload","Share2","Link","ExternalLink","Copy","Trash2","Pencil","Bookmark","RefreshCw","LayoutGrid","List","QrCode","Power","Maximize2"],
+"Contatti": ["Phone","Mail","MapPin","Map","Globe","AtSign","MessageCircle","MessageSquare","Send","User","Users","UserPlus","Building2","House","Navigation","Clock","Calendar","CalendarDays","CalendarCheck","Contact"],
+"Social": ["Instagram","Facebook","Youtube","Linkedin","Twitter","Github","Dribbble","Figma","Twitch","Slack","Rss","Hash"],
+"Commercio": ["ShoppingCart","ShoppingBag","Tag","Tags","Percent","BadgePercent","CreditCard","Wallet","Receipt","Gift","Package","Truck","Store","Ticket","Euro","Coins","Banknote","Barcode","ScanLine","HandCoins"],
+"Media": ["Play","Pause","Square","SkipForward","SkipBack","Volume2","VolumeX","Mic","Headphones","Music","Camera","Image","Video","Film","Radio","Podcast","Tv","Clapperboard","Aperture","Disc3"],
+"Valutazioni & Enfasi": ["Heart","Star","StarHalf","ThumbsUp","ThumbsDown","Smile","Flame","Sparkles","Sparkle","Award","Trophy","Crown","Zap","Rocket","Target","Flag","Megaphone","Quote","BadgeCheck","Gem"],
+"Cibo & Ospitalità": ["Coffee","Wine","Beer","Martini","UtensilsCrossed","Utensils","ChefHat","CookingPot","Pizza","Croissant","CakeSlice","IceCreamCone","Salad","Soup","Sandwich","Apple","Cherry","Grape","Leaf","Wheat","Sprout","Vegan","Fish","Egg"],
+"Viaggi & Meteo": ["Plane","Car","Bike","TrainFront","Ship","Hotel","Bed","Mountain","TreePine","Palmtree","Tent","Compass","Luggage","Sun","Moon","Cloud","CloudRain","Snowflake","Umbrella","Waves","Thermometer","Wind"],
+"Lavoro & Creatività": ["Briefcase","Palette","PenTool","Brush","PenLine","Scissors","Ruler","Layers","Frame","Crop","Type","Monitor","Smartphone","Laptop","Printer","Lightbulb","BookOpen","GraduationCap","FileText","Folder","Paperclip","ClipboardList","ChartColumn","ChartPie","TrendingUp","Presentation","Handshake","Puzzle"],
+"Servizi & Benessere": ["Dumbbell","HeartPulse","Stethoscope","Pill","Baby","Dog","Cat","PawPrint","Flower2","Shield","ShieldCheck","Accessibility","Recycle","Wifi","ParkingSquare","Cigarette","CigaretteOff","Bath","Shirt","Scissors","Key","Wrench","Hammer","Sofa"]
+}

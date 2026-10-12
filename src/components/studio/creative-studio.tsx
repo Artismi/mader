@@ -31,7 +31,7 @@ import { SpringIntegrator } from '@/lib/motion/spring-physics'
 // Libraries
 import { ALL_FONTS, FONT_CATEGORIES, injectGoogleFont } from './libraries/font-library'
 import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
-import { SHAPE_LIBRARY, ICONS_LIBRARY, FILLED_SHAPE_CATEGORIES, FILLED_ICONS } from './libraries/shape-library'
+import { SHAPE_LIBRARY, ICON_GROUPS, FILLED_SHAPE_CATEGORIES, FILLED_ICONS } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
 import {
   BRUSH_TYPES, createCrayonBrush, createSprayBrush,
@@ -2321,6 +2321,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const SHAPE_NORM: Record<string, string> = {}
       Object.entries(SHAPE_MAP).forEach(([k, v]) => { SHAPE_NORM[normShape(k)] = v })
       const findShape = (id: string) => SHAPE_MAP[id] || SHAPE_NORM[normShape(id)] || ''
+      // Icone a tratto (viewBox 24) richieste per nome
+      const ICON_NORM: Record<string, { path: string; filled: boolean }> = {}
+      Object.entries(ICON_GROUPS).forEach(([cat, items]) => items.forEach(i => { ICON_NORM[normShape(i.name)] ??= { path: i.path, filled: cat === 'Celestial' } }))
 
       const deferredImages: Array<{ artboardName: string; boardW: number; boardH: number; el: any }> = []
 
@@ -2413,6 +2416,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           const elId = el.id || `${b.name}_${el.type}_${index}`
           // Una forma richiesta per nome è sempre un path, anche se l'AI ha scritto rect/circle
           if (el.shapeId && el.type !== 'text' && el.type !== 'image') el.type = 'path'
+          if (el.iconId && el.type !== 'text' && el.type !== 'image') el.type = 'icon'
           if (el.type === 'image' && el.url) {
             deferredImages.push({ artboardName, boardW, boardH, el: { ...el, id: elId } })
             return
@@ -2474,6 +2478,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               obj = p
             } else if (el.shapeId) {
               console.warn(`[createDesignBoards] forma non trovata: "${el.shapeId}"`)
+            }
+          } else if (el.type === 'icon') {
+            const ic = el.iconId ? ICON_NORM[normShape(el.iconId)] : undefined
+            if (ic) {
+              // Icona nel box w×h, proporzioni mantenute; il tratto scala con l'icona (2 = spessore Lucide)
+              const color = resolveColor(el.color || el.stroke || '#ffffff')
+              const p = new fabric.Path(ic.path, ic.filled
+                ? { ...common, fill: color }
+                : { ...common, fill: '', stroke: color, strokeWidth: el.strokeWidth ?? 2, strokeLineCap: 'round', strokeLineJoin: 'round' })
+              const k = Math.min(elW, elH) / 24
+              p.set({ scaleX: k, scaleY: k })
+              if (!el.originX || el.originX === 'left') p.set({ left: common.left + (elW - (p.width || 24) * k) / 2 })
+              if (!el.originY || el.originY === 'top') p.set({ top: common.top + (elH - (p.height || 24) * k) / 2 })
+              obj = p
+            } else if (el.iconId) {
+              console.warn(`[createDesignBoards] icona non trovata: "${el.iconId}"`)
             }
           } else if (el.type === 'line') {
             // x1,y1,x2,y2 sono coordinate relative alla posizione x,y dell'elemento
@@ -5557,16 +5577,28 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
         )}
 
         {tab === 'icons' && (
-          <div className="grid grid-cols-3 gap-2.5">
-            {ICONS_LIBRARY.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(ic => (
-              <button key={ic.name} onClick={() => onIcon(ic.path, FILLED_ICONS.has(ic.name))}
-                className="aspect-square flex flex-col items-center justify-center gap-1.5 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all group">
-                <svg viewBox="0 0 24 24" className="w-8 h-8 drop-shadow-lg">{FILLED_ICONS.has(ic.name)
-                  ? <path d={ic.path} fill="currentColor" className="text-white/40 group-hover:text-white transition-colors" />
-                  : <path d={ic.path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 group-hover:text-white transition-colors" />}</svg>
-                <span className="text-[7px] font-bold uppercase tracking-widest text-white/20 group-hover:text-white/50">{ic.name}</span>
-              </button>
-            ))}
+          <div className="space-y-6">
+            {Object.entries(ICON_GROUPS).map(([cat, items]) => {
+              const shown = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+              if (!shown.length) return null
+              const filled = cat === 'Celestial'
+              return (
+                <div key={cat}>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 ml-1">{cat}</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {shown.map(ic => (
+                      <button key={ic.name} onClick={() => onIcon(ic.path, filled && FILLED_ICONS.has(ic.name))} title={ic.name}
+                        className="aspect-square flex flex-col items-center justify-center gap-1 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all group">
+                        <svg viewBox="0 0 24 24" className="w-7 h-7 drop-shadow-lg">{filled
+                          ? <path d={ic.path} fill="currentColor" className="text-white/40 group-hover:text-white transition-colors" />
+                          : <path d={ic.path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 group-hover:text-white transition-colors" />}</svg>
+                        <span className="text-[6px] font-bold uppercase tracking-widest text-white/20 group-hover:text-white/50 truncate max-w-full px-1">{ic.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
