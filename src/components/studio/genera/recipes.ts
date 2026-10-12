@@ -6,12 +6,13 @@
 import {
   blurMask, combine, dither, drawMask, fbm, fitSize, grain, inkBox, liquid, makeCanvas, maskToCanvas,
   newMask, noise2, polar, range, remap, rng, slices, smoothstep, stretch, text, xerox,
-  type Ctx, type Mask, type Rnd,
+  type Ctx, type Face, type Mask, type Rnd,
 } from './raster'
 import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
+import { burst, dieCut, inkPress, stampPlate, stickerCanvas, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -863,12 +864,108 @@ const simbolo: Recipe = {
   },
 }
 
+// ─── TIMBRI & ADESIVI ────────────────────────────────────────────────────────
+
+const STAMP_INKS = [
+  { label: 'Rosso ufficio', c: '#c4242b' }, { label: 'Blu notaio', c: '#1d3b8f' }, { label: 'Viola', c: '#5a2d82' },
+  { label: 'Nero', c: '#1a1a1a' }, { label: 'Verde', c: '#1f6b3a' }, { label: 'Colore del tono', c: '' },
+]
+
+const timbro: Recipe = {
+  id: 'timbro', label: 'Timbro', cat: 'Timbri & adesivi', hint: 'timbro di gomma: testo sul cerchio, stelline, inchiostro vero con pressione e grana',
+  piece: true,
+  params: [P.sel('kind', 'Forma', ['Cerchio', 'Sigillo dentellato', 'Rettangolo', 'Ovale']), P.text('Approvato', 'Parola'),
+    { key: 'top', label: 'Testo in alto', type: 'text', def: 'Creative OS Studio' }, { key: 'bottom', label: 'Testo in basso', type: 'text', def: 'Milano' },
+    { key: 'small', label: 'Riga piccola', type: 'text', def: 'MMXXVI' },
+    P.sel('ink', 'Inchiostro', STAMP_INKS.map(i => i.label)), P.face('condensato'), P.range('weight', 'Spessore', 50, 180, 100),
+    P.range('wear', 'Consumo', 0, 100, 38), P.range('tilt', 'Pressione storta', 0, 100, 45), P.range('angle', 'Rotazione', -30, 30, -8),
+    P.tog('ghost', 'Doppia battuta', false), P.tone(1), P.grain(15)],
+  render: o => {
+    const t = tone(o), S = SS(o), kind = num(o, 'kind')
+    const ink = STAMP_INKS[num(o, 'ink')]?.c || t.acc
+    const f = face(o)
+    const txt = { top: str(o, 'top'), bottom: str(o, 'bottom'), center: str(o, 'text') || ' ', small: str(o, 'small') }
+    const faces = { ring: FACES.grotesk, center: f, small: FACES.mono }
+    const plate = drawMask(o.W, o.H, ctx => {
+      ctx.translate(o.W / 2, o.H / 2); ctx.rotate(num(o, 'angle') * Math.PI / 180); ctx.translate(-o.W / 2, -o.H / 2)
+      stampPlate(ctx, kind, o.W / 2, o.H / 2, S * 0.92, txt, faces, num(o, 'weight') / 100)
+    })
+    const pressed = inkPress(plate, o.seed, S, num(o, 'wear') / 100, { tilt: num(o, 'tilt') / 100 })
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'ghost')) {
+      // seconda battuta leggera e spostata: il timbro rimbalza
+      const g = inkPress(plate, o.seed + 31, S, 0.75, { tilt: 1 })
+      ctx.save(); ctx.globalAlpha = 0.28; ctx.globalCompositeOperation = o.transparent ? 'source-over' : 'multiply'
+      ctx.drawImage(maskToCanvas(g, ink), S * 0.012, -S * 0.008); ctx.restore()
+    }
+    ctx.save(); if (!o.transparent) ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(maskToCanvas(pressed, ink, 0.94), 0, 0); ctx.restore()
+    return finish(c, o, t, 'timbro', null)
+  },
+}
+
+const adesivo: Recipe = {
+  id: 'adesivo', label: 'Adesivo', cat: 'Timbri & adesivi', hint: 'adesivo fustellato: bordo bianco morbido, ombra, finitura lucida o olografica',
+  piece: true,
+  params: [P.sel('kind', 'Contenuto', ['Parola', 'Simbolo', 'Bollino']), P.text('Fresh|Drop', 'Testo'), P.face('espanso'),
+    P.sel('sym', 'Simbolo', ['Sole', 'Luna', 'Occhio', 'Stella', 'Cuore sacro', 'Pugnale']),
+    P.sel('color', 'Colore', ['Due toni', 'Accento', 'Inchiostro']), P.sel('finish', 'Finitura', ['Lucida', 'Opaca', 'Olografica']),
+    P.range('border', 'Bordo', 20, 200, 100), P.tog('shadow', 'Ombra', true), P.range('angle', 'Rotazione', -20, 20, -5), P.tone(4), P.grain(0)],
+  render: o => {
+    const t = tone(o), S = SS(o), kind = num(o, 'kind'), r = rng(o.seed)
+    const ang = num(o, 'angle') * Math.PI / 180
+    const rot = (ctx: Ctx) => { ctx.translate(o.W / 2, o.H / 2); ctx.rotate(ang); ctx.translate(-o.W / 2, -o.H / 2) }
+    const ls = lines(str(o, 'text')).slice(0, 3)
+    const f: Face = face(o)
+    const cx = o.W / 2, cy = o.H / 2
+    let content: Mask, knock: Mask | null = null
+    if (kind === 1) {
+      content = drawMask(o.W, o.H, ctx => { rot(ctx); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; flash(ctx, num(o, 'sym'), cx, cy, S * 0.8, r, 2.2) })
+    } else if (kind === 2) {
+      const R = S * 0.32
+      content = drawMask(o.W, o.H, ctx => { rot(ctx); burst(ctx, cx, cy, R, 18, 0.86) })
+      knock = drawMask(o.W, o.H, ctx => {
+        rot(ctx)
+        const words = ls.length ? ls : ['NEW']
+        const lh = R * 1.05 / words.length
+        words.forEach((w, i) => { const { ctx: m } = makeCanvas(4, 4); const sz = Math.min(fitSize(m, f.upper ? w.toUpperCase() : w, f, R * 1.3), lh * 0.95); text(ctx, w, cx, cy - (words.length - 1) * lh / 2 + i * lh + sz * 0.36, f, sz, 'center') })
+      })
+    } else {
+      const words = ls.length ? ls : [' ']
+      const { ctx: m } = makeCanvas(4, 4)
+      const sizes = words.map(w => Math.min(fitSize(m, f.upper ? w.toUpperCase() : w, f, S * 0.72), S * 0.3))
+      const gap = 0.92
+      const tot = sizes.reduce((a, b) => a + b * gap, 0)
+      content = drawMask(o.W, o.H, ctx => {
+        rot(ctx)
+        let y = cy - tot / 2
+        words.forEach((w, i) => { y += sizes[i] * gap; text(ctx, w, cx, y - sizes[i] * 0.16, f, sizes[i], 'center') })
+      })
+    }
+    const B = S * 0.028 * num(o, 'border') / 100
+    const cut = dieCut(content, B, S * 0.03)
+    const col = num(o, 'color')
+    const main = col === 2 ? t.ink : t.acc
+    const layers: { mask: Mask; color: string; dx?: number; dy?: number }[] = []
+    // due toni: copia in inchiostro sfalsata dietro, effetto stampa a rilievo
+    if (col === 0) layers.push({ mask: content, color: t.ink, dx: S * 0.006, dy: S * 0.008 })
+    layers.push({ mask: content, color: main })
+    if (knock) layers.push({ mask: knock, color: col === 0 ? t.ink : '#ffffff' })
+    const finishMode = (['lucida', 'opaca', 'olografica'] as Finish[])[num(o, 'finish')] ?? 'lucida'
+    const st = stickerCanvas(cut, layers, S, { paper: '#fbfaf6', finish: finishMode, shadow: on(o, 'shadow'), seed: o.seed })
+    const { c, ctx } = stage(o, t)
+    ctx.drawImage(st, 0, 0)
+    return finish(c, o, t, 'adesivo', null)
+  },
+}
+
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
+  timbro, adesivo,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
 
