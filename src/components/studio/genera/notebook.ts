@@ -14,13 +14,17 @@ export interface WingGeom {
   /** ventre spezzato in smerli: ogni arco sfora oltre la cuspide e incrocia il vicino */
   arcs: Pt[][]
   /** aghi pieni: asse e larghezza alla base */
-  spikes: { pts: Pt[]; w: number }[]
+  spikes: { pts: Pt[]; w: number; cusp?: number }[]
   /** nervature: dalla cuspide dentro la lama, verso il dorso */
   veins: Pt[][]
   /** ripresa interna parallela al dorso, a tratti */
   echo: Pt[][]
   /** sagoma piena (per lo stile pieno) */
   poly: Pt[]
+  /** cuspidi del ventre: punto, direzione d'uscita, spessore locale (per farci crescere altre ali) */
+  cusps: { p: Pt; a: number; w: number }[]
+  /** curvatura: +1 o -1 */
+  side: number
 }
 
 /**
@@ -53,36 +57,52 @@ export function wingGeom(r: Rnd, x: number, y: number, angle: number, L: number,
   // profilo dello smerlo: fianchi ripidi, fondo tondo; oltre la cuspide (u<0, u>1) esce
   // dalla lama, così due smerli vicini si incrociano a X sulla punta
   const biteU = (u: number, d: number) => { const s = Math.sin(Math.PI * u); return d * Math.sign(s) * Math.pow(Math.abs(s), 0.45) }
-  const arcs: Pt[][] = []
   const steps = (dt: number) => Math.max(8, Math.ceil(dt * n))
+  // aghi: nascono dalla cuspide e sono fatti dagli stessi due smerli che vi arrivano,
+  // prolungati fino alla punta. Un solo segno continuo, non un artiglio appoggiato.
+  const spikes: { pts: Pt[]; w: number; cusp?: number }[] = []
+  const cusps: { p: Pt; a: number; w: number }[] = []
+  const edges: ({ before: Pt[]; after: Pt[] } | null)[] = [null]
+  for (let c = 1; c < k; c++) {
+    const t = cuts[c], i = at(t), nv = nrm(i), w = th(t)
+    const out = Math.atan2(nv[1], nv[0]) + side * range(r, 0.7, 1.05)
+    const base = off(t, w)
+    cusps.push({ p: base, a: out, w })
+    if (r() > o.spikes) { edges.push(null); continue }
+    const sp = whip(base[0], base[1], out, w * range(r, 0.55, 1.05), side * 0.2, side * range(r, 1.2, 2.4), 1.6, 1)
+    const w0 = w * range(r, 0.07, 0.1), m = sp.pts.length
+    const A: Pt[] = [], B: Pt[] = []
+    sp.pts.forEach((p, j) => {
+      const s = j / (m - 1), hw = w0 * Math.pow(1 - s, 1.15)
+      const a = sp.angles[j], nx = -Math.sin(a), ny = Math.cos(a)
+      A.push([p[0] + nx * hw, p[1] + ny * hw]); B.push([p[0] - nx * hw, p[1] - ny * hw])
+    })
+    // il fianco che guarda verso la radice continua lo smerlo che arriva da lì
+    const tg: Pt = [Math.cos(angles[i]), Math.sin(angles[i])]
+    const back = (q: Pt[]) => { const p = q[Math.floor(m * 0.2)]; return (p[0] - base[0]) * tg[0] + (p[1] - base[1]) * tg[1] }
+    const [before, after] = back(A) < back(B) ? [A, B] : [B, A]
+    edges.push({ before, after })
+    spikes.push({ pts: sp.pts, w: w0 * 0.7, cusp: c - 1 })
+  }
+  edges.push(null)
+  const arcs: Pt[][] = []
   // radice → prima cuspide e ultima cuspide → punta: ventre pieno
   const plain = (ta: number, tb: number) => { const q: Pt[] = []; const m = steps(tb - ta); for (let j = 0; j <= m; j++) { const t = ta + (tb - ta) * j / m; q.push(off(t, th(t))) } return q }
   arcs.push(plain(0, t0))
   for (let i = 0; i < k; i++) {
-    const ta = cuts[i], tb = cuts[i + 1], e0 = range(r, 0.04, 0.12), e1 = range(r, 0.04, 0.12)
+    const ta = cuts[i], tb = cuts[i + 1], eIn = edges[i], eOut = edges[i + 1]
+    // senza ago, lo smerlo sfora la cuspide e incrocia il vicino
+    const e0 = eIn ? 0 : range(r, 0.04, 0.12), e1 = eOut ? 0 : range(r, 0.04, 0.12)
     const q: Pt[] = [], m = steps(tb - ta)
+    if (eIn) q.push(...[...eIn.after].reverse())
     for (let j = 0; j <= m; j++) {
       const u = -e0 + (1 + e0 + e1) * j / m, t = ta + (tb - ta) * u
       q.push(off(t, th(t) * (1 - biteU(u, depths[i]))))
     }
+    if (eOut) q.push(...eOut.before)
     arcs.push(q)
   }
   arcs.push(plain(t1, 1))
-  // aghi dalle cuspidi, piegati verso la punta
-  const spikes: { pts: Pt[]; w: number }[] = []
-  for (let c = 1; c < k; c++) {
-    if (r() > o.spikes) continue
-    const t = cuts[c], i = at(t), nv = nrm(i), w = th(t)
-    const base = off(t, w * 0.9)
-    const out = Math.atan2(nv[1], nv[0]) + side * range(r, 0.7, 1.05)
-    const sp = whip(base[0], base[1], out, w * range(r, 0.5, 1.0), side * 0.2, side * range(r, 1.2, 2.4), 1.6, 1)
-    spikes.push({ pts: sp.pts, w: w * range(r, 0.08, 0.12) })
-  }
-  if (r() < o.spikes) {
-    const nv = nrm(0), a = angle + Math.PI + side * range(r, 0.2, 0.5)
-    const sp = whip(pts[0][0] + nv[0] * th(0.02), pts[0][1] + nv[1] * th(0.02), a, L * range(r, 0.06, 0.12), 0, -side * 0.8, 2, 1)
-    spikes.push({ pts: sp.pts, w: L * o.width * 0.06 })
-  }
   // nervature: come le dita dell'ala, dalla cuspide piegano verso la punta e muoiono
   // prima del dorso
   const veins: Pt[][] = []
@@ -114,13 +134,21 @@ export function wingGeom(r: Rnd, x: number, y: number, angle: number, L: number,
     if (t > t0 && t < t1) { let c = 0; while (c < k - 1 && t > cuts[c + 1]) c++; b = biteU((t - cuts[c]) / (cuts[c + 1] - cuts[c]), depths[c]) }
     poly.push(off(t, th(t) * (1 - b)))
   }
-  return { back: pts, arcs, spikes, veins, echo, poly }
+  return { back: pts, arcs, spikes, veins, echo, poly, cusps, side }
 }
 
 /** riflette una geometria d'ala (o qualsiasi insieme di punti) con una funzione */
 export function mapWing(g: WingGeom, f: (p: Pt) => Pt): WingGeom {
   const m = (q: Pt[]) => q.map(f)
-  return { back: m(g.back), arcs: g.arcs.map(m), spikes: g.spikes.map(s => ({ pts: m(s.pts), w: s.w })), veins: g.veins.map(m), echo: g.echo.map(m), poly: m(g.poly) }
+  const p0 = f([0, 0]), px = f([1, 0]), py = f([0, 1])
+  // riflessione? allora le direzioni si specchiano e la curvatura cambia verso
+  const det = (px[0] - p0[0]) * (py[1] - p0[1]) - (px[1] - p0[1]) * (py[0] - p0[0])
+  const dirMap = (a: number) => { const q = f([Math.cos(a), Math.sin(a)]); return Math.atan2(q[1] - p0[1], q[0] - p0[0]) }
+  const k = Math.sqrt(Math.abs(det))
+  return {
+    back: m(g.back), arcs: g.arcs.map(m), spikes: g.spikes.map(s => ({ pts: m(s.pts), w: s.w * k, cusp: s.cusp })), veins: g.veins.map(m), echo: g.echo.map(m), poly: m(g.poly),
+    cusps: g.cusps.map(c => ({ p: f(c.p), a: dirMap(c.a), w: c.w * k })), side: det < 0 ? -g.side : g.side,
+  }
 }
 
 export function wingBox(g: WingGeom) {
@@ -198,6 +226,69 @@ export function drawWing(ctx: Ctx, g: WingGeom, h: Hand, filled: boolean) {
   for (const e of g.echo) penLine(ctx, e, h, 0.7)
   // aghi: pieni ma fini, con l'attacco che nasce dalla linea e la punta ricurva
   for (const sp of g.spikes) taper(ctx, sp.pts, needle(sp.w, 0.12, 1.3))
+}
+
+type WingOpts = { width: number; bites: number; depth: number; spikes: number; bend: number; veins: number; echo: number }
+
+/**
+ * Un'ala con le sue figlie: da alcune cuspidi, al posto dell'ago, nasce un'ala più
+ * piccola che parte tangente al ventre e si piega nello stesso verso della madre.
+ * Le linee continuano l'una nell'altra: si legge un solo organismo, non pezzi sparsi.
+ */
+export function wingTree(r: Rnd, x: number, y: number, angle: number, L: number, o: WingOpts, branch: number, depth = 2): WingGeom[] {
+  const g = wingGeom(r, x, y, angle, L, o)
+  const out = [g]
+  if (depth <= 0 || L < 40) return out
+  const grown = new Set<number>()
+  g.cusps.forEach((c, i) => {
+    if (r() > branch) return
+    grown.add(i)
+    // la figlia si avvita al contrario: si stacca dal ventre e si apre nel vuoto
+    const sub = wingTree(r, c.p[0], c.p[1], c.a + g.side * range(r, 0.1, 0.35), L * range(r, 0.32, 0.5), { ...o, width: o.width * range(r, 0.9, 1.15), bites: Math.max(2, o.bites - 1), bend: -Math.sign(o.bend) * range(r, 0.7, 1.0) }, branch * 0.5, depth - 1)
+    out.push(...sub)
+  })
+  g.spikes = g.spikes.filter(s => s.cusp === undefined || !grown.has(s.cusp))
+  return out
+}
+
+/** lama centrale a doppio taglio: due fili che si chiudono in punta d'ago ai due capi */
+export function bladeLines(cx: number, top: number, bottom: number, wmax: number, bulge = 0.42): Pt[][] {
+  const L: Pt[] = [], R: Pt[] = [], n = 200
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, y = top + (bottom - top) * t
+    // pancia alta, punta inferiore lunga: slancio verso il basso
+    const u = t < bulge ? Math.pow(Math.sin(t / bulge * Math.PI / 2), 0.9) : Math.pow(Math.cos((t - bulge) / (1 - bulge) * Math.PI / 2), 1.4)
+    L.push([cx - wmax * u, y]); R.push([cx + wmax * u, y])
+  }
+  return [L, R]
+}
+
+/**
+ * Organismo: una lama verticale da cui germogliano coppie di ali speculari, ognuna
+ * con le sue figlie. Le radici delle ali poggiano sul filo della lama e partono
+ * tangenti, così tutto è un unico oggetto simmetrico.
+ */
+export function organism(r: Rnd, cx: number, top: number, bottom: number, S: number, o: WingOpts, branch: number, pairs: number) {
+  const wmax = S * 0.03
+  const blade = bladeLines(cx, top, bottom, wmax)
+  // filo centrale della lama, solo nella pancia: la nervatura che regge le ali
+  const Hb = bottom - top
+  blade.push(Array.from({ length: 80 }, (_, j): Pt => [cx, top + Hb * (0.08 + 0.6 * j / 79)]))
+  const wings: WingGeom[] = []
+  const Hh = Hb
+  for (let i = 0; i < pairs; i++) {
+    const t = 0.1 + 0.6 * (pairs === 1 ? 0.3 : i / (pairs - 1)) + range(r, -0.04, 0.04)
+    const y = top + Hh * t
+    const u = t < 0.42 ? Math.pow(Math.sin(t / 0.42 * Math.PI / 2), 0.9) : Math.pow(Math.cos((t - 0.42) / 0.58 * Math.PI / 2), 1.4)
+    // le alte salgono e si aprono, le basse ricadono verso il basso: un ventaglio
+    const down = i >= Math.ceil(pairs * 0.6)
+    const a = down ? Math.PI / 2 - range(r, 0.35, 0.8) : -Math.PI / 2 + range(r, 0.15, 0.5) + i * 0.32
+    // lunghe abbastanza da accavallarsi alla coppia vicina: gli incroci legano il tutto
+    const L = S * (down ? range(r, 0.45, 0.6) : range(r, 0.6, 0.8) * (1 - i * 0.1))
+    const tree = wingTree(r, cx + wmax * u * 0.9, y, a, L, { ...o, bend: down ? -1 : 1 }, branch)
+    for (const g of tree) { wings.push(g); wings.push(mapWing(g, p => [2 * cx - p[0], p[1]])) }
+  }
+  return { blade, wings }
 }
 
 /** pugnale a croce: asta ad ago, rombo al centro, braccia corte affilate */

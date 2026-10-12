@@ -12,7 +12,7 @@ import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, 
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
-import { dagger, drawWing, gridPaper, mapWing, wingBox, wingGeom, type Hand, type WingGeom } from './notebook'
+import { drawWing, gridPaper, mapWing, organism, penLine, wingBox, wingTree, type Hand, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
 
@@ -226,10 +226,11 @@ const falce: Recipe = {
 }
 
 const quaderno: Recipe = {
-  id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'pagina di taccuino tattoo: ali a falce che si incrociano, pugnali, mano viva',
-  params: [P.sel('layout', 'Composizione', ['Pagina', 'Ala', 'Corona di ali']), P.tone(0), P.sel('style', 'Segno', ['Penna', 'Pieno']),
+  id: 'quaderno', label: 'Quaderno gotico', cat: 'Gotico', hint: 'organismo di ali a falce che germogliano l\'una dall\'altra, a penna viva',
+  params: [P.sel('layout', 'Composizione', ['Organismo', 'Ala', 'Corona di ali']), P.tone(0), P.sel('style', 'Segno', ['Penna', 'Pieno']),
     P.range('pen', 'Penna', 40, 250, 100), P.range('bites', 'Smerli', 2, 8, 4), P.range('depth', 'Morso', 20, 90, 62),
     P.range('spikes', 'Aghi', 0, 100, 80), P.range('veins', 'Nervature', 0, 100, 60), P.range('echo', 'Riprese', 0, 100, 50),
+    P.range('branch', 'Ramificazioni', 0, 100, 55), P.range('pairs', 'Coppie', 1, 5, 3),
     P.range('shake', 'Mano', 0, 100, 50), P.range('sketch', 'Ripassi', 0, 100, 45), P.range('breaks', 'Stacchi', 0, 100, 25),
     P.tog('grid', 'Quadretti', true), P.caps(false), P.grain(30)],
   render: o => {
@@ -237,42 +238,41 @@ const quaderno: Recipe = {
     const filled = num(o, 'style') === 1
     const hand: Hand = { lw: S * 0.0032 * num(o, 'pen') / 100, shake: num(o, 'shake') / 50, sketch: num(o, 'sketch') / 100, breaks: num(o, 'breaks') / 100 * 0.6, seed: o.seed + 5, r }
     const opts = (width: number, bites = num(o, 'bites'), bend = 1) => ({ width, bites, depth: num(o, 'depth') / 100, spikes: num(o, 'spikes') / 100, bend, veins: num(o, 'veins') / 100, echo: num(o, 'echo') / 100 })
-    // un'ala qualsiasi, riflessa a specchio rispetto a un asse verticale per x = mx
-    const wing = (x: number, y: number, a: number, L: number, width: number, bend = 1, mx?: number) => {
-      const g = wingGeom(r, x, y, a, L, opts(width, num(o, 'bites'), bend))
-      return mx === undefined ? g : mapWing(g, p => [2 * mx - p[0], p[1]])
-    }
+    const branch = num(o, 'branch') / 100
     const wings: WingGeom[] = []
+    const lines: Pt[][] = []
+    // centra e scala nella tavola tutto ciò che è stato costruito
+    const fit = (margin: number) => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+      for (const g of wings) { const b = wingBox(g); x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1) }
+      for (const q of lines) for (const p of q) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]) }
+      const k = Math.min((W * margin) / (x1 - x0), (H * margin) / (y1 - y0))
+      const f = (p: Pt): Pt => [W / 2 + (p[0] - (x0 + x1) / 2) * k, H / 2 + (p[1] - (y0 + y1) / 2) * k]
+      wings.splice(0, wings.length, ...wings.map(g => mapWing(g, f)))
+      lines.splice(0, lines.length, ...lines.map(q => q.map(f)))
+      hand.lw *= Math.min(1.6, Math.max(0.7, k))
+    }
     if (lay === 1) {
-      // disegna, misura e ricentra: la frusta non ha un ingombro prevedibile
-      const g = wing(0, 0, 0.95 + range(r, -0.15, 0.15), S, 0.2)
-      const b = wingBox(g), k = Math.min((W * 0.84) / (b.x1 - b.x0), (H * 0.84) / (b.y1 - b.y0))
-      wings.push(mapWing(g, p => [W / 2 + (p[0] - (b.x0 + b.x1) / 2) * k, H / 2 + (p[1] - (b.y0 + b.y1) / 2) * k]))
-      hand.lw *= Math.max(1, k * 0.7)
+      wings.push(...wingTree(r, 0, 0, 0.95 + range(r, -0.15, 0.15), S, opts(0.2), branch * 0.6, 1))
+      fit(0.86)
     } else if (lay === 2) {
-      // corona: ali ruotate attorno a un centro, che si sovrappongono e si incrociano
-      const cx = W / 2, cy = H / 2, cnt = 3 + Math.floor(r() * 3), R0 = S * range(r, 0.1, 0.16), rot = r() * Math.PI * 2
+      // corona: un anello da cui le ali partono tangenti e si avvitano tutte nello stesso verso
+      const R0 = S * range(r, 0.07, 0.11), cnt = 3 + Math.floor(r() * 3), rot = r() * Math.PI * 2
       for (let i = 0; i < cnt; i++) {
         const a = rot + i * Math.PI * 2 / cnt
-        // la radice sta oltre il centro: ogni ala parte dal lato opposto e attraversa le altre
-        wings.push(wing(cx - Math.cos(a) * R0, cy - Math.sin(a) * R0, a + range(r, 0.1, 0.3), S * range(r, 0.5, 0.58), range(r, 0.16, 0.22)))
+        wings.push(...wingTree(r, Math.cos(a) * R0, Math.sin(a) * R0, a + Math.PI / 2 - range(r, 0.3, 0.6), S * range(r, 0.4, 0.5), opts(range(r, 0.16, 0.22)), branch))
       }
+      const ring = (rr: number) => { const q: Pt[] = []; for (let j = 0; j <= 120; j++) { const a = j / 120 * Math.PI * 2; q.push([Math.cos(a) * rr, Math.sin(a) * rr]) } return q }
+      lines.push(ring(R0), ring(R0 * range(r, 0.55, 0.75)))
+      fit(0.84)
     } else {
-      const jit = () => range(r, -0.03, 0.03)
-      // due grandi falci che si attraversano: l'incrocio è il centro della pagina
-      wings.push(wing(W * (0.04 + jit()), H * (0.16 + jit()), 0.62 + range(r, -0.1, 0.1), S * 1.02, range(r, 0.17, 0.24)))
-      wings.push(wing(W * (0.95 + jit()), H * 0.5 - S * (0.62 + jit()), Math.PI - 0.3 + range(r, -0.1, 0.1), S * 1.05, range(r, 0.15, 0.2), -1))
-      // la terza, in basso, risale verso destra
-      wings.push(wing(W * (0.98 + jit()), H - S * (0.5 + jit()), Math.PI + 0.15 + range(r, -0.1, 0.1), S * 0.7, range(r, 0.17, 0.22), -1))
-      // piccole: una falce in alto e una coppia speculare di ali aperte
-      wings.push(wing(W * (0.4 + jit()), H * (0.04 + jit()), 1.25, S * 0.24, 0.2))
-      const px = W * (0.72 + jit() * 0.5), py = H * (H > W * 1.4 ? 0.16 : 0.12), pa = range(r, -0.35, -0.15), pl = S * range(r, 0.17, 0.22)
-      const seed2 = Math.floor(r() * 1e6)
-      for (const mx of [undefined, px]) wings.push(mapWing(wingGeom(rng(seed2), px + S * 0.01, py, pa, pl, opts(0.22, 3, 0.8)), p => (mx === undefined ? p : [2 * mx - p[0], p[1]])))
+      const org = organism(r, 0, 0, S * 1.3, S, opts(0.2), branch, num(o, 'pairs'))
+      wings.push(...org.wings); lines.push(...org.blade)
+      fit(0.88)
     }
     const m = drawMask(W, H, ctx => {
+      for (const q of lines) penLine(ctx, q, hand, 1.1)
       for (const g of wings) drawWing(ctx, g, hand, filled)
-      if (lay === 0) for (let i = 0; i < 3; i++) dagger(ctx, r, W * (0.08 + i * 0.075), H - S * 0.2, S * range(r, 0.13, 0.17))
     })
     const { c, ctx } = stage(o, t)
     if (on(o, 'grid') && !o.transparent) gridPaper(ctx, W, H, S * 0.024, t.ink, t.dark ? 0.22 : 0.24)
