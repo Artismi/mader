@@ -1468,3 +1468,15 @@ void main() {
   if (uMask > 0.5) q *= uSoft > 0.5 ? clamp(texture(uM, vUv).a * 1.4, 0.0, 1.0) : s.a;
   o = mix(s, q, uAmt);
 }`
+
+/** mappa della forma nel formato degli shader Paper "da logo": R = distanza dal bordo
+ *  (0 al centro del tratto, 1 sul bordo) con profilo a cupola come la loro soluzione di
+ *  Poisson, G = copertura. Calcolata dal campo di distanze sub-pixel. */
+export const EDGE_MAP = FX + `uniform float uH;
+void main() {
+  float a = texture(uOrig, vUv).a;
+  float d = max(-sd(vUv), 0.0);
+  float r = clamp(d / uH, 0.0, 1.0);
+  float dome = 1.0 - (1.0 - r) * (1.0 - r);
+  o = a > 0.002 ? vec4(1.0 - dome, a, 1.0, 1.0) : vec4(1.0, 0.0, 1.0, 1.0);
+}`

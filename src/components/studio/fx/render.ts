@@ -9,7 +9,7 @@ import { FxGL, type Tex, type UVal } from './gl'
 import {
   MASK, MASK_A, ADJUST, GRUNGE, STITCH, FOIL, IMPRESS, SMEAR, RAYS, GLITTER, FLUTED, ASCII, LINOCUT, MIRRORTILE, LIGHTCAST, PIXELSORT, LOWPOLY, KALEIDO, HAL_MASK, HAL_ADD, FINISH, SHADOW_COMP, INNER_SHADOW, GLOW_COMP, INNER_GLOW, BEVEL_H, BEVEL, STROKE, SATIN, COLOR_OVERLAY, GRAD_OVERLAY, TEX_OVERLAY, NEON, ECHO, HOLLOW, SPLICE, LONG_SHADOW, EXTRUDE, GLITCH, BLOOM_MASK, BLOOM, LIGHT_LEAK, HALFTONE, RISO, DITHER, SCREENPRINT, GRAD_MAP, POSTERIZE, TILT, MOTION, ZOOM_BLUR, WAVE, RIPPLE, TWIRL, BULGE, MOSAIC, CHROMA, VHS, CRT,
   MAT3D, GENFILL, MIX_AMT,
-  TONEMATCH, OVER_AB, FINITURA, PAPER_MIX,
+  TONEMATCH, OVER_AB, FINITURA, PAPER_MIX, EDGE_MAP,
 } from './shaders'
 import { PAPER } from './paper'
 import { LOOKS, HSL_BANDS, fxDef, migrateFx, type Adjust, type FxEntry, type Look, type PVal } from './catalog'
@@ -145,7 +145,7 @@ function sdfReach(stack: FxEntry[]): number {
       case 'stroke': m = Math.max(m, num(p.size, 6) + 2); break
       case 'neon': m = Math.max(m, num(p.size, 18) * 0.15 + 3); break
       case 'hollow': case 'splice': m = Math.max(m, num(p.thickness, 3) + 2); break
-      case 'material3d': m = Math.max(m, 100000); break
+      case 'material3d': case 'metalloLiquido': case 'fumoGemma': m = Math.max(m, 100000); break
       case 'grunge': m = Math.max(m, 10); break
       case 'glitter': m = Math.max(m, 60); break
       case 'raggi': m = Math.max(m, 400); break
@@ -256,8 +256,15 @@ const paperRun = (id: string): Run => (c, cur, p, amt) => {
   const fn = PAPER[id]; if (!fn) return cur
   const src = document.createElement('canvas')
   c.g.present(cur, src)
+  // mappa della forma per gli shader "da logo": calcolata qui sul campo di distanze,
+  // istantanea e nitida (al posto della preparazione lenta di Paper)
+  let edge: HTMLCanvasElement | undefined
+  if (id === 'metalloLiquido' || id === 'fumoGemma') {
+    const em = c.g.pass('edgeMap', EDGE_MAP, c.W, c.H, std(c, cur, 1, { uH: Math.max(2, c.stroke * c.z * 0.8) }))
+    edge = document.createElement('canvas'); c.g.present(em, edge); c.g.release(em)
+  }
   let r: ReturnType<typeof fn> = null
-  try { r = fn(src, p, c.t) } catch (e) { console.warn('[paper]', e); return cur }
+  try { r = fn(src, p, c.t, edge) } catch (e) { console.warn('[paper]', e); return cur }
   if (!r) return cur        // sagoma o risorsa ancora in preparazione: si ridisegna appena pronta
   const t = c.g.upload(r.out, c.W, c.H)
   // alone morbido: la forma allargata e sfumata, così niente bordi del riquadro
