@@ -65,8 +65,35 @@ export const isActive = (d: FxData) => {
 interface Ctx {
   g: FxGL; orig: Tex; W: number; H: number; z: number; t: number
   sdf: Tex | null
+  /** spessore medio del tratto in px di progetto (per adattare smussi e grane a ogni font) */
+  stroke: number
   /** copertura della forma erosa di e pixel (e < 0: dilatata) */
   mask: (e: number) => Tex
+}
+
+/** spessore medio del tratto (px della cache): 2 × area / perimetro sulla sagoma ridotta */
+const strokeMemo = new WeakMap<HTMLCanvasElement, { key: string; v: number }>()
+/** da chiamare quando il contenuto della cache cambia (testo riscritto, font, misure) */
+export function forgetStroke(src: HTMLCanvasElement) { strokeMemo.delete(src) }
+function strokeWidth(src: HTMLCanvasElement) {
+  const key = `${src.width}x${src.height}`
+  const m = strokeMemo.get(src); if (m && m.key === key) return m.v
+  const k = Math.min(1, 320 / Math.max(src.width, src.height))
+  const w = Math.max(1, Math.round(src.width * k)), h = Math.max(1, Math.round(src.height * k))
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h
+  const x = cv.getContext('2d', { willReadFrequently: true })!
+  x.drawImage(src, 0, 0, w, h)
+  const d = x.getImageData(0, 0, w, h).data
+  let area = 0, per = 0
+  const inside = (i: number, j: number) => i >= 0 && j >= 0 && i < w && j < h && d[(j * w + i) * 4 + 3] > 127
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    if (!inside(i, j)) continue
+    area++
+    if (!inside(i + 1, j) || !inside(i - 1, j) || !inside(i, j + 1) || !inside(i, j - 1)) per++
+  }
+  const v = per ? (2 * area / per) / k : Math.max(src.width, src.height)
+  strokeMemo.set(src, { key, v })
+  return v
 }
 
 export function renderFx(src: HTMLCanvasElement, out: HTMLCanvasElement, data: FxData, z: number, time: number): boolean {
@@ -79,7 +106,7 @@ export function renderFx(src: HTMLCanvasElement, out: HTMLCanvasElement, data: F
     const need = sdfReach(stack) * z
     const sdf = need > 0 ? g.sdf(orig, need + 4) : null
     const ctx: Ctx = {
-      g, orig, W, H, z, t: time, sdf,
+      g, orig, W, H, z, t: time, sdf, stroke: strokeWidth(src) / z,
       mask: e => sdf
         ? g.pass('mask', MASK, W, H, { uSdf: sdf, uE: e })
         : g.pass('maskA', MASK_A, W, H, { uSrc: orig }),
@@ -247,7 +274,7 @@ const RUN: Partial<Record<string, Run>> = {
   },
   innerGlow: simple('innerGlow', INNER_GLOW, (c, p) => ({ uCol: rgb(p.color), uOp: num(p.opacity, 70) / 100, uCenter: num(p.source), uChoke: num(p.choke) * c.z, uSize: Math.max(1, num(p.size, 14) * c.z) })),
   bevel: (c, cur, p) => {
-    const size = Math.max(1, num(p.size, 10) * c.z)
+    const size = Math.max(1, Math.min(num(p.size, 10), c.stroke * 0.45) * c.z)
     const hgt = c.g.pass('bevelH', BEVEL_H, c.W, c.H, std(c, cur, 1, { uSize: size, uStyle: num(p.style), uTech: num(p.technique) }))
     const hb = c.g.blur(hgt, (1.6 + num(p.soften, 2)) * c.z)
     c.g.release(hgt)
@@ -280,7 +307,7 @@ const RUN: Partial<Record<string, Run>> = {
   impressione: (c, cur, p, amt) => {
     const name = MATERIALS[num(p.material)] ?? MATERIALS[0]
     const mat = c.g.image(`/assets/materials/${name}.jpg`), nrm = c.g.image(`/assets/materials/${name}-rilievo.jpg`)
-    const size = num(p.size, 8)
+    const size = Math.max(1, Math.min(num(p.size, 8), c.stroke * 0.42))
     const mode = num(p.mode)
     const h = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 0.35)
     const hb = mode > 3.5 ? c.orig : c.g.blur(c.orig, size * c.z * 0.9)
@@ -353,7 +380,7 @@ const RUN: Partial<Record<string, Run>> = {
     return res
   },
   raggi: simple('rays', RAYS, (_c, p) => ({ uCenter: [num(p.cx, 50) / 100, num(p.cy, 50) / 100], uLen: num(p.length, 60) / 100, uInt: num(p.intensity, 70) / 100, uMode: num(p.mode), uCol: rgb(p.color, '#7ab8ff') })),
-  glitter: simple('glitter', GLITTER, (_c, p) => ({ uBase: rgb(p.color, '#c9ccd6'), uUse: num(p.useColor, 1), uSize: Math.max(0.5, num(p.size, 4)), uSpark: num(p.sparkle, 70) / 100, uDust: num(p.dust, 50) / 100 })),
+  glitter: simple('glitter', GLITTER, (c, p) => ({ uBase: rgb(p.color, '#c9ccd6'), uUse: num(p.useColor, 1), uSize: Math.max(0.6, Math.min(num(p.size, 4), c.stroke * 0.3)), uSpark: num(p.sparkle, 70) / 100, uDust: num(p.dust, 50) / 100 })),
   glitch: simple('glitch', GLITCH, (_c, p) => ({ uPow: num(p.power, 50) / 100, uSplit: num(p.split, 30) / 100, uSlices: num(p.slices, 18), uNoise: num(p.noise, 20) / 100 })),
   bloom: (c, cur, p, amt) => {
     const bright = c.g.pass('bloomMask', BLOOM_MASK, c.W, c.H, { uSrc: cur, uTh: num(p.threshold, 60) / 100 })
@@ -389,10 +416,10 @@ const RUN: Partial<Record<string, Run>> = {
   material3d: (c, cur, p, amt) => {
     if (!c.sdf) return cur
     // campo di distanze ammorbidito: superfici lisce, niente striature sulle forme gonfie
-    const s3 = c.g.blur(c.sdf, (num(p.shape) > 0 ? 3 : 1.6) * Math.max(1, c.z))
+    const s3 = c.g.blur(c.sdf, (num(p.shape) > 0 ? 2 : 0.8) * Math.max(1, c.z))
     const spin = num(p.spin) > 0 ? c.t * num(p.spin) * 0.04 : 0
     const out = c.g.pass('mat3d', MAT3D, c.W, c.H, {
-      uSrc: cur, uS3: s3, uZ: c.z, uDepth: num(p.depth, 40) * c.z, uBevel: num(p.bevel, 6) * c.z,
+      uSrc: cur, uS3: s3, uZ: c.z, uDepth: Math.min(num(p.depth, 40), c.stroke * 2.6) * c.z, uBevel: Math.min(num(p.bevel, 6), c.stroke * 0.32) * c.z,
       uRx: rad(num(p.rx, 18)), uRy: rad(num(p.ry, -24)) + spin, uPersp: num(p.persp, 40) / 100, uMat: num(p.material),
       uShape: num(p.shape), uUseCol: num(p.useColor), uCol: rgb(p.color, '#ff5a36'), uEnv: num(p.env), uLightA: rad(num(p.light, 220)), uRough: num(p.rough, 30) / 100,
     })

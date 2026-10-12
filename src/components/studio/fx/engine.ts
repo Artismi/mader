@@ -15,7 +15,7 @@
  */
 import * as fabric from 'fabric'
 import { LOOKS, fxDef, migrateFx, newFx, type Adjust, type FxEntry, type FxId, type Look } from './catalog'
-import { fxPadding, fxSpeed, isActive, renderFx, type FxData } from './render'
+import { forgetStroke, fxPadding, fxSpeed, isActive, renderFx, type FxData } from './render'
 import { onAssetReady } from './gl'
 import { ensureFont } from '../libraries/font-loader'
 import { TEXT_STYLES, type TextStyle } from './text-styles'
@@ -87,7 +87,11 @@ export function installFxEngine() {
       const drawObject = proto.drawObject
       proto.drawObject = function (this: FxObject, ...args: unknown[]) {
         const r = drawObject.apply(this, args)
-        if (args[0] === (this as unknown as { _cacheContext: unknown })._cacheContext) this._fxStale = true
+        if (args[0] === (this as unknown as { _cacheContext: unknown })._cacheContext) {
+          this._fxStale = true
+          const cv = (this as unknown as { _cacheCanvas?: HTMLCanvasElement })._cacheCanvas
+          if (cv) forgetStroke(cv)
+        }
         return r
       }
     }
