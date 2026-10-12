@@ -13,13 +13,10 @@
 import {
   getShaderColorFromString, getShaderNoiseTexture, ShaderFitOptions,
   liquidMetalFragmentShader, toProcessedLiquidMetal,
-  heatmapFragmentShader, toProcessedHeatmap,
   gemSmokeFragmentShader, toProcessedGemSmoke,
   halftoneCmykFragmentShader, HalftoneCmykTypes,
   halftoneDotsFragmentShader, HalftoneDotsTypes, HalftoneDotsGrids,
-  imageDitheringFragmentShader,
   paperTextureFragmentShader,
-  flutedGlassFragmentShader, GlassDistortionShapes, GlassGridShapes,
   waterFragmentShader,
 } from '@paper-design/shaders'
 import { assetReady } from './gl'
@@ -400,17 +397,7 @@ export const PAPER: Record<string, PaperRun> = {
     }, w, h))
     return out ? { mask: 'none', out } : null
   },
-  /** mappa termica: la sagoma come un'immagine a infrarossi, con alone */
-  mappaTermica: (src, p, t) => {
-    const img = prepared('heat', src); const gl = getGL(); if (!img || !gl) return null
-    const colors = (HEAT_PAL[num(p.palette)] ?? HEAT_PAL[0]).split(',').map(c => col(c.trim(), '#ffffff'))
-    return { mask: 'soft', out: gl.render(heatmapFragmentShader, {
-      ...sizing(src.width, src.height, img.width / img.height), u_time: t + num(p.phase) * 0.1,
-      u_image: img, u_colorBack: [0, 0, 0, 0], u_colors: colors, u_colorsCount: colors.length,
-      u_contour: num(p.contour, 50) / 100, u_angle: num(p.angle, 0), u_noise: num(p.noise, 0) / 100,
-      u_innerGlow: num(p.innerGlow, 60) / 100, u_outerGlow: num(p.outerGlow, 20) / 100,
-    }, src.width, src.height) }
-  },
+
   /** fumo di gemma: volute di colore dentro la sagoma, con bagliori */
   fumoGemma: (src, p, t) => {
     const gl = getGL(); if (!gl) return null
@@ -448,15 +435,7 @@ export const PAPER: Record<string, PaperRun> = {
       u_grid: num(p.grid, HalftoneDotsGrids.hex), u_type: num(p.type, HalftoneDotsTypes.gooey),
     }, src.width, src.height) }
   },
-  /** dithering a matrice: 2×2, 4×4, 8×8 o casuale, a due colori o con i colori dell'immagine */
-  ditheringPaper: (src, p) => {
-    const gl = getGL(); if (!gl) return null
-    return { mask: 'shape', out: gl.render(imageDitheringFragmentShader, {
-      ...sizing(src.width, src.height), u_time: 0, u_image: src,
-      u_colorFront: col(p.front, '#94ffaf'), u_colorBack: col(p.back, '#000c38'), u_colorHighlight: col(p.highlight, '#eaff94'),
-      u_type: num(p.type, 3) + 1, u_pxSize: num(p.size, 2), u_colorSteps: num(p.steps, 2), u_originalColors: !!num(p.original), u_inverted: !!num(p.inverted),
-    }, src.width, src.height) }
-  },
+
   /** carta vera: fibre, pieghe, grinze e macchie sopra il livello */
   cartaPaper: (src, p) => {
     const gl = getGL(), nz = noiseTex(); if (!gl || !nz) return null
@@ -469,18 +448,7 @@ export const PAPER: Record<string, PaperRun> = {
       u_wrinkles: num(p.wrinkles, 100) / 100, u_wrinkleSize: 0.65, u_crumples: num(p.crumples, 0) / 100, u_crumpleCount: 6, u_crumpleSize: 0.5, u_drops: num(p.drops, 40) / 100, u_fade: 0, u_contrast: 0.3, u_scale: 1,
     }, src.width, src.height) }
   },
-  /** vetro cannettato di Paper: prisma, onde, pieghe, linee irregolari */
-  vetroPaper: (src, p) => {
-    const gl = getGL(); if (!gl) return null
-    return { mask: 'shape', out: gl.render(flutedGlassFragmentShader, {
-      ...sizing(src.width, src.height), u_time: 0, u_image: src,
-      u_colorBack: [0, 0, 0, 0], u_colorShadow: col(p.shadowColor, '#000000'), u_colorHighlight: col(p.highlightColor, '#ffffff'),
-      u_shadows: num(p.shadows, 25) / 100, u_size: num(p.size, 50) / 100, u_angle: num(p.angle, 0), u_highlights: num(p.highlights, 10) / 100,
-      u_distortionShape: num(p.distortionShape, 0) + GlassDistortionShapes.prism, u_shape: num(p.shape, 0) + GlassGridShapes.lines,
-      u_distortion: num(p.distortion, 50) / 100, u_shift: 0, u_blur: num(p.blur, 0) / 100, u_edges: num(p.edges, 25) / 100, u_stretch: num(p.stretch, 0) / 100,
-      u_margin: 0, u_marginLeft: 0, u_marginRight: 0, u_marginTop: 0, u_marginBottom: 0, u_grainMixer: 0, u_grainOverlay: num(p.grain, 0) / 100,
-    }, src.width, src.height) }
-  },
+
   /** acqua: caustiche e increspature sopra il livello */
   acqua: (src, p, t) => {
     const gl = getGL(); if (!gl) return null

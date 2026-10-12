@@ -268,9 +268,8 @@ const paperRun = (id: string): Run => (c, cur, p, amt) => {
 }
 
 const RUN: Partial<Record<string, Run>> = {
-  metalloLiquido: paperRun('metalloLiquido'), mappaTermica: paperRun('mappaTermica'), fumoGemma: paperRun('fumoGemma'),
-  mezzetinteCmyk: paperRun('mezzetinteCmyk'), retinoPunti: paperRun('retinoPunti'), ditheringPaper: paperRun('ditheringPaper'),
-  cartaPaper: paperRun('cartaPaper'), vetroPaper: paperRun('vetroPaper'), acqua: paperRun('acqua'),
+  metalloLiquido: paperRun('metalloLiquido'), fumoGemma: paperRun('fumoGemma'),
+  mezzetinteCmyk: paperRun('mezzetinteCmyk'), retinoPunti: paperRun('retinoPunti'), cartaPaper: paperRun('cartaPaper'), acqua: paperRun('acqua'),
   dropShadow: (c, cur, p) => {
     const m = c.mask(-num(p.spread) * c.z)
     const b = num(p.size, 20) > 0 ? c.g.blur(m, num(p.size, 20) * c.z) : m
