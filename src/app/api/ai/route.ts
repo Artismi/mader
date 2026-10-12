@@ -8,6 +8,7 @@ import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
+import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
 import fs from 'fs'
 import path from 'path'
@@ -96,7 +97,8 @@ const canvasElementSchema = z.object({
   effects: z.array(z.string()).optional().describe("['3d', 'glass', 'clay', 'neon', 'glitch', 'riso', 'bloom', 'grain']"),
   effectProps: z.record(z.string(), z.unknown()).optional(),
   // Path / Shape
-  shapeId: z.string().optional().describe("ID da SHAPE_MAP (es. 'Swiss Cross', 'Fluid Wave', 'Dense Halftone')."),
+  shapeId: z.string().optional().describe("Nome esatto di una forma della LIBRERIA GRAFICA (es. 'Sparkle', 'Bloom Line', 'Dot Sparkle', 'Saturn Sparkle'). Usalo con type 'path'."),
+  angle: z.number().optional().describe("Rotazione in gradi (es. 12 per un accento inclinato)."),
   pathData: z.string().optional(),
   scaleX: z.number().optional(),
   scaleY: z.number().optional(),
@@ -717,6 +719,7 @@ export async function POST(req: Request) {
       canvasSnapshot
         ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements. Per modifiche chirurgiche NON usare clearBoard.\n---`
         : '',
+      graphicLibraryPrompt(),
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
       ctx.clientVaults.length > 0
