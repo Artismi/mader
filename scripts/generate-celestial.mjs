@@ -699,20 +699,6 @@ function facetSparkle(cx, cy, rx, ry = rx, o = {}) {
 const S = (cx, cy, rx, ry = rx, o = {}) => (Math.max(rx, ry) >= 30 ? facetSparkle(cx, cy, rx, ry, o) : sparkle(cx, cy, rx, ry, o))
 
 const CATS = {
-  'SIGIL': {
-    'Sigil 01':        [vine(4)],
-    'Sigil 02':        [vine(12)],
-    'Sigil 03':        [vine(14)],
-    'Sigil 04':        [vine(16)],
-    'Sigil 05':        [vine(20)],
-    'Sigil 06':        [vine(22)],
-    'Sigil 07':        [vine(1)],
-    'Sigil 08':        [vine(6)],
-    'Sigil 09':        [vine(9)],
-    'Sigil 10':        [vine(10)],
-    'Sigil 11':        [vine(17)],
-    'Sigil 12':        [vine(19)],
-  },
   'SPARKLE': {
     'Sparkle':          [S(50, 50, 36, 48, { pinch: 0.08 })],
     'Sparkle Tall':     [S(50, 50, 20, 48, { pinch: 0.12 })],
@@ -789,7 +775,6 @@ const CATS = {
 const ICON_FROM = {
   Sparkle: 'Sparkle', Sparkles: 'Sparkle Duo', Blade: 'Sparkle Blade', Starburst: 'Starburst', Flare: 'Flare', 'Cross X': 'Cross X',
   Orbit: 'Saturn Sparkle', Halo: 'Halo Wide', Comet: 'Comet Trail', Thorn: 'Thorn Branch', 'Thorn Crown': 'Thorn Crown', Arcs: 'Arc Wave',
-  Sigil: 'Sigil 01', 'Sigil 2': 'Sigil 02', 'Sigil 3': 'Sigil 05',
 }
 
 // ── Esplorazione: SIGIL_EXPLORE=<cartella> genera candidati e si ferma ─────
