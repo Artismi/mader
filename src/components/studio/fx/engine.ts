@@ -93,15 +93,23 @@ export function installFxEngine() {
     }
   }
 
+  // pixel massimi della cache supercampionata (oltre si scende a 1.5x o a 1x)
+  const SS_LIMIT = 16_000_000
+  fabric.config.configure({ perfLimitSizeTotal: SS_LIMIT, maxCacheSideLimit: 8192 })
   const P = fabric.FabricObject.prototype as unknown as Record<string, (...a: unknown[]) => unknown>
   const dims = P._getCacheCanvasDimensions
   P._getCacheCanvasDimensions = function (this: FxObject) {
-    const d = dims.call(this) as { width: number; height: number; zoomX: number; zoomY: number }
-    if (active(this) && this._fxPad) {
+    const d = dims.call(this) as { width: number; height: number; zoomX: number; zoomY: number; x: number; y: number }
+    if (!active(this)) return d
+    if (this._fxPad) {
       const k = fxScale(this)
       d.width += Math.ceil(this._fxPad * k * 2 * d.zoomX)
       d.height += Math.ceil(this._fxPad * k * 2 * d.zoomY)
     }
+    // supercampionamento: gli effetti si calcolano al doppio della risoluzione e poi si
+    // riducono, così bordi, filetti e grane escono puliti invece che seghettati
+    const ss = d.width * d.height * 4 <= SS_LIMIT ? 2 : d.width * d.height * 2.25 <= SS_LIMIT ? 1.5 : 1
+    if (ss > 1) { d.width = Math.ceil(d.width * ss); d.height = Math.ceil(d.height * ss); d.zoomX *= ss; d.zoomY *= ss; (d as { x: number }).x *= ss; (d as { y: number }).y *= ss }
     return d
   }
 
@@ -117,6 +125,7 @@ export function installFxEngine() {
       this._fxStale = false
     }
     ctx.scale(1 / self.zoomX, 1 / self.zoomY)
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(out, -self.cacheTranslationX, -self.cacheTranslationY)
   }
 }
