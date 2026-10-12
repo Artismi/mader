@@ -1,0 +1,4 @@
+/* Caratteri arrivati dai pack scaricati (Y2K Typeface, raccolta Züli). Uso personale: verificare la licenza dell'autore prima di un uso commerciale. */
+@font-face { font-family: "Kilo"; src: url("/fonts/pack/Kilo.otf") format("opentype"); font-display: swap; }
+@font-face { font-family: "Roadam"; src: url("/fonts/pack/Roadam.otf") format("opentype"); font-display: swap; }
+@font-face { font-family: "Vanosky"; src: url("/fonts/pack/Vanosky.otf") format("opentype"); font-display: swap; }

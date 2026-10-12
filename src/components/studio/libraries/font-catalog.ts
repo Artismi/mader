@@ -27,6 +27,7 @@ export const FONT_CATS: { id: string; label: string }[] = [
   { id: 'futuro', label: "Tecnici e futuristici" },
   { id: 'calligrafici', label: "Calligrafici raffinati" },
   { id: 'gotici', label: "Gotici e blackletter" },
+  { id: 'pack', label: "Dai pack" },
 ]
 
 export const FONTS: FontEntry[] = [
@@ -377,6 +378,10 @@ export const FONTS: FontEntry[] = [
   { family: "Grenze", cat: 'gotici', source: 'google', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
   { family: "Grenze Gotisch", cat: 'gotici', source: 'google', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900] },
   { family: "Jacquarda Bastarda 9", cat: 'gotici', source: 'google', weights: [400] },
+  // caratteri locali dai pack scaricati (public/fonts/pack): uso personale, verificare la licenza
+  { family: "Kilo", cat: 'pack', source: 'local', weights: [400], files: [{ url: '/fonts/pack/Kilo.otf', weight: 400, style: 'normal' }] },
+  { family: "Roadam", cat: 'pack', source: 'local', weights: [400], files: [{ url: '/fonts/pack/Roadam.otf', weight: 400, style: 'normal' }] },
+  { family: "Vanosky", cat: 'pack', source: 'local', weights: [400], files: [{ url: '/fonts/pack/Vanosky.otf', weight: 400, style: 'normal' }] },
 ]
 
 // caratteri liberi serviti dall'app (Velvetyne, OFL)
