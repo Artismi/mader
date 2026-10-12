@@ -148,3 +148,56 @@ export function softShadow(ctx: Ctx, m: Mask, S: number, k = 1, color = '#000000
   ctx.drawImage(maskToCanvas(blurMask(m, S * 0.014 * k), color), S * 0.004 * k, S * 0.016 * k)
   ctx.restore()
 }
+
+/**
+ * Lucido: un filo chiaro dentro le lettere, solo sul lato in alto a sinistra
+ * (dove la luce batte), a distanza `at` dal bordo e largo `w`.
+ */
+export function shine(m: Mask, din: Float32Array, at: number, w: number, reach: number): Mask {
+  const W = m.w, H = m.h, o = newMask(W, H), dx = Math.round(reach), dy = Math.round(reach)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x
+    if (m.a[i] < 128) continue
+    const sx = x - dx, sy = y - dy
+    // il punto spostato verso la luce cade fuori dalla lettera: siamo sul lato illuminato
+    const lit = sx < 0 || sy < 0 || m.a[sy * W + sx] < 128
+    if (!lit) continue
+    o.a[i] = smoothstep(at - 0.7, at + 0.7, din[i]) * (1 - smoothstep(at + w - 0.7, at + w + 0.7, din[i])) * 255
+  }
+  return o
+}
+
+/** estrusione a strisce: bande alterne lungo la profondità del blocco */
+export function extrudeStriped(ctx: Ctx, m: Mask, a: string, b: string, dx: number, dy: number, bands: number) {
+  const ca = maskToCanvas(m, a), cb = maskToCanvas(m, b), n = Math.ceil(Math.hypot(dx, dy))
+  for (let i = n; i >= 1; i--) ctx.drawImage(Math.floor((i / n) * bands * 2) % 2 ? cb : ca, (dx * i) / n, (dy * i) / n)
+}
+
+/** scintilla Y2K a quattro punte affilate, con alone */
+export function glint(ctx: Ctx, x: number, y: number, r: number, color: string, glow = true) {
+  ctx.save()
+  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = r * 0.8 }
+  ctx.fillStyle = color
+  ctx.beginPath()
+  const k = 0.12
+  ctx.moveTo(x, y - r)
+  ctx.quadraticCurveTo(x + r * k, y - r * k, x + r * 0.62, y)
+  ctx.quadraticCurveTo(x + r * k, y + r * k, x, y + r)
+  ctx.quadraticCurveTo(x - r * k, y + r * k, x - r * 0.62, y)
+  ctx.quadraticCurveTo(x - r * k, y - r * k, x, y - r)
+  ctx.fill()
+  ctx.restore()
+}
+
+/** scintille attorno alla scritta: una grande su un angolo, due piccole sull'altro */
+export function glints(ctx: Ctx, m: Mask, S: number, color: string, seed: number) {
+  const b = inkBox(m)
+  if (!b) return
+  const flip = seed % 2 ? 1 : 0
+  const pts: [number, number, number][] = [
+    [flip ? b.x0 + (b.x1 - b.x0) * 0.04 : b.x1 - (b.x1 - b.x0) * 0.04, b.y0 - S * 0.01, S * 0.045],
+    [flip ? b.x1 - (b.x1 - b.x0) * 0.02 : b.x0 + (b.x1 - b.x0) * 0.02, b.y1 + S * 0.005, S * 0.028],
+    [flip ? b.x1 + S * 0.03 : b.x0 - S * 0.03, b.y1 - S * 0.04, S * 0.016],
+  ]
+  for (const [x, y, r] of pts) glint(ctx, x, y, r, color)
+}

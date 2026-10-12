@@ -14,7 +14,7 @@ import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
-import { WARPS, band as distBand, extrude, fittedWord, grow, invert, puffy, softShadow } from './typo'
+import { WARPS, band as distBand, extrude, extrudeStriped, glints, shine, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
@@ -1806,7 +1806,8 @@ const groovy: Recipe = {
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label)), P.sel('warp', 'Busta', [...WARPS], 1), P.range('amt', 'Piega', 0, 100, 45),
     P.sel('pal', 'Colori', GROOVY_PALETTES.map(x => x.label)), P.range('rings', 'Contorni', 0, 5, 3), P.range('ringW', 'Spessore contorni', 20, 200, 100),
-    P.tog('inline', 'Filo interno', true), P.range('ext', 'Estrusione', 0, 100, 45), P.tone(1), P.range('grain', 'Grana', 0, 30, 10)],
+    P.sel('inner', 'Dentro le lettere', ['Niente', 'Filo interno', 'Lucido', 'Filo e lucido'], 3), P.range('ext', 'Estrusione', 0, 100, 45), P.tog('stripes', 'Estrusione a strisce', true),
+    P.tog('glint', 'Scintille', false), P.tone(1), P.range('grain', 'Grana', 0, 30, 10)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const pal = GROOVY_PALETTES[num(o, 'pal')] ?? GROOVY_PALETTES[0]
@@ -1818,16 +1819,22 @@ const groovy: Recipe = {
     const all = grow(out, m, rings * bw)
     const { c, ctx } = stage(o, t)
     // blocco: tutta la sagoma (contorni compresi) spinta giù a destra
-    if (ext > 0) extrude(ctx, all, pal.ext, ext * 0.55, ext * 0.85)
+    if (ext > 0) {
+      if (on(o, 'stripes')) extrudeStriped(ctx, all, pal.ext, pal.bands[rings > 1 ? rings - 1 : 0], ext * 0.55, ext * 0.85, 3)
+      else extrude(ctx, all, pal.ext, ext * 0.55, ext * 0.85)
+    }
     for (let k = rings; k >= 1; k--) ctx.drawImage(maskToCanvas(grow(out, m, k * bw), pal.bands[(k - 1) % pal.bands.length]), 0, 0)
     ctx.drawImage(maskToCanvas(m, pal.fill), 0, 0)
-    if (on(o, 'inline')) {
-      // filo che corre dentro le aste, solo dove la lettera è abbastanza grossa
+    const inner = num(o, 'inner')
+    if (inner) {
       const din = distance(m)
       let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
-      const at = mx * 0.42, w = Math.max(1.2, mx * 0.16)
-      ctx.drawImage(maskToCanvas(distBand(din, W, H, at, at + w), pal.line), 0, 0)
+      // filo che corre dentro le aste, a metà spessore
+      if (inner === 1 || inner === 3) { const at = mx * 0.42, w = Math.max(1.2, mx * 0.16); ctx.drawImage(maskToCanvas(distBand(din, W, H, at, at + w), pal.line), 0, 0) }
+      // lucido: una lama chiara vicino al bordo, solo dove batte la luce
+      if (inner >= 2) { const at = mx * 0.14, w = Math.max(1.2, mx * 0.14); ctx.drawImage(maskToCanvas(shine(m, din, at, w, mx * 0.5), '#ffffff', 0.85), 0, 0) }
     }
+    if (on(o, 'glint')) glints(ctx, all, S, t.dark ? '#ffffff' : pal.bands[0], o.seed)
     return finish(c, o, t, 'groovy', null)
   },
 }
@@ -1842,7 +1849,7 @@ const gonfiabile: Recipe = {
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 1), P.sel('warp', 'Busta', [...WARPS], 2), P.range('amt', 'Piega', 0, 100, 35),
     P.sel('col', 'Colore', PUFFY_COLORS.map(x => x.label)), P.range('puff', 'Gonfiore', 20, 100, 70), P.range('gloss', 'Lucido', 0, 100, 80),
-    P.sel('edge', 'Bordo', ['Nessuno', 'Bianco adesivo', 'Nero fumetto', 'Doppio']), P.tone(1), P.range('grain', 'Grana', 0, 30, 8)],
+    P.sel('edge', 'Bordo', ['Nessuno', 'Bianco adesivo', 'Nero fumetto', 'Doppio'], 1), P.tog('glint', 'Scintille', true), P.tone(1), P.range('grain', 'Grana', 0, 30, 8)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const f = TYPE_FACES[num(o, 'face')]?.f ?? FACES.gonfio
@@ -1850,7 +1857,9 @@ const gonfiabile: Recipe = {
     const edge = num(o, 'edge'), ew = S * 0.016
     const room = (edge === 3 ? ew * 2 : edge ? ew : 0) + S * 0.02
     // le lettere si toccano e si fondono come un palloncino solo
-    const m = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room, fat: 0.02, lead: 0.04 })
+    const raw = fittedWord(W, H, lines(str(o, 'text') || 'Artismi'), f, num(o, 'warp'), num(o, 'amt') / 100, { room, fat: 0.02, lead: 0.04 })
+    // dove le lettere si toccano il gonfio si raccorda morbido invece di fare una piega
+    const m = liquid(raw, S * 0.0035, 0.5, 0.08)
     const din = distance(m)
     let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
     const { c, ctx } = stage(o, t)
@@ -1860,6 +1869,7 @@ const gonfiabile: Recipe = {
     if (out && edge === 3) ctx.drawImage(maskToCanvas(shell, '#141414'), 0, 0)
     if (out) ctx.drawImage(maskToCanvas(grow(out, m, ew), edge === 2 ? '#141414' : '#ffffff'), 0, 0)
     ctx.drawImage(puffy(m, mx * (0.5 + num(o, 'puff') / 100 * 0.5), col, num(o, 'gloss') / 100), 0, 0)
+    if (on(o, 'glint')) glints(ctx, shell, S, '#ffffff', o.seed)
     return finish(c, o, t, 'gonfiabile', null)
   },
 }
@@ -1968,7 +1978,7 @@ const trama: Recipe = {
   piece: true,
   params: [P.text('Artismi'), P.sel('face', 'Carattere', TYPE_FACES.map(x => x.label), 3), P.sel('warp', 'Busta', [...WARPS]), P.range('amt', 'Piega', 0, 100, 30),
     P.sel('pat', 'Trama', ['Righe', 'Scacchi', 'Mezzatinta', 'Zebra', 'Pois']), P.range('cell', 'Passo trama', 20, 200, 100), P.range('ang', 'Inclinazione', -60, 60, 35),
-    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.range('shadow', 'Ombra sfalsata', 0, 100, 60), P.tog('outline', 'Contorno', true), P.tone(1), P.range('grain', 'Grana', 0, 30, 12)],
+    P.sel('pal', 'Colori', TRAMA_PALETTES.map(x => x.label)), P.range('shadow', 'Ombra sfalsata', 0, 100, 60), P.tog('outline', 'Contorno', true), P.tog('shine', 'Lucido', true), P.tone(1), P.range('grain', 'Grana', 0, 30, 12)],
   render: o => {
     const t = tone(o), S = SS(o), W = o.W, H = o.H
     const pal0 = TRAMA_PALETTES[num(o, 'pal')] ?? TRAMA_PALETTES[0]
@@ -1986,6 +1996,11 @@ const trama: Recipe = {
     const pc = pat.getContext('2d')!
     pc.globalCompositeOperation = 'destination-in'; pc.drawImage(maskToCanvas(m, '#000000'), 0, 0)
     ctx.drawImage(pat, 0, 0)
+    if (on(o, 'shine')) {
+      const din = distance(m)
+      let mx = 0; for (let i = 0; i < din.length; i++) if (din[i] > mx) mx = din[i]
+      ctx.drawImage(maskToCanvas(shine(m, din, mx * 0.12, Math.max(1.2, mx * 0.13), mx * 0.5), '#ffffff', 0.9), 0, 0)
+    }
     return finish(c, o, t, 'trama', null)
   },
 }
