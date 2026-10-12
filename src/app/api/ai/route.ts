@@ -8,6 +8,7 @@ import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
+import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
@@ -98,7 +99,8 @@ const canvasElementSchema = z.object({
   effects: z.array(z.string()).optional().describe("['3d', 'glass', 'clay', 'neon', 'glitch', 'riso', 'bloom', 'grain']"),
   effectProps: z.record(z.string(), z.unknown()).optional(),
   // Path / Shape
-  shapeId: z.string().optional().describe("ID da SHAPE_MAP (es. 'Swiss Cross', 'Fluid Wave', 'Dense Halftone')."),
+  shapeId: z.string().optional().describe("Nome esatto di una forma della LIBRERIA GRAFICA (es. 'Sparkle', 'Bloom Line', 'Dot Sparkle', 'Saturn Sparkle'). Usalo con type 'path'."),
+  angle: z.number().optional().describe("Rotazione in gradi (es. 12 per un accento inclinato)."),
   pathData: z.string().optional(),
   scaleX: z.number().optional(),
   scaleY: z.number().optional(),
@@ -762,6 +764,7 @@ export async function POST(req: Request) {
       isCreativeQuery
         ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
         : '',
+      graphicLibraryPrompt(),
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
       ctx.clientVaults.length > 0

@@ -2455,6 +2455,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         items.forEach(item => { if (item.name && item.path) SHAPE_MAP[item.name] = item.path })
       })
       PRO_ASSETS.forEach(asset => { SHAPE_MAP[asset.name] = asset.path; SHAPE_MAP[asset.id] = asset.path })
+      // Ricerca tollerante del nome: maiuscole, spazi, trattini e punti non contano
+      const normShape = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const SHAPE_NORM: Record<string, string> = {}
+      Object.entries(SHAPE_MAP).forEach(([k, v]) => { SHAPE_NORM[normShape(k)] = v })
+      const findShape = (id: string) => SHAPE_MAP[id] || SHAPE_NORM[normShape(id)] || ''
 
       const deferredImages: Array<{ artboardName: string; boardW: number; boardH: number; el: any }> = []
 
@@ -2545,6 +2550,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const elsByZIndex = [...(b.elements || [])].sort((a: any, c: any) => (a.zIndex ?? 0) - (c.zIndex ?? 0))
         elsByZIndex.forEach((el: any, index: number) => {
           const elId = el.id || `${b.name}_${el.type}_${index}`
+          // Una forma richiesta per nome è sempre un path, anche se l'AI ha scritto rect/circle
+          if (el.shapeId && el.type !== 'text' && el.type !== 'image') el.type = 'path'
           if (el.type === 'image' && el.url) {
             deferredImages.push({ artboardName, boardW, boardH, el: { ...el, id: elId } })
             return
@@ -2568,7 +2575,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             ...(el.stroke && { stroke: resolveColor(el.stroke) }),
             ...(el.strokeWidth !== undefined && { strokeWidth: el.strokeWidth }),
             ...(el.originX && { originX: el.originX }),
-            ...(el.originY && { originY: el.originY })
+            ...(el.originY && { originY: el.originY }),
+            ...(el.angle !== undefined && { angle: el.angle })
           }
 
           if (el.type === 'text') {
@@ -2594,9 +2602,17 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           } else if (el.type === 'circle') {
             obj = new fabric.Ellipse({ ...common, rx: elW / 2, ry: elH / 2 })
           } else if (el.type === 'path') {
-            let svgPath = (el.shapeId ? SHAPE_MAP[el.shapeId] : el.pathData) || ''
+            const svgPath = (el.shapeId ? findShape(el.shapeId) : el.pathData) || ''
             if (svgPath) {
-              obj = new fabric.Path(svgPath, { ...common, scaleX: (elW / 100), scaleY: (elH / 100) })
+              // Adatta la forma al box mantenendo le proporzioni e la centra nel box
+              const p = new fabric.Path(svgPath, { ...common })
+              const pw = p.width || 1, ph = p.height || 1, k = Math.min(elW / pw, elH / ph)
+              p.set({ scaleX: k, scaleY: k })
+              if (!el.originX || el.originX === 'left') p.set({ left: common.left + (elW - pw * k) / 2 })
+              if (!el.originY || el.originY === 'top') p.set({ top: common.top + (elH - ph * k) / 2 })
+              obj = p
+            } else if (el.shapeId) {
+              console.warn(`[createDesignBoards] forma non trovata: "${el.shapeId}"`)
             }
           } else if (el.type === 'line') {
             // x1,y1,x2,y2 sono coordinate relative alla posizione x,y dell'elemento
