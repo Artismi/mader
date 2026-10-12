@@ -721,6 +721,113 @@ function lineOf(g, w = 1.6) {
   return pc.union(...quads)
 }
 
+// ── Design Syndrome: manuale tecnico, ragnatele, flussi ────────────────────
+// Ispirati agli asset del progetto (public/assets/elements/ds-assembly, ds-tribals,
+// textures/ds-noise): annotazioni da manuale di montaggio, filamenti organici, campi di linee.
+
+const TW = 1.1 // spessore del tratto tecnico
+// Linea tratteggiata.
+function dashed(a, b, { dash = 2.6, gap = 1.8, w = TW } = {}) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), out = []
+  for (let d = 0; d < L - 0.5; d += dash + gap) out.push(line(lerp(a, b, d / L), lerp(a, b, Math.min(L, d + dash) / L), w, 0))
+  return out
+}
+// Punta di freccia: aperta (due tratti) o piena (triangolo).
+function arrowHead(tip, deg, size = 5, { open = true, w = TW } = {}) {
+  const a = rad(deg), back = [tip[0] - Math.cos(a) * size, tip[1] - Math.sin(a) * size], n = [-Math.sin(a) * size * 0.45, Math.cos(a) * size * 0.45]
+  const l = [back[0] + n[0], back[1] + n[1]], r = [back[0] - n[0], back[1] - n[1]]
+  return open ? [line(l, tip, w, 0), line(r, tip, w, 0)] : [poly([tip, l, r])]
+}
+// Cifre a 7 segmenti (stile display tecnico), box w x h con angolo alto-sinistra in (x, y).
+const SEG = { 0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' }
+function digit(ch, x, y, w = 5, h = 9, sw = TW) {
+  const P = { tl: [x, y], tr: [x + w, y], ml: [x, y + h / 2], mr: [x + w, y + h / 2], bl: [x, y + h], br: [x + w, y + h] }
+  const segs = { a: ['tl', 'tr'], b: ['tr', 'mr'], c: ['mr', 'br'], d: ['bl', 'br'], e: ['ml', 'bl'], f: ['tl', 'ml'], g: ['ml', 'mr'] }
+  return [...SEG[ch]].map(k => line(P[segs[k][0]], P[segs[k][1]], sw, 0))
+}
+const number = (str, x, y, size = 9) => [...String(str)].flatMap((c, i) => digit(c, x + i * size * 0.78, y, size * 0.55, size))
+// Richiamo numerato: punto sull'oggetto, linea guida, cerchio col numero.
+function callout(from, to, n, { r = 6.5 } = {}) {
+  const d = Math.hypot(to[0] - from[0], to[1] - from[1]), end = lerp(from, to, 1 - (r + 0.2) / d)
+  const sz = r * 0.95, str = String(n)
+  return [dot(from[0], from[1], 1.4), line(from, end, TW, 0), ringO(to[0], to[1], r, TW), ...number(str, to[0] - (str.length * sz * 0.78 - sz * 0.23) / 2, to[1] - sz / 2, sz)]
+}
+// Quota: linea con frecce/tacche e linee di riferimento.
+function dimension(a, b, { off = 0, ticks = true, w = TW } = {}) {
+  const deg = Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI
+  const n = [-Math.sin(rad(deg)), Math.cos(rad(deg))], A = [a[0] + n[0] * off, a[1] + n[1] * off], B = [b[0] + n[0] * off, b[1] + n[1] * off]
+  const out = [line(A, B, w, 0), ...arrowHead(A, deg + 180, 3.6, { w }), ...arrowHead(B, deg, 3.6, { w })]
+  if (ticks) out.push(line([A[0] - n[0] * 4, A[1] - n[1] * 4], [A[0] + n[0] * 4, A[1] + n[1] * 4], w, 0), line([B[0] - n[0] * 4, B[1] - n[1] * 4], [B[0] + n[0] * 4, B[1] + n[1] * 4], w, 0))
+  return out
+}
+// Crocino di registro.
+const registration = (cx = 50, cy = 50, R = 30) => [ringO(cx, cy, R * 0.55, TW), dot(cx, cy, R * 0.12), line([cx - R, cy], [cx + R, cy], TW, 0), line([cx, cy - R], [cx, cy + R], TW, 0)]
+// Segni di taglio agli angoli.
+const cropMarks = (m = 8, L = 14) => [[m, m, 1, 1], [100 - m, m, -1, 1], [m, 100 - m, 1, -1], [100 - m, 100 - m, -1, -1]].flatMap(([x, y, sx, sy]) => [line([x, y], [x + sx * L, y], TW, 0), line([x, y], [x, y + sy * L], TW, 0)])
+// Righello con tacche lunghe ogni 5.
+function ruler(x0 = 6, x1 = 94, y = 50, step = 2.2) { const out = [line([x0, y], [x1, y], TW, 0)]; let i = 0; for (let x = x0; x <= x1 + 0.01; x += step, i++) out.push(line([x, y], [x, y - (i % 5 === 0 ? 7 : 3.5)], TW * 0.85, 0)); return out }
+// Freccia di rotazione (come nelle istruzioni di montaggio).
+function rotateArrow(cx = 50, cy = 50, r = 34, a0 = 200, a1 = 470, dashedArc = true) {
+  const out = []
+  const at = d => [cx + r * Math.cos(rad(d)), cy + r * Math.sin(rad(d))]
+  if (dashedArc) for (let d = a0; d < a1 - 14; d += 11) out.push(brush(t => at(d + 6 * t), () => TW, { N: 20, needle: 0 }))
+  else out.push(brush(t => at(a0 + (a1 - a0 - 6) * t), () => TW, { N: 200, needle: 0 }))
+  const tip = at(a1), tangent = a1 + 90
+  return [...out, ...arrowHead(tip, tangent, 6, { open: false })]
+}
+
+// Ragnatela organica: nodi collegati da filamenti che si assottigliano a meta' e
+// si annodano nei nodi; alcuni filamenti escono liberi e chiudono ad ago.
+function web(seed, { nodes = 6, free = 6, w = 2.6 } = {}) {
+  const R = rng(seed * 7717 + 3), pts = []
+  for (let i = 0; i < nodes; i++) pts.push([22 + R() * 56, 22 + R() * 56])
+  // albero di copertura minimo + un paio di lati extra
+  const edges = [], inT = [0]
+  while (inT.length < nodes) { let best = null
+    for (const i of inT) for (let j = 0; j < nodes; j++) if (!inT.includes(j)) { const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]); if (!best || d < best[2]) best = [i, j, d] }
+    edges.push(best); inT.push(best[1]) }
+  for (let k = 0; k < 2; k++) { const i = Math.floor(R() * nodes), j = Math.floor(R() * nodes); if (i !== j) edges.push([i, j]) }
+  const parts = []
+  for (const [i, j] of edges) { const a = pts[i], b = pts[j], m = lerp(a, b, 0.5), n = [-(b[1] - a[1]), b[0] - a[0]], k = (R() - 0.5) * 0.5
+    const c = [m[0] + n[0] * k, m[1] + n[1] * k]
+    parts.push(brush(t => quad(a, c, b, t), t => 0.45 + w * Math.pow(Math.abs(t - 0.5) * 2, 2.2), { N: 120, needle: 0 })) }
+  for (let f = 0; f < free; f++) { const a = pts[Math.floor(R() * nodes)], ang = R() * 2 * Math.PI, L = 18 + R() * 30
+    const e = clampBox([a[0] + Math.cos(ang) * L, a[1] + Math.sin(ang) * L]), c = [lerp(a, e, 0.5)[0] + (R() - 0.5) * 12, lerp(a, e, 0.5)[1] + (R() - 0.5) * 12]
+    parts.push(brush(t => quad(a, c, e, t), t => w * Math.pow(1 - t, 1.6) + 0.1, { N: 100, needle: 0 })) }
+  for (const p of pts) parts.push(sparkle(p[0], p[1], 2.2 + R() * 1.5, 2.2 + R() * 1.5, { pinch: 0.35, bend: 0.5, rotate: R() * 90 }))
+  return { joined: fitBox(pc.union(...parts), 3) }
+}
+
+// Campo di flusso: linee sottili che seguono un rumore morbido, dentro una maschera,
+// distanziate in modo uniforme (una linea si ferma quando si avvicina troppo a un'altra).
+function flowField(seed, { inside = (x, y) => Math.hypot(x - 50, y - 50) < 44, sep = 2.1, w = 0.55, scale = 0.05, step = 0.6, maxLen = 160 } = {}) {
+  const R = rng(seed * 9973 + 1), ph = Array.from({ length: 6 }, () => R() * 6.28)
+  const ang = (x, y) => Math.sin(x * scale + ph[0]) * 1.5 + Math.cos(y * scale * 1.2 + ph[1]) * 1.3 + Math.sin((x - y) * scale * 0.6 + ph[2]) * 0.8
+  const cell = sep / 2, grid = new Map(), key = (x, y) => `${Math.floor(x / cell)},${Math.floor(y / cell)}`
+  const near = (p, own) => { const cx = Math.floor(p[0] / cell), cy = Math.floor(p[1] / cell)
+    for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) { const l = grid.get(`${cx + i},${cy + j}`); if (l) for (const q of l) if (q.id !== own && Math.hypot(q.x - p[0], q.y - p[1]) < sep) return true }
+    return false }
+  const add = (p, id) => { const k = key(...p); if (!grid.has(k)) grid.set(k, []); grid.get(k).push({ x: p[0], y: p[1], id }) }
+  const parts = []; let id = 0
+  const seeds = []
+  for (let y = 3; y < 97; y += sep * 1.3) for (let x = 3; x < 97; x += sep * 1.3) seeds.push([x + (R() - 0.5) * sep, y + (R() - 0.5) * sep])
+  seeds.sort(() => R() - 0.5)
+  for (const s0 of seeds) {
+    if (!inside(...s0) || near(s0, -1)) continue
+    id++
+    const trace = dir => { const out = []; let p = s0
+      for (let k = 0; k < maxLen; k++) { const a = ang(...p); const q = [p[0] + Math.cos(a) * step * dir, p[1] + Math.sin(a) * step * dir]
+        if (!inside(...q) || near(q, id)) break; out.push(q); p = q }
+      return out }
+    const pts = [...trace(-1).reverse(), s0, ...trace(1)]
+    if (pts.length < 14) continue
+    pts.forEach(p => add(p, id))
+    const at = t => { const f = t * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(f)); return lerp(pts[i], pts[i + 1], f - i) }
+    parts.push(brush(at, t => w * Math.pow(Math.sin(Math.PI * t), 0.35) + 0.12, { N: Math.min(200, pts.length), needle: 0 }))
+  }
+  return { joined: pc.union(...parts) }
+}
+
 // ── Combinazioni: strumenti ───────────────────────────────────────────────
 // Mette una forma (anche un sigillo) dentro un riquadro [x0, y0, x1, y1].
 const place = (g, box) => ({ joined: fitBox(g.joined || g, 0, box) })
@@ -827,6 +934,40 @@ const CATS = {
     'Stella Radiale':        [halftoneRadial(covFill(star5(50, 54, 44), 8), 50, 52, { step: 2.8 })],
     'Halftone Burst':      [htFill(burst(50, 50, 46, { inner: 0.1, alt: 0.6 }), 6, { step: 2.6 })],
   },
+  'MANUALE TECNICO': {
+    'Callout 1':        [join(...callout([26, 74], [70, 30], 1, { r: 9 }))],
+    'Callout 2':        [join(...callout([26, 74], [70, 30], 2, { r: 9 }))],
+    'Callout 3':        [join(...callout([26, 74], [70, 30], 3, { r: 9 }))],
+    'Callout Set':      [join(...callout([34, 62], [72, 26], 1)), join(...callout([46, 76], [82, 72], 2)), join(...callout([24, 46], [14, 14], 3))],
+    'Dimension':        [join(...dimension([8, 50], [92, 50]))],
+    'Dimension Cross':  [join(...dimension([8, 50], [92, 50], { ticks: false }), ...dimension([50, 8], [50, 92], { ticks: false }))],
+    'Registration':     [join(...registration(50, 50, 44))],
+    'Crop Marks':       [join(...cropMarks())],
+    'Ruler':            [join(...ruler(6, 94, 54))],
+    'Rotate Arrow':     [join(...rotateArrow())],
+    'Arrow':            [join(line([8, 50], [86, 50], TW, 0), ...arrowHead([92, 50], 0, 8))],
+    'Arrow Dashed':     [join(...dashed([8, 50], [84, 50]), ...arrowHead([92, 50], 0, 8, { open: false }))],
+    'Exploded Axis':    [join(...dashed([50, 10], [50, 90]), ...arrowHead([50, 4], -90, 7), ...arrowHead([50, 96], 90, 7))],
+  },
+  'SPEC': {
+    'Sparkle Spec':     [join(sparkle(44, 46, 16, 38, { pinch: 0.12 }), ...callout([45.5, 20], [80, 14], 1)), join(...dimension([28, 92], [60, 92], { ticks: true }))],
+    'Flare Spec':       [join(crossFlare(46, 54, 40), ...callout([46, 54], [84, 16], 2))],
+    'Bloom Spec':       [join(lineOf(bloom(44, 54, 32), 1.4), ...callout([44, 54], [86, 12], 3)), join(...dimension([12, 93], [76, 93], { ticks: true }))],
+    'Gear Exploded':    [join(gear(44, 22, 17), ...callout([60, 26], [86, 40], 1)), join(...dashed([44, 43], [44, 57])), join(gear(44, 78, 17, { teeth: 12, hole: 0.42 }), ...callout([60, 74], [86, 60], 2))],
+    'Globe Spec':       [join(globe(44, 50, 36), ...callout([64, 24], [86, 10], 1)), join(...ruler(8, 80, 97, 2.4))],
+    'Target Spec':      [join(...registration(50, 50, 30), lineOf(sparkle(50, 50, 6, 12, { pinch: 0.15 }), 1)), join(...cropMarks(6, 10))],
+  },
+  'RAGNATELE': {
+    'Web 1':            [web(1)], 'Web 2': [web(4)], 'Web 3': [web(6)], 'Web 4': [web(9)], 'Web 5': [web(10)], 'Web 6': [web(12)],
+  },
+  'FLUSSI': {
+    'Flow Circle':      [flowField(1)],
+    'Flow Square':      [flowField(2, { inside: (x, y) => x > 5 && x < 95 && y > 5 && y < 95 })],
+    'Flow Band':        [flowField(4, { inside: (x, y) => y > 32 && y < 68 && x > 3 && x < 97, sep: 1.8 })],
+    'Flow Ring':        [flowField(5, { inside: (x, y) => { const d = Math.hypot(x - 50, y - 50); return d < 46 && d > 24 }, sep: 1.8 })],
+    'Flow Bloom':       [flowField(6, { inside: (x, y) => sdGeom([x, y], bloom()) < -0.5, sep: 1.8 })],
+    'Flow Arch':        [flowField(7, { inside: (x, y) => (y > 50 ? Math.abs(x - 50) < 40 : Math.hypot(x - 50, y - 50) < 40) && y < 96, sep: 1.9 })],
+  },
   'ORBITE': {
     'Saturn Sparkle':   ringAround([S(50, 46, 15, 44, { pinch: 0.12 })], 50, 54, 46, 14),
     'Saturn Tilt':      ringAround([S(50, 50, 15, 46, { pinch: 0.12 })], 50, 52, 46, 15, { tilt: 14 }),
@@ -874,6 +1015,16 @@ const GLYPHS = {
   glint: () => glint(), burst: () => burst(50, 50, 47), bloom: () => bloom(), bloom6: () => bloom(50, 50, 46, { n: 6, depth: 0.5 }), cross: () => crossArm(),
   gear: () => gear(), target: () => targetSolid(), star: () => star5(50, 53, 46),
 }
+const DS = {
+  callouts: () => pc.union(...callout([30, 60], [64, 26], 1), ...callout([40, 74], [78, 64], 2), ...callout([22, 40], [16, 14], 3)),
+  dim: () => pc.union(...dimension([12, 50], [88, 50]), ...dimension([50, 14], [50, 86], { off: 0 })),
+  reg: () => pc.union(...registration(50, 50, 44)), crop: () => pc.union(...cropMarks()), ruler: () => pc.union(...ruler()),
+  rot: () => pc.union(...rotateArrow()), arrows: () => pc.union(line([10, 50], [86, 50], TW, 0), ...arrowHead([90, 50], 0, 7), ...dashed([10, 70], [86, 70]), ...arrowHead([90, 70], 0, 7, { open: false })),
+  ...Object.fromEntries([5,6,7,8,9,10,11,12].map(k => [`web${k}`, () => web(k).joined])),
+  web1: () => web(1).joined, web2: () => web(2).joined, web3: () => web(3).joined, web4: () => web(4).joined,
+  flow1: () => flowField(1).joined, flow2: () => flowField(2, { inside: (x, y) => x > 6 && x < 94 && y > 6 && y < 94 }).joined,
+  flow3: () => flowField(3, { inside: (x, y) => sdGeom([x, y], sparkle(50, 50, 34, 47, { pinch: 0.1 })) < 0, n: 220 }).joined,
+}
 const LINES = {
   globe: () => globe(), squares: () => concentricSquares(), warp: () => warpGrid(), echoSparkle: () => echo(k => sparkle(50, 50, 34 * k, 47 * k, { pinch: 0.16 })),
   echoBloom: () => echo(k => bloom(50, 50, 46 * k), [1, 0.74, 0.48, 0.22]), echoSlim: () => echo(k => sparkle(50, 50, 18 * k + 2, 47 * k, { pinch: 0.2 }), [1, 0.7, 0.4]),
@@ -888,6 +1039,7 @@ if (process.env.GLYPH_EXPLORE) {
     writeFileSync(`${dir}/${k}-3half.svg`, svg(halftone(covGlow(g, 7), { step: 2.6 }).raw))
   }
   for (const [k, f] of Object.entries(LINES)) writeFileSync(`${dir}/z-${k}.svg`, svg(toPath(f())))
+  for (const [k, f] of Object.entries(DS)) writeFileSync(`${dir}/ds-${k}.svg`, svg(toPath(f())))
   process.exit(0)
 }
 

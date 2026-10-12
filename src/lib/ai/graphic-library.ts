@@ -10,6 +10,10 @@ const USO: Record<string, string> = {
   'ORBITE': 'elemento narrativo attorno a un titolo o a un prodotto',
   'SPINE & INCHIOSTRO': 'tono dark/editoriale, diagonali che attraversano la tavola',
   'OP ART': 'blocchi ritmici, retro-moderno, bilanciati con molto vuoto',
+  'MANUALE TECNICO': 'estetica da manuale di montaggio: richiami numerati che indicano il prodotto, quote, crocini, segni di taglio, righelli; piccoli e precisi, allineati ai margini',
+  'SPEC': 'un glifo già annotato come tavola tecnica: ottimo come elemento eroe in layout editoriali o di prodotto',
+  'RAGNATELE': 'filamenti organici da usare come accento dinamico, spesso a un angolo o tagliati dal bordo',
+  'FLUSSI': 'texture di linee a flusso: grandi, dietro ai contenuti, opacità 0.15-0.4',
 }
 
 export function graphicLibraryPrompt(): string {
