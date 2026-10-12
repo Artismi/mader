@@ -492,7 +492,7 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
       m.a[k] = v ? Math.max(m.a[k], cov) : Math.min(m.a[k], 255 - cov)
     }
   }
-  const fillPockets = (solid: Mask, region: (k: number) => boolean) => {
+  const fillPockets = (solid: Mask, region: (k: number) => boolean, rho: number) => {
     const comp: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
     for (let k = 0; k < N; k++) comp.a[k] = 255 - solid.a[k]
     const dOut = distance(comp)                                   // distanza dal pieno, fuori
@@ -505,24 +505,22 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
       if (v > ink[k]) ink[k] = v
     }
   }
-  // nidificazione: chi sta dentro chi
-  const inHost = circles.map((q, j) => {
-    let best = -1
-    circles.forEach((c, i) => { if (i !== j && Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r + g && (best < 0 || c.r < circles[best].r)) best = i })
-    return best
-  })
-  // regione esterna: il pieno sono le bolle di primo livello
+  // annidata solo se sta tutta dentro (niente tolleranza): una bolla che esce dal bordo
+  // resta di primo livello e le sue conche esterne prendono l'inchiostro pieno
+  const inside = (q: { x: number; y: number; r: number }, c: { x: number; y: number; r: number }) => Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r - w
+  const nested = circles.map((q, j) => circles.some((c, i) => i !== j && inside(q, c)))
   const outer: Mask = { w: W, h: H, a: new Uint8ClampedArray(N) }
-  circles.forEach((c, i) => { if (inHost[i] < 0) disk(outer, c, 1) })
-  fillPockets(outer, () => true)
-  // dentro ogni bolla che ne contiene altre: il pieno è il fuori della bolla + le annidate
-  circles.forEach((h, hi) => {
-    const kids = circles.filter((_, j) => inHost[j] === hi)
-    if (!kids.length) return
+  circles.forEach((c, i) => { if (!nested[i]) disk(outer, c, 1) })
+  fillPockets(outer, () => true, rho)
+  // dentro ogni bolla: conche fra il suo contorno e le bolle che vi entrano (annidate o
+  // sovrapposte), con raggio dimezzato, quindi più sottili dell'esterno
+  circles.forEach(h => {
+    const guests = circles.filter(q => q !== h && Math.hypot(q.x - h.x, q.y - h.y) < h.r + q.r - w && !inside(h, q))
+    if (!guests.length) return
     const sol: Mask = { w: W, h: H, a: new Uint8ClampedArray(N).fill(255) }
     disk(sol, h, 0)
-    kids.forEach(c => disk(sol, c, 1))
-    fillPockets(sol, k => { const x = k % W, y = (k / W) | 0; return Math.hypot(x - h.x, y - h.y) < h.r })
+    guests.forEach(c => disk(sol, c, 1))
+    fillPockets(sol, k => { const x = k % W, y = (k / W) | 0; return Math.hypot(x - h.x, y - h.y) < h.r }, rho * 0.5)
   })
   return drawMask(W, H, ctx => {
     const img = ctx.createImageData(W, H)
