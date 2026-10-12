@@ -52,5 +52,3 @@ ts-error.txt
 /public/vendor/
 /public/models/
 
-# asset dei pack importati (rigenerabili con scripts/import-packs.py, ~350 MB)
-/public/library/

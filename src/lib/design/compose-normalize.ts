@@ -11,6 +11,7 @@
  * Nessuna dipendenza dal canvas: lo usano sia lo Studio sia i test.
  */
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES, type ComposeBoard, type DecorId } from './compose-spec'
+import { pickRecipes, RECIPES, recipeOf, recipeSpec, STYLE_FINISH, type Recipe } from './compose-recipes'
 
 const norm = (s: unknown) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
 
@@ -81,7 +82,7 @@ function photoPrompt(b: Partial<ComposeBoard>, styleLabel: string) {
   return `Product and lifestyle photograph for: ${subject}. Editorial ${styleLabel.toLowerCase()} mood, real objects and materials from the subject, natural light, clean composition with negative space, high detail, photorealistic, no text, no letters, no logo`
 }
 
-export interface NormalizeOpts { /** l'utente ha chiesto niente foto */ noPhoto?: boolean; /** aggiungere una foto se manca (spento: dava risultati casuali) */ autoPhoto?: boolean }
+export interface NormalizeOpts { /** senza ricette (solo nomi corretti) */ raw?: boolean; /** l'utente ha chiesto niente foto */ noPhoto?: boolean; /** aggiungere una foto se manca (spento: dava risultati casuali) */ autoPhoto?: boolean }
 
 export function normalizeBoard(input: Partial<ComposeBoard>, opts: NormalizeOpts = {}): ComposeBoard {
   const b: Partial<ComposeBoard> = { ...input, content: { ...(input.content ?? { title: '' }) } }
@@ -116,9 +117,40 @@ export function normalizeBoard(input: Partial<ComposeBoard>, opts: NormalizeOpts
   return b as ComposeBoard
 }
 
-/** Accetta anche risposte mal formate: una tavola sola, o tavole dentro "board"/"design". */
+/** La tavola con la ricetta applicata: contenuti, formato e colori restano quelli scritti. */
+function withRecipe(b: ComposeBoard, r: Recipe, suffix = ''): ComposeBoard {
+  const out: ComposeBoard = { ...b, ...recipeSpec(r) }
+  if (!b.finish) out.finish = STYLE_FINISH[r.style] ?? []
+  if (suffix) out.name = `${b.name || b.content.title.slice(0, 28)} ${suffix}`
+  return out
+}
+
+/**
+ * Accetta anche risposte mal formate (una tavola sola, o dentro "board"/"design")
+ * e le porta su ricette pulite:
+ * - ricetta indicata → quella
+ * - una sola tavola → `variants` proposte (predefinito 3), ricette diverse adatte al contenuto
+ * - più tavole (carosello, adattamenti) → una ricetta coerente per ciascuna, stesso stile
+ */
 export function normalizeBoards(payload: unknown, opts: NormalizeOpts = {}): ComposeBoard[] {
   const p = payload as Record<string, unknown> | undefined
   const raw = Array.isArray(p?.boards) ? p!.boards : Array.isArray(p) ? p : p?.board ? [p.board] : p?.design ? [p.design] : p?.content ? [p] : []
-  return (raw as Partial<ComposeBoard>[]).filter(x => x && typeof x === 'object').map(x => normalizeBoard(x, opts))
+  const boards = (raw as Partial<ComposeBoard>[]).filter(x => x && typeof x === 'object').map(x => normalizeBoard(x, opts))
+  if (opts.raw) return boards
+  const asked = Number(p?.variants ?? (boards.length === 1 ? (raw as Record<string, unknown>[])[0]?.variants : undefined))
+  const n = Math.max(1, Math.min(4, Number.isFinite(asked) && asked > 0 ? asked : boards.length === 1 ? 3 : 1))
+  const styleAsked = (b: ComposeBoard, i: number) => (raw as Record<string, unknown>[])[i]?.style ? b.style : undefined
+
+  if (boards.length === 1) {
+    const b = boards[0]
+    const fixed = recipeOf(b.recipe)
+    if (fixed && n === 1) return [withRecipe(b, fixed)]
+    const picks = pickRecipes({ ...b, style: styleAsked(b, 0) }, n)
+    if (fixed && !picks.some(r => r.id === fixed.id)) picks.unshift(fixed)
+    const letters = 'ABCD'
+    return picks.slice(0, n).map((r, i) => withRecipe(b, r, n > 1 ? `· ${letters[i]}` : ''))
+  }
+  // più tavole: stessa famiglia di stile per tutte (un carosello deve sembrare una serie)
+  const style = styleAsked(boards[0], 0)
+  return boards.map(b => withRecipe(b, recipeOf(b.recipe) ?? pickRecipes({ ...b, style: style ?? b.style }, 1)[0] ?? RECIPES[0]))
 }

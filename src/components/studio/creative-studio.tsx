@@ -293,6 +293,7 @@ import { describeCanvas, runDesignOps } from './ai/design-ops'
 import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
 import { normalizeBoards } from '@/lib/design/compose-normalize'
 import { resolvePhoto } from './ai/photos'
+import { applyFinish } from './ai/finish'
 import { isCropping, startCrop } from './image/crop'
 
 /** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
@@ -2442,7 +2443,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const { w, h } = boardSize(b)
         const name = addArtboard(w, h, b.name || (b.content?.title || b.content?.quote)?.slice(0, 32) || `Tavola ${i + 1}`, 'social', x + w / 2, 100 + h / 2)
         const ab = canvas.getObjects().find(o => o.get('name') === name)
-        if (ab) await composeBoard(canvas, ab, b, i, boards.length)
+        if (ab) {
+          await composeBoard(canvas, ab, b, i, boards.length)
+          // finiture con i pack importati (carta, grana, luci, elementi): procedurali, stesse per lo stesso contenuto
+          if (b.finish?.length) await applyFinish(canvas, ab, b.finish, `${b.content.title}|${b.recipe ?? b.style}|${i}`)
+        }
         x += w + 160
       }
       fitToArtboards()

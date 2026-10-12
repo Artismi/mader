@@ -222,6 +222,12 @@ export interface ComposeBoard {
   /** decorazioni in più o al posto di quelle dello stile */
   decor?: DecorId[]
   noDecor?: boolean
+  /** decorazioni dello stile da togliere (le ricette pulite tolgono 'ghost') */
+  excludeDecor?: DecorId[]
+  /** ricetta pulita (compose-recipes.ts) */
+  recipe?: string
+  /** finiture con i pack importati: carta, grana, luce, polvere, y2k… (compose-recipes.ts) */
+  finish?: string[]
   /** materia sopra la tavola: carta, rumore, plastica o nessuna */
   texture?: 'stile' | 'carta' | 'rumore' | 'plastica' | 'nessuna'
   /** ornamento generativo: 'stile' (predefinito), 'nessuno' o un id */

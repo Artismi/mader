@@ -180,7 +180,7 @@ export async function composeBoard(canvas: fabric.Canvas, artboard: fabric.Fabri
   /* ── fasce che rubano spazio (prima della disposizione) ── */
   const density = spec.density ?? 'ricco'
   const recipe: DecorId[] = density === 'essenziale' ? S.decor.slice(0, 2) : density === 'massimo' ? [...S.decor, 'ghost', 'vertical', 'crop'] : S.decor
-  const decor = new Set<DecorId>(spec.noDecor ? [] : [...recipe, ...(spec.decor ?? [])])
+  const decor = new Set<DecorId>((spec.noDecor ? [] : [...recipe, ...(spec.decor ?? [])]).filter(d => !spec.excludeDecor?.includes(d)))
   // le impaginazioni a moduli hanno già la loro struttura: niente testata, griglie o forme libere
   if (['arte', 'bento', 'manifesto', 'cover', 'tipografico', 'manuale', 'collage', 'drop'].includes(L.id)) (['folio', 'columns', 'index', 'bauhaus', 'blob', 'dots', 'orbs', 'ticker', 'bars', 'frame'] as DecorId[]).forEach(d => decor.delete(d))
   if (L.id === 'bento') (['ghost', 'shape3d', 'halftoneDisc'] as DecorId[]).forEach(d => decor.delete(d))
