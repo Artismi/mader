@@ -12,7 +12,8 @@ import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, 
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
-import { burst, castShadow, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
+import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
+import { arcText, burst, castShadow, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
@@ -328,18 +329,29 @@ const sigillo: Recipe = {
 }
 
 const corona: Recipe = {
-  id: 'corona', label: 'Corona di spine', cat: 'Sigilli', hint: 'una parola chiusa in un anello di spine affilate',
-  params: [P.text('Veritas'), P.face('gotico'), P.tone(3), P.mat(0), P.range('thorns', 'Spine', 8, 40, 22), P.range('weight', 'Peso', 40, 170, 100), P.glow(false), P.caps(), P.grain(30)],
+  id: 'corona', label: 'Corona', cat: 'Sigilli', hint: 'una parola dentro una corona: alloro, spine intrecciate o cordone',
+  params: [P.sel('ring', 'Corona', ['Alloro', 'Spine intrecciate', 'Cordone']), P.text('Artismi'), { key: 'sub', label: 'Sotto', type: 'text', def: 'Torino · MMXXVI' },
+    P.face('gotico'), P.tone(3), P.mat(0), P.range('thorns', 'Spine', 8, 30, 16), P.range('weight', 'Peso', 50, 170, 100), P.glow(false), P.caps(), P.grain(30)],
   render: o => {
-    const t = tone(o), S = SS(o), r = rng(o.seed), R = S * 0.3
-    const ring = drawMask(o.W, o.H, ctx => thornRing(ctx, r, o.W / 2, o.H / 2, R, S, num(o, 'thorns'), num(o, 'weight') / 100))
-    const f = face(o), word = str(o, 'text') || ' '
-    const size = Math.min(wordSize(word, f, R * 1.55), S * 0.17)
-    const w = drawMask(o.W, o.H, ctx => text(ctx, word, o.W / 2, o.H / 2 + size * 0.32, f, size, 'center'))
+    const t = tone(o), S = SS(o), r = rng(o.seed), R = S * 0.3, cx = o.W / 2, cy = o.H / 2, kind = num(o, 'ring'), wt = num(o, 'weight') / 100
+    const ring = drawMask(o.W, o.H, ctx => {
+      if (kind === 0) laurel(ctx, r, cx, cy, R, S, wt)
+      else if (kind === 1) thornBraid(ctx, r, cx, cy, R, S, num(o, 'thorns'), wt)
+      else { rope(ctx, cx, cy, R, S, wt); ctx.lineWidth = S * 0.003; ctx.beginPath(); ctx.arc(cx, cy, R * 0.86, 0, Math.PI * 2); ctx.stroke() }
+    })
+    const f = face(o), word = str(o, 'text') || ' ', sub = str(o, 'sub')
+    const w = drawMask(o.W, o.H, ctx => {
+      const size = Math.min(wordSize(word, f, R * 1.3), S * 0.15)
+      const ch = capOf(f, size)
+      const subS = sub ? Math.min(wordSize(sub, FACES.mono, R * 0.9), S * 0.022) : 0
+      const tot = ch + (sub ? subS * 2.4 : 0)
+      text(ctx, word, cx, cy - tot / 2 + ch, f, size, 'center')
+      if (sub) text(ctx, sub, cx, cy + tot / 2, FACES.mono, subS, 'center')
+    })
     const { c, ctx } = stage(o, t)
-    paint(ctx, ring, o, t, num(o, 'mat'), on(o, 'glow'))
+    paint(ctx, ring, o, t, num(o, 'mat'), on(o, 'glow'), 0.006)
     paint(ctx, w, o, t, num(o, 'mat'), false, 0.006)
-    return finish(c, o, t, 'corona', ['CORONA SPINARUM', code(o, 'crwn'), BRAND, word.toUpperCase()])
+    return finish(c, o, t, 'corona', ['CORONA', code(o, 'crwn'), BRAND, word.toUpperCase()])
   },
 }
 
@@ -1094,6 +1106,227 @@ const nastro: Recipe = {
   },
 }
 
+// ─── EPHEMERA ────────────────────────────────────────────────────────────────
+
+const francobollo: Recipe = {
+  id: 'francobollo', label: 'Francobollo', cat: 'Ephemera', hint: 'francobollo dentellato con illustrazione, valore e annullo postale',
+  piece: true,
+  params: [P.sel('sym', 'Soggetto', ['Sole', 'Luna', 'Occhio', 'Stella', 'Cuore sacro', 'Pugnale', 'Raggiera']), P.text('Torino', 'Luogo'),
+    { key: 'value', label: 'Valore', type: 'text', def: '€ 1,20' }, { key: 'issuer', label: 'Emittente', type: 'text', def: 'Artismi Design Studio' },
+    P.tog('cancel', 'Annullo', true), P.range('angle', 'Rotazione', -15, 15, 4), P.tog('shadow', 'Ombra', true), P.tone(2), P.grain(20)],
+  render: o => {
+    const t = tone(o), S = SS(o), r = rng(o.seed), cx = o.W / 2, cy = o.H / 2
+    const w = S * 0.56, h = S * 0.7, x = cx - w / 2, y = cy - h / 2, hole = S * 0.011
+    const ang = num(o, 'angle') * Math.PI / 180
+    const rot = (m: Mask) => remap(m, (px, py) => { const dx = px - cx, dy = py - cy, cs = Math.cos(-ang), sn = Math.sin(-ang); return [cx + dx * cs - dy * sn, cy + dx * sn + dy * cs] })
+    const paper = rot(perforated(o.W, o.H, x, y, w, h, hole))
+    const m = S * 0.04, ix = x + m, iy = y + m, iw = w - 2 * m, ih = h - 2 * m
+    const panel = rot(drawMask(o.W, o.H, ctx => ctx.fillRect(ix, iy, iw, ih)))
+    const light = rot(drawMask(o.W, o.H, ctx => {
+      const k = num(o, 'sym'), icx = cx, icy = iy + ih * 0.44
+      ctx.save(); ctx.beginPath(); ctx.rect(ix, iy, iw, ih); ctx.clip()
+      if (k === 6) sunburst(ctx, icx, icy, ih, 28, r() * 0.2)
+      else { ctx.lineCap = 'round'; ctx.lineJoin = 'round'; flash(ctx, k, icx, icy, iw * 0.95, r, 1.6) }
+      ctx.restore()
+      fitText(ctx, str(o, 'text'), FACES.condensato, ix + iw * 0.06, iy + ih * 0.12, iw * 0.6, ih * 0.08, 'left')
+      fitText(ctx, str(o, 'value'), FACES.espanso, ix + iw * 0.94, iy + ih * 0.93, iw * 0.5, ih * 0.1, 'right')
+      fitText(ctx, str(o, 'issuer'), FACES.mono, ix + iw * 0.06, iy + ih * 0.93, iw * 0.4, ih * 0.03, 'left')
+    }))
+    const { c, ctx } = stage(o, t)
+    if (on(o, 'shadow')) castShadow(ctx, paper, S, 0.25, 0.5)
+    ctx.drawImage(maskToCanvas(paper, '#f6f1e4'), 0, 0)
+    const pc = makeCanvas(o.W, o.H)
+    pc.ctx.drawImage(maskToCanvas(panel, t.acc), 0, 0)
+    pc.ctx.drawImage(maskToCanvas(combine(light, panel, 'min'), '#f6f1e4'), 0, 0)
+    // stampa calcografica: inchiostro appena irregolare
+    ctx.drawImage(maskToCanvas(inkPress(panel, o.seed + 1, S, 0.05, { tilt: 0.2 }), '#000000', 0), 0, 0)
+    ctx.drawImage(pc.c, 0, 0)
+    if (on(o, 'cancel')) {
+      // annullo: timbro tondo con data e onde, nero e scarico, che sborda dal francobollo
+      const pcx = cx + w * 0.42, pcy = cy - h * 0.18
+      const plate = drawMask(o.W, o.H, c2 => {
+        stampPlate(c2, 0, pcx, pcy, S * 0.38, { top: str(o, 'text'), bottom: 'Poste', center: '12·10·26', small: '' }, { ring: FACES.grotesk, center: FACES.mono, small: FACES.mono }, 0.7)
+        c2.lineWidth = S * 0.005
+        for (let i = 0; i < 5; i++) { const yy = pcy - S * 0.06 + i * S * 0.03; c2.beginPath(); for (let k = 0; k <= 60; k++) { const xx = pcx + S * 0.17 + k * S * 0.006; c2.lineTo(xx, yy + Math.sin(k * 0.45) * S * 0.008) } c2.stroke() }
+      })
+      ctx.save(); ctx.globalAlpha = 0.85; ctx.globalCompositeOperation = 'multiply'
+      ctx.drawImage(maskToCanvas(inkPress(plate, o.seed + 7, S, 0.5, { tilt: 0.8 }), '#1b1b22'), 0, 0); ctx.restore()
+    }
+    return finish(c, o, t, 'francobollo', null)
+  },
+}
+
+const valigia: Recipe = {
+  id: 'valigia', label: 'Etichetta da valigia', cat: 'Ephemera', hint: 'etichetta d\'albergo anni 30-50: raggiera, banda col nome, testo in giro',
+  piece: true,
+  params: [P.sel('kind', 'Forma', ['Tonda', 'Ovale', 'Rombo']), P.text('Torino', 'Banda'), { key: 'top', label: 'In alto', type: 'text', def: 'Artismi Design Studio' },
+    { key: 'bottom', label: 'In basso', type: 'text', def: 'Italia' }, P.face('espanso'), P.range('wear', 'Usura', 0, 100, 15), P.range('angle', 'Rotazione', -20, 20, -7), P.tone(5), P.grain(25)],
+  render: o => {
+    const t = tone(o), S = SS(o), cx = o.W / 2, cy = o.H / 2, kind = num(o, 'kind'), R = S * 0.42
+    const ang = num(o, 'angle') * Math.PI / 180
+    const shapePath = (ctx: Ctx, k = 1) => {
+      ctx.beginPath()
+      if (kind === 0) ctx.arc(cx, cy, R * k, 0, Math.PI * 2)
+      else if (kind === 1) ctx.ellipse(cx, cy, R * k, R * 0.72 * k, 0, 0, Math.PI * 2)
+      else { ctx.moveTo(cx, cy - R * k); ctx.lineTo(cx + R * 1.05 * k, cy); ctx.lineTo(cx, cy + R * k); ctx.lineTo(cx - R * 1.05 * k, cy); ctx.closePath() }
+    }
+    const rot = (ctx: Ctx) => { ctx.translate(cx, cy); ctx.rotate(ang); ctx.translate(-cx, -cy) }
+    const paper = drawMask(o.W, o.H, ctx => { rot(ctx); shapePath(ctx); ctx.fill() })
+    const ink1 = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      shapePath(ctx, 0.95); ctx.fill()
+      ctx.save(); shapePath(ctx, 0.95); ctx.clip()
+      ctx.globalCompositeOperation = 'destination-out'
+      shapePath(ctx, 0.9); ctx.lineWidth = S * 0.006; ctx.stroke()
+      ctx.restore()
+    })
+    const ink2 = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      ctx.save(); shapePath(ctx, 0.88); ctx.clip()
+      sunburst(ctx, cx, cy, R * 1.2, 36, 0.05)
+      ctx.restore()
+    })
+    const band = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      const bh = R * 0.34, bw = kind === 2 ? R * 2.3 : R * 2.15
+      // banda con le code a coda di rondine che escono dalla sagoma
+      ctx.beginPath(); ctx.rect(cx - bw / 2, cy - bh / 2, bw, bh); ctx.fill()
+      for (const s of [-1, 1]) { const ex = cx + s * bw / 2; ctx.beginPath(); ctx.moveTo(ex, cy - bh * 0.35); ctx.lineTo(ex + s * bh * 0.6, cy - bh * 0.35); ctx.lineTo(ex + s * bh * 0.35, cy + bh * 0.05); ctx.lineTo(ex + s * bh * 0.6, cy + bh * 0.45); ctx.lineTo(ex, cy + bh * 0.45); ctx.closePath(); ctx.fill() }
+    })
+    // nome nella banda, centrato sull'altezza delle maiuscole
+    const word2 = drawMask(o.W, o.H, ctx => { rot(ctx); const f: Face = face(o); const s0 = str(o, 'text'); const { ctx: m } = makeCanvas(4, 4); const sz = Math.min(fitSize(m, f.upper ? s0.toUpperCase() : s0, f, R * 1.6), R * 0.34 * 0.62); text(ctx, s0, cx, cy + capOf(f, sz) / 2, f, sz, 'center') })
+    const ring = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      if (kind === 0) {
+        if (str(o, 'top')) arcText(ctx, str(o, 'top'), cx, cy, R * 0.68, FACES.grotesk, R * 0.11, true, 0.08)
+        if (str(o, 'bottom')) arcText(ctx, str(o, 'bottom'), cx, cy, R * 0.8, FACES.grotesk, R * 0.11, false, 0.25)
+      } else {
+        if (str(o, 'top')) fitText(ctx, str(o, 'top'), FACES.grotesk, cx, cy - R * 0.3, R * (kind === 2 ? 0.8 : 1.2), R * 0.1)
+        if (str(o, 'bottom')) fitText(ctx, str(o, 'bottom'), FACES.grotesk, cx, cy + R * 0.38, R * 0.7, R * 0.09)
+      }
+    })
+    const wear = num(o, 'wear') / 100
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, paper, S, 0.22, 0.4)
+    ctx.drawImage(maskToCanvas(paper, '#efe5cf'), 0, 0)
+    const lay = (m: Mask, col: string, seed: number, dx = 0) => ctx.drawImage(maskToCanvas(inkPress(combine(m, paper, 'min'), seed, S, wear * 0.6, { tilt: 0.3 }), col), dx, 0)
+    lay(ink1, t.acc, o.seed)
+    ctx.save(); ctx.globalAlpha = 0.16; lay(ink2, '#ffffff', o.seed + 1); ctx.restore()
+    const bandOut = drawMask(o.W, o.H, c2 => { c2.drawImage(maskToCanvas(band, '#000'), 0, 0) })
+    lay(bandOut, '#efe5cf', o.seed + 2)
+    lay(combine(band, word2, 'min'), t.acc, o.seed + 3, S * 0.002)
+    ctx.drawImage(maskToCanvas(inkPress(combine(ring, paper, 'min'), o.seed + 4, S, wear * 0.6, { tilt: 0.3 }), '#efe5cf'), 0, 0)
+    return finish(c, o, t, 'valigia', null)
+  },
+}
+
+const fiammiferi: Recipe = {
+  id: 'fiammiferi', label: 'Etichetta fiammiferi', cat: 'Ephemera', hint: 'etichetta da scatola di fiammiferi: geometria modernista a tinte piatte',
+  piece: true,
+  params: [P.text('Artismi', 'Marchio'), { key: 'sub', label: 'Riga', type: 'text', def: 'Torino' }, { key: 'count', label: 'Numero', type: 'text', def: '40' },
+    P.face('condensato'), P.sel('pal', 'Colori', ['Rosso e blu', 'Arancio e nero', 'Verde e rosa', 'Tono']), P.range('misreg', 'Fuori registro', 0, 100, 30), P.tone(1), P.grain(25)],
+  render: o => {
+    const t = tone(o), S = SS(o), r = rng(o.seed), cx = o.W / 2, cy = o.H / 2
+    const pals = [['#d62f2f', '#1d3a8a', '#f2e6c9'], ['#ef6a1f', '#151515', '#f3ead6'], ['#1f7a52', '#f07da6', '#f4ecdb'], [t.acc, t.ink, t.bg]]
+    const [c1, c2, pap] = pals[num(o, 'pal')] ?? pals[0]
+    const w = S * 0.86, h = S * 0.56, x = cx - w / 2, y = cy - h / 2
+    const mis = S * 0.004 * num(o, 'misreg') / 100
+    const paper = drawMask(o.W, o.H, ctx => ctx.fillRect(x, y, w, h))
+    // composizione: una figura grande in c1, un contrappunto in c2, testo
+    const pick = Math.floor(r() * 4)
+    const A = drawMask(o.W, o.H, ctx => {
+      ctx.save(); ctx.beginPath(); ctx.rect(x + h * 0.06, y + h * 0.06, w - h * 0.12, h - h * 0.12); ctx.clip()
+      const gx = x + w * 0.3, gy = cy
+      if (pick === 0) { ctx.beginPath(); ctx.arc(gx, gy, h * 0.36, 0, Math.PI * 2); ctx.fill() }
+      else if (pick === 1) { ctx.beginPath(); ctx.moveTo(gx - h * 0.4, gy + h * 0.38); ctx.lineTo(gx, gy - h * 0.4); ctx.lineTo(gx + h * 0.4, gy + h * 0.38); ctx.closePath(); ctx.fill() }
+      else if (pick === 2) { for (let i = 0; i < 6; i++) ctx.fillRect(gx - h * 0.4, gy - h * 0.38 + i * h * 0.14, h * 0.8, h * 0.07) }
+      else { ctx.beginPath(); ctx.arc(gx, gy + h * 0.38, h * 0.62, Math.PI, 0); ctx.fill() }
+      ctx.restore()
+    })
+    const B = drawMask(o.W, o.H, ctx => {
+      const gx = x + w * 0.3, gy = cy
+      // fiamma geometrica: goccia rovesciata con il cuore vuoto
+      ctx.beginPath(); ctx.moveTo(gx, gy - h * 0.3)
+      ctx.bezierCurveTo(gx + h * 0.2, gy - h * 0.05, gx + h * 0.16, gy + h * 0.2, gx, gy + h * 0.22)
+      ctx.bezierCurveTo(gx - h * 0.16, gy + h * 0.2, gx - h * 0.2, gy - h * 0.05, gx, gy - h * 0.3); ctx.fill()
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.beginPath(); ctx.ellipse(gx, gy + h * 0.09, h * 0.06, h * 0.1, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.globalCompositeOperation = 'source-over'
+      // cornice doppia e testo
+      ctx.lineWidth = S * 0.005; ctx.strokeRect(x + h * 0.035, y + h * 0.035, w - h * 0.07, h - h * 0.07)
+      const tx = x + w * 0.58, tw = w * 0.36
+      const big = fitText(ctx, str(o, 'text'), face(o), tx + tw / 2, cy + h * 0.06, tw, h * 0.3)
+      ctx.fillRect(tx, cy + h * 0.06 + big * 0.12, tw, S * 0.004)
+      fitText(ctx, str(o, 'sub'), FACES.grotesk, tx + tw / 2, cy + h * 0.06 + big * 0.12 + h * 0.11, tw * 0.8, h * 0.07)
+      const cnt = str(o, 'count')
+      if (cnt) { fitText(ctx, 'N° ' + cnt, FACES.mono, tx + tw / 2, y + h * 0.2, tw * 0.5, h * 0.045) }
+    })
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, paper, S, 0.2, 0.35)
+    ctx.drawImage(maskToCanvas(paper, pap), 0, 0)
+    ctx.save(); ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(maskToCanvas(inkPress(combine(A, paper, 'min'), o.seed, S, 0.15, { tilt: 0.3 }), c1), -mis, mis * 0.5)
+    ctx.drawImage(maskToCanvas(inkPress(combine(B, paper, 'min'), o.seed + 1, S, 0.12, { tilt: 0.3 }), c2), mis, -mis * 0.5)
+    ctx.restore()
+    return finish(c, o, t, 'fiammiferi', null)
+  },
+}
+
+const cartellino: Recipe = {
+  id: 'cartellino', label: 'Cartellino', cat: 'Ephemera', hint: 'cartellino con occhiello rinforzato e spago, stampato o scritto',
+  piece: true,
+  params: [P.text('Artismi', 'Titolo'), { key: 'lines', label: 'Righe', type: 'text', def: 'Design Studio|Torino|Pezzo unico' }, P.face('bodoni'),
+    P.sel('paper', 'Carta', ['Kraft', 'Avorio', 'Nero', 'Colore del tono']), P.range('angle', 'Rotazione', -30, 30, 12), P.tog('string', 'Spago', true), P.tone(1), P.grain(20)],
+  render: o => {
+    const t = tone(o), S = SS(o), cx = o.W / 2, cy = o.H / 2 + S * 0.05
+    const w = S * 0.4, h = S * 0.68, x = cx - w / 2, y = cy - h / 2, cut = w * 0.22
+    const ang = num(o, 'angle') * Math.PI / 180
+    const pk = num(o, 'paper')
+    const paperC = ['#b98b57', '#f3ead7', '#161616', t.acc][pk] ?? '#b98b57'
+    const inkC = pk === 2 ? '#efe6d2' : pk === 3 ? (luma(t.acc) > 0.5 ? '#141414' : '#f4efe4') : '#1d1a17'
+    const rot = (ctx: Ctx) => { ctx.translate(cx, y); ctx.rotate(ang); ctx.translate(-cx, -y) }
+    const hy = y + cut * 0.95
+    const tag = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      ctx.beginPath(); ctx.moveTo(x + cut, y); ctx.lineTo(x + w - cut, y); ctx.lineTo(x + w, y + cut); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + cut); ctx.closePath(); ctx.fill()
+      ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(cx, hy, w * 0.05, 0, Math.PI * 2); ctx.fill()
+    })
+    const ring = drawMask(o.W, o.H, ctx => { rot(ctx); eyelet(ctx, cx, hy, w * 0.05) })
+    const ink = drawMask(o.W, o.H, ctx => {
+      rot(ctx)
+      const m = w * 0.12, tw = w - 2 * m
+      const f = face(o)
+      const big = fitText(ctx, str(o, 'text'), f, cx, y + h * 0.42, tw, h * 0.14)
+      ctx.fillRect(cx - tw * 0.3, y + h * 0.42 + big * 0.25, tw * 0.6, Math.max(1, S * 0.0025))
+      lines(str(o, 'lines')).slice(0, 4).forEach((l, i) => fitText(ctx, l, FACES.mono, cx, y + h * 0.42 + big * 0.25 + h * 0.09 + i * h * 0.065, tw * 0.9, h * 0.032))
+      ctx.lineWidth = Math.max(1, S * 0.002); ctx.setLineDash([S * 0.008, S * 0.006])
+      ctx.strokeRect(x + m * 0.5, y + cut + h * 0.12, w - m, h - cut - h * 0.12 - m * 0.5)
+    })
+    const { c, ctx } = stage(o, t)
+    castShadow(ctx, tag, S, 0.25, 0.5)
+    ctx.drawImage(maskToCanvas(tag, paperC), 0, 0)
+    ctx.save(); if (pk !== 2) ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(maskToCanvas(inkPress(combine(ink, tag, 'min'), o.seed, S, 0.15, { tilt: 0.3 }), inkC), 0, 0); ctx.restore()
+    ctx.drawImage(maskToCanvas(ring, '#b8b2a6'), 0, 0)
+    ctx.drawImage(maskToCanvas(drawMask(o.W, o.H, c2 => { rot(c2); c2.lineWidth = w * 0.012; c2.beginPath(); c2.arc(cx, hy, w * 0.07, 0, Math.PI * 2); c2.stroke() }), '#8d877c'), 0, 0)
+    if (on(o, 'string')) {
+      // spago: passa nell'occhiello e sale in due capi morbidi
+      const ca = Math.cos(ang), sa = Math.sin(ang)
+      const hx = cx - (hy - y) * sa, hyy = y + (hy - y) * ca
+      const str2 = drawMask(o.W, o.H, c2 => {
+        for (const s of [-1, 1]) {
+          const pts: [number, number][] = []
+          for (let i = 0; i <= 80; i++) { const u = i / 80; pts.push([hx + s * S * 0.05 * Math.sin(u * Math.PI) + s * u * S * 0.08, hyy - u * S * 0.32 + Math.sin(u * 5 + s) * S * 0.01]) }
+          twine(c2, pts, S * 0.007)
+        }
+      })
+      castShadow(ctx, str2, S, 0.3, 0.3)
+      ctx.drawImage(maskToCanvas(str2, '#d9c7a1'), 0, 0)
+    }
+    return finish(c, o, t, 'cartellino', null)
+  },
+}
+
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
 export const RECIPES: Recipe[] = [
@@ -1101,6 +1334,7 @@ export const RECIPES: Recipe[] = [
   colata, fette, fotocopia, vortice, bit,
   simbolo, rametto, costellazione, fregio,
   timbro, adesivo, ceralacca, toppa, biglietto, nastro,
+  francobollo, valigia, fiammiferi, cartellino,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
 
