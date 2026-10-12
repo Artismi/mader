@@ -31,8 +31,17 @@ interface FxState {
   _fxSpeed?: number
   _fxTime?: number
   _fxDisabled?: boolean
+  /** corpo del testo su cui gli effetti sono tarati: cambiando corpo, gli effetti scalano con lui */
+  fxRef?: number
 }
 type FxObject = fabric.FabricObject & FxState
+
+/** fattore di scala degli effetti: misure tarate su `fxRef` px di corpo, riportate al corpo vero */
+export function fxScale(obj: fabric.FabricObject) {
+  const o = obj as FxObject
+  if (!o.fxRef || !(obj instanceof fabric.Text)) return 1
+  return Math.min(10, Math.max(0.05, (obj.fontSize ?? o.fxRef) / o.fxRef))
+}
 
 /** Rilegge i dati dell'oggetto: margine, animazione, da ridisegnare */
 export function applyFx(obj: fabric.FabricObject) {
@@ -89,8 +98,9 @@ export function installFxEngine() {
   P._getCacheCanvasDimensions = function (this: FxObject) {
     const d = dims.call(this) as { width: number; height: number; zoomX: number; zoomY: number }
     if (active(this) && this._fxPad) {
-      d.width += Math.ceil(this._fxPad * 2 * d.zoomX)
-      d.height += Math.ceil(this._fxPad * 2 * d.zoomY)
+      const k = fxScale(this)
+      d.width += Math.ceil(this._fxPad * k * 2 * d.zoomX)
+      d.height += Math.ceil(this._fxPad * k * 2 * d.zoomY)
     }
     return d
   }
@@ -103,7 +113,7 @@ export function installFxEngine() {
     const src = self._cacheCanvas
     const out = this._fxCanvas ?? (this._fxCanvas = document.createElement('canvas'))
     if (this._fxStale || out.width !== src.width || out.height !== src.height) {
-      if (!renderFx(src, out, { adjust: this.adjust, look: this.look, fx: this.fx }, self.zoomX, this._fxTime ?? 0)) return drawCache.apply(this, args)
+      if (!renderFx(src, out, { adjust: this.adjust, look: this.look, fx: this.fx }, self.zoomX * fxScale(this), this._fxTime ?? 0)) return drawCache.apply(this, args)
       this._fxStale = false
     }
     ctx.scale(1 / self.zoomX, 1 / self.zoomY)
@@ -184,14 +194,17 @@ export function fxPreviews(obj: fabric.FabricObject, items: { key: string; entry
   const b = baseImage(obj, size); if (!b) return {}
   const res: Record<string, string> = {}
   const out = document.createElement('canvas')
-  for (const it of items) res[it.key] = renderFx(b.box, out, { fx: [{ ...it.entry, p: { ...it.entry.p, speed: 0, flicker: 0 } }] }, b.z, 0.37) ? out.toDataURL() : b.box.toDataURL()
+  for (const it of items) res[it.key] = renderFx(b.box, out, { fx: [{ ...it.entry, p: { ...it.entry.p, speed: 0, flicker: 0 } }] }, b.z * fxScale(obj), 0.37) ? out.toDataURL() : b.box.toDataURL()
   return res
 }
 
 export const variantEntries = (id: FxId) => (fxDef(id)?.variants ?? []).map(v => ({ key: v.id, entry: newFx(id, v.id) }))
 
+/** corpo di riferimento su cui sono tarati stili ed effetti del testo */
+export const TEXT_REF = 120
+
 /** anteprima di uno stile testo: parola d'esempio nel carattere dello stile, sul suo fondo */
-export async function stylePreview(st: TextStyle, sample: string, w = 168, h = 100): Promise<string> {
+export async function stylePreview(st: TextStyle, sample: string, w = 336, h = 200): Promise<string> {
   await Promise.race([ensureFont(st.family, st.weight ?? 400), new Promise(r => setTimeout(r, 4000))])
   const txt = (st.upper ? sample.toUpperCase() : sample).slice(0, 10) || 'Aa'
   const t = new fabric.Textbox(txt, { fontFamily: st.family, fontWeight: String(st.weight ?? 400), fill: st.fill, fontSize: 120, width: 3000, charSpacing: st.tracking ?? 0 })
@@ -219,6 +232,7 @@ export async function applyTextStyle(obj: fabric.FabricObject, st: TextStyle, ba
   const fill = background && Math.abs(lum(st.fill) - lum(background)) < 0.3 && Math.abs(lum(st.swatch) - lum(background)) > 0.3 ? st.swatch : st.fill
   obj.set({ fontFamily: st.family, fontWeight: String(st.weight ?? 400), fill, charSpacing: st.tracking ?? obj.charSpacing })
   if (st.upper && obj.text) obj.set('text', obj.text.toUpperCase())
+  ;(obj as FxObject).fxRef = TEXT_REF
   ;(obj as FxObject).fx = st.fx.map(([id, v, p]) => { const e = newFx(id as FxId, v); return { ...e, p: { ...e.p, ...(p ?? {}) } } })
   ;(fabric as unknown as { cache?: { clearFontCache?: (f?: string) => void } }).cache?.clearFontCache?.(st.family)
   obj.initDimensions(); obj.setCoords(); obj.set('dirty', true)

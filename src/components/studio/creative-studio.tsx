@@ -280,7 +280,20 @@ import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
 import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
 import { composeBoard, boardSize } from './compose/compose'
-import { installArtboards } from './arrange/artboards'
+import { installArtboards, boardOf } from './arrange/artboards'
+
+/** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
+function boardOrigin(canvas: fabric.Canvas, obj: fabric.FabricObject) {
+  const ab = (obj as any).isArtboard ? undefined : boardOf(canvas, obj)
+  if (!ab) return { x: 0, y: 0 }
+  const c = ab.getCenterPoint()
+  return { x: c.x - (ab.width * ab.scaleX) / 2, y: c.y - (ab.height * ab.scaleY) / 2 }
+}
+/** misure come in un programma di grafica: angolo in alto a sinistra del riquadro, rispetto alla tavola */
+function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
+  const o = boardOrigin(canvas, obj), r = obj.getBoundingRect()
+  return { x: Math.round(r.left - o.x), y: Math.round(r.top - o.y), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) }
+}
 import { cutout } from './compose/cutout'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -923,7 +936,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const refreshInsp = () => {
       const obj = canvas.getActiveObject()
       if (!obj) { setInsp(null); return }
-      setInsp({ x: Math.round(obj.left || 0), y: Math.round(obj.top || 0), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) })
+      setInsp(inspOf(canvas, obj))
     }
     canvas.on('selection:created', () => { refreshSel(); refreshInsp() })
     canvas.on('selection:updated', () => { refreshSel(); refreshInsp() })
@@ -1828,9 +1841,30 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const a = document.createElement('a'); a.href = url; a.download = 'canvas.svg'; a.click()
       URL.revokeObjectURL(url); return
     }
-    const url = canvas.toDataURL({ format: format as 'png' | 'jpeg', quality: 1, multiplier })
+    // si esporta la tavola a misura vera (non la vista a schermo): quella dell'oggetto
+    // selezionato, altrimenti tutte le tavole, una per file
     const ext = format === 'jpg' ? 'jpg' : 'png'
-    const a = document.createElement('a'); a.href = url; a.download = `canvas@${multiplier}x.${ext}`; a.click()
+    const boardsAll = canvas.getObjects().filter(o => (o as any).isArtboard)
+    const active = canvas.getActiveObject()
+    const picked = active ? ((active as any).isArtboard ? active : boardOf(canvas, active)) : undefined
+    const targets = picked ? [picked] : boardsAll
+    const vt = canvas.viewportTransform.slice() as fabric.TMat2D
+    canvas.discardActiveObject()
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+    try {
+      const shots = targets.length ? targets.map(ab => {
+        // misura netta della tavola (senza lo spessore del bordo)
+        const w = Math.round(ab.width * ab.scaleX), h = Math.round(ab.height * ab.scaleY), cpt = ab.getCenterPoint()
+        const left = cpt.x - w / 2, top = cpt.y - h / 2
+        const name = String(ab.get('name') ?? 'tavola').replace(/^artboard_/, '').replace(/[^\w\- ]+/g, '').trim() || 'tavola'
+        return { name, url: canvas.toDataURL({ format: format === 'jpg' ? 'jpeg' : 'png', quality: 0.95, multiplier, left, top, width: w, height: h }) }
+      }) : [{ name: 'canvas', url: canvas.toDataURL({ format: format === 'jpg' ? 'jpeg' : 'png', quality: 0.95, multiplier }) }]
+      shots.forEach(sh => { const a = document.createElement('a'); a.href = sh.url; a.download = `${sh.name}@${multiplier}x.${ext}`; a.click() })
+    } finally {
+      canvas.setViewportTransform(vt)
+      if (active && canvas.getObjects().includes(active)) canvas.setActiveObject(active)
+      canvas.requestRenderAll()
+    }
   }
 
   // ── Apply text ────────────────────────────────────────────────────────────
@@ -3942,7 +3976,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         </div>
 
         {/* AI Control Center Floating Bar */}
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-top-4 duration-500">
           <button
             onClick={() => setShowCervello(!showCervello)}
             className={cn(
@@ -4189,7 +4223,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {!showLaunchHub && artboardBadges.map(badge => (
             <div key={badge.id} className="absolute z-[23] pointer-events-auto transition-all duration-75"
               style={{ left: badge.left, top: badge.top }}>
-              <div className="flex items-center gap-1.5 px-2 h-7 bg-[#141414]/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl group hover:bg-[#1a1a1a]/80 transition-all">
+              <div className="flex items-center gap-1.5 px-2 h-7 bg-[#141414]/60 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_1px_6px_rgba(0,0,0,0.3)] group hover:bg-[#1a1a1a]/80 transition-all">
                 {/* Artboard Icon & ID */}
                 <div className="flex items-center gap-1.5">
                   <div className="w-4 h-4 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
@@ -4745,7 +4779,12 @@ function PropertiesPanel(props: PanelProps) {
     if (prop === 'width') { obj.scaleX = (val || 1) / obj.width!; obj.setCoords() }
     else if (prop === 'height') { obj.scaleY = (val || 1) / obj.height!; obj.setCoords() }
     else if (prop === 'angle') { obj.set({ angle: val }); obj.setCoords() }
-    else obj.set({ [prop]: val })
+    else {
+      // X/Y sono misurati dalla tavola: si sposta l'oggetto della differenza
+      const cur = inspOf(canvas!, obj)
+      if (prop === 'left') obj.set({ left: obj.left + (val - cur.x) })
+      else obj.set({ top: obj.top + (val - cur.y) })
+    }
     obj.setCoords()
     canvas!.requestRenderAll()
     canvas!.fire('object:modified', { target: obj })

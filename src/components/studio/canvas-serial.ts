@@ -15,7 +15,7 @@ export const SERIAL_PROPS = [
   // video / sottotitoli
   'isVideo', 'isSubtitle', 'startTime', 'endTime',
   // effetti (motore fx) e Lab
-  'fx', 'adjust', 'look', 'labParams',
+  'fx', 'adjust', 'look', 'labParams', 'fxRef',
   // blocchi del livello
   'selectable', 'evented', 'hasControls',
   'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation',
