@@ -13,7 +13,7 @@ import { useApp } from '@/components/layout/AppContext';
 import { useChatStore, ChatSession, Message } from '../studio/hooks/use-chat-store';
 import { InspirationPortal } from './inspiration-portal';
 
-type ModelId = 'claude' | 'gemini';
+type ModelId = 'openrouter' | 'claude' | 'gemini';
 
 // ── Tipi contesto ─────────────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ const CANVAS_TOOL_LABELS: Record<string, string> = {
     clearBoard: 'Tavola svuotata',
     deleteElements: 'Elementi eliminati',
     getCanvasState: 'Canvas letto',
+    generateConceptualSchema: 'Schema caricato nel canvas',
 };
 
 const messageText = (m: UIMessage) => m.parts.filter(isTextUIPart).map(p => p.text).join('');
@@ -298,7 +299,7 @@ function GenerativeUI({ data }: { data: any }) {
 
 // Canvas tools are client-side (no execute on the server). Their UI state is
 // 'input-available' (not 'output-available') so they need a dedicated check.
-const CANVAS_TOOLS = new Set(['createDesignBoards', 'updateCanvasElements', 'clearBoard', 'deleteElements', 'getCanvasState']);
+const CANVAS_TOOLS = new Set(['createDesignBoards', 'updateCanvasElements', 'clearBoard', 'deleteElements', 'getCanvasState', 'generateConceptualSchema']);
 
 function QuickActions({ lastMessage, onAction, disabled, inputRef }: { 
     lastMessage?: UIMessage, 
@@ -428,6 +429,20 @@ export function AIChatWidget() {
     const clearContext = () => { setClientSetting('auto'); setExtraFiles([]) }
 
     const [selectedModel, setSelectedModel] = useState<ModelId>('gemini');
+    const [openRouterConnected, setOpenRouterConnected] = useState(false);
+
+    // Con OpenRouter collegato si parte dal modello dell'utente
+    useEffect(() => {
+        fetch('/api/ai/provider')
+            .then(r => r.json())
+            .then(d => {
+                if (d?.openrouter?.connected) {
+                    setOpenRouterConnected(true);
+                    setSelectedModel('openrouter');
+                }
+            })
+            .catch(() => {});
+    }, []);
     const [input, setInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     const [lastEngineReport, setLastEngineReport] = useState<{ id: string, items: string[] } | null>(null);
@@ -488,6 +503,8 @@ export function AIChatWidget() {
                         toolName,
                         result: undefined,
                         args: part.input as Record<string, unknown> | undefined,
+                        // l'SVG dello schema arriva nell'output del tool, non nell'input
+                        output: part.state === 'output-available' ? part.output : undefined,
                         timestamp: Date.now(),
                     });
                 }
@@ -664,7 +681,7 @@ export function AIChatWidget() {
 
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-0.5 bg-white/[0.03] rounded-lg p-0.5 border border-white/10 backdrop-blur-sm">
-                            {(['gemini', 'claude'] as ModelId[]).map(m => (
+                            {((openRouterConnected ? ['openrouter', 'gemini', 'claude'] : ['gemini', 'claude']) as ModelId[]).map(m => (
                                 <button key={m} onClick={() => setSelectedModel(m)} className={cn(
                                     "px-3 py-1 rounded-md text-[9px] font-black tracking-widest transition-all",
                                     selectedModel === m

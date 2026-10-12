@@ -1,7 +1,5 @@
-import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
 import * as aiSdk from 'ai'
-import { convertToModelMessages, stepCountIs } from 'ai'
+import { convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type UIMessageStreamWriter } from 'ai'
 import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
@@ -9,6 +7,7 @@ import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { buildContext } from '@/lib/ai/context'
+import { resolveModel } from '@/lib/ai/model-provider'
 import fs from 'fs'
 import path from 'path'
 
@@ -236,30 +235,65 @@ function needsOfficePipeline(query: string): boolean {
   return ALL_OFFICE_TRIGGERS.some(t => q.includes(t)) && !needsCrewPipeline(query)
 }
 
+// ── UI message stream ────────────────────────────────────────────────────────
+// Il client usa useChat (AI SDK v6): le risposte che non passano da streamText
+// (schema, office, crew) devono uscire come UI message stream, non nel vecchio
+// data stream v1 ("0:", "b:", "a:"…) che il client non legge più.
+
+function uiStreamResponse(execute: (writer: UIMessageStreamWriter) => Promise<void> | void): Response {
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.write({ type: 'start' })
+        writer.write({ type: 'start-step' })
+        await execute(writer)
+        writer.write({ type: 'finish-step' })
+        writer.write({ type: 'finish' })
+      },
+    }),
+  })
+}
+
+/** Una parte di testo che resta aperta finché non si chiude o arriva un tool. */
+function textPart(writer: UIMessageStreamWriter) {
+  let id: string | null = null
+  return {
+    write(delta: string) {
+      if (!id) {
+        id = `txt_${crypto.randomUUID()}`
+        writer.write({ type: 'text-start', id })
+      }
+      writer.write({ type: 'text-delta', id, delta })
+    },
+    close() {
+      if (id) writer.write({ type: 'text-end', id })
+      id = null
+    },
+  }
+}
+
+/** Emette una chiamata tool già eseguita (input + output) senza passare dal modello. */
+function writeToolCall(writer: UIMessageStreamWriter, toolName: string, input: unknown, output: unknown) {
+  const toolCallId = `${toolName}_${crypto.randomUUID()}`
+  writer.write({ type: 'tool-input-available', toolCallId, toolName, input })
+  writer.write({ type: 'tool-output-available', toolCallId, output })
+}
+
+const OFFICE_EMOJI: Record<string, string> = { excel: '📊', word: '📄', powerpoint: '📽️' }
+
 function buildOfficeStreamResponse(data: {
   doc_type: string
   title: string
   download_url: string
   preview_text: string
 }): Response {
-  const enc = new TextEncoder()
-  const tcId = `office_${Date.now()}`
-  const emojiMap: Record<string, string> = { excel: '📊', word: '📄', powerpoint: '📽️' }
-  const emoji = emojiMap[data.doc_type] ?? '📎'
-
-  const chunks: Uint8Array[] = [
-    enc.encode(`0:${JSON.stringify(`\n${emoji} **${data.title}** (${data.doc_type})\n${data.preview_text}\n`)}\n`),
-    enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateOfficeDocument' })}\n`),
-    enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ doc_type: data.doc_type }) })}\n`),
-    enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, ...data } })}\n`),
-    enc.encode(`e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`),
-    enc.encode(`d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`),
-  ]
-
-  return new Response(
-    new ReadableStream<Uint8Array>({ start(c) { chunks.forEach(ch => c.enqueue(ch)); c.close() } }),
-    { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-Vercel-AI-Data-Stream': 'v1', 'Cache-Control': 'no-cache' } },
-  )
+  const emoji = OFFICE_EMOJI[data.doc_type] ?? '📎'
+  return uiStreamResponse(writer => {
+    const text = textPart(writer)
+    text.write(`\n${emoji} **${data.title}** (${data.doc_type})\n${data.preview_text}\n`)
+    text.close()
+    writeToolCall(writer, 'generateOfficeDocument', { doc_type: data.doc_type }, { success: true, ...data })
+  })
 }
 
 function extractClientName(query: string, ctx: { clientVaults?: string[] }): string {
@@ -274,11 +308,10 @@ function extractClientName(query: string, ctx: { clientVaults?: string[] }): str
   return ''
 }
 
-// ── Schema → AI SDK stream response ──────────────────────────────────────────
+// ── Schema → UI message stream ───────────────────────────────────────────────
 /**
- * Costruisce una risposta AI SDK UI v1 per uno schema SVG già generato.
- * Emette un messaggio testuale di conferma + il tool call generateConceptualSchema
- * con l'SVG nel result, che il client usa per caricare lo schema nel canvas.
+ * Risposta per uno schema SVG già generato: testo di conferma + tool call
+ * generateConceptualSchema con l'SVG nell'output, che il client carica nel canvas.
  */
 function buildSchemaStreamResponse(data: {
   svg: string
@@ -287,57 +320,27 @@ function buildSchemaStreamResponse(data: {
   node_count: number
   edge_count: number
 }): Response {
-  const enc = new TextEncoder()
-  const tcId = `schema_${Date.now()}`
-
-  const chunks: Uint8Array[] = [
-    // Testo introduttivo
-    enc.encode(`0:${JSON.stringify(`\n🗺️ **Schema generato**: ${data.title}\n${data.node_count} nodi · ${data.edge_count} connessioni · layout ${data.layout_type}\n`)}\n`),
-    // Tool call begin
-    enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateConceptualSchema' })}\n`),
-    // Tool call args
-    enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ prompt: data.title }) })}\n`),
-    // Tool result con SVG
-    enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, svg: data.svg, title: data.title, layout_type: data.layout_type, node_count: data.node_count, edge_count: data.edge_count } })}\n`),
-    // Finish
-    enc.encode(`e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`),
-    enc.encode(`d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`),
-  ]
-
-  const readable = new ReadableStream<Uint8Array>({
-    start(controller) {
-      chunks.forEach(c => controller.enqueue(c))
-      controller.close()
-    },
-  })
-
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'X-Vercel-AI-Data-Stream': 'v1',
-      'Cache-Control': 'no-cache',
-    },
+  return uiStreamResponse(writer => {
+    const text = textPart(writer)
+    text.write(`\n🗺️ **Schema generato**: ${data.title}\n${data.node_count} nodi · ${data.edge_count} connessioni · layout ${data.layout_type}\n`)
+    text.close()
+    writeToolCall(writer, 'generateConceptualSchema', { prompt: data.title }, { success: true, ...data })
   })
 }
 
 // ── Crew SSE → AI SDK stream converter ───────────────────────────────────────
 /**
  * Legge lo stream SSE dalla crew Python e lo converte nel formato
- * AI SDK UI v1 (data stream protocol), mostrando ogni pensiero degli agenti
+ * UI message stream, mostrando ogni pensiero degli agenti
  * come testo in chat. Alla fine, se ci sono boards pronti, emette il tool call
  * createDesignBoards per aggiornare il canvas senza un secondo LLM call.
  */
 function buildCrewStreamResponse(
   crewSseBody: ReadableStream<Uint8Array>,
 ): Response {
-  const enc = new TextEncoder()
-
-  // Emette un testo nel protocollo AI SDK UI v1: `0:"<escaped>"\n`
-  const textDelta = (text: string): Uint8Array =>
-    enc.encode(`0:${JSON.stringify(text)}\n`)
-
-  const readable = new ReadableStream<Uint8Array>({
-    async start(controller) {
+  return uiStreamResponse(async writer => {
+      const text = textPart(writer)
+      const textDelta = (t: string) => text.write(t)
       const reader = crewSseBody.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -373,7 +376,7 @@ function buildCrewStreamResponse(
                 const header = attempt === 1
                   ? `\n🧠 **Pipeline Multi-Agente avviato** — 5 agenti in sequenza\n\n`
                   : `\n🔄 **Retry ${attempt}** — il Critic ha richiesto revisioni\n\n`
-                controller.enqueue(textDelta(header))
+                textDelta(header)
                 break
               }
 
@@ -392,7 +395,7 @@ function buildCrewStreamResponse(
                 if (toolName) stepContent += `[TOOL name="${toolName}"]${toolInput || ''}[/TOOL]\n`
                 stepContent += `</agent_step>\n`
                 
-                controller.enqueue(textDelta(stepContent))
+                textDelta(stepContent)
                 break
               }
 
@@ -400,24 +403,24 @@ function buildCrewStreamResponse(
                 const agent = event.agent as string
                 const step = event.step as number
                 const total = event.total as number
-                controller.enqueue(textDelta(`✓ **${agent}** completato (${step}/${total})\n\n`))
+                textDelta(`✓ **${agent}** completato (${step}/${total})\n\n`)
                 break
               }
 
               case 'retry': {
                 const score = event.score as number ?? 0
                 const issues = (event.issues as string[] ?? []).slice(0, 3)
-                controller.enqueue(textDelta(`\n⚠️ Score: **${score}/100** — sotto soglia. Issues:\n`))
-                issues.forEach(issue => controller.enqueue(textDelta(`- ${issue}\n`)))
-                controller.enqueue(textDelta('\n'))
+                textDelta(`\n⚠️ Score: **${score}/100** — sotto soglia. Issues:\n`)
+                issues.forEach(issue => textDelta(`- ${issue}\n`))
+                textDelta('\n')
                 break
               }
 
               case 'clarification_needed': {
                 hasClarification = true
                 const questions = event.questions as string[] ?? []
-                controller.enqueue(textDelta(`\n❓ Ho bisogno di qualche informazione prima di procedere:\n\n`))
-                questions.forEach((q, i) => controller.enqueue(textDelta(`**${i + 1}.** ${q}\n`)))
+                textDelta(`\n❓ Ho bisogno di qualche informazione prima di procedere:\n\n`)
+                questions.forEach((q, i) => textDelta(`**${i + 1}.** ${q}\n`))
                 break
               }
 
@@ -430,17 +433,17 @@ function buildCrewStreamResponse(
                 const scoreEmoji = finalScore >= 75 ? '✅' : '⚠️'
                 const warning = event.warning as string | undefined
 
-                controller.enqueue(textDelta(
+                textDelta(
                   `\n${scoreEmoji} **Pipeline completato** — qualità: ${finalScore}/100\n`
-                ))
+                )
                 if (finalSuggestions.length > 0) {
-                  controller.enqueue(textDelta(`💡 ${finalSuggestions[0]}\n`))
+                  textDelta(`💡 ${finalSuggestions[0]}\n`)
                 }
                 if (warning) {
-                  controller.enqueue(textDelta(`⚠️ ${warning}\n`))
+                  textDelta(`⚠️ ${warning}\n`)
                 }
                 if (!approved && finalBoards) {
-                  controller.enqueue(textDelta(`\nCanvas consegnato nonostante lo score basso — puoi modificarlo manualmente.\n`))
+                  textDelta(`\nCanvas consegnato nonostante lo score basso — puoi modificarlo manualmente.\n`)
                 }
                 break
               }
@@ -453,24 +456,23 @@ function buildCrewStreamResponse(
                   node_count: event.node_count as number,
                   edge_count: event.edge_count as number,
                 }
-                controller.enqueue(textDelta(
+                textDelta(
                   `\n🗺️ **Schema generato**: ${finalSchema.title}\n${finalSchema.node_count} nodi · ${finalSchema.edge_count} connessioni · layout ${finalSchema.layout_type}\n`
-                ))
+                )
                 break
               }
 
               case 'office_ready': {
-                const emojiMap: Record<string, string> = { excel: '📊', word: '📄', powerpoint: '📽️' }
                 finalOffice = {
                   doc_type: event.doc_type as string,
                   title: event.title as string,
                   download_url: event.download_url as string,
                   preview_text: event.preview_text as string,
                 }
-                const officeEmoji = emojiMap[finalOffice.doc_type] ?? '📎'
-                controller.enqueue(textDelta(
+                const officeEmoji = OFFICE_EMOJI[finalOffice.doc_type] ?? '📎'
+                textDelta(
                   `\n${officeEmoji} **${finalOffice.title}** (${finalOffice.doc_type}) pronto — ${finalOffice.preview_text}\n`
-                ))
+                )
                 break
               }
 
@@ -479,25 +481,23 @@ function buildCrewStreamResponse(
                 const msg = event.message as string
                 const cpBoards = event.boards as unknown[] ?? []
                 
-                controller.enqueue(textDelta(`\n⏸️ **Checkpoint raggiunto**: ${cpId}\n${msg}\n`))
-                controller.enqueue(textDelta(`Il sistema è in attesa del tuo feedback o di un eventuale spostamento manuale degli elementi.\n`))
+                textDelta(`\n⏸️ **Checkpoint raggiunto**: ${cpId}\n${msg}\n`)
+                textDelta(`Il sistema è in attesa del tuo feedback o di un eventuale spostamento manuale degli elementi.\n`)
                 
                 // Opzionalmente inviamo i board correnti per aggiornare la UI se necessario
                 if (cpBoards.length > 0) {
-                    const tcId = `checkpoint_${Date.now()}`
-                    controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'createDesignBoards' })}\n`))
-                    controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ boards: cpBoards }) })}\n`))
-                    controller.enqueue(enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, checkpoint_id: cpId } })}\n`))
+                  text.close()
+                  writeToolCall(writer, 'createDesignBoards', { boards: cpBoards }, { success: true, checkpoint_id: cpId })
                 }
                 break
               }
 
               case 'warning':
-                controller.enqueue(textDelta(`\n⚠️ ${event.message as string}\n`))
+                textDelta(`\n⚠️ ${event.message as string}\n`)
                 break
 
               case 'error':
-                controller.enqueue(textDelta(`\n❌ Errore crew: ${event.message as string}\n`))
+                textDelta(`\n❌ Errore crew: ${event.message as string}\n`)
                 break
             }
           }
@@ -506,83 +506,16 @@ function buildCrewStreamResponse(
         reader.releaseLock()
       }
 
-      // ── Fine stream: emette tool call o chiusura ─────────────────────────
-      if (finalBoards && finalBoards.length > 0 && !hasClarification) {
-        // Bypass LLM bridge: costruiamo il tool call direttamente nel stream
-        // senza una seconda chiamata a Gemini. I boards sono già pronti.
-        const tcId = `crew_${Date.now()}`
-        const argsStr = JSON.stringify({ boards: finalBoards })
-
-        // Tool call begin
-        controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'createDesignBoards' })}\n`))
-        // Tool call args delta (tutto in un chunk)
-        controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: argsStr })}\n`))
-        // Tool result
-        controller.enqueue(enc.encode(`a:${JSON.stringify({
-          toolCallId: tcId,
-          result: { success: true, rendered: finalBoards.length, score: finalScore },
-        })}\n`))
-
-        // Finish step con tool-calls
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
-      } else if (finalOffice && !hasClarification) {
-        const tcId = `office_${Date.now()}`
-        controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateOfficeDocument' })}\n`))
-        controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ doc_type: finalOffice.doc_type }) })}\n`))
-        controller.enqueue(enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, ...finalOffice } })}\n`))
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
-      } else if (finalSchema && !hasClarification) {
-        // Schema branch: emette tool call direttamente senza secondo LLM call
-        const tcId = `schema_${Date.now()}`
-        controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateConceptualSchema' })}\n`))
-        controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ prompt: finalSchema.title }) })}\n`))
-        controller.enqueue(enc.encode(`a:${JSON.stringify({
-          toolCallId: tcId,
-          result: {
-            success: true,
-            svg: finalSchema.svg,
-            title: finalSchema.title,
-            layout_type: finalSchema.layout_type,
-            node_count: finalSchema.node_count,
-            edge_count: finalSchema.edge_count,
-          },
-        })}\n`))
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
-      } else {
-        // Solo testo (clarification o errore senza boards)
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'stop', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'stop', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
+      // ── Fine stream: emette il tool call finale (niente seconda chiamata LLM) ──
+      text.close()
+      if (hasClarification) return
+      if (finalBoards && finalBoards.length > 0) {
+        writeToolCall(writer, 'createDesignBoards', { boards: finalBoards }, { success: true, rendered: finalBoards.length, score: finalScore })
+      } else if (finalOffice) {
+        writeToolCall(writer, 'generateOfficeDocument', { doc_type: finalOffice.doc_type }, { success: true, ...finalOffice })
+      } else if (finalSchema) {
+        writeToolCall(writer, 'generateConceptualSchema', { prompt: finalSchema.title }, { success: true, ...finalSchema })
       }
-
-      controller.close()
-    },
-  })
-
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'X-Vercel-AI-Data-Stream': 'v1',
-      'Cache-Control': 'no-cache',
-    },
   })
 }
 
@@ -734,9 +667,10 @@ export async function POST(req: Request) {
     ].filter(Boolean).join('\n\n')
     const modelMessages = await convertToModelMessages(messages)
 
-    const model = modelId === 'gemini'
-      ? google('gemini-2.5-flash')
-      : anthropic('claude-sonnet-5-5')
+    // Le richieste grafiche (o fatte con il canvas aperto) vanno al modello forte,
+    // il resto a quello economico
+    const task = isCreativeQuery || canvasSnapshot ? 'design' : 'general'
+    const { model, label: modelLabel } = resolveModel(modelId, task)
 
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
@@ -751,7 +685,7 @@ export async function POST(req: Request) {
         isEnabled: true,
         functionId: 'canvas-ai-agent',
         metadata: {
-          modelId: modelId ?? 'anthropic',
+          modelId: modelLabel,
           hasCanvas: !!canvasSnapshot,
         },
       },

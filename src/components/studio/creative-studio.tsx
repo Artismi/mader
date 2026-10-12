@@ -2689,7 +2689,35 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       pushHistory()
     }
 
-    // ─── 5. getCanvasState (read-only) ────────────────────────────────────
+    // ─── 5. generateConceptualSchema (SVG → gruppo editabile) ─────────────
+    if (command.toolName === 'generateConceptualSchema') {
+      const out = command.output ?? command.result ?? {}
+      if (out.success && typeof out.svg === 'string' && out.svg) {
+        const { objects } = await fabric.loadSVGFromString(out.svg)
+        const parts = objects.filter(Boolean) as fabric.FabricObject[]
+        if (parts.length > 0) {
+          const group = new fabric.Group(parts, { name: `schema_${Date.now()}` })
+          // Al centro della vista corrente, ridotto se più grande del 80% del viewport
+          const zoom = canvas.getZoom()
+          const vpt = canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0]
+          const viewW = canvas.getWidth() / zoom
+          const viewH = canvas.getHeight() / zoom
+          const fit = Math.min(1, (viewW * 0.8) / (group.width || 1), (viewH * 0.8) / (group.height || 1))
+          group.scale(fit)
+          group.set({
+            originX: 'center', originY: 'center',
+            left: (-vpt[4] / zoom) + viewW / 2,
+            top: (-vpt[5] / zoom) + viewH / 2,
+          })
+          canvas.add(group)
+          canvas.setActiveObject(group)
+          canvas.requestRenderAll()
+          pushHistory()
+        }
+      }
+    }
+
+    // ─── 6. getCanvasState (read-only) ────────────────────────────────────
     if (command.toolName === 'getCanvasState') {
       const snapshot = canvas.getObjects()
         .filter(o => !(o as any).isArtboard)

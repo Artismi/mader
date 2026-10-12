@@ -516,6 +516,10 @@ export const tokens = {
     `).run(randomUUID(), data.provider, n(data.provider_token),
       n(data.provider_refresh_token), n(data.expires_at))
   },
+
+  remove: (provider: string): void => {
+    db.prepare('DELETE FROM user_tokens WHERE provider = ?').run(provider)
+  },
 }
 
 // ─── CLIENT CHANNELS ─────────────────────────────────────────────────────────
