@@ -476,36 +476,48 @@ export function foam(W: number, H: number, cx: number, cy: number, R: number, r:
       spikes[j].push({ a: angOf(B, p), W0, L: L * (hv < 0.5 ? 0.7 : 1) })
     }
   }
-  // l'inchiostro vive solo nello spazio stretto tra due contorni: in ogni giunzione la
-  // soglia su (dA + dB) è massima e decresce allontanandosi, così il nero si affusola
-  // lungo il canale e negli incroci riempie solo le punte acute. L'interno delle bolle
-  // resta tondo e bianco.
-  type Junc = { p: Pt; A: number; B: number; W: number; L: number }
-  const juncs: Junc[] = []
-  for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) {
-    const A = circles[i], B = circles[j], d = Math.hypot(B.x - A.x, B.y - A.y), small = Math.min(A.r, B.r)
-    const gapOut = d - A.r - B.r, gapIn = Math.max(A.r, B.r) - (d + small)
-    let pts: Pt[] = []
-    if (Math.abs(gapOut) < g * 0.9) { const t = (A.r + gapOut / 2) / d; pts = [[A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t]] }
-    else if (gapIn >= 0 && gapIn < g * 0.9) { const big = A.r > B.r ? A : B, sm = big === A ? B : A, ux = (sm.x - big.x) / (d || 1), uy = (sm.y - big.y) / (d || 1); pts = [[big.x + ux * (big.r - gapIn / 2), big.y + uy * (big.r - gapIn / 2)]] }
-    else pts = intersect({ ...A, big: true }, { ...B, big: true })
-    for (const p of pts) juncs.push({ p, A: i, B: j, W: Math.min(small * 0.45, g * range(r, 2.6, 4)), L: small * range(r, 0.5, 0.9) * o.gap })
-  }
+  // l'inchiostro si raccoglie solo negli angoli concavi ESTERNI: nello spazio vuoto fra
+  // le bolle (o fra una bolla e quella annidata dentro), dove due contorni convergono a
+  // cuspide. Mai dentro le bolle né nelle lenti di sovrapposizione. Il menisco è
+  // dA + dB < G: pieno nella cuspide, si affusola da solo man mano che i bordi si aprono.
+  const G = g * 0.6
   const m: Mask = { w: W, h: H, a: new Uint8ClampedArray(W * H) }
   const x0 = Math.max(0, Math.floor(cx - R * 1.3)), x1 = Math.min(W - 1, Math.ceil(cx + R * 1.3))
   const y0 = Math.max(0, Math.floor(cy - R * 1.3)), y1 = Math.min(H - 1, Math.ceil(cy + R * 1.3))
-  const sd = (c: { x: number; y: number; r: number }, x: number, y: number) => Math.abs(Math.hypot(x - c.x, y - c.y) - c.r)
+  const n = circles.length
+  // per ogni bolla: quali bolle le stanno dentro (annidate)
+  const nestedIn = circles.map((c, i) => circles.map((q, j) => j !== i && Math.hypot(q.x - c.x, q.y - c.y) + q.r <= c.r + g))
+  const sd = new Float32Array(n)
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    let cov = 0
-    for (const c of circles) { const v = 0.5 - (sd(c, x, y) - w / 2); if (v > cov) cov = v }
-    if (cov < 1) for (const J of juncs) {
-      const dp = Math.hypot(x - J.p[0], y - J.p[1])
-      if (dp > J.L) continue
-      const t = dp / J.L
-      // menisco: pieno all'incrocio, poi la soglia scende con fianchi concavi fino all'ago
-      const f = sd(circles[J.A], x, y) + sd(circles[J.B], x, y) - (w + J.W * Math.pow(1 - t, 1.8))
-      const v = 0.5 - f / 1.6
-      if (v > cov) cov = v
+    let dmin = Infinity
+    const inside: number[] = []
+    for (let i = 0; i < n; i++) {
+      const c = circles[i], v = Math.hypot(x - c.x, y - c.y) - c.r
+      sd[i] = v
+      if (Math.abs(v) < dmin) dmin = Math.abs(v)
+      if (v < 0) inside.push(i)
+    }
+    let cov = 0.5 - (dmin - w / 2)
+    if (cov < 1) {
+      // vuoto: fuori da tutte le bolle (contano tutti i contorni) oppure dentro una
+      // sola bolla, fuori dalle sue annidate (contano il suo contorno e quelli annidati)
+      let host = -1, ok = false
+      if (inside.length === 0) ok = true
+      else {
+        // la bolla più interna che contiene il punto, e il punto non sta in nessun'altra non annidata
+        host = inside.reduce((b, i) => (circles[i].r < circles[b].r ? i : b), inside[0])
+        ok = inside.every(i => i === host || nestedIn[i][host])
+      }
+      if (ok) {
+        let d1 = Infinity, d2 = Infinity
+        for (let i = 0; i < n; i++) {
+          if (host >= 0 && i !== host && !nestedIn[host][i]) continue
+          const ad = Math.abs(sd[i])
+          if (ad < d1) { d2 = d1; d1 = ad } else if (ad < d2) d2 = ad
+        }
+        const v = 0.5 - (d1 + d2 - G) * 0.7
+        if (v > cov) cov = v
+      }
     }
     if (cov > 0) m.a[y * W + x] = Math.min(1, cov) * 255
   }
