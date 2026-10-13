@@ -4,12 +4,13 @@
  * vetrina.mjs (Playwright).
  */
 import * as fabric from 'fabric'
-import { generateSystem, proposeKnobs, type Knobs } from '@/components/studio/designer/gen'
+import { generateSystem, proposeKnobs, tintaFoto, type Knobs } from '@/components/studio/designer/gen'
+import { styleById } from '@/components/studio/designer/styles'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string }
+export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; registro?: string }
 
 async function draw(sc: Scene, thumb: number) {
   const el = document.createElement('canvas')
@@ -27,7 +28,8 @@ async function draw(sc: Scene, thumb: number) {
 async function run(job: Job): Promise<Result[]> {
   const sink: string[] = []
   ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
-  const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi })
+  const tinta = await tintaFoto(job.photo)
+  const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi, tinta, seme: (job as { seme?: number }).seme })
   const out: Result[] = []
   for (const k0 of ks) {
     const k = { ...k0, ...job.over }
@@ -37,7 +39,8 @@ async function run(job: Job): Promise<Result[]> {
     const reasons = [...new Set(sink)]
     if (!sc) { out.push({ sistema: k.sistema, ok: false, ms: Math.round(performance.now() - t0), knobs: k, reasons }); continue }
     const url = await draw(sc, job.thumb)
-    out.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url, knobs: k, reasons, layout: sc.label })
+    const st = styleById(k.stile)
+    out.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url, knobs: k, reasons, layout: sc.label, stile: st.name, registro: st.registro })
   }
   return out
 }

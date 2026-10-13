@@ -5,7 +5,7 @@
  * solo questi: la composizione la costruisce il sistema.
  */
 
-export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista'
+export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista' | 'tesi' | 'dato' | 'citazione' | 'elenco' | 'chiusura'
 export type Trattamento = 'pellicola' | 'duotone' | 'retino' | 'riso' | 'serigrafia' | 'bn' | 'poster'
 
 export interface Knobs {
@@ -30,7 +30,7 @@ export interface Knobs {
   enfasi?: string
 }
 
-export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no' }
+export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean }
 
 export const SISTEMI: SistemaInfo[] = [
   { id: 'supertipo', nome: 'Tipo gigante', idea: 'il titolo parola per parola a tutta larghezza, pieno e contorno alternati, foto in un blocco con cornice fuori registro, scritta verticale sul bordo', foto: 'meglio' },
@@ -43,6 +43,11 @@ export const SISTEMI: SistemaInfo[] = [
   { id: 'giocoso', nome: 'Giocoso', idea: 'blob morbidi, foto in una forma con contorno spesso e ombra piena, titolo che saltella in più colori, adesivo, stelline e coriandoli', foto: 'meglio' },
   { id: 'decostruito', nome: 'Decostruito', idea: 'le parole del titolo sparse sulla griglia con forti scarti di scala, striscia di foto retinata, filetti tecnici, segno a mano attorno alla parola chiave', foto: 'meglio' },
   { id: 'rivista', nome: 'Rivista', idea: 'testata come il nome di una rivista, foto grande, titolo con la parola chiave in corsivo, capolettera, folio', foto: 'meglio' },
+  { id: 'tesi', nome: 'Tesi', idea: 'un\'affermazione grande con tanto vuoto', foto: 'no', slide: true },
+  { id: 'dato', nome: 'Dato', idea: 'un numero protagonista con la spiegazione', foto: 'no', slide: true },
+  { id: 'citazione', nome: 'Citazione', idea: 'virgolette grandi e una frase', foto: 'no', slide: true },
+  { id: 'elenco', nome: 'Elenco', idea: 'punti numerati grandi', foto: 'no', slide: true },
+  { id: 'chiusura', nome: 'Chiusura', idea: 'l\'invito protagonista e il brand grande', foto: 'no', slide: true },
   { id: 'ritaglio', nome: 'Foto nelle lettere', idea: 'la parola chiave enorme con la foto dentro le lettere, contorno fuori registro dietro, titolo completo sotto', foto: 'serve' },
 ]
 

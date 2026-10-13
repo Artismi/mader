@@ -30,7 +30,11 @@ export interface G {
   els: SceneEl[]
   /** pixel della foto, se caricata */
   pix?: Pix
+  /** posizione nella sequenza (carosello): paginazione, ponte con la slide accanto, freccia in copertina */
+  seq?: Seq
 }
+
+export interface Seq { i: number; n: number; ponte?: { destra?: boolean; sinistra?: boolean }; colore: string; specchio?: boolean }
 
 /* ── colore ───────────────────────────────────────────────────────────── */
 const rgb = (hex: string) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
@@ -55,7 +59,7 @@ function palette(s: Style, inverti: boolean): Pal {
   return { bg, fg, acc, acc2: s.bg, sec: mix(fg, bg, 0.3), srf: mix(bg, fg, 0.12), dark: lum(bg) < 0.25 }
 }
 
-export function makeG(format: Format, s: Style, k: Knobs, c: DesignContent, photo?: string, pix?: Pix): G {
+export function makeG(format: Format, s: Style, k: Knobs, c: DesignContent, photo?: string, pix?: Pix, seq?: Seq): G {
   const [W, H] = FORMAT_SIZE[format]
   const ms = misure(format)
   return {
@@ -63,7 +67,7 @@ export function makeG(format: Format, s: Style, k: Knobs, c: DesignContent, phot
     format, landscape: W > H * 1.15, portrait: H > W * 1.15,
     s, k, c, photo: photo ?? c.imageUrl,
     r: rng(k.seme ^ hashText(`${c.title}|${k.sistema}`)),
-    P: palette(s, k.inverti), els: [], pix,
+    P: palette(s, k.inverti), els: [], pix, seq,
   }
 }
 
@@ -136,13 +140,14 @@ export const putPara = (g: G, name: string, f: Fit, x: number, y: number, color:
  * Titolo. `caps`: y è la sommità delle maiuscole (non il box), come allinea un
  * tipografo; a sinistra il rientro ottico porta l'inchiostro sul margine.
  */
-export const putDisplay = (g: G, name: string, f: Fit, x: number, y: number, color: string, align: 'left' | 'center' | 'right' = 'left', w = f.w, extra: Partial<TextOpts> & { caps?: boolean } = {}) => {
+export const putDisplay = (g: G, name: string, f: Fit, x: number, y: number, color: string, align: 'left' | 'center' | 'right' = 'left', w = f.w, extra: Partial<TextOpts> & { caps?: boolean; su?: string } = {}) => {
   const leading = f.leading ?? g.s.displayLeading
-  const { caps, ...rest } = extra
+  const { caps, su, ...rest } = extra
   const yy = caps ? topForCaps(y, g.s.display, f.size, leading) : y
   const xx = align === 'left' && !rest.angle ? x + opticalLeft(f.lines[0], g.s.display, f.size) : x
   // il titolo prende l'accento del registro sulla parola chiave
-  const chars = rest.chars ?? (name.startsWith('titolo') ? accentChars(g, f.lines, color) : undefined)
+  // `su`: il colore che il titolo ha sotto (fascia, barra), se non è il fondo
+  const chars = rest.chars ?? (name.startsWith('titolo') ? accentChars(g, f.lines, color, su ?? g.P.bg) : undefined)
   return txt(g, { name, lines: f.lines, font: g.s.display, size: f.size, x: xx, y: yy, color, align, w, leading, tracking: f.tracking ?? g.s.displayTracking, ...rest, chars })
 }
 
@@ -471,11 +476,104 @@ function legible(g: G): boolean {
       if (!u.busy && contrast(e.color, u.color) >= min) ok++
     }
     if (ok / n < (big ? 0.75 : 0.9)) return dbg(`si legge poco ${e.name} (${Math.round((ok / n) * 100)}%)`)
+    // i colori delle singole lettere (accento, saltello) devono leggersi quanto il testo
+    const charColors = [...new Set((e.chars ?? []).flat().map(ch => ch?.c).filter((c): c is string => !!c && c.startsWith('#') && c !== e.color))]
+    for (const cc of charColors) {
+      let okc = 0
+      for (let fx = 0.04; fx < 1; fx += 0.12) for (const fy of [0.3, 0.55, 0.8]) {
+        const lx = left + e.tw * fx, ly = e.h * fy
+        const u = under(g, i, e.x + lx * ca - ly * sa, e.y + lx * sa + ly * ca)
+        if (!u.busy && contrast(cc, u.color) >= min) okc++
+      }
+      if (okc / n < (big ? 0.75 : 0.9)) return dbg(`lettere in ${cc} poco leggibili in ${e.name}`)
+    }
   }
   return true
 }
 
+/* ── specchiatura ─────────────────────────────────────────────────────── */
+/** Riflette un tracciato SVG (comandi M L C Q A, assoluti e relativi) rispetto all'asse verticale della tavola. */
+function mirrorPath(d: string, W: number) {
+  const tok = d.match(/[MLCQAZmlcqaz]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? []
+  const out: string[] = []
+  let cmd = '', idx = 0
+  for (const t of tok) {
+    if (/[A-Za-z]/.test(t)) { cmd = t; idx = 0; out.push(t); continue }
+    let v = parseFloat(t)
+    const abs = cmd === cmd.toUpperCase()
+    if (cmd === 'A' || cmd === 'a') {
+      const k = idx % 7
+      if (k === 2) v = -v                  // rotazione
+      else if (k === 4) v = 1 - v          // verso dell'arco
+      else if (k === 5) v = abs ? W - v : -v
+    } else if (idx % 2 === 0) v = abs ? W - v : -v
+    out.push(String(Math.round(v * 10) / 10))
+    idx++
+  }
+  return out.join(' ')
+}
+
+/**
+ * Specchia la composizione da destra a sinistra in modo esatto: forme ruotate,
+ * tracciati, foto (la foto non si capovolge: si sposta la finestra), testi con
+ * l'allineamento invertito. Raddoppia le varianti di ogni sistema; la
+ * leggibilità si ricontrolla dopo.
+ */
+export function mirror(g: G) {
+  const W = g.W
+  const flipAlign = (a: 'left' | 'center' | 'right') => (a === 'left' ? 'right' : a === 'right' ? 'left' : 'center')
+  const rot = (x: number, y: number, w: number, angle = 0) => {
+    const a = (angle * Math.PI) / 180
+    return { x: W - x - w * Math.cos(a), y: y + w * Math.sin(a), angle: angle ? -angle : angle }
+  }
+  for (const e of g.els) {
+    switch (e.kind) {
+      case 'rect': Object.assign(e, rot(e.x, e.y, e.w, e.angle)); break
+      case 'text': Object.assign(e, rot(e.x, e.y, e.w, e.angle), { align: flipAlign(e.align) }); break
+      case 'circle': e.cx = W - e.cx; break
+      case 'line': e.x1 = W - e.x1; e.x2 = W - e.x2; break
+      case 'path': e.d = mirrorPath(e.d, W); break
+      case 'glyph': e.cx = W - e.cx; if (e.angle) e.angle = -e.angle; break
+      case 'seal': e.cx = W - e.cx; if (e.angle) e.angle = -e.angle; break
+      case 'arcText': e.cx = W - e.cx; if (e.start) e.start = -e.start; break
+      case 'ornament': e.x = W - e.x - e.w; break
+      case 'image':
+        e.x = W - e.x - e.w
+        if (e.view) e.view = { ...e.view, x: W - e.view.x - e.view.w }
+        if (e.mask) e.mask = mirrorPath(e.mask, W)
+        if (e.clipText) e.clipText = { ...e.clipText, x: W - e.clipText.x - Math.max(...e.clipText.lines.map(l => lineWidth(l, e.clipText!.font, e.clipText!.size, e.clipText!.tracking))) }
+        break
+    }
+  }
+}
+
+/** Elementi della sequenza: ponte con la slide accanto, freccia in copertina, paginazione. */
+function seqMarks(g: G) {
+  const q = g.seq!
+  const r = Math.min(g.W, g.H) * 0.22, cy = g.H * 0.56
+  const discs: SceneEl[] = []
+  // lo stesso disco a cavallo del bordo: metà su questa slide, metà sulla successiva
+  if (q.ponte?.destra) discs.push({ kind: 'circle', name: 'ponte', cx: g.W, cy, r, fill: q.colore })
+  if (q.ponte?.sinistra) discs.push({ kind: 'circle', name: 'ponte', cx: 0, cy, r, fill: q.colore })
+  g.els.unshift(...discs)
+  if (q.i === 0 && q.n > 1) {
+    const x = g.W - g.m * 0.95, y = cy, L = U(g, 34)
+    put(g, { kind: 'path', name: 'freccia', d: `M ${x - L} ${y} L ${x} ${y} M ${x - L * 0.4} ${y - L * 0.4} L ${x} ${y} L ${x - L * 0.4} ${y + L * 0.4}`, fill: 'transparent', stroke: readable(q.colore, [g.P.fg, g.P.bg]), sw: U(g, 5) })
+  }
+  // paginazione: in alto a destra, altrimenti in basso a destra, se non tocca un testo
+  const f = lab(g, `${String(q.i + 1).padStart(2, '0')} / ${String(q.n).padStart(2, '0')}`, g.W * 0.3)
+  if (!f) return
+  const texts = g.els.filter(e => e.kind === 'text' && !e.deco).map(e => textBox(e as Extract<SceneEl, { kind: 'text' }>))
+  for (const y of [g.T, g.B - f.h]) {
+    const b = { x: g.W - g.m - f.w, y, w: f.w, h: f.h }
+    if (!texts.some(t => touches(t, b, 14 * g.u))) { putLab(g, 'paginazione', f, b.x, y, g.P.sec); break }
+  }
+}
+
 export function finish(g: G, layout: string, label: string): Scene | null {
+  // una composizione su due-tre si specchia (stesso seme, stessa scelta)
+  if (g.seq?.specchio ?? (hashText(`${g.k.seme}|specchio`) % 10 < 4)) mirror(g)
+  if (g.seq) seqMarks(g)
   if (!legible(g)) return null
   grainTop(g)
   // i testi veri e i sigilli stanno sopra la grana: nitidi, come li comporrebbe un tipografo

@@ -5,6 +5,7 @@
  * varianti di impaginazione dello stesso progetto.
  */
 import type { DesignKind, FontSpec } from './types'
+import { daId } from './identita'
 
 /** Registri visivi: dal mondo dei bambini all'editoriale all'avanguardia. */
 export type RegistroId = 'infantile' | 'pop' | 'editoriale' | 'svizzero' | 'avanguardia' | 'lusso' | 'artigianale' | 'notte' | 'tech' | 'retro' | 'sportivo'
@@ -269,7 +270,21 @@ const KIND_DEFAULT: Record<DesignKind, string> = {
   lancio: 'notte-calda', evento: 'notte-elettrica', citazione: 'carta-editoriale', annuncio: 'svizzero',
 }
 
-export const styleById = (id: string) => STYLES.find(s => s.id === id) ?? STYLES[0]
+/** Stile per id: uno di quelli curati, oppure un'identità generata ("id:…"). */
+export const styleById = (id: string) => daId(id) ?? STYLES.find(s => s.id === id) ?? STYLES[0]
+
+/** Registro dal contenuto: le parole chiave di tutti gli stili del registro, sull'inizio delle parole. */
+export function inferRegistro(text: string, fallback: RegistroId = 'editoriale'): RegistroId {
+  const t = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ')} `
+  const score = new Map<RegistroId, number>()
+  for (const s of STYLES) {
+    const hits = new Set(s.keywords.filter(k => t.includes(` ${k.replace(/[^\p{L}\p{N}]+/gu, ' ')}`)))
+    score.set(s.registro, Math.max(score.get(s.registro) ?? 0, hits.size))
+  }
+  let best: RegistroId = fallback, bestN = 0
+  for (const [r, n] of score) if (n > bestN) { best = r; bestN = n }
+  return best
+}
 
 /** Stile dal contenuto: conta le parole chiave nel testo; a parità vale lo stile del tipo. */
 export function inferStyle(text: string, kind: DesignKind): Style {

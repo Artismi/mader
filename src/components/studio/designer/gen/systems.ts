@@ -11,7 +11,7 @@ import {
 } from './tools'
 import { lineWidth } from '../text'
 
-export const ink = (g: G) => ({ fg: g.P.fg, sec: g.P.sec, acc: readable(g.P.bg, [g.P.acc, g.P.fg], 3) })
+export const ink = (g: G) => ({ fg: g.P.fg, sec: g.P.sec, acc: readable(g.P.bg, [g.P.acc, g.P.acc2, g.P.fg], 3.6) })
 /** Sovrastampa che funziona sul fondo: moltiplica sul chiaro, schiarisce sul buio. */
 export const over = (g: G, under = g.P.bg): GlobalCompositeOperation => (lum(under) < 0.18 ? 'screen' : 'multiply')
 
@@ -245,7 +245,7 @@ export function strisce(g: G): Scene | null {
   // la rotazione è attorno all'angolo della fascia: il titolo segue
   const dx = tx - bandX, dy = ty - bandY
   putDisplay(g, 'titolo', t, bandX + dx * Math.cos(a) - dy * Math.sin(a), bandY + dx * Math.sin(a) + dy * Math.cos(a), onBar, 'left', t.w, {
-    angle, fx: k.sovrastampa > 0.15 ? [{ id: 'echo', variant: 'pop', p: { color: P.acc, distance: Math.round(4 + 10 * k.sovrastampa), count: 1, angle: 45 } }] : undefined,
+    angle, su: barColor, fx: k.sovrastampa > 0.15 ? [{ id: 'echo', variant: 'pop', p: { color: P.acc, distance: Math.round(4 + 10 * k.sovrastampa), count: 1, angle: 45 } }] : undefined,
   })
   // passo 4: testata e informazioni nello spazio libero
   if (side) {
@@ -324,7 +324,7 @@ export function costruttivo(g: G): Scene | null {
   }
   // il titolo, centrato lungo la barra
   const tx0 = bcx - (t.w / 2) * Math.cos(a) + (t.h / 2) * Math.sin(a), ty0 = bcy - (t.w / 2) * Math.sin(a) - (t.h / 2) * Math.cos(a)
-  putDisplay(g, 'titolo', t, tx0, ty0, P.bg, 'center', t.w, { angle: ang })
+  putDisplay(g, 'titolo', t, tx0, ty0, P.bg, 'center', t.w, { angle: ang, su: P.fg })
   // passo 5: brand e occhiello in verticale sul bordo sinistro
   const brand = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), H * 0.5)
   if (brand) putLab(g, 'brand', brand, m, Math.max(T, m * 0.6 + numH + U(g, 20)) + brand.w, P.fg, 'left', brand.w, { angle: -90 })

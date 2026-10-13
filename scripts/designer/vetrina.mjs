@@ -88,10 +88,10 @@ for (const nome of contenuti) {
   for (const format of formati) {
     const t0 = Date.now()
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
-    const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb })
+    const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })
     const items = res.map(r => ({
       url: r.url, label: `${r.sistema}${r.ok ? '' : '  — scartata'}`,
-      sub: r.ok ? `${r.knobs.stile} · ${r.knobs.trattamento} · sc ${r.knobs.scala.toFixed(2)} en ${r.knobs.energia.toFixed(2)} de ${r.knobs.densita.toFixed(2)} so ${r.knobs.sovrastampa.toFixed(2)}${r.knobs.inverti ? ' · inverso' : ''}` : (r.reasons[0] ?? ''),
+      sub: r.ok ? `${r.registro} · ${r.stile} · ${r.knobs.trattamento} · sc ${r.knobs.scala.toFixed(2)} en ${r.knobs.energia.toFixed(2)} de ${r.knobs.densita.toFixed(2)} so ${r.knobs.sovrastampa.toFixed(2)}${r.knobs.inverti ? ' · inverso' : ''}` : (r.reasons[0] ?? ''),
     }))
     const cols = format === 'orizzontale' ? 3 : 4
     const sheet = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format}`, items, cols, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
