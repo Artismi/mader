@@ -14,7 +14,7 @@ import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
-import { arcLine, arrowNE, asterisk, baseText, capH, inkCanvas, inkOf, inkText, ringText, rule, sizeForWidth, wrap } from './design'
+import { arcLine, arrowNE, asterisk, baseText, capH, inkCanvas, inkOf, inkText, ringText, rule, sizeForWidth, up, wrap } from './design'
 import { WARPS, band as distBand, extrude, extrudeStriped, glints, shine, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
@@ -2290,6 +2290,96 @@ const tensione: Recipe = {
   },
 }
 
+const KINETIC_FACES: { label: string; f: Face }[] = [
+  { label: 'Grotesk', f: FACES.grotesk }, { label: 'Condensato', f: FACES.condensato }, { label: 'Espanso', f: FACES.espanso }, { label: 'Mono', f: { ...FACES.mono, weight: 500, track: 0.02 } },
+]
+
+const cinetico: Recipe = {
+  id: 'cinetico', label: 'Sistema cinetico', cat: 'Design tipografico', hint: 'la parola su una griglia che si deforma con una regola sola: cilindro, fisarmonica, prospettiva, raggiera, onda',
+  params: [P.text('Pizza Party', 'Parola'), { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3|Dalle 21:00' }, { key: 'num', label: 'Numero', type: 'text', def: '07' },
+    P.sel('mode', 'Regola', ['Cilindro', 'Fisarmonica', 'Prospettiva', 'Raggiera', 'Onda']), P.sel('face', 'Carattere', KINETIC_FACES.map(x => x.label)),
+    P.range('rows', 'Righe', 4, 28, 12), P.range('twist', 'Torsione', 0, 100, 40), P.range('waves', 'Onde', 1, 4, 1),
+    P.sel('pal', 'Colori', DESIGN_PALS.map(x => x.label), 2), P.tog('accent', 'Una riga in accento', true), P.range('grain', 'Grana', 0, 30, 6)],
+  render: o => {
+    const t = dTone(o), S = SS(o), W = o.W, H = o.H
+    const f = KINETIC_FACES[num(o, 'face')]?.f ?? FACES.grotesk
+    const word = (str(o, 'text') || 'Artismi').replace(/\|/g, ' ')
+    const { c, ctx } = stage(o, t)
+    const m = Math.round(S * 0.06)
+    const fr = microFrame(ctx, o, t, m, lines(str(o, 'info')), str(o, 'num'))
+    const x0 = m, x1 = W - m, y0 = fr.top + S * 0.04, y1 = fr.bottom - S * 0.04
+    const aw = x1 - x0, ah = y1 - y0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+    const mode = num(o, 'mode'), N = num(o, 'rows'), tw = num(o, 'twist') / 100, waves = num(o, 'waves')
+    const accRow = on(o, 'accent') ? Math.floor(N / 2) : -1
+    const col = (r: number) => (r === accRow ? t.acc : t.ink)
+    const capK = capH(f, 100) / 100
+    const glyphs = (s2: string, size: number) => { ctx.font = fontCss(f, size); return [...up(f, s2)].map(ch => ({ ch, w: ctx.measureText(ch).width })) }
+    if (mode === 0) {
+      // cilindro: la frase gira attorno a un tubo; davanti piena, dietro in trasparenza e specchiata
+      const rh = ah / N, size = rh * 0.78 / capK, R = aw / 2
+      const g = glyphs(word + '  ·  ', size)
+      const one = g.reduce((a, b) => a + b.w, 0)
+      const C = Math.PI * 2 * R, reps = Math.max(1, Math.round(C / one)), sc = C / (reps * one)
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = fontCss(f, size)
+      for (let r = 0; r < N; r++) {
+        const base = y0 + rh * (r + 0.5) + size * capK / 2, phase = r * tw * 0.35
+        let acc = 0
+        for (let k = 0; k < reps; k++) for (const q of g) {
+          const th = phase + (acc + q.w / 2) * sc / R
+          acc += q.w
+          const cs = Math.cos(th)
+          if (Math.abs(cs) < 0.03) continue
+          ctx.save(); ctx.globalAlpha = cs > 0 ? 1 : 0.14
+          ctx.fillStyle = col(r); ctx.translate(cx + Math.sin(th) * R, base); ctx.scale(cs * sc, 1); ctx.fillText(q.ch, 0, 0); ctx.restore()
+        }
+      }
+    } else if (mode === 1 || mode === 2) {
+      // fisarmonica: ogni riga si stringe e si allarga col coseno; prospettiva: righe che rimpiccioliscono verso l'alto
+      const gap = ah * 0.012
+      const q = 1 - 0.07 * (0.3 + tw)
+      const hs = Array.from({ length: N }, (_, r) => (mode === 2 ? Math.pow(q, N - 1 - r) : 1))
+      const hsum = hs.reduce((a, b) => a + b, 0)
+      let y = y0
+      for (let r = 0; r < N; r++) {
+        const h = (ah - gap * (N - 1)) * hs[r] / hsum
+        const sx = mode === 1 ? 0.12 + 0.88 * (0.5 + 0.5 * Math.cos(((r / Math.max(1, N - 1)) * waves + tw * 0.5) * Math.PI * 2)) : hs[r]
+        const w = aw * sx
+        const src = stretchLine(f, word, aw, h, col(r))
+        ctx.drawImage(src, cx - w / 2, y, w, h)
+        y += h + gap
+      }
+    } else if (mode === 3) {
+      // raggiera: la parola ripetuta sui raggi, dal piccolo cerchio vuoto al bordo
+      const R1 = Math.min(aw, ah) / 2, R0 = R1 * (0.16 + tw * 0.2)
+      const size = sizeForWidth(f, word, R1 - R0)
+      const cap = capH(f, size)
+      const n = Math.max(6, Math.min(N * 2, Math.floor((Math.PI * 2 * R0) / (cap * 1.25))))
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 - Math.PI / 2
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(a)
+        inkText(ctx, f, word, size, R0, -cap / 2, i === 0 && accRow >= 0 ? t.acc : t.ink, 'left')
+        ctx.restore()
+      }
+    } else {
+      // onda: lettere a passo costante, ogni riga sfasata, ogni lettera ruotata sulla tangente
+      const rh = ah / N, size = Math.min(rh * 0.7 / capK, sizeForWidth(f, word, aw * 0.92))
+      const g = glyphs(word, size), tot = g.reduce((a, b) => a + b.w, 0)
+      const A = rh * (0.4 + tw * 1.4), k = (waves * Math.PI * 2) / aw
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = fontCss(f, size)
+      for (let r = 0; r < N; r++) {
+        const base = y0 + rh * (r + 0.5) + size * capK / 2, ph = r * 0.45
+        let x = cx - tot / 2
+        for (const q2 of g) {
+          const xm = x + q2.w / 2, yy = base + Math.sin(xm * k + ph) * A * 0.5, ang = Math.atan(Math.cos(xm * k + ph) * A * 0.5 * k)
+          ctx.save(); ctx.fillStyle = col(r); ctx.translate(xm, yy); ctx.rotate(ang); ctx.fillText(q2.ch, 0, 0); ctx.restore()
+          x += q2.w
+        }
+      }
+    }
+    return finish(c, o, t, 'cinetico', null)
+  },
+}
+
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
@@ -2297,7 +2387,7 @@ export const RECIPES: Recipe[] = [
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
   tattoo,
   groovy, gonfiabile, eco, trama,
-  lockup, tensione,
+  lockup, tensione, cinetico,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
