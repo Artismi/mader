@@ -2228,7 +2228,7 @@ const tensione: Recipe = {
   params: [P.text('Pizza|Party|Torino', 'Testo'), { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3|Dalle 21:00' }, { key: 'num', label: 'Numero', type: 'text', def: '07' },
     P.sel('mode', 'Gesto', ['Riempi', 'Crescendo', 'Onda di altezze', 'Taglio']), P.sel('face', 'Carattere', TENSION_FACES.map(x => x.label)),
     P.sel('pal', 'Colori', DESIGN_PALS.map(x => x.label), 1), P.sel('accent', 'Accento', ['Nessuno', 'Una riga', 'Prima lettera']),
-    P.range('wave', 'Onde', 1, 6, 2), P.range('depth', 'Escursione', 10, 90, 60), P.tog('bleed', 'Al vivo', false), P.range('grain', 'Grana', 0, 30, 6)],
+    P.range('wave', 'Onde', 1, 4, 2), P.range('depth', 'Escursione', 10, 60, 45), P.tog('bleed', 'Al vivo', false), P.range('grain', 'Grana', 0, 30, 6)],
   render: o => {
     const t = dTone(o), S = SS(o), W = o.W, H = o.H
     const f = TENSION_FACES[num(o, 'face')]?.f ?? FACES.condensato
@@ -2364,7 +2364,7 @@ const cinetico: Recipe = {
       // onda: lettere a passo costante, ogni riga sfasata, ogni lettera ruotata sulla tangente
       const rh = ah / N, size = Math.min(rh * 0.7 / capK, sizeForWidth(f, word, aw * 0.92))
       const g = glyphs(word, size), tot = g.reduce((a, b) => a + b.w, 0)
-      const A = rh * (0.4 + tw * 1.4), k = (waves * Math.PI * 2) / aw
+      const A = rh * (0.3 + tw * 0.6), k = (waves * Math.PI * 2) / aw
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = fontCss(f, size)
       for (let r = 0; r < N; r++) {
         const base = y0 + rh * (r + 0.5) + size * capK / 2, ph = r * 0.45
@@ -2380,6 +2380,155 @@ const cinetico: Recipe = {
   },
 }
 
+/** un altro generatore reso come pezzo scontornato, con i parametri forzati */
+function piece(rc: Recipe, o: Job, size: number, over: RValues = {}, seed = o.seed) {
+  return rc.render({ W: Math.round(size), H: Math.round(size), p: { ...defaults(rc), ...over, grain: 0 }, seed, transparent: true })
+}
+
+/** ricolora un pezzo piatto (mantiene l'alfa) */
+function tint(src: HTMLCanvasElement, color: string) {
+  const k = makeCanvas(src.width, src.height)
+  k.ctx.drawImage(src, 0, 0); k.ctx.globalCompositeOperation = 'source-in'; k.ctx.fillStyle = color; k.ctx.fillRect(0, 0, src.width, src.height)
+  return k.c
+}
+
+/** disegna un pezzo dentro un riquadro, centrato, senza deformarlo */
+function placeIn(ctx: Ctx, src: HTMLCanvasElement, x: number, y: number, w: number, h: number, align: 'center' | 'bottom' = 'center') {
+  const k = Math.min(w / src.width, h / src.height), dw = src.width * k, dh = src.height * k
+  ctx.drawImage(src, x + (w - dw) / 2, align === 'bottom' ? y + h - dh : y + (h - dh) / 2, dw, dh)
+  return { x: x + (w - dw) / 2, y: align === 'bottom' ? y + h - dh : y + (h - dh) / 2, w: dw, h: dh }
+}
+
+const HEROES: { label: string; rc: () => Recipe; flat: boolean; over?: RValues }[] = [
+  { label: 'Crescita aliena', rc: () => alieno, flat: false },
+  { label: 'Membrana', rc: () => membrana, flat: false },
+  { label: 'Macchia simmetrica', rc: () => macchia, flat: true },
+  { label: 'Simbolo', rc: () => simbolo, flat: true },
+  { label: 'Rete neurale', rc: () => rete, flat: true },
+  { label: 'Costellazione', rc: () => costellazione, flat: true },
+  { label: 'Rametto', rc: () => rametto, flat: true },
+  { label: 'Goccia', rc: () => goccia, flat: true },
+  { label: 'Tattoo flash', rc: () => tattoo, flat: false, over: { banner: '' } },
+]
+const HERO_MATS = [{ label: 'Originale', v: -1 }, { label: 'Cromo', v: 1 }, { label: 'Nero lucido', v: 2 }, { label: 'Oro', v: 3 }, { label: 'Iridescente', v: 4 }, { label: 'Perla', v: 6 }]
+
+const STAMPS: { label: string; rc: () => Recipe; over: (o: Job) => RValues }[] = [
+  { label: 'Nessuno', rc: () => timbro, over: () => ({}) },
+  { label: 'Timbro', rc: () => timbro, over: o => ({ text: str(o, 'stamp') || 'Ingresso libero', top: 'Artismi Design Studio', bottom: 'Torino', angle: 0 }) },
+  { label: 'Adesivo', rc: () => adesivo, over: o => ({ kind: 3, text: str(o, 'stamp') || 'Ingresso libero', angle: 0 }) },
+  { label: 'Ceralacca', rc: () => ceralacca, over: () => ({}) },
+  { label: 'Toppa ricamata', rc: () => toppa, over: o => ({ text: 'Artismi', sub: str(o, 'stamp') || 'Torino' }) },
+  { label: 'Francobollo', rc: () => francobollo, over: () => ({ angle: 0 }) },
+  { label: 'Sigillo quadrato', rc: () => hanko, over: () => ({}) },
+]
+
+const locandina: Recipe = {
+  id: 'locandina', label: 'Locandina con elemento', cat: 'Design tipografico', hint: 'impaginazione pulita con un elemento dei generatori come protagonista e un timbro, adesivo o ceralacca nell\'angolo',
+  params: [P.text('Pizza|Party', 'Titolo'), { key: 'sub', label: 'Sottotitolo', type: 'text', def: 'una notte di forno a legna e vinili' },
+    { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3, Torino|Dalle 21:00' }, { key: 'num', label: 'Numero', type: 'text', def: '07' },
+    P.sel('layout', 'Impaginazione', ['Protagonista', 'Tipo dietro, elemento davanti', 'Copertina', 'Lockup e timbro']),
+    P.sel('hero', 'Elemento', HEROES.map(x => x.label)), P.sel('heroMat', 'Materia elemento', HERO_MATS.map(x => x.label)),
+    P.sel('stampKind', 'Nell\'angolo', STAMPS.map(x => x.label), 1), { key: 'stamp', label: 'Scritta del timbro', type: 'text', def: 'Ingresso libero' },
+    P.sel('corner', 'Angolo', ['Dove c\'è spazio', 'Basso a destra', 'Alto a destra', 'Basso a sinistra', 'Alto a sinistra']),
+    P.sel('pair', 'Caratteri', PAIRS.map(x => x.label)), P.sel('pal', 'Colori', DESIGN_PALS.map(x => x.label)), P.range('grain', 'Grana', 0, 30, 8)],
+  render: o => {
+    const t = dTone(o), S = SS(o), W = o.W, H = o.H
+    const pair = PAIRS[num(o, 'pair')] ?? PAIRS[0]
+    const lay = num(o, 'layout'), m = Math.round(S * 0.06)
+    const title = lines(str(o, 'text') || 'Artismi'), sub = str(o, 'sub'), info = lines(str(o, 'info'))
+    const hero = HEROES[num(o, 'hero')] ?? HEROES[0]
+    const mat = HERO_MATS[num(o, 'heroMat')]?.v ?? -1
+    const heroCanvas = (size: number) => {
+      const over: RValues = { ...(hero.over ?? {}), ...(mat >= 0 && !hero.flat ? { mat } : {}) }
+      const src = piece(hero.rc(), o, size, over)
+      return hero.flat ? tint(src, lay === 1 ? t.acc : t.ink) : src
+    }
+    let c: HTMLCanvasElement, ctx: Ctx
+    if (lay === 3) {
+      // il lockup svizzero così com'è, poi il timbro appoggiato sopra
+      c = lockup.render({ ...o, p: { ...defaults(lockup), ...o.p, layout: 0, mark: 0, grain: 0 } }); ctx = c.getContext('2d')!
+    } else if (lay === 1) {
+      // il tipo stirato fa da fondo, l'elemento ci sta davanti con la sua ombra
+      c = tensione.render({ ...o, p: { ...defaults(tensione), text: str(o, 'text'), info: str(o, 'info'), num: str(o, 'num'), pal: num(o, 'pal'), mode: 0, face: 0, grain: 0 } })
+      ctx = c.getContext('2d')!
+      const h = heroCanvas(S * 0.9)
+      const box = { x: W * 0.12, y: H * 0.14, w: W * 0.76, h: H * 0.7 }
+      const k = Math.min(box.w / h.width, box.h / h.height)
+      ctx.save(); ctx.globalAlpha = 0.35; ctx.filter = `blur(${S * 0.012}px)`
+      ctx.drawImage(tint(h, '#000000'), box.x + (box.w - h.width * k) / 2 + S * 0.01, box.y + (box.h - h.height * k) / 2 + S * 0.02, h.width * k, h.height * k)
+      ctx.restore()
+      placeIn(ctx, h, box.x, box.y, box.w, box.h)
+    } else {
+      ;({ c, ctx } = stage(o, t))
+      const fr = microFrame(ctx, o, t, m, info, str(o, 'num'))
+      const lw = Math.max(1, S * 0.0016)
+      if (lay === 0) {
+        // protagonista: l'elemento occupa il centro, il titolo chiude in basso a tutta larghezza
+        const rows = title.map((s2, i) => { const f = i % 2 ? pair.b : pair.a, w = (W - 2 * m) * (i % 2 ? 0.7 : 1), ss = i % 2 ? s2.toLowerCase() : s2; const sz = sizeForWidth(f, ss, w); const k = inkOf(f, ss, sz); return { f, s: ss, sz, h: k.asc + k.desc, right: i % 2 === 1 } })
+        const gap = S * 0.01, maxT = H * 0.3
+        let tot = rows.reduce((a, r) => a + r.h, 0) + gap * (rows.length - 1)
+        const k = tot > maxT ? maxT / tot : 1
+        tot *= k
+        rule(ctx, m, W - m, fr.bottom - S * 0.012, lw, t.ink)
+        let y = fr.bottom - S * 0.04 - tot
+        const tTop = y
+        rows.forEach(r => { inkText(ctx, r.f, r.s, r.sz * k, r.right ? W - m : m, y, t.ink, r.right ? 'right' : 'left'); y += (r.h + gap) * k })
+        rule(ctx, m, W - m, fr.top + S * 0.012, lw, t.ink)
+        const top = fr.top + S * 0.04, bot = tTop - S * 0.04
+        if (sub) baseText(ctx, pair.b, sub, S * 0.026, m, top + S * 0.026, t.ink)
+        placeIn(ctx, heroCanvas(S * 0.9), m, top + (sub ? S * 0.05 : 0), W - 2 * m, bot - top - (sub ? S * 0.05 : 0))
+      } else {
+        // copertina: l'elemento chiuso in un riquadro a filetto, il titolo sotto in asse
+        const bx = m, by = fr.top + S * 0.03, bw = W - 2 * m, bh = (fr.bottom - by) * 0.64
+        ctx.strokeStyle = t.ink; ctx.lineWidth = lw; ctx.strokeRect(bx, by, bw, bh)
+        baseText(ctx, MICRO, 'Fig. ' + (str(o, 'num') || '01'), S * 0.0145, bx + S * 0.02, by + bh - S * 0.02, t.ink)
+        placeIn(ctx, heroCanvas(S * 0.9), bx + bw * 0.08, by + bh * 0.07, bw * 0.84, bh * 0.86)
+        // in copertina il titolo va nel carattere più "da libro" della coppia
+        const fT = pair.a.italic ? pair.a : pair.b
+        const rows = title.map(s2 => { const sz = sizeForWidth(fT, s2, W * 0.8); const k2 = inkOf(fT, s2, sz); return { s: s2, sz, h: k2.asc + k2.desc } })
+        const room = fr.bottom - (by + bh) - S * 0.1
+        let tot = rows.reduce((a, r) => a + r.h, 0) + S * 0.008 * (rows.length - 1)
+        const k = tot > room ? room / tot : 1
+        tot *= k
+        let y = by + bh + S * 0.05
+        rows.forEach(r => { inkText(ctx, fT, r.s, r.sz * k, W / 2, y, t.ink, 'center'); y += (r.h + S * 0.008) * k })
+        if (sub) baseText(ctx, FACES.grotesk, sub, S * 0.017, W / 2, y + S * 0.035, t.ink, 'center', 0.12)
+      }
+    }
+    // l'oggetto nell'angolo, un po' storto e a cavallo del margine, come appoggiato a mano
+    const st = STAMPS[num(o, 'stampKind')] ?? STAMPS[0]
+    if (num(o, 'stampKind') > 0) {
+      const r = rng(o.seed ^ 0x5a17)
+      const src = piece(st.rc(), o, S * 0.7, st.over(o))
+      const size = S * 0.27, corner = num(o, 'corner')
+      // posti possibili: i quattro angoli a cavallo del margine e qualche punto lungo i bordi
+      const L = m + size * 0.42, R = W - m - size * 0.42, T = m + size * 0.55, B = H - m - size * 0.62
+      const spots: [number, number][] = corner ? [[[R, B], [R, T], [L, B], [L, T]][corner - 1] as [number, number]]
+        : [[R, B], [R, T], [L, B], [L, T], [R, H * 0.5], [L, H * 0.5], [W * 0.5, B], [R, H * 0.33], [R, H * 0.68], [L, H * 0.68]]
+      // si sceglie quello che copre meno inchiostro già stampato (a pari merito, il primo)
+      const img = ctx.getImageData(0, 0, W, H).data, [br, bg2, bb] = hexRgb(t.bg)
+      const cover = ([x, y]: [number, number]) => {
+        let n = 0, hit = 0
+        const rr = size * 0.46, st = Math.max(2, Math.round(size / 40))
+        for (let yy = Math.max(0, Math.round(y - rr)); yy < Math.min(H, y + rr); yy += st) for (let xx = Math.max(0, Math.round(x - rr)); xx < Math.min(W, x + rr); xx += st) {
+          if ((xx - x) ** 2 + (yy - y) ** 2 > rr * rr) continue
+          const i = (yy * W + xx) * 4
+          n++; if (Math.abs(img[i] - br) + Math.abs(img[i + 1] - bg2) + Math.abs(img[i + 2] - bb) > 60) hit++
+        }
+        return n ? hit / n : 1
+      }
+      let best = spots[0], bestS = Infinity
+      spots.forEach((p2, i) => { const sc = cover(p2) + i * 0.004; if (sc < bestS) { bestS = sc; best = p2 } })
+      const [cx, cy] = best
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate((r() - 0.5) * 0.5)
+      const k = size / Math.max(src.width, src.height)
+      ctx.drawImage(src, -src.width * k / 2, -src.height * k / 2, src.width * k, src.height * k)
+      ctx.restore()
+    }
+    return finish(c, o, t, 'locandina', null)
+  },
+}
+
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
@@ -2387,7 +2536,7 @@ export const RECIPES: Recipe[] = [
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
   tattoo,
   groovy, gonfiabile, eco, trama,
-  lockup, tensione, cinetico,
+  lockup, tensione, cinetico, locandina,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
