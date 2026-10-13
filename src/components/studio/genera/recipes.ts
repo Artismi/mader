@@ -15,7 +15,7 @@ import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
 import { arrowNE, asterisk, baseText, capH, inkCanvas, inkOf, inkText, rule, sizeForWidth, up, wrap } from './design'
-import { GRADES, POST_FX, type Grade, heroFx, postFx, grainIn, backGlow, backdrop, beams, cinemaFinish, dust, fadeFoot, reflection, rgba } from './cinema'
+import { GRADES, POST_FX, heroFx, postFx, grainIn, backGlow, backdrop, beams, cinemaFinish, dust, fadeFoot, reflection, rgba } from './cinema'
 import { WARPS, band as distBand, extrude, extrudeStriped, glints, shine, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
@@ -2441,19 +2441,8 @@ const locandina: Recipe = {
     const mat = HERO_MATS[num(o, 'heroMat')]?.v ?? -1
     const heroCanvas = (size: number) => {
       const over: RValues = { ...(hero.over ?? {}), ...(mat >= 0 && !hero.flat ? { mat } : {}) }
-      let src = piece(hero.rc(), o, size, over)
-      if (hero.flat) src = tint(src, lay === 1 ? t.acc : t.ink)
-      // l'elemento non è mai crudo: emissione delle sue luci, velo del colore d'accento, grana
-      return heroFx(src, t.acc, o.seed, t.dark || !hero.flat ? 0.5 : 0, hero.flat ? 0 : 0.05)
-    }
-    /** l'elemento nella sua luce: alone d'accento dietro, ombra morbida sotto, piede sfumato se tocca il fondo */
-    const stageHero = (src: HTMLCanvasElement, x: number, y: number, w: number, h: number) => {
-      const kk = Math.min(w / src.width, h / src.height), dw = src.width * kk, dh = src.height * kk
-      const hx = x + (w - dw) / 2, hy = y + (h - dh) / 2
-      backGlow(ctx, src, hx, hy, dw, dh, t.acc, S * 0.05, t.dark ? 0.55 : 0.22, t.dark ? 'screen' : 'multiply')
-      ctx.save(); ctx.globalAlpha = t.dark ? 0.5 : 0.22; ctx.filter = `blur(${S * 0.014}px)`
-      ctx.drawImage(tint(src, '#000000'), hx + S * 0.008, hy + S * 0.018, dw, dh); ctx.restore()
-      ctx.drawImage(src, hx, hy, dw, dh)
+      const src = piece(hero.rc(), o, size, over)
+      return hero.flat ? tint(src, lay === 1 ? t.acc : t.ink) : src
     }
     let c: HTMLCanvasElement, ctx: Ctx
     if (lay === 3) {
@@ -2463,14 +2452,15 @@ const locandina: Recipe = {
       // il tipo stirato fa da fondo, l'elemento ci sta davanti con la sua ombra
       c = tensione.render({ ...o, p: { ...defaults(tensione), text: str(o, 'text'), info: str(o, 'info'), num: str(o, 'num'), pal: num(o, 'pal'), mode: 0, face: 0, grain: 0 } })
       ctx = c.getContext('2d')!
-      stageHero(heroCanvas(S * 0.9), W * 0.12, H * 0.14, W * 0.76, H * 0.7)
+      const h = heroCanvas(S * 0.9)
+      const box = { x: W * 0.12, y: H * 0.14, w: W * 0.76, h: H * 0.7 }
+      const k = Math.min(box.w / h.width, box.h / h.height)
+      ctx.save(); ctx.globalAlpha = 0.35; ctx.filter = `blur(${S * 0.012}px)`
+      ctx.drawImage(tint(h, '#000000'), box.x + (box.w - h.width * k) / 2 + S * 0.01, box.y + (box.h - h.height * k) / 2 + S * 0.02, h.width * k, h.height * k)
+      ctx.restore()
+      placeIn(ctx, h, box.x, box.y, box.w, box.h)
     } else {
       ;({ c, ctx } = stage(o, t))
-      // luce d'ambiente sul foglio: uno spot morbido dall'alto, mai un fondo piatto
-      ctx.save(); ctx.globalCompositeOperation = t.dark ? 'screen' : 'soft-light'
-      const sp = ctx.createRadialGradient(W / 2, H * 0.12, 0, W / 2, H * 0.12, H * 0.85)
-      sp.addColorStop(0, rgba(t.dark ? t.acc : '#ffffff', t.dark ? 0.16 : 0.55)); sp.addColorStop(1, rgba(t.dark ? t.acc : '#ffffff', 0))
-      ctx.fillStyle = sp; ctx.fillRect(0, 0, W, H); ctx.restore()
       const fr = microFrame(ctx, o, t, m, info, str(o, 'num'))
       const lw = Math.max(1, S * 0.0016)
       if (lay === 0) {
@@ -2487,15 +2477,13 @@ const locandina: Recipe = {
         rule(ctx, m, W - m, fr.top + S * 0.012, lw, t.ink)
         const top = fr.top + S * 0.04, bot = tTop - S * 0.04
         if (sub) baseText(ctx, pair.b, sub, S * 0.026, m, top + S * 0.026, t.ink)
-        stageHero(heroCanvas(S * 0.9), m, top + (sub ? S * 0.05 : 0), W - 2 * m, bot - top - (sub ? S * 0.05 : 0))
+        placeIn(ctx, heroCanvas(S * 0.9), m, top + (sub ? S * 0.05 : 0), W - 2 * m, bot - top - (sub ? S * 0.05 : 0))
       } else {
         // copertina: l'elemento chiuso in un riquadro a filetto, il titolo sotto in asse
         const bx = m, by = fr.top + S * 0.03, bw = W - 2 * m, bh = (fr.bottom - by) * 0.64
         ctx.strokeStyle = t.ink; ctx.lineWidth = lw; ctx.strokeRect(bx, by, bw, bh)
         baseText(ctx, MICRO, 'Fig. ' + (str(o, 'num') || '01'), S * 0.0145, bx + S * 0.02, by + bh - S * 0.02, t.ink)
-        // dentro la cornice un fondo appena più profondo, come una lastra
-        ctx.save(); ctx.globalAlpha = t.dark ? 0.35 : 0.06; ctx.fillStyle = t.dark ? '#000000' : t.ink; ctx.fillRect(bx, by, bw, bh); ctx.restore()
-        stageHero(heroCanvas(S * 0.9), bx + bw * 0.08, by + bh * 0.07, bw * 0.84, bh * 0.86)
+        placeIn(ctx, heroCanvas(S * 0.9), bx + bw * 0.08, by + bh * 0.07, bw * 0.84, bh * 0.86)
         // in copertina il titolo va nel carattere più "da libro" della coppia
         const fT = pair.a.italic ? pair.a : pair.b
         const rows = title.map(s2 => { const sz = sizeForWidth(fT, s2, W * 0.8); const k2 = inkOf(fT, s2, sz); return { s: s2, sz, h: k2.asc + k2.desc } })
@@ -2538,10 +2526,7 @@ const locandina: Recipe = {
       ctx.drawImage(src, -src.width * k / 2, -src.height * k / 2, src.width * k, src.height * k)
       ctx.restore()
     }
-    // post-produzione come una stampa fotografica: viraggio sui colori della palette, luci morbide, grana
-    const grade: Grade = { label: t.label, bg: t.bg, floor: t.bg, light: t.dark ? t.acc : '#ffffff', glow: t.acc, ink: t.ink, shadow: t.dark ? t.bg : t.ink, high: t.dark ? t.ink : t.bg, dark: t.dark }
-    cinemaFinish(c, grade, o.seed, { bloom: t.dark ? 0.35 : 0.12, halation: t.dark ? 0.12 : 0.04, aberration: 0.22, grade: 0.55, vignette: t.dark ? 0.6 : 0.28, grain: num(o, 'grain') / 30 * 0.6 })
-    return c
+    return finish(c, o, t, 'locandina', null)
   },
 }
 
@@ -2700,7 +2685,7 @@ const BASE: Recipe[] = [
  */
 const withPost = (rc: Recipe): Recipe => ({
   ...rc,
-  params: [...rc.params, P.sel('post', 'Finitura', [...POST_FX], rc.id === 'scena' || rc.id === 'locandina' ? 0 : 1), P.range('postAmt', 'Intensità finitura', 0, 100, 45)],
+  params: [...rc.params, P.sel('post', 'Finitura', [...POST_FX], rc.id === 'scena' ? 0 : 1), P.range('postAmt', 'Intensità finitura', 0, 100, 45)],
   render: o => {
     const c = rc.render(o)
     const out = postFx(c, num(o, 'post'), num(o, 'postAmt') / 100, o.seed, o.transparent)
