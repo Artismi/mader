@@ -15,6 +15,7 @@ import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
 import { arcLine, arrowNE, asterisk, baseText, capH, inkCanvas, inkOf, inkText, ringText, rule, sizeForWidth, up, wrap } from './design'
+import { GRADES, backGlow, backdrop, beams, cinemaFinish, dust, fadeFoot, reflection, rgba } from './cinema'
 import { WARPS, band as distBand, extrude, extrudeStriped, glints, shine, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
@@ -2529,6 +2530,115 @@ const locandina: Recipe = {
   },
 }
 
+const SCENE_HEROES: { label: string; rc: () => Recipe; over?: (o: Job) => RValues }[] = [
+  { label: 'Crescita aliena', rc: () => alieno },
+  { label: 'Sigillo cyber', rc: () => sigillo },
+  { label: 'Membrana', rc: () => membrana },
+  { label: 'Falce gotica', rc: () => falce },
+  { label: 'Rete neurale', rc: () => rete },
+  { label: 'Corona di spine', rc: () => corona, over: () => ({ text: '' }) },
+  { label: 'Simbolo', rc: () => simbolo },
+  { label: 'Scritta cromata', rc: () => cromo, over: o => ({ text: (lines(str(o, 'text'))[0] ?? 'Artismi'), sparks: false }) },
+]
+const SCENE_MATS = [{ label: 'Cromo', v: 1 }, { label: 'Nero lucido', v: 2 }, { label: 'Oro', v: 3 }, { label: 'Iridescente', v: 4 }, { label: 'Perla', v: 6 }, { label: 'Gel', v: 5 }]
+
+const scena: Recipe = {
+  id: 'scena', label: 'Scena cinematografica', cat: 'Design tipografico', hint: 'locandina da film: l\'elemento in scena con luce, fasci, nebbia, riflesso; titolo e crediti; bloom, viraggio, grana',
+  params: [P.text('Techno|Night', 'Titolo'), { key: 'sub', label: 'Frase di lancio', type: 'text', def: 'Una notte sola. Nessuna replica.' },
+    { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3, Torino|Dalle 23:00' },
+    P.sel('hero', 'Elemento', SCENE_HEROES.map(x => x.label)), P.sel('mat', 'Materia', SCENE_MATS.map(x => x.label)),
+    P.sel('shot', 'Inquadratura', ['Centrale', 'Dal basso', 'Laterale']), P.sel('grade', 'Luce e viraggio', GRADES.map(x => x.label)),
+    P.sel('back', 'Titolo dietro', ['Pieno tenue', 'Contorno', 'Nessuno']),
+    P.range('beams', 'Fasci di luce', 0, 100, 55), P.range('fog', 'Nebbia', 0, 100, 55), P.range('bloom', 'Bagliore', 0, 100, 45),
+    P.range('aberr', 'Aberrazione', 0, 100, 35), P.range('grain', 'Grana pellicola', 0, 100, 40)],
+  render: o => {
+    const g = GRADES[num(o, 'grade')] ?? GRADES[0], S = SS(o), W = o.W, H = o.H
+    const shot = num(o, 'shot'), title = lines(str(o, 'text') || 'Artismi'), sub = str(o, 'sub'), info = lines(str(o, 'info'))
+    const t: Tone = { id: 'cine', label: g.label, bg: g.bg, ink: g.ink, acc: g.glow, dark: g.dark }
+    const { c, ctx } = stage({ ...o, transparent: false }, t)
+    const m = Math.round(S * 0.06)
+    const horizon = H * (shot === 1 ? 0.8 : 0.7)
+    const spotX = shot === 2 ? W * 0.66 : W / 2
+    backdrop(ctx, W, H, g, horizon, { x: spotX, y: H * 0.02, r: H * 0.8 })
+    beams(ctx, W, H, g, spotX, -H * 0.04, 7, o.seed, num(o, 'beams') / 100)
+    // titolo dietro: enorme, tenue, un filo sfocato (è lontano)
+    const back = num(o, 'back')
+    if (back < 2) {
+      const word = title.join(' '), f = FACES.condensato
+      const bw = W - 2 * m * 0.6, bh = (horizon - H * 0.12) * 0.62
+      const src = stretchLine(f, word, bw, bh, g.ink)
+      const k = makeCanvas(W, H)
+      k.ctx.drawImage(src, (W - bw) / 2, H * 0.11, bw, bh)
+      if (back === 1) {
+        // solo contorno: si toglie l'interno eroso
+        const kd = k.ctx.getImageData(0, 0, W, H).data, m2 = newMask(W, H)
+        for (let i = 0; i < m2.a.length; i++) m2.a[i] = kd[i * 4 + 3]
+        const d = distance(m2)
+        const edge = newMask(W, H); for (let i = 0; i < d.length; i++) edge.a[i] = m2.a[i] && d[i] < S * 0.0022 ? 255 : 0
+        k.ctx.clearRect(0, 0, W, H); k.ctx.drawImage(maskToCanvas(edge, g.ink), 0, 0)
+      }
+      // si spegne verso il basso, dove comincia la nebbia
+      const fade = k.ctx.createLinearGradient(0, H * 0.11, 0, H * 0.11 + bh)
+      fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0.15)')
+      k.ctx.globalCompositeOperation = 'destination-in'; k.ctx.fillStyle = fade; k.ctx.fillRect(0, 0, W, H)
+      ctx.save(); ctx.globalAlpha = back === 1 ? 0.55 : g.dark ? 0.13 : 0.1; ctx.filter = `blur(${S * 0.0018}px)`; ctx.drawImage(k.c, 0, 0); ctx.restore()
+    }
+    // l'elemento: reso grande, col piede sfumato nella nebbia
+    const hero = SCENE_HEROES[num(o, 'hero')] ?? SCENE_HEROES[0]
+    const mat = SCENE_MATS[num(o, 'mat')]?.v ?? 1
+    let src = piece(hero.rc(), o, S * 1.1, { ...(hero.over?.(o) ?? {}), mat, tone: g.dark ? 0 : 1, glow: false, caps: false })
+    src = fadeFoot(src, 0.86, 1)
+    const box = shot === 0 ? { x: W * 0.1, y: H * 0.13, w: W * 0.8, h: horizon - H * 0.13 + S * 0.02 }
+      : shot === 1 ? { x: -W * 0.02, y: H * 0.08, w: W * 1.04, h: horizon - H * 0.08 + S * 0.05 }
+      : { x: W * 0.3, y: H * 0.12, w: W * 0.64, h: horizon - H * 0.12 + S * 0.02 }
+    const kk = Math.min(box.w / src.width, box.h / src.height), dw = src.width * kk, dh = src.height * kk
+    const hx = box.x + (box.w - dw) / 2, hy = box.y + box.h - dh
+    // ombra di contatto e controluce
+    ctx.save(); ctx.translate(hx + dw / 2, horizon + S * 0.01); ctx.scale(1, 0.12)
+    const cs = ctx.createRadialGradient(0, 0, 0, 0, 0, dw * 0.45); cs.addColorStop(0, 'rgba(0,0,0,0.55)'); cs.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = cs; ctx.fillRect(-W, -H * 4, W * 2, H * 8); ctx.restore()
+    backGlow(ctx, src, hx, hy, dw, dh, g.glow, S * 0.06, g.dark ? 0.75 : 0.35, g.dark ? 'screen' : 'soft-light')
+    backGlow(ctx, src, hx, hy, dw, dh, g.light, S * 0.015, g.dark ? 0.35 : 0.2, g.dark ? 'screen' : 'soft-light')
+    reflection(ctx, src, hx, horizon + S * 0.005, dw, dh, g.dark ? 0.32 : 0.22, S * 0.004)
+    ctx.drawImage(src, hx, hy, dw, dh)
+    // nebbia bassa che attraversa il piede e il pavimento
+    const fog = num(o, 'fog') / 100
+    if (fog > 0) {
+      const fk = makeCanvas(W, H), r2 = rng(o.seed ^ 0xf06)
+      for (let i = 0; i < 14; i++) {
+        const y = horizon + (r2() - 0.55) * H * 0.1, x = r2() * W, rx = W * (0.25 + r2() * 0.35), ry = H * (0.02 + r2() * 0.035)
+        fk.ctx.save(); fk.ctx.translate(x, y); fk.ctx.scale(1, ry / rx)
+        const gr = fk.ctx.createRadialGradient(0, 0, 0, 0, 0, rx); gr.addColorStop(0, rgba(g.light, 0.22 * fog)); gr.addColorStop(1, rgba(g.light, 0))
+        fk.ctx.fillStyle = gr; fk.ctx.fillRect(-rx, -rx, rx * 2, rx * 2); fk.ctx.restore()
+      }
+      ctx.save(); ctx.globalCompositeOperation = g.dark ? 'screen' : 'source-over'; ctx.filter = `blur(${S * 0.01}px)`; ctx.drawImage(fk.c, 0, 0); ctx.restore()
+    }
+    dust(ctx, W, H, g, o.seed, 160, { x: spotX, y: H * 0.35, r: H * 0.45 })
+    // ── tipografia in primo piano ──
+    const ms = S * 0.0145
+    baseText(ctx, MICRO, 'Artismi Design Studio presenta', ms, W / 2, m + ms, g.ink, 'center', 0.2)
+    const tf: Face = { ...FACES.grotesk, track: 0.32 }
+    const word = title.join(' ')
+    const tw = shot === 2 ? W * 0.5 : W * 0.74
+    const tsz = Math.min(sizeForWidth(tf, word, tw), S * 0.075)
+    const titleY = H * (shot === 1 ? 0.835 : 0.775)
+    ctx.save(); ctx.shadowColor = g.glow; ctx.shadowBlur = S * 0.02
+    const tb = inkText(ctx, tf, word, tsz, shot === 2 ? m : W / 2, titleY, g.ink, shot === 2 ? 'left' : 'center')
+    ctx.restore()
+    if (sub) baseText(ctx, FACES.corsivo, sub, S * 0.026, shot === 2 ? m : W / 2, tb.y - S * 0.022, g.ink, shot === 2 ? 'left' : 'center')
+    // blocco crediti: condensato stretto e alto, come in fondo ai manifesti
+    const credits = ['Artismi Design Studio presenta', word, ...info, 'Torino MMXXVI'].join('   ·   ').toUpperCase()
+    const cf = FACES.condensato
+    const cy0 = H - m - S * 0.03
+    const csrc = inkCanvas(cf, credits, S * 0.05, g.ink)
+    const cw = W - 2 * m, ch = Math.min(S * 0.026, cw * csrc.height / csrc.width * 2.2)
+    ctx.save(); ctx.globalAlpha = 0.72; ctx.drawImage(csrc, m, cy0 - ch, cw, ch); ctx.restore()
+    baseText(ctx, MICRO, info.join('   /   '), ms * 0.95, W / 2, H - m + ms * 0.2, g.ink, 'center', 0.1)
+    cinemaFinish(c, g, o.seed, { bloom: num(o, 'bloom') / 100, halation: num(o, 'bloom') / 100 * 0.45, aberration: num(o, 'aberr') / 100, grade: 1, vignette: g.dark ? 0.85 : 0.4, grain: num(o, 'grain') / 100 })
+    return c
+  },
+}
+
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
@@ -2536,7 +2646,7 @@ export const RECIPES: Recipe[] = [
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
   tattoo,
   groovy, gonfiabile, eco, trama,
-  lockup, tensione, cinetico, locandina,
+  lockup, tensione, cinetico, locandina, scena,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
