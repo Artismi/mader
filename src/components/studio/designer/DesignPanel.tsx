@@ -3,8 +3,8 @@
 /**
  * Pannello Template. Dal brief la catena di ruoli dell'IA (analista,
  * copywriter, direttore creativo, con i controlli della maestra) scrive i
- * testi e sceglie tre direzioni visive; il motore generativo compone due
- * varianti per direzione. Sulla proposta scelta i regolatori la ricompongono
+ * testi e sceglie sei direzioni visive; il motore compone un vivaio quattro
+ * volte più ampio delle proposte e il critico tiene le 12 migliori diverse. Sulla proposta scelta i regolatori la ricompongono
  * dal vivo, senza altre chiamate all'IA. Senza IA: esempi e campi a mano.
  */
 import React, { useRef, useState } from 'react'
@@ -14,7 +14,9 @@ import type { DesignContent, Format, Scene } from './types'
 import { STYLES, inferStyle } from './styles'
 import { findPhoto } from './generate'
 import { renderPreview } from './preview'
-import { generateSystem, proposeKnobs, SISTEMI, TRATTAMENTI, RANGE_KNOBS, rng, type Knobs } from './gen'
+import { generateSystem, proposeKnobs, proponi, SISTEMI, TRATTAMENTI, RANGE_KNOBS, rng, type Knobs } from './gen'
+
+const N_PROPOSTE = 12
 
 const FORMATS: [Format, string][] = [['quadrato', '1:1'], ['verticale', '4:5'], ['storia', '9:16'], ['orizzontale', '16:9']]
 
@@ -68,7 +70,7 @@ interface Regia {
   modelli: Record<string, string>
 }
 
-/** Regolatori dentro gli intervalli scelti dal direttore (due varianti per direzione, semi diversi). */
+/** Regolatori dentro gli intervalli scelti dal direttore (più varianti per direzione, semi diversi). */
 function knobsFrom(d: Direzione, seed: number, enfasi?: string): Knobs {
   const r = rng(seed)
   const pick = ([lo, hi]: [number, number]) => lo + (hi - lo) * r.next()
@@ -115,16 +117,20 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
     try {
       const photo = await photoFor(c, fmt)
       if (c.imageQuery && !photo) setMsg('Non ho trovato una foto per quel soggetto: le proposte usano fondi generativi.')
-      const ks: Knobs[] = dirs.length
-        ? dirs.flatMap((d, i) => [knobsFrom(d, 1000 + i * 97, enf), knobsFrom(d, 5000 + i * 131, enf)])
-        : proposeKnobs(c, { hasPhoto: !!photo }).map(k => ({ ...k, enfasi: enf }))
-      setItems(ks.map(k => ({ k, sc: null })))
-      for (let i = 0; i < ks.length; i++) {
-        const sc = await generateSystem(c, fmt, ks[i], photo)
+      // quattro varianti per direzione dell'IA; il motore completa il vivaio (quattro volte le proposte),
+      // il critico esamina tutto e restano le 12 migliori diverse tra loro
+      const ks: Knobs[] = dirs.flatMap((d, i) => [0, 1, 2, 3].map(j => knobsFrom(d, 1000 + i * 97 + j * 7919, enf)))
+      setItems(Array.from({ length: N_PROPOSTE }, () => ({ k: ks[0] ?? proposeKnobs(c, { hasPhoto: !!photo })[0], sc: null })))
+      const p = await proponi(c, fmt, { photo, n: N_PROPOSTE, knobs: ks, onProgress: (a, b) => gen.current === my && setBusy(`compongo ${a}/${b}`) })
+      if (gen.current !== my) return
+      setBusy('compongo')
+      setMsg(`${p.promosse} promosse dal critico su ${p.candidate} candidate.`)
+      const scene = p.scene.map(sc => ({ ...sc, knobs: { ...sc.knobs, enfasi: enf } }))
+      setItems(scene.map(sc => ({ k: sc.knobs as Knobs, sc })))
+      for (let i = 0; i < scene.length; i++) {
+        const thumb = await renderPreview(scene[i])
         if (gen.current !== my) return
-        const thumb = sc ? await renderPreview(sc) : undefined
-        if (gen.current !== my) return
-        setItems(list => { const n = list.slice(); n[i] = { k: ks[i], sc, thumb }; return n })
+        setItems(list => { const n = list.slice(); n[i] = { ...n[i], thumb }; return n })
       }
     } catch (e) {
       setMsg((e as Error).message)
@@ -149,7 +155,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
     else setMsg(null)
   }
 
-  /** Regia dell'IA: testi, titoli alternativi e tre direzioni. */
+  /** Regia dell'IA: testi, titoli alternativi e sei direzioni. */
   async function fromBrief() {
     setBusy('regia'); setMsg(null)
     try {
@@ -181,7 +187,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       {/* 1. brief → regia dell'IA */}
       <Field label="Brief" value={brief} onChange={setBrief} area placeholder="Es. Tostatura Nera di Bologna lancia il blend Notte Etiope: 250 g, Etiopia Guji, note di cacao e frutti rossi. Post per Instagram." />
       <div className="flex items-center gap-1">
-        <Btn primary onClick={fromBrief} disabled={brief.trim().length < 10 || !!busy} title="L'IA scrive i testi e sceglie tre direzioni; lo Studio compone">
+        <Btn primary onClick={fromBrief} disabled={brief.trim().length < 10 || !!busy} title="L'IA scrive i testi e sceglie sei direzioni; lo Studio compone un vivaio e il critico sceglie le 12 migliori">
           <Sparkles className="w-3 h-3" />{busy === 'regia' ? 'L’IA sta lavorando…' : 'Genera con l’IA'}
         </Btn>
         {modelli && <span className="text-[8px] text-white/30 truncate" title={Object.entries(modelli).map(([r, m]) => `${r}: ${m}`).join('\n')}>con {[...new Set(Object.values(modelli))].join(', ')}</span>}
@@ -217,20 +223,20 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       <div className="flex flex-wrap items-center gap-1">
         {FORMATS.map(([id, l]) => <Chip key={id} on={format === id} onClick={() => { setFormat(id); if (items.length) compose({ format: id }) }}>{l}</Chip>)}
         <span className="flex-1" />
-        <Btn onClick={() => compose()} disabled={!!busy}><WandSparkles className="w-3 h-3" />{busy === 'compongo' ? 'Compongo…' : 'Componi'}</Btn>
+        <Btn onClick={() => compose()} disabled={!!busy}><WandSparkles className="w-3 h-3" />{busy?.startsWith('compongo') ? `Compongo${busy.length > 8 ? busy.slice(8) : '…'}` : 'Componi'}</Btn>
       </div>
-      {!direzioni.length && autoStyle && <p className="text-[8px] text-white/30">Senza IA: un sistema per proposta, stile dal contenuto ({autoStyle}).</p>}
+      {!direzioni.length && autoStyle && <p className="text-[8px] text-white/30">Senza IA: il motore genera il vivaio dallo stile del contenuto ({autoStyle}) e il critico sceglie.</p>}
 
       {/* 3. proposte */}
       {items.length > 0 && (
         <div className={cn('grid gap-2', format === 'orizzontale' ? 'grid-cols-2' : 'grid-cols-3')}>
           {items.map((it, i) => (
-            <button key={i} onClick={() => it.sc && setSelected(i)} title={direzioni[Math.floor(i / 2)]?.perche ?? ''}
-              className={cn('relative rounded-lg overflow-hidden border-2 text-left', selected === i ? 'border-accent' : 'border-transparent', !it.sc && it.thumb === undefined && busy !== 'compongo' && 'opacity-40')}>
+            <button key={i} onClick={() => it.sc && setSelected(i)} title={it.sc?.esame ? `Critico: ${it.sc.esame.voto}/100 · ${[...it.sc.esame.gesti, ...it.sc.esame.difetti].join(' · ')}` : ''}
+              className={cn('relative rounded-lg overflow-hidden border-2 text-left', selected === i ? 'border-accent' : 'border-transparent', !it.sc && it.thumb === undefined && !busy?.startsWith('compongo') && 'opacity-40')}>
               {/* eslint-disable-next-line @next/next/no-img-element -- miniature generate al volo (data URL) */}
               {it.thumb ? <img src={it.thumb} alt={it.k.sistema} className={cn('w-full object-cover bg-black/40', aspect)} />
-                : <div className={cn('w-full bg-white/5 flex items-center justify-center text-[8px] text-white/30', aspect, busy === 'compongo' && 'animate-pulse')}>{busy === 'compongo' ? '' : 'non regge'}</div>}
-              <span className="absolute bottom-0 inset-x-0 px-1.5 py-1 text-[8px] text-white/80 bg-black/55 truncate">{sistemaNome(it.k.sistema)} · {stileNome(it.k.stile)}</span>
+                : <div className={cn('w-full bg-white/5 flex items-center justify-center text-[8px] text-white/30', aspect, busy?.startsWith('compongo') && 'animate-pulse')}>{busy?.startsWith('compongo') ? '' : 'non regge'}</div>}
+              <span className="absolute bottom-0 inset-x-0 px-1.5 py-1 text-[8px] text-white/80 bg-black/55 truncate">{sistemaNome(it.k.sistema)} · {stileNome(it.k.stile)}{it.sc?.esame ? ` · ${it.sc.esame.voto}` : ''}</span>
             </button>
           ))}
         </div>

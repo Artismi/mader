@@ -6,9 +6,10 @@
  *   analista  → fatti veri dal brief
  *   regista   → arco e ruoli delle slide (solo caroselli)
  *   copywriter→ testi con i budget di caratteri, tre titoli alternativi
- *   direttore → tre direzioni visive dal menu (sistema, stile, trattamento, regolatori)
+ *   direttore → sei direzioni visive dal menu (sistema, stile, trattamento, regolatori)
  */
 import { rubricaPerPrompt } from '@/components/studio/designer/gen/rubrica'
+import { ARCHETIPI } from '@/components/studio/designer/gen/archetipi/elenco'
 import { z } from 'zod'
 import { eseguiRuolo, type Giro } from './roles'
 import { lunghezza, frasiFatte, numeriInventati, diverse, enfasiNelTitolo, apostrofi, unaParola, tutti, clean } from './maestra'
@@ -164,12 +165,12 @@ export const direzioniSchema = z.object({
     sistema: z.enum(SISTEMA_IDS), stile: z.enum(STILE_IDS), trattamento: z.enum(TRATT_IDS), inverti: z.boolean().default(false),
     regolatori: z.object({ scala: range, energia: range, densita: range, sovrastampa: range, grana: range }),
     perche: z.string().default(''),
-  })).length(3),
+  })).length(6),
 })
 export type Direzioni = z.infer<typeof direzioniSchema>
 
 const MENU = () => [
-  'SISTEMI (composizione):', ...SISTEMI.filter(s => !s.slide && !s.tipo).map(s => `- ${s.id}: ${s.idea}${s.foto === 'serve' ? ' [serve una foto]' : ''}`),
+  'SISTEMI (composizione):', ...SISTEMI.filter(s => !s.slide && !s.tipo).map(s => { const a = ARCHETIPI.find(x => x.id === s.id); return `- ${s.id}: ${s.idea}${a ? ` (ispirazione: ${a.ricetta}; registri ${a.registri.join(', ')})` : ''}${s.foto === 'serve' ? ' [serve una foto]' : ''}` }),
   '', 'STILI (palette e caratteri):', ...STYLES.map(s => `- ${s.id}: ${s.name}, ${s.dark ? 'scuro' : 'chiaro'}; adatto a ${s.keywords.slice(0, 8).join(', ')}`),
   '', `TRATTAMENTI della foto: ${TRATTAMENTI.map(t => `${t.id} (${t.nome})`).join(', ')}`,
   '', 'REGOLATORI (intervalli 0-1): scala (quanto è grande il titolo), energia (diagonali, sfalsamenti), densita (quanti elementi), sovrastampa (inchiostri fuori registro), grana (trama di stampa).',
@@ -178,14 +179,15 @@ const MENU = () => [
 export async function direttore(an: Analisi, haFoto: boolean, opts: { riservato?: boolean } = {}) {
   return eseguiRuolo({
     ruolo: 'direttore', riservato: opts.riservato, schema: direzioniSchema, temperature: 0.9,
-    system: `Sei il direttore creativo di uno studio grafico con carattere. Scegli tre direzioni visive diverse tra loro, adatte al contenuto e al tono, solo dalle voci del menu.\n\n${rubricaPerPrompt('direttore')}\n\n${SOLO_JSON}`,
-    prompt: `${MENU()}\n\nContenuto:\n${JSON.stringify(an)}\nFoto disponibile: ${haFoto ? 'sì' : 'no'}.\n\nProponi 3 direzioni: una coerente e sicura, una più audace, una inaspettata ma sensata. Sistemi tutti diversi. ${haFoto ? '' : 'Niente sistemi che richiedono la foto.'}
+    system: `Sei il direttore creativo di uno studio grafico con carattere. Scegli sei direzioni visive diverse tra loro, adatte al contenuto e al tono, solo dalle voci del menu: la varietà nasce qui, prima della selezione.\n\n${rubricaPerPrompt('direttore')}\n\n${SOLO_JSON}`,
+    prompt: `${MENU()}\n\nContenuto:\n${JSON.stringify(an)}\nFoto disponibile: ${haFoto ? 'sì' : 'no'}.\n\nProponi 6 direzioni: due coerenti e sicure, due più audaci, due inaspettate ma sensate (da un registro vicino). Sei sistemi tutti diversi, di famiglie diverse (tipografici, collage, geometrici, digitali, fotografici). ${haFoto ? '' : 'Niente sistemi che richiedono la foto.'}
 Formato: {"direzioni": [{"sistema": "id", "stile": "id", "trattamento": "id", "inverti": false, "regolatori": {"scala": [0.5, 0.8], "energia": [0.2, 0.5], "densita": [0.4, 0.7], "sovrastampa": [0.2, 0.5], "grana": [0.3, 0.6]}, "perche": "una frase"}]}`,
     verifica: d => tutti(
-      new Set(d.direzioni.map(x => x.sistema)).size < 3 ? ['direzioni: i tre sistemi devono essere diversi.'] : [],
+      new Set(d.direzioni.map(x => x.sistema)).size < 6 ? ['direzioni: i sei sistemi devono essere tutti diversi.'] : [],
+      new Set(d.direzioni.map(x => x.stile)).size < 3 ? ['direzioni: usa almeno tre stili diversi.'] : [],
       !haFoto ? d.direzioni.filter(x => SISTEMI.find(s => s.id === x.sistema)?.foto === 'serve').map(x => `direzioni: "${x.sistema}" richiede una foto, che non c'è. Scegli un altro sistema.`) : [],
       d.direzioni.flatMap((x, i) => Object.entries(x.regolatori).filter(([, [lo, hi]]) => lo > hi).map(([k]) => `direzione ${i + 1}: l'intervallo di ${k} ha il minimo maggiore del massimo.`)),
-      d.direzioni.every(x => x.regolatori.energia[1] < 0.4) ? ['direzioni: almeno una direzione deve osare (energia sopra 0.5).'] : [],
+      d.direzioni.filter(x => x.regolatori.energia[1] >= 0.55).length < 2 ? ['direzioni: almeno due direzioni devono osare (energia sopra 0.55).'] : [],
     ),
   })
 }

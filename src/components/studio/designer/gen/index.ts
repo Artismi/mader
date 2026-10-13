@@ -167,9 +167,9 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
   let candidate = 0, giro = 0
   const maxGiri = o.giri ?? 3
   for (; giro < maxGiri; giro++) {
-    const pool = giro === 0 && o.knobs?.length
-      ? o.knobs
-      : proposeKnobs(c, { hasPhoto: !!o.photo, styleId: o.styleId, tinta, seme: (o.seme ?? 0) + giro * 104729, ampio: Math.max(3, Math.ceil(vivaio / 6)) })
+    // le direzioni dell'IA (se ci sono) entrano nel primo giro; il resto del vivaio lo genera il motore
+    const date = giro === 0 ? o.knobs ?? [] : []
+    const pool = [...date, ...proposeKnobs(c, { hasPhoto: !!o.photo, styleId: o.styleId, tinta, seme: (o.seme ?? 0) + giro * 104729, ampio: Math.max(2, Math.ceil((vivaio - date.length) / 6)) })]
     for (const [i, k] of pool.entries()) {
       const sc = await generateSystem(c, format, k, o.photo, { tentativi: k.sistema === 'composto' ? 8 : 4 })
       candidate++
