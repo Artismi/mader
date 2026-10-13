@@ -256,5 +256,250 @@
       ],
       "cta": "Prenota il taglio"
     }
+  },
+  "t_consigli": {
+    "foto": "caffe.jpg",
+    "c": {
+      "tipo": "consigli",
+      "brand": "Tostatura Nera",
+      "kicker": "Guida",
+      "title": "Come conservare il caffè a casa",
+      "voci": [
+        {
+          "titolo": "Barattolo ermetico",
+          "testo": "L'aria è il primo nemico: chiudi sempre bene dopo ogni uso."
+        },
+        {
+          "titolo": "Lontano dalla luce",
+          "testo": "Tienilo in dispensa, mai sul piano vicino ai fornelli."
+        },
+        {
+          "titolo": "Niente frigorifero",
+          "testo": "L'umidità rovina gli aromi e il caffè assorbe gli odori."
+        },
+        {
+          "titolo": "Macina al momento",
+          "testo": "Il caffè in grani resta fresco tre volte più a lungo."
+        }
+      ],
+      "cta": "Scopri le miscele"
+    }
+  },
+  "t_programma": {
+    "foto": "club.jpg",
+    "c": {
+      "tipo": "programma",
+      "brand": "Spazio Rotonda",
+      "kicker": "Sabato 14 marzo",
+      "title": "Il programma della notte",
+      "voci": [
+        {
+          "ora": "21:00",
+          "titolo": "Apertura porte"
+        },
+        {
+          "ora": "22:00",
+          "titolo": "Marta Kolb",
+          "testo": "live set, ambient"
+        },
+        {
+          "ora": "23:30",
+          "titolo": "Dj Ferro",
+          "testo": "techno"
+        },
+        {
+          "ora": "01:00",
+          "titolo": "Nausicaa b2b Rumore"
+        },
+        {
+          "ora": "03:00",
+          "titolo": "Chiusura"
+        }
+      ]
+    }
+  },
+  "t_menu": {
+    "foto": "verdure.jpg",
+    "c": {
+      "tipo": "menu",
+      "brand": "Osteria del Ponte",
+      "kicker": "Menu di stagione",
+      "title": "Pranzo d'autunno",
+      "voci": [
+        {
+          "titolo": "Vellutata di zucca",
+          "testo": "con semi tostati e olio al rosmarino",
+          "prezzo": "9 €"
+        },
+        {
+          "titolo": "Tortelli burro e salvia",
+          "prezzo": "14 €"
+        },
+        {
+          "titolo": "Guancia brasata",
+          "testo": "polenta morbida",
+          "prezzo": "18 €"
+        },
+        {
+          "titolo": "Torta di mele",
+          "prezzo": "6 €"
+        }
+      ]
+    }
+  },
+  "t_dati": {
+    "c": {
+      "tipo": "dati",
+      "brand": "Cooperativa Terra Viva",
+      "kicker": "Bilancio 2025",
+      "title": "Un anno di raccolto in numeri",
+      "voci": [
+        {
+          "valore": "68%",
+          "titolo": "prodotti venduti a km zero"
+        },
+        {
+          "valore": "42%",
+          "titolo": "acqua risparmiata con la goccia"
+        },
+        {
+          "valore": "85%",
+          "titolo": "imballaggi compostabili"
+        }
+      ]
+    }
+  },
+  "t_numeri": {
+    "c": {
+      "tipo": "dati",
+      "brand": "Festival Lungolago",
+      "kicker": "Edizione 2025",
+      "title": "Com'è andata",
+      "voci": [
+        {
+          "valore": "12.400",
+          "titolo": "visitatori"
+        },
+        {
+          "valore": "38",
+          "titolo": "concerti"
+        },
+        {
+          "valore": "3",
+          "titolo": "giorni"
+        },
+        {
+          "valore": "160",
+          "titolo": "volontari"
+        }
+      ]
+    }
+  },
+  "t_confronto": {
+    "c": {
+      "tipo": "confronto",
+      "brand": "Studio Pilates Sole",
+      "kicker": "Perché sceglierci",
+      "title": "Lezione di gruppo o privata?",
+      "colonne": [
+        {
+          "titolo": "In palestra",
+          "punti": [
+            "Classi da trenta persone",
+            "Esercizi uguali per tutti",
+            "Orari rigidi"
+          ]
+        },
+        {
+          "titolo": "Da noi",
+          "punti": [
+            "Massimo sei persone",
+            "Programma su misura",
+            "Prenoti dall'app"
+          ]
+        }
+      ]
+    }
+  },
+  "t_faq": {
+    "foto": "ceramica.jpg",
+    "c": {
+      "tipo": "faq",
+      "brand": "Bottega Argilla",
+      "kicker": "Corso base",
+      "title": "Le domande prima di iniziare",
+      "voci": [
+        {
+          "titolo": "Serve esperienza?",
+          "testo": "No, il corso parte da zero e il materiale è incluso."
+        },
+        {
+          "titolo": "Quanto dura?",
+          "testo": "Otto incontri da due ore, il martedì sera."
+        },
+        {
+          "titolo": "Porto a casa i pezzi?",
+          "testo": "Sì, dopo la cottura e la smaltatura."
+        }
+      ]
+    }
+  },
+  "t_timeline": {
+    "foto": "ritratto.jpg",
+    "c": {
+      "tipo": "timeline",
+      "brand": "Sartoria Ferri",
+      "kicker": "La nostra storia",
+      "title": "Tre generazioni di sartoria",
+      "voci": [
+        {
+          "valore": "1962",
+          "titolo": "La prima bottega",
+          "testo": "Nonno Aldo apre in via Saragozza."
+        },
+        {
+          "valore": "1988",
+          "titolo": "Il su misura",
+          "testo": "Arrivano gli abiti da cerimonia."
+        },
+        {
+          "valore": "2011",
+          "titolo": "La seconda sede",
+          "testo": "Apre il laboratorio a Milano."
+        },
+        {
+          "valore": "2024",
+          "titolo": "Online",
+          "testo": "Le misure si prendono anche in video."
+        }
+      ]
+    }
+  },
+  "t_passi": {
+    "foto": "fragole.jpg",
+    "c": {
+      "tipo": "passi",
+      "brand": "Cucina di Lia",
+      "kicker": "Ricetta",
+      "title": "Marmellata di fragole in quattro passi",
+      "voci": [
+        {
+          "titolo": "Lava e taglia",
+          "testo": "Un chilo di fragole mature, a pezzi."
+        },
+        {
+          "titolo": "Zucchero e limone",
+          "testo": "Lascia riposare due ore."
+        },
+        {
+          "titolo": "Cuoci piano",
+          "testo": "Quaranta minuti, mescolando spesso."
+        },
+        {
+          "titolo": "Invasa",
+          "testo": "Vasetti caldi, capovolti fino a sera."
+        }
+      ]
+    }
   }
 }

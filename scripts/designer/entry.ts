@@ -10,7 +10,7 @@ import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; registro?: string }
+export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; registro?: string; esame?: Scene['esame'] }
 
 async function draw(sc: Scene, thumb: number) {
   const el = document.createElement('canvas')
@@ -40,7 +40,7 @@ async function run(job: Job): Promise<Result[]> {
     if (!sc) { out.push({ sistema: k.sistema, ok: false, ms: Math.round(performance.now() - t0), knobs: k, reasons }); continue }
     const url = await draw(sc, job.thumb)
     const st = styleById(k.stile)
-    out.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url, knobs: k, reasons, layout: sc.label, stile: st.name, registro: st.registro })
+    out.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url, knobs: sc.knobs as Knobs ?? k, reasons, layout: sc.label, stile: st.name, registro: st.registro, esame: sc.esame })
   }
   return out
 }

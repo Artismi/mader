@@ -8,6 +8,7 @@
  *   copywriter→ testi con i budget di caratteri, tre titoli alternativi
  *   direttore → tre direzioni visive dal menu (sistema, stile, trattamento, regolatori)
  */
+import { rubricaPerPrompt } from '@/components/studio/designer/gen/rubrica'
 import { z } from 'zod'
 import { eseguiRuolo, type Giro } from './roles'
 import { lunghezza, frasiFatte, numeriInventati, diverse, enfasiNelTitolo, apostrofi, unaParola, tutti, clean } from './maestra'
@@ -34,7 +35,7 @@ export type Analisi = z.infer<typeof analisiSchema>
 export async function analista(brief: string, opts: { riservato?: boolean } = {}) {
   return eseguiRuolo({
     ruolo: 'analista', riservato: opts.riservato, schema: analisiSchema, temperature: 0.3,
-    system: `Sei l'analista di uno studio grafico. Dal brief estrai solo informazioni vere e presenti: non inventare prezzi, date, numeri o caratteristiche. ${LINGUA} ${SOLO_JSON}`,
+    system: `Sei l'analista di uno studio grafico. Dal brief estrai solo informazioni vere e presenti: non inventare prezzi, date, numeri o caratteristiche. ${LINGUA}\n\n${rubricaPerPrompt('analista')}\n\n${SOLO_JSON}`,
     prompt: `Brief:\n"""${brief}"""\n\nRestituisci: {"brand": "solo il nome del marchio, corto (es. 'Tostatura Nera', non 'Torrefazione Tostatura Nera di Bologna'), o vuoto", "settore": "…", "prodotto": "…", "pubblico": "…", "tono": ["2-4 aggettivi"], "fatti": ["frasi brevi e vere, dalla più importante"], "numeri": ["numeri, date, prezzi, misure presenti nel brief, scritti come nel brief"], "azione": "cosa deve fare chi guarda", "foto": "soggetto generico da cercare in un archivio fotografico, 3-6 parole: materia, luce, ambiente (es. 'chicchi di caffè tostati su pietra scura'); niente nomi di brand, confezioni o loghi; vuoto se non serve"}\nIl pubblico va dedotto dal contenuto se non è scritto (es. 'appassionati di caffè di specialità').`,
     verifica: a => tutti(
       lunghezza('settore', a.settore, 60, 2), lunghezza('prodotto', a.prodotto, 100, 2), lunghezza('pubblico', a.pubblico, 120, 4),
@@ -83,7 +84,7 @@ export async function copywriter(brief: string, an: Analisi, opts: { riservato?:
   const fonte = `${brief} ${an.numeri.join(' ')}`
   return eseguiRuolo({
     ruolo: 'copywriter', riservato: opts.riservato, schema: testiSchema, temperature: 0.8,
-    system: `Sei il copywriter di uno studio grafico: scrivi testi brevi, concreti, con un'immagine precisa, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti. ${SOLO_JSON}`,
+    system: `Sei il copywriter di uno studio grafico: scrivi testi brevi, concreti, con un'immagine precisa, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti.\n\n${rubricaPerPrompt('copywriter')}\n\n${SOLO_JSON}`,
     prompt: `Analisi del brief:\n${JSON.stringify(an)}\n\nScrivi i testi di una grafica social. Regole:
 - 3 titoli DAVVERO diversi (massimo ${BUDGET.titolo} caratteri): uno descrittivo, uno evocativo, uno con un gioco di parole o un contrasto. Per ognuno la parola chiave da evidenziare ("enfasi"): UNA parola che compare nel titolo.
 - Ortografia italiana curata: apostrofi tipografici (dell’Etiopia, un’altra), accenti giusti (caffè, perché).
@@ -138,7 +139,7 @@ export async function copywriterSlide(brief: string, an: Analisi, sc: Scaletta, 
   const fonte = `${brief} ${an.numeri.join(' ')}`
   return eseguiRuolo({
     ruolo: 'copywriter', riservato: opts.riservato, schema: testiSlideSchema, temperature: 0.8,
-    system: `Sei il copywriter di uno studio grafico: scrivi i testi di un carosello, una slide alla volta, brevi e concreti, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti. ${SOLO_JSON}`,
+    system: `Sei il copywriter di uno studio grafico: scrivi i testi di un carosello, una slide alla volta, brevi e concreti, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti.\n\n${rubricaPerPrompt('copywriter')}\n\n${SOLO_JSON}`,
     prompt: `Analisi:\n${JSON.stringify(an)}\n\nScaletta (${sc.arco}):\n${sc.slides.map((s, i) => `${i + 1}. ${s.ruolo}: ${s.idea}`).join('\n')}\n\nPer OGNI slide, nello stesso ordine (${sc.slides.length} slide):
 - titolo: massimo ${BUDGET.titolo} caratteri in copertina, ${BUDGET.titoloInterno} nelle altre; "enfasi" = parola del titolo da evidenziare.
 - occhiello (massimo ${BUDGET.occhiello}), testo (massimo ${BUDGET.testo}, vuoto nelle slide "immagine"), dettagli (0-3, massimo ${BUDGET.dettaglio} ciascuno, solo dati presenti), numero (solo nelle slide "dato", massimo ${BUDGET.numero}), invito (solo in "chiusura", massimo ${BUDGET.invito}).
@@ -153,7 +154,7 @@ Formato: {"slides": [{"titolo": "…", "enfasi": "…", "occhiello": "…", "tes
 }
 
 /* ── Direttore creativo ───────────────────────────────────────────────── */
-const SISTEMA_IDS = SISTEMI.map(s => s.id) as [string, ...string[]]
+const SISTEMA_IDS = SISTEMI.filter(s => !s.slide && !s.tipo).map(s => s.id) as [string, ...string[]]
 const STILE_IDS = STYLES.map(s => s.id) as [string, ...string[]]
 const TRATT_IDS = TRATTAMENTI.map(t => t.id) as [string, ...string[]]
 const range = z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)])
@@ -168,7 +169,7 @@ export const direzioniSchema = z.object({
 export type Direzioni = z.infer<typeof direzioniSchema>
 
 const MENU = () => [
-  'SISTEMI (composizione):', ...SISTEMI.map(s => `- ${s.id}: ${s.idea}${s.foto === 'serve' ? ' [serve una foto]' : ''}`),
+  'SISTEMI (composizione):', ...SISTEMI.filter(s => !s.slide && !s.tipo).map(s => `- ${s.id}: ${s.idea}${s.foto === 'serve' ? ' [serve una foto]' : ''}`),
   '', 'STILI (palette e caratteri):', ...STYLES.map(s => `- ${s.id}: ${s.name}, ${s.dark ? 'scuro' : 'chiaro'}; adatto a ${s.keywords.slice(0, 8).join(', ')}`),
   '', `TRATTAMENTI della foto: ${TRATTAMENTI.map(t => `${t.id} (${t.nome})`).join(', ')}`,
   '', 'REGOLATORI (intervalli 0-1): scala (quanto è grande il titolo), energia (diagonali, sfalsamenti), densita (quanti elementi), sovrastampa (inchiostri fuori registro), grana (trama di stampa).',
@@ -177,7 +178,7 @@ const MENU = () => [
 export async function direttore(an: Analisi, haFoto: boolean, opts: { riservato?: boolean } = {}) {
   return eseguiRuolo({
     ruolo: 'direttore', riservato: opts.riservato, schema: direzioniSchema, temperature: 0.9,
-    system: `Sei il direttore creativo di uno studio grafico con carattere. Scegli tre direzioni visive diverse tra loro, adatte al contenuto e al tono, solo dalle voci del menu. ${SOLO_JSON}`,
+    system: `Sei il direttore creativo di uno studio grafico con carattere. Scegli tre direzioni visive diverse tra loro, adatte al contenuto e al tono, solo dalle voci del menu.\n\n${rubricaPerPrompt('direttore')}\n\n${SOLO_JSON}`,
     prompt: `${MENU()}\n\nContenuto:\n${JSON.stringify(an)}\nFoto disponibile: ${haFoto ? 'sì' : 'no'}.\n\nProponi 3 direzioni: una coerente e sicura, una più audace, una inaspettata ma sensata. Sistemi tutti diversi. ${haFoto ? '' : 'Niente sistemi che richiedono la foto.'}
 Formato: {"direzioni": [{"sistema": "id", "stile": "id", "trattamento": "id", "inverti": false, "regolatori": {"scala": [0.5, 0.8], "energia": [0.2, 0.5], "densita": [0.4, 0.7], "sovrastampa": [0.2, 0.5], "grana": [0.3, 0.6]}, "perche": "una frase"}]}`,
     verifica: d => tutti(

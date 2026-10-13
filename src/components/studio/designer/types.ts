@@ -5,6 +5,8 @@
  * le proposte che non stanno.
  */
 
+import type { Esame } from './gen/critico'
+
 export type DesignKind = 'lancio' | 'evento' | 'citazione' | 'annuncio'
 
 export interface DesignContent {
@@ -18,10 +20,23 @@ export interface DesignContent {
   cta?: string
   /** numero protagonista: data, prezzo, percentuale, anno ("14.11", "-30%", "2026") */
   numero?: string
+  /** tipo di contenuto: non solo copertine */
+  tipo?: TipoContenuto
+  /** voci strutturate: consigli, passi, dati, righe del programma, piatti del menu, domande, tappe */
+  voci?: Voce[]
+  /** confronto a due colonne (prima/dopo, sì/no, A contro B) */
+  colonne?: { titolo: string; punti: string[] }[]
+  /** chi parla (testimonianza, citazione) */
+  persona?: { nome: string; ruolo?: string }
   /** cosa mostra la foto (per la ricerca): "chicchi di caffè su pietra scura" */
   imageQuery?: string
   imageUrl?: string
 }
+
+export type TipoContenuto = 'copertina' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'citazione' | 'faq' | 'prodotto' | 'timeline'
+
+/** Una voce strutturata: i campi usati dipendono dal tipo (consiglio: titolo+testo; programma: ora+titolo; menu: titolo+testo+prezzo; dati: valore+titolo). */
+export interface Voce { titolo?: string; testo?: string; valore?: string; ora?: string; prezzo?: string }
 
 export type Format = 'quadrato' | 'verticale' | 'storia' | 'orizzontale'
 
@@ -99,4 +114,6 @@ export interface Scene {
   finish?: { ids: string[]; seed: string; fallback?: 'grana' | 'carta'; amount?: number }
   /** regolatori che hanno prodotto la scena (sistemi generativi) */
   knobs?: Record<string, unknown>
+  /** esame del critico: voto, difetti, gesti, correzioni fatte */
+  esame?: Esame
 }

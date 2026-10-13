@@ -32,6 +32,8 @@ export interface G {
   pix?: Pix
   /** posizione nella sequenza (carosello): paginazione, ponte con la slide accanto, freccia in copertina */
   seq?: Seq
+  /** misure di lettura raccolte dal controllo (per il critico): punti buoni e contrasto medio di ogni testo */
+  letture?: { name: string; ok: number; contrasto: number; big: boolean }[]
 }
 
 export interface Seq { i: number; n: number; ponte?: { destra?: boolean; sinistra?: boolean }; colore: string; specchio?: boolean }
@@ -67,7 +69,7 @@ export function makeG(format: Format, s: Style, k: Knobs, c: DesignContent, phot
     format, landscape: W > H * 1.15, portrait: H > W * 1.15,
     s, k, c, photo: photo ?? c.imageUrl,
     r: rng(k.seme ^ hashText(`${c.title}|${k.sistema}`)),
-    P: palette(s, k.inverti), els: [], pix, seq,
+    P: palette(s, k.inverti), els: [], pix, seq, letture: [],
   }
 }
 
@@ -333,13 +335,13 @@ export function textBox(t: Extract<SceneEl, { kind: 'text' }>): Box {
 }
 
 /** Angoli del testo ruotato (riga più lunga), allargati di `pad`. */
-function corners(t: Extract<SceneEl, { kind: 'text' }>, pad: number): [number, number][] {
+export function corners(t: Extract<SceneEl, { kind: 'text' }>, pad: number): [number, number][] {
   const left = t.align === 'left' ? 0 : t.align === 'right' ? t.w - t.tw : (t.w - t.tw) / 2
   const a = ((t.angle ?? 0) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a)
   return [[left - pad, -pad], [left + t.tw + pad, -pad], [left + t.tw + pad, t.h + pad], [left - pad, t.h + pad]].map(([px, py]) => [t.x + px * ca - py * sa, t.y + px * sa + py * ca])
 }
 /** Due rettangoli orientati si toccano? (assi separatori) */
-function obbTouch(A: [number, number][], B: [number, number][]) {
+export function obbTouch(A: [number, number][], B: [number, number][]) {
   for (const P of [A, B]) for (let i = 0; i < 4; i++) {
     const [x1, y1] = P[i], [x2, y2] = P[(i + 1) % 4]
     const nx = y1 - y2, ny = x2 - x1
@@ -458,6 +460,7 @@ function pathBox(d: string): Box | null {
  * foto movimentata. Contorni vuoti solo grandi e con un tratto deciso.
  */
 function legible(g: G): boolean {
+  g.letture = []
   const dbg = (why: string) => discard(g, why)
   for (let i = 0; i < g.els.length; i++) {
     const e = g.els[i]
@@ -468,14 +471,17 @@ function legible(g: G): boolean {
     const a = ((e.angle ?? 0) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a)
     const big = e.size > 40 * g.u
     const min = big ? 2.4 : 3.2
-    let ok = 0, n = 0
+    let ok = 0, n = 0, csum = 0
     for (let fx = 0.04; fx < 1; fx += 0.12) for (const fy of [0.3, 0.55, 0.8]) {
       const lx = left + e.tw * fx, ly = e.h * fy
       const u = under(g, i, e.x + lx * ca - ly * sa, e.y + lx * sa + ly * ca)
       n++
-      if (!u.busy && contrast(e.color, u.color) >= min) ok++
+      const cr = contrast(e.color, u.color)
+      csum += u.busy ? Math.min(cr, 1.5) : cr
+      if (!u.busy && cr >= min) ok++
     }
     if (ok / n < (big ? 0.75 : 0.9)) return dbg(`si legge poco ${e.name} (${Math.round((ok / n) * 100)}%)`)
+    g.letture?.push({ name: e.name, ok: ok / n, contrasto: csum / n, big })
     // i colori delle singole lettere (accento, saltello) devono leggersi quanto il testo
     const charColors = [...new Set((e.chars ?? []).flat().map(ch => ch?.c).filter((c): c is string => !!c && c.startsWith('#') && c !== e.color))]
     for (const cc of charColors) {
@@ -570,9 +576,10 @@ function seqMarks(g: G) {
   }
 }
 
-export function finish(g: G, layout: string, label: string): Scene | null {
-  // una composizione su due-tre si specchia (stesso seme, stessa scelta)
-  if (g.seq?.specchio ?? (hashText(`${g.k.seme}|specchio`) % 10 < 4)) mirror(g)
+export function finish(g: G, layout: string, label: string, o: { specchio?: boolean } = {}): Scene | null {
+  // una composizione su due-tre si specchia (stesso seme, stessa scelta); mai gli elenchi
+  // numerati e le griglie di voci, dove lo specchio invertirebbe l'ordine di lettura
+  if (o.specchio !== false && (g.seq?.specchio ?? (hashText(`${g.k.seme}|specchio`) % 10 < 4))) mirror(g)
   if (g.seq) seqMarks(g)
   if (!legible(g)) return null
   grainTop(g)

@@ -4,8 +4,10 @@
  * i regolatori decidono quanto spingere ogni passaggio. L'IA e l'utente muovono
  * solo questi: la composizione la costruisce il sistema.
  */
+import type { TipoContenuto } from '../types'
 
 export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista' | 'tesi' | 'dato' | 'citazione' | 'elenco' | 'chiusura'
+  | 'composto' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'faq' | 'prodotto' | 'timeline'
 export type Trattamento = 'pellicola' | 'duotone' | 'retino' | 'riso' | 'serigrafia' | 'bn' | 'poster'
 
 export interface Knobs {
@@ -30,7 +32,7 @@ export interface Knobs {
   enfasi?: string
 }
 
-export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean }
+export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean; /** sistema dedicato a un tipo di contenuto (elenco, programma…) */ tipo?: TipoContenuto }
 
 export const SISTEMI: SistemaInfo[] = [
   { id: 'supertipo', nome: 'Tipo gigante', idea: 'il titolo parola per parola a tutta larghezza, pieno e contorno alternati, foto in un blocco con cornice fuori registro, scritta verticale sul bordo', foto: 'meglio' },
@@ -49,6 +51,16 @@ export const SISTEMI: SistemaInfo[] = [
   { id: 'elenco', nome: 'Elenco', idea: 'punti numerati grandi', foto: 'no', slide: true },
   { id: 'chiusura', nome: 'Chiusura', idea: 'l\'invito protagonista e il brand grande', foto: 'no', slide: true },
   { id: 'ritaglio', nome: 'Foto nelle lettere', idea: 'la parola chiave enorme con la foto dentro le lettere, contorno fuori registro dietro, titolo completo sotto', foto: 'serve' },
+  { id: 'composto', nome: 'Composto', idea: 'ossatura generata: la tavola tagliata in celle (terzi, sezione aurea, metà), ogni cella con un ruolo (titolo, foto, campo di colore, numero, segno, contenuto); ogni seme è un\'impaginazione diversa', foto: 'meglio' },
+  { id: 'consigli', nome: 'Consigli', idea: 'titolo e voci numerate in elenco o in card', foto: 'no', tipo: 'consigli' },
+  { id: 'passi', nome: 'Passo dopo passo', idea: 'passi numerati collegati da un filo', foto: 'no', tipo: 'passi' },
+  { id: 'dati', nome: 'Dati', idea: 'numeri grandi o barre proporzionali', foto: 'no', tipo: 'dati' },
+  { id: 'confronto', nome: 'Confronto', idea: 'due colonne, croci e spunte', foto: 'no', tipo: 'confronto' },
+  { id: 'programma', nome: 'Programma', idea: 'orari e appuntamenti in righe o pillole', foto: 'no', tipo: 'programma' },
+  { id: 'menu', nome: 'Menu', idea: 'piatti e prezzi con puntini guida o centrati', foto: 'no', tipo: 'menu' },
+  { id: 'faq', nome: 'Domande e risposte', idea: 'domande in evidenza e risposte brevi', foto: 'no', tipo: 'faq' },
+  { id: 'prodotto', nome: 'Prodotto', idea: 'foto del prodotto, caratteristiche e prezzo in un bollino', foto: 'meglio', tipo: 'prodotto' },
+  { id: 'timeline', nome: 'Timeline', idea: 'tappe con anni grandi su una linea', foto: 'no', tipo: 'timeline' },
 ]
 
 export const TRATTAMENTI: { id: Trattamento; nome: string }[] = [

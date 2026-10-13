@@ -90,8 +90,8 @@ for (const nome of contenuti) {
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
     const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })
     const items = res.map(r => ({
-      url: r.url, label: `${r.sistema}${r.ok ? '' : '  — scartata'}`,
-      sub: r.ok ? `${r.registro} · ${r.stile} · ${r.knobs.trattamento} · sc ${r.knobs.scala.toFixed(2)} en ${r.knobs.energia.toFixed(2)} de ${r.knobs.densita.toFixed(2)} so ${r.knobs.sovrastampa.toFixed(2)}${r.knobs.inverti ? ' · inverso' : ''}` : (r.reasons[0] ?? ''),
+      url: r.url, label: `${r.sistema}${r.ok ? (r.esame ? `  ${r.esame.voto} ${r.esame.promossa ? '✓' : '✗ bocciata'}` : '') : '  — scartata'}`,
+      sub: r.ok ? (r.esame ? (r.esame.difetti[0] ?? `${r.registro} · ${r.stile} · gesti: ${r.esame.gesti.join(', ')}`) : `${r.registro} · ${r.stile}`) : (r.reasons[0] ?? ''),
     }))
     const cols = format === 'orizzontale' ? 3 : 4
     const sheet = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format}`, items, cols, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
@@ -99,8 +99,10 @@ for (const nome of contenuti) {
     const ok = res.filter(r => r.ok).length
     report.push({ contenuto: nome, formato: format, ok, totale: res.length, secondi: (Date.now() - t0) / 1000,
       scarti: res.filter(r => !r.ok).map(r => ({ sistema: r.sistema, motivi: r.reasons.slice(0, 4) })),
+      esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, stile: r.stile })),
       tempi: Object.fromEntries(res.map(r => [r.sistema, r.ms])) })
-    console.log(`${nome.padEnd(12)} ${format.padEnd(12)} ${ok}/${res.length}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
+    const voti = res.filter(r => r.esame).map(r => r.esame.voto)
+    console.log(`${nome.padEnd(12)} ${format.padEnd(12)} ${ok}/${res.length} voti ${voti.join(' ')}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
   }
 }
 await browser.close()

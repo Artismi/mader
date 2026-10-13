@@ -10,9 +10,12 @@ import { tintaDominante } from '../core/colore'
 import { loadFonts } from '../fonts'
 import { type Knobs, type SistemaId, SISTEMI, hashText, rng } from './knobs'
 import { makeG } from './tools'
+import { esamina, ECCELLENTE } from './critico'
 import { SYSTEMS_BASE } from './systems'
 import { SYSTEMS_REGISTRI } from './systems2'
 import { SYSTEMS_SLIDE } from './slides'
+import { SYSTEMS_TIPI } from './tipi'
+import { composto } from './compositore'
 import type { Scene as SceneT } from '../types'
 import type { G } from './tools'
 import type { RegistroId } from '../styles'
@@ -20,7 +23,7 @@ import { loadPix } from '../core/foto'
 
 export * from './knobs'
 
-export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE }
+export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto }
 
 /** Sistemi che parlano ciascun registro, dal più tipico. */
 export const SISTEMI_DEL_REGISTRO: Record<RegistroId, SistemaId[]> = {
@@ -37,22 +40,34 @@ export const SISTEMI_DEL_REGISTRO: Record<RegistroId, SistemaId[]> = {
   sportivo: ['costruttivo', 'strisce', 'eco', 'supertipo', 'ritaglio'],
 }
 
-/** Una scena dai regolatori; se la composizione non regge prova qualche variante del seme. */
-export async function generateSystem(c: DesignContent, format: Format, k: Knobs, photo?: string): Promise<Scene | null> {
+/**
+ * Una scena dai regolatori, passata dal critico. Il sistema prova più semi
+ * (ossature diverse) e tiene la tavola col voto più alto; si ferma prima se ne
+ * trova una eccellente. Se nessuna regge, riprova con il titolo più piccolo.
+ */
+export async function generateSystem(c: DesignContent, format: Format, k: Knobs, photo?: string, o: { tentativi?: number } = {}): Promise<Scene | null> {
   const style = styleById(k.stile)
   const [, pix] = await Promise.all([loadFonts(fontsOf(style)), loadPix(photo ?? c.imageUrl)])
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const kk = attempt ? { ...k, seme: k.seme + attempt * 7919, scala: Math.max(0, k.scala - attempt * 0.08) } : k
+  const tentativi = o.tentativi ?? (k.sistema === 'composto' ? 14 : 6)
+  let best: Scene | null = null, falliti = 0
+  for (let attempt = 0; attempt < tentativi; attempt++) {
+    const kk = attempt ? { ...k, seme: k.seme + attempt * 7919, scala: Math.max(0, k.scala - falliti * 0.06) } : k
     try {
-      const sc = SYSTEMS[k.sistema](makeG(format, style, kk, c, photo, pix))
-      if (sc) return { ...sc, knobs: { ...k } }
+      const g = makeG(format, style, kk, c, photo, pix)
+      const sc = SYSTEMS[k.sistema](g)
+      if (!sc) { falliti++; continue }
+      const esame = esamina(g)
+      const scena: Scene = { ...sc, els: g.els, knobs: { ...kk }, esame }
+      if (!best || esame.voto > (best.esame?.voto ?? 0)) best = scena
+      if (esame.voto >= ECCELLENTE) break
     } catch (e) {
       console.warn('[designer]', k.sistema, e)
       ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: errore ${(e as Error).message}`)
       return null
     }
   }
-  return null
+  if (best && !best.esame?.promossa) (globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: bocciata ${best.esame?.voto} — ${best.esame?.difetti.slice(0, 3).join('; ')}`)
+  return best
 }
 
 const allText = (c: DesignContent) => [c.brand, c.kicker, c.title, c.body, c.imageQuery, ...(c.details ?? [])].filter(Boolean).join(' ')
@@ -71,7 +86,10 @@ export async function tintaFoto(url?: string) {
 export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhoto: boolean; sistemi?: SistemaId[]; tinta?: number; seme?: number }): Knobs[] {
   const r = rng(hashText(allText(c)) ^ (opts.seme ?? 0))
   const registro = opts.styleId ? styleById(opts.styleId).registro : inferRegistro(allText(c))
-  const ok = (id: SistemaId) => { const info = SISTEMI.find(s => s.id === id); return !info?.slide && (opts.hasPhoto || info?.foto !== 'serve') }
+  const tipo = c.tipo && c.tipo !== 'copertina' ? c.tipo : undefined
+  const ok = (id: SistemaId) => { const info = SISTEMI.find(s => s.id === id); return !info?.slide && !info?.tipo && id !== 'composto' && (opts.hasPhoto || info?.foto !== 'serve') }
+  // il sistema dedicato al tipo di contenuto (o la slide equivalente), se c'è
+  const dedicato = tipo ? (SISTEMI.find(s => s.tipo === tipo)?.id ?? (tipo === 'citazione' ? 'citazione' : undefined)) : undefined
   const tratt: Knobs['trattamento'][] = ['pellicola', 'duotone', 'retino', 'riso', 'serigrafia', 'bn', 'poster']
   const prefK: Partial<Record<SistemaId, Partial<Knobs>>> = {
     costruttivo: { trattamento: 'retino' }, riso: { trattamento: 'riso', sovrastampa: 0.7 }, strisce: { trattamento: 'pellicola' },
@@ -90,8 +108,13 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   for (const id of identita) {
     const pref = SISTEMI_DEL_REGISTRO[id.registro].filter(ok)
     const tutti = [...pref, ...SISTEMI.map(s => s.id).filter(x => ok(x) && !pref.includes(x))]
-    // sistemi non ancora usati prima: le identità non si ripetono la stessa composizione
-    const scelti = opts.sistemi ?? [...tutti.filter(x => !usati.has(x)), ...tutti].slice(0, id.n)
+    // sistemi non ancora usati prima: le identità non si ripetono la stessa composizione.
+    // Il compositore (ogni seme un'ossatura nuova) c'è in ogni identità; con un tipo di
+    // contenuto (elenco, programma…) le proposte sono il sistema dedicato e il compositore.
+    const mano = [...tutti.filter(x => !usati.has(x)), ...tutti]
+    const scelti = opts.sistemi ?? (tipo
+      ? [...(dedicato ? [dedicato] : []), 'composto', 'composto', 'composto'] as SistemaId[]
+      : ['composto', ...mano.slice(0, id.n - 1), ...(id.n > 3 ? ['composto'] : [])] as SistemaId[])
     for (const sistema of scelti.slice(0, id.n)) {
       usati.add(sistema)
       out.push({
