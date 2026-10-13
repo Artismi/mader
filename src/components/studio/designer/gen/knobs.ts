@@ -5,9 +5,11 @@
  * solo questi: la composizione la costruisce il sistema.
  */
 import type { TipoContenuto } from '../types'
+import { ARCHETIPI, type ArchetipoId } from './archetipi/elenco'
 
 export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista' | 'tesi' | 'dato' | 'citazione' | 'elenco' | 'chiusura'
   | 'composto' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'faq' | 'prodotto' | 'timeline'
+  | ArchetipoId
 export type Trattamento = 'pellicola' | 'duotone' | 'retino' | 'riso' | 'serigrafia' | 'bn' | 'poster'
 
 export interface Knobs {
@@ -61,6 +63,7 @@ export const SISTEMI: SistemaInfo[] = [
   { id: 'faq', nome: 'Domande e risposte', idea: 'domande in evidenza e risposte brevi', foto: 'no', tipo: 'faq' },
   { id: 'prodotto', nome: 'Prodotto', idea: 'foto del prodotto, caratteristiche e prezzo in un bollino', foto: 'meglio', tipo: 'prodotto' },
   { id: 'timeline', nome: 'Timeline', idea: 'tappe con anni grandi su una linea', foto: 'no', tipo: 'timeline' },
+  ...ARCHETIPI.map(a => ({ id: a.id, nome: a.nome, idea: a.idea, foto: a.foto })),
 ]
 
 export const TRATTAMENTI: { id: Trattamento; nome: string }[] = [

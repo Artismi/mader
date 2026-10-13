@@ -16,6 +16,11 @@ import { SYSTEMS_REGISTRI } from './systems2'
 import { SYSTEMS_SLIDE } from './slides'
 import { SYSTEMS_TIPI } from './tipi'
 import { composto } from './compositore'
+import { ARCHETIPI } from './archetipi/elenco'
+import { SYSTEMS_A } from './archetipi/gruppo-a'
+import { SYSTEMS_B } from './archetipi/gruppo-b'
+import { SYSTEMS_C } from './archetipi/gruppo-c'
+import { SYSTEMS_D } from './archetipi/gruppo-d'
 import type { Scene as SceneT } from '../types'
 import type { G } from './tools'
 import type { RegistroId } from '../styles'
@@ -23,10 +28,10 @@ import { loadPix } from '../core/foto'
 
 export * from './knobs'
 
-export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto }
+export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D }
 
 /** Sistemi che parlano ciascun registro, dal più tipico. */
-export const SISTEMI_DEL_REGISTRO: Record<RegistroId, SistemaId[]> = {
+const SISTEMI_A_MANO: Record<RegistroId, SistemaId[]> = {
   infantile: ['giocoso', 'orbita', 'modulare', 'riso', 'supertipo'],
   pop: ['giocoso', 'eco', 'strisce', 'supertipo', 'riso', 'orbita'],
   editoriale: ['rivista', 'supertipo', 'modulare', 'ritaglio', 'eco'],
@@ -39,6 +44,11 @@ export const SISTEMI_DEL_REGISTRO: Record<RegistroId, SistemaId[]> = {
   retro: ['strisce', 'orbita', 'giocoso', 'supertipo', 'eco'],
   sportivo: ['costruttivo', 'strisce', 'eco', 'supertipo', 'ritaglio'],
 }
+
+/** Sistemi che parlano ciascun registro: quelli a mano e gli archetipi di casa nel registro. */
+export const SISTEMI_DEL_REGISTRO = Object.fromEntries(Object.entries(SISTEMI_A_MANO).map(([reg, l]) => [
+  reg, [...l, ...ARCHETIPI.filter(a => (a.registri as readonly string[]).includes(reg)).map(a => a.id)],
+])) as Record<RegistroId, SistemaId[]>
 
 /**
  * Una scena dai regolatori, passata dal critico. Il sistema prova più semi
@@ -114,7 +124,8 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   const out: Knobs[] = []
   const usati = new Set<SistemaId>()
   for (const id of identita) {
-    const pref = SISTEMI_DEL_REGISTRO[id.registro].filter(ok)
+    // l'ordine dei sistemi preferiti cambia con il seme: nel vivaio entrano tutti, non sempre i primi
+    const pref = SISTEMI_DEL_REGISTRO[id.registro].filter(ok).sort(() => r.next() - 0.5)
     const tutti = [...pref, ...SISTEMI.map(s => s.id).filter(x => ok(x) && !pref.includes(x))]
     // sistemi non ancora usati prima: le identità non si ripetono la stessa composizione.
     // Il compositore (ogni seme un'ossatura nuova) c'è in ogni identità; con un tipo di
@@ -125,7 +136,7 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
       : opts.ampio
       ? ['composto', ...mano.slice(0, id.n - 2), 'composto'] as SistemaId[]
       : ['composto', ...mano.slice(0, id.n - 1), ...(id.n > 3 ? ['composto'] : [])] as SistemaId[])
-    for (const sistema of scelti.slice(0, id.n)) {
+    for (const sistema of scelti.slice(0, opts.sistemi ? opts.sistemi.length : id.n)) {
       usati.add(sistema)
       out.push({
         sistema, stile: id.stile,
