@@ -308,7 +308,7 @@ function noiseField(W: number, H: number, cell: number, seed: number) {
 }
 
 /** finitura per l'elemento in scena: emissione del suo colore, grana, frangia */
-export function heroFx(src: HTMLCanvasElement, color: string, seed: number, emit: number) {
+export function heroFx(src: HTMLCanvasElement, color: string, seed: number, emit: number, veil = 0.18) {
   const S = Math.min(src.width, src.height)
   const k = makeCanvas(src.width, src.height), ctx = k.ctx
   ctx.drawImage(src, 0, 0)
@@ -317,7 +317,7 @@ export function heroFx(src: HTMLCanvasElement, color: string, seed: number, emit
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 * emit; ctx.filter = `blur(${S * 0.012}px)`; ctx.drawImage(hi, 0, 0)
     ctx.globalAlpha = 0.35 * emit; ctx.filter = `blur(${S * 0.003}px)`; ctx.drawImage(hi, 0, 0); ctx.restore()
     // un velo del colore della scena sulle ombre dell'oggetto: è immerso in quella luce
-    ctx.save(); ctx.globalCompositeOperation = 'source-atop'; ctx.globalAlpha = 0.18; ctx.fillStyle = color; ctx.fillRect(0, 0, src.width, src.height); ctx.restore()
+    ctx.save(); ctx.globalCompositeOperation = 'source-atop'; ctx.globalAlpha = veil; ctx.fillStyle = color; ctx.fillRect(0, 0, src.width, src.height); ctx.restore()
   }
   fringe(k.c, S * 0.0018)
   grainIn(k.c, 0.5, seed)
