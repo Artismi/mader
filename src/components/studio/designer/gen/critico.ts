@@ -98,9 +98,17 @@ export function esamina(g: G): Esame {
   const altri = texts.filter(t => !t.name.startsWith('titolo') && !/^(numero|valore|anno|domanda_segno|adesivo)/.test(t.name))
   const S2 = Math.max(1, ...altri.map(t => t.size))
   const rapp = S1 / S2
-  let gerarchia = rapp >= 2 ? 10 : rapp >= 1.6 ? 8.5 : rapp >= 1.3 ? 6.5 : rapp >= 1.12 ? 4 : 2
+  let gerarchia = rapp >= 2.4 ? 10 : rapp >= 2 ? 9 : rapp >= 1.6 ? 7.5 : rapp >= 1.3 ? 5.5 : rapp >= 1.12 ? 3.5 : 2
   if (!S1) gerarchia = 3
   if (rapp < 1.3) difetti.push(`gerarchia debole: il titolo è solo ${rapp.toFixed(2)} volte il testo più grande`)
+  // il titolo resta una frase: nessuna parola minuscola accanto alle altre, frammenti non dispersi
+  if (titoli.length > 1) {
+    const piccole = titoli.filter(t => t.size < S1 * 0.4)
+    if (piccole.length) { gerarchia -= 3; difetti.push(`parole del titolo troppo piccole (${piccole.map(t => t.lines.join(' ')).join(', ')}): il titolo si spezza`) }
+    const bs = titoli.map(t => ({ b: textBox(t), s: t.size })).sort((a, b) => a.b.y - b.b.y)
+    const salti = bs.slice(1).filter((x, i) => { const gap = x.b.y - (bs[i].b.y + bs[i].b.h); return gap > 1.3 * Math.min(x.s, bs[i].s) && gap > 60 * u }).length
+    if (salti) { gerarchia -= 2.5; difetti.push('frammenti del titolo troppo lontani: non si legge come una frase') }
+  }
   const corpi: number[] = []
   for (const t of texts) if (!corpi.some(s => Math.abs(s - t.size) / s < 0.07)) corpi.push(t.size)
   if (corpi.length > 6) { gerarchia -= corpi.length - 6; difetti.push(`troppi corpi diversi (${corpi.length})`) }
@@ -131,7 +139,7 @@ export function esamina(g: G): Esame {
     if (!dentro) continue
     const lati = [b.x > 1 ? tb.x - b.x : Infinity, b.x + b.w < W - 1 ? b.x + b.w - tb.x - tb.w : Infinity, b.y > 1 ? tb.y - b.y : Infinity, b.y + b.h < H - 1 ? b.y + b.h - tb.y - tb.h : Infinity]
     const pad = Math.min(...lati)
-    if (pad < 14 * u) { respiro -= 2; difetti.push(`${t.name} stretto nel suo riquadro (${Math.round(pad / u)}u)`) }
+    if (pad < 14 * u) { respiro -= 3; difetti.push(`${t.name} stretto nel suo riquadro (${Math.round(pad / u)}u)`) }
   }
   // testi di gruppi diversi troppo vicini (il controllo ferma solo i contatti)
   for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
@@ -140,6 +148,11 @@ export function esamina(g: G): Esame {
       respiro -= 1; difetti.push(`${texts[i].name} e ${texts[j].name} troppo vicini`)
     }
   }
+  // spazio morto: la più grande zona continua dove non succede niente (solo fondo o campi piatti grandi)
+  const morto = spazioMorto(g)
+  const sobrio = ['lusso', 'svizzero', 'editoriale'].includes(g.s.registro)
+  const limite = sobrio ? 0.38 : 0.28
+  if (morto > limite) { respiro -= morto > limite + 0.15 ? 5 : 3; difetti.push(`vuoto non progettato (${Math.round(morto * 100)}% della tavola senza niente)`) }
   respiro = clamp(respiro)
 
   /* ── colore: palette compatta, niente colori quasi uguali ── */
@@ -157,22 +170,37 @@ export function esamina(g: G): Esame {
   const maxVivi = g.s.registro === 'pop' || g.s.registro === 'infantile' ? 4 : 3
   if (vivi.length > maxVivi) { colore -= 2 * (vivi.length - maxVivi); difetti.push(`troppe tinte vive (${vivi.length})`) }
   if (distinti.length > 7) { colore -= distinti.length - 7; difetti.push(`palette dispersa (${distinti.length} colori)`) }
+  // campi di colore muti: blocchi pieni dove non succede niente
+  const pieni = (b: Box) => g.els.some(e => (isText(e) || e.kind === 'image' || e.kind === 'ornament' || e.kind === 'glyph') && (() => { const x = isText(e) ? textBox(e) : boxOf(e)!; return x.x < b.x + b.w && x.x + x.w > b.x && x.y < b.y + b.h && x.y + x.h > b.y })())
+  const muti = g.els.filter(e => e.kind === 'rect' && e.name === 'campo' && !pieni(boxOf(e)!)).length
+  if (muti >= 2) { colore -= 1.5 * (muti - 1); difetti.push(`${muti} campi di colore senza funzione`) }
+  // una situazione cromatica ha un punto d'attenzione: un campo d'accento o una foto che si stacca dal fondo
+  const accento = campi.some(x => x.b.w * x.b.h > area * 0.03 && dist(x.f, g.P.bg) > 0.12) || g.els.some(e => e.kind === 'image')
+  if (!accento) { colore -= 2.5; difetti.push('colore senza un punto d\'attenzione: tutto sullo stesso piano') }
+  if (distinti.length <= 2) colore -= 1.5
   colore = clamp(colore)
 
   /* ── decoro: quanto basta per il registro, mai rumore ── */
   const deco = g.els.filter(e => e.kind === 'ornament' || e.kind === 'glyph' || e.kind === 'seal' || (e.kind === 'path' && !/^(foto|velo)/.test(e.name)) || e.kind === 'line' || (e.kind === 'text' && e.deco) || (e.kind === 'circle' && !/^(foto|ponte)/.test(e.name)))
   const espressivo = ['pop', 'infantile', 'avanguardia', 'notte', 'retro', 'sportivo', 'artigianale'].includes(g.s.registro)
-  let decoro = 10
-  if (espressivo && deco.length === 0) { decoro = 4; difetti.push('nessun segno: il registro chiede più carattere') }
+  const tipiDeco = new Set(deco.map(e => e.kind)).size
+  let decoro = tipiDeco >= 2 ? 10 : tipiDeco === 1 ? 8 : espressivo ? 4 : 7.5
+  if (espressivo && deco.length === 0) { decoro = 3; difetti.push('nessun segno: il registro chiede più carattere') }
   else if (!espressivo && deco.length > 18) { decoro = 6; difetti.push('troppi segni per un registro sobrio') }
   else if (deco.length > 40) { decoro = 6; difetti.push('decorazione rumorosa') }
+  // segni isolati: ornamenti in una zona a sé, che non toccano testi né foto (riempitivi da catalogo)
+  const isolati = g.els.filter(e => (e.kind === 'ornament' || e.kind === 'glyph' || (e.kind === 'path' && /^(segno|blob|righe|ornamento|glifo)$/.test(e.name))) && (() => {
+    const b = boxOf(e); if (!b) return false
+    return !g.els.some(x => (isText(x) || x.kind === 'image') && (() => { const y = isText(x) ? textBox(x) : boxOf(x)!; return y.x < b.x + b.w && y.x + y.w > b.x && y.y < b.y + b.h && y.y + y.h > b.y })())
+  })()).length
+  if (isolati) { decoro -= 2.5 * isolati; difetti.push(`${isolati === 1 ? 'un segno isolato' : `${isolati} segni isolati`}: riempitivo che non dialoga con il contenuto`) }
   decoro = clamp(decoro)
 
   /* ── sperimentazione: gesti da grafico, quanti ne chiede l'energia ── */
   const non = (e: SceneEl) => !/^(grana|fondo|tavola)$/.test(e.name)
   if (g.els.some(e => (e.kind === 'text' && !e.deco && e.angle) || (e.kind === 'rect' && e.angle && Math.abs(e.angle) > 1))) gesti.push('rotazione')
   if (g.els.some(e => { const b = boxOf(e); return non(e) && b && (e.kind === 'image' || fillOf(e)) && b.w * b.h < area * 0.95 && b.w * b.h > area * 0.04 && (b.x <= 1 || b.y <= 1 || b.x + b.w >= W - 1 || b.y + b.h >= H - 1) })) gesti.push('al vivo')
-  if (g.els.some(e => (e as { blend?: string }).blend && (e as { blend?: string }).blend !== 'source-over')) gesti.push('sovrastampa')
+  if (g.els.some(e => { const b = (e as { blend?: string }).blend; const op = (e as { opacity?: number }).opacity ?? 1; return b && b !== 'source-over' && op > 0.4 && !/grana|carta|trama|luce|fondo|finitura|velo/.test(e.name) && (boxOf(e)?.w ?? 0) * (boxOf(e)?.h ?? 0) > area * 0.02 })) gesti.push('sovrastampa')
   if (g.els.some(e => e.kind === 'image' && (e.fx?.length || e.look))) gesti.push('foto trattata')
   if (g.els.some(e => e.kind === 'image' && (e.mask || e.clipText || (e.shape && e.shape !== 'rect')))) gesti.push('foto in forma')
   if (S1 / H > 0.12) gesti.push('scala')
@@ -181,15 +209,60 @@ export function esamina(g: G): Esame {
   if (g.els.some(e => e.kind === 'text' && e.deco)) gesti.push('tipografia decorativa')
   if (g.els.some(e => e.kind === 'ornament' || e.kind === 'seal' || e.kind === 'arcText')) gesti.push('ornamento')
   if (sconfina(g, texts)) gesti.push('sconfinamento')
-  const attesi = 1.5 + 4 * g.k.energia
+  const attesi = 2.5 + 4 * g.k.energia
   let sperimentazione = gesti.length === 0 ? 2 : clamp(10 * Math.min(1, gesti.length / attesi))
   if (gesti.length < attesi * 0.5) difetti.push(`pochi gesti (${gesti.length}): composizione ordinata ma senza idea`)
   sperimentazione = clamp(sperimentazione)
 
   const criteri: Record<Criterio, number> = { leggibilita, contenuto, gerarchia, allineamento, respiro, colore, decoro, sperimentazione }
-  const voto = Math.round((Object.keys(PESI) as Criterio[]).reduce((a, k) => a + PESI[k] * criteri[k], 0) * 10)
-  const promossa = voto >= SOGLIA && leggibilita >= 6 && contenuto >= 8 && gerarchia >= 5
+  // voto severo: la media pesata passa per una curva (tutto "corretto" non basta per l'eccellenza),
+  // ogni difetto toglie punti, un criterio debole mette un tetto
+  const media = (Object.keys(PESI) as Criterio[]).reduce((a, k) => a + PESI[k] * criteri[k], 0)
+  let voto = 100 * (media / 10) ** 2.4 - 2.5 * difetti.length
+  const tetti: [boolean, number][] = [
+    [contenuto < 8, 50], [leggibilita < 6, 50], [Math.min(...Object.values(criteri)) < 4, 58],
+    [sperimentazione < 6, 66], [gerarchia < 5.5, 64], [Math.min(...Object.values(criteri)) < 6, 70],
+  ]
+  for (const [cond, max] of tetti) if (cond) voto = Math.min(voto, max)
+  voto = Math.max(0, Math.round(voto))
+  const promossa = voto >= SOGLIA
   return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g) }
+}
+
+/** Frazione della tavola occupata dalla più grande zona continua vuota (griglia 16×16). */
+function spazioMorto(g: G) {
+  const N = 16, cw = g.W / N, ch = g.H / N, area = g.W * g.H
+  const pieno = Array.from({ length: N * N }, () => false)
+  for (const e of g.els) {
+    let b: Box | null = null
+    if (isText(e)) b = textBox(e)
+    else if (e.kind === 'image' || e.kind === 'ornament' || e.kind === 'glyph' || e.kind === 'seal' || e.kind === 'arcText' || e.kind === 'line') b = e.kind === 'line' ? { x: Math.min(e.x1, e.x2), y: Math.min(e.y1, e.y2), w: Math.abs(e.x2 - e.x1) + 1, h: Math.abs(e.y2 - e.y1) + 1 } : e.kind === 'arcText' ? { x: e.cx - e.r, y: e.cy - e.r, w: 2 * e.r, h: 2 * e.r } : boxOf(e)
+    else if ((e.kind === 'rect' || e.kind === 'circle' || e.kind === 'path') && !/grana|fondo|carta/.test(e.name)) {
+      const x = boxOf(e)
+      // i campi piatti grandi sono fondo; le forme piccole e i tratti sono segni
+      if (x && (x.w * x.h < area * 0.2 || (e as { stroke?: string }).stroke || (e as { fx?: unknown[] }).fx?.length)) b = x
+    }
+    if (!b) continue
+    for (let i = Math.max(0, Math.floor(b.x / cw)); i <= Math.min(N - 1, Math.floor((b.x + b.w) / cw)); i++)
+      for (let j = Math.max(0, Math.floor(b.y / ch)); j <= Math.min(N - 1, Math.floor((b.y + b.h) / ch)); j++) pieno[j * N + i] = true
+  }
+  const visto = new Set<number>()
+  let max = 0
+  for (let k = 0; k < N * N; k++) {
+    if (pieno[k] || visto.has(k)) continue
+    let n = 0
+    const coda = [k]; visto.add(k)
+    while (coda.length) {
+      const c = coda.pop()!; n++
+      const i = c % N, j = Math.floor(c / N)
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj, nk = nj * N + ni
+        if (ni >= 0 && nj >= 0 && ni < N && nj < N && !pieno[nk] && !visto.has(nk)) { visto.add(nk); coda.push(nk) }
+      }
+    }
+    max = Math.max(max, n)
+  }
+  return max / (N * N)
 }
 
 /** Un testo che attraversa il bordo di una foto o di un campo: la composizione si lega, non è a scomparti. */
