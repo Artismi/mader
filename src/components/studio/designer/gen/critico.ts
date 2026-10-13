@@ -32,6 +32,8 @@ export { SOGLIA, ECCELLENTE }
 type Text = Extract<SceneEl, { kind: 'text' }>
 type Box = { x: number; y: number; w: number; h: number }
 const clamp = (v: number, a = 0, b = 10) => Math.max(a, Math.min(b, v))
+/** Penalità che raddoppia a ogni ripetizione: 1 volta = base, 2 = base + 2·base, 3 = … (base·(2ⁿ−1)). */
+const doppia = (n: number, base: number) => base * (2 ** n - 1)
 const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()
 const isText = (e: SceneEl): e is Text => e.kind === 'text' && !e.deco
 const lab = (hex: string) => { const [L, C, h] = toOklch(hex); const r = (h * Math.PI) / 180; return [L, C * Math.cos(r), C * Math.sin(r)] as const }
@@ -76,21 +78,23 @@ export function esamina(g: G): Esame {
   /* ── leggibilità: margine sopra la soglia, non solo la soglia ── */
   const lett = g.letture ?? []
   const perTesto = lett.map(l => 0.5 * l.ok + 0.5 * Math.min(1, l.contrasto / (l.big ? 4.5 : 7)))
-  const leggibilita = perTesto.length ? clamp(10 * (0.6 * (perTesto.reduce((a, b) => a + b, 0) / perTesto.length) + 0.4 * Math.min(...perTesto))) : 5
-  for (const [i, l] of lett.entries()) if (perTesto[i] < 0.62) difetti.push(`${l.name} si legge a fatica (contrasto ${l.contrasto.toFixed(1)})`)
+  let leggibilita = perTesto.length ? clamp(10 * (0.6 * (perTesto.reduce((a, b) => a + b, 0) / perTesto.length) + 0.4 * Math.min(...perTesto))) : 5
+  const deboli = lett.filter((_, i) => perTesto[i] < 0.62)
+  for (const l of deboli) difetti.push(`${l.name} si legge a fatica (contrasto ${l.contrasto.toFixed(1)})`)
 
   /* ── contenuto: tutto quello che il cliente ha scritto c'è ── */
   const scritto = norm(texts.map(t => t.lines.join(' ')).join(' ') + ' ' + g.els.filter(e => e.kind === 'arcText' || e.kind === 'seal').map(e => (e as { text: string }).text).join(' '))
   let contenuto = 10
   const c = g.c
+  let vociPerse = 0
   if (!texts.some(t => t.name.startsWith('titolo')) && !scritto.includes(norm(c.title).split(' ').slice(0, 2).join(' '))) { contenuto -= 6; difetti.push('manca il titolo') }
   if (c.brand && !scritto.includes(norm(c.brand))) { contenuto -= 3; difetti.push('manca il brand') }
   if (c.cta && !scritto.includes(norm(c.cta).split(' ').slice(0, 2).join(' '))) { contenuto -= 1; difetti.push('manca l\'invito') }
   if (c.tipo && c.tipo !== 'copertina') for (const v of c.voci ?? []) {
     const k = norm(v.titolo ?? v.valore ?? '')
-    if (k && !scritto.includes(k.split(' ').slice(0, 3).join(' '))) { contenuto -= 3; difetti.push(`manca la voce «${v.titolo ?? v.valore}»`) }
+    if (k && !scritto.includes(k.split(' ').slice(0, 3).join(' '))) { vociPerse++; difetti.push(`manca la voce «${v.titolo ?? v.valore}»`) }
   }
-  contenuto = clamp(contenuto)
+  contenuto = clamp(contenuto - doppia(vociPerse, 3))
 
   /* ── gerarchia: un protagonista chiaro, pochi corpi ── */
   const titoli = texts.filter(t => t.name.startsWith('titolo'))
@@ -116,7 +120,8 @@ export function esamina(g: G): Esame {
 
   /* ── allineamento: gli allineamenti mancati di poco sono l'errore del dilettante ── */
   const quasi = nearMisses(g)
-  let allineamento = 10 - 2.5 * quasi.length
+  let allineamento = 10 - doppia(quasi.length, 1.5)
+  leggibilita = clamp(leggibilita - doppia(deboli.length, 0.8))
   for (const q of quasi.slice(0, 3)) difetti.push(`${q.name} quasi allineato (${Math.round(q.d / u)}u)`)
   const assi: number[] = []
   for (const t of texts) if (!(t.angle)) { const e = edges(t); const v = e[e.anchor]; if (!assi.some(a => Math.abs(a - v) < 3 * u)) assi.push(v) }
@@ -125,7 +130,7 @@ export function esamina(g: G): Esame {
   allineamento = clamp(allineamento)
 
   /* ── respiro: i testi non toccano i bordi dei loro riquadri ── */
-  let respiro = 10
+  let respiro = 10, stretti = 0, vicini = 0
   const fondi = g.els.map((e, i) => ({ e, i, b: boxOf(e) })).filter(x => x.b && (x.e.kind === 'rect' || x.e.kind === 'image' || x.e.kind === 'circle') && fillOf(x.e) !== null || x.e.kind === 'image')
   for (const t of texts) {
     if (t.angle) continue
@@ -139,31 +144,34 @@ export function esamina(g: G): Esame {
     if (!dentro) continue
     const lati = [b.x > 1 ? tb.x - b.x : Infinity, b.x + b.w < W - 1 ? b.x + b.w - tb.x - tb.w : Infinity, b.y > 1 ? tb.y - b.y : Infinity, b.y + b.h < H - 1 ? b.y + b.h - tb.y - tb.h : Infinity]
     const pad = Math.min(...lati)
-    if (pad < 14 * u) { respiro -= 3; difetti.push(`${t.name} stretto nel suo riquadro (${Math.round(pad / u)}u)`) }
+    if (pad < 14 * u) { stretti++; difetti.push(`${t.name} stretto nel suo riquadro (${Math.round(pad / u)}u)`) }
   }
   // testi di gruppi diversi troppo vicini (il controllo ferma solo i contatti)
   for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
     if (group(texts[i].name) === group(texts[j].name)) continue
     if (obbTouch(corners(texts[i], 5 * u), corners(texts[j], 5 * u)) && !/^(voce|testo|valore|anno|ora|prezzo|domanda|risposta|punto|numero)/.test(texts[i].name)) {
-      respiro -= 1; difetti.push(`${texts[i].name} e ${texts[j].name} troppo vicini`)
+      vicini++; difetti.push(`${texts[i].name} e ${texts[j].name} troppo vicini`)
     }
   }
-  // spazio morto: la più grande zona continua dove non succede niente (solo fondo o campi piatti grandi)
-  const morto = spazioMorto(g)
+  // spazio morto: zone continue dove non succede niente (solo fondo o campi piatti grandi). Un solo
+  // vuoto ampio può essere una scelta; ogni zona vuota in più raddoppia il peso della precedente
+  const zone = spazioMorto(g)
   const sobrio = ['lusso', 'svizzero', 'editoriale'].includes(g.s.registro)
   const limite = sobrio ? 0.38 : 0.28
-  if (morto > limite) { respiro -= morto > limite + 0.15 ? 5 : 3; difetti.push(`vuoto non progettato (${Math.round(morto * 100)}% della tavola senza niente)`) }
-  respiro = clamp(respiro)
+  const vuoti = zone.filter((z, i) => z > 0.1 && (i > 0 || z > limite))
+  if (vuoti.length) difetti.push(`${vuoti.length === 1 ? 'un vuoto' : `${vuoti.length} vuoti`} non progettati (${vuoti.map(z => Math.round(z * 100) + '%').join(', ')} della tavola senza niente)`)
+  // ogni ripetizione dello stesso difetto pesa il doppio della precedente
+  respiro = clamp(respiro - doppia(stretti, 2) - doppia(vicini, 1) - doppia(vuoti.length, 2.5))
 
   /* ── colore: palette compatta, niente colori quasi uguali ── */
-  let colore = 10
+  let colore = 10, simili = 0
   const campi = g.els.map(e => ({ f: fillOf(e), b: boxOf(e), e })).filter(x => x.f && x.b && x.b.w * x.b.h > area * 0.015) as { f: string; b: Box; e: SceneEl }[]
   const tinte = [g.P.bg, ...campi.map(x => x.f), ...texts.map(t => t.color).filter(c => c.startsWith('#') && c.length === 7)]
   const distinti: string[] = []
   for (const t of tinte) if (!distinti.some(d => dist(d, t) < 0.035)) distinti.push(t)
   for (let i = 0; i < distinti.length; i++) for (let j = i + 1; j < distinti.length; j++) {
     const d = dist(distinti[i], distinti[j])
-    if (d > 0.006 && d < 0.05) { colore -= 1.5; difetti.push(`colori quasi uguali ${distinti[i]} e ${distinti[j]}`) }
+    if (d > 0.006 && d < 0.05) { simili++; difetti.push(`colori quasi uguali ${distinti[i]} e ${distinti[j]}`) }
   }
   const vivi: number[] = []
   for (const t of distinti) { const [, C, h] = toOklch(t); if (C > 0.07 && !vivi.some(v => Math.abs(((v - h + 540) % 360) - 180) < 30)) vivi.push(h) }
@@ -173,12 +181,12 @@ export function esamina(g: G): Esame {
   // campi di colore muti: blocchi pieni dove non succede niente
   const pieni = (b: Box) => g.els.some(e => (isText(e) || e.kind === 'image' || e.kind === 'ornament' || e.kind === 'glyph') && (() => { const x = isText(e) ? textBox(e) : boxOf(e)!; return x.x < b.x + b.w && x.x + x.w > b.x && x.y < b.y + b.h && x.y + x.h > b.y })())
   const muti = g.els.filter(e => e.kind === 'rect' && e.name === 'campo' && !pieni(boxOf(e)!)).length
-  if (muti >= 2) { colore -= 1.5 * (muti - 1); difetti.push(`${muti} campi di colore senza funzione`) }
+  if (muti) { colore -= doppia(muti, 1.2); difetti.push(`${muti === 1 ? 'un campo' : `${muti} campi`} di colore senza funzione`) }
   // una situazione cromatica ha un punto d'attenzione: un campo d'accento o una foto che si stacca dal fondo
   const accento = campi.some(x => x.b.w * x.b.h > area * 0.03 && dist(x.f, g.P.bg) > 0.12) || g.els.some(e => e.kind === 'image')
   if (!accento) { colore -= 2.5; difetti.push('colore senza un punto d\'attenzione: tutto sullo stesso piano') }
   if (distinti.length <= 2) colore -= 1.5
-  colore = clamp(colore)
+  colore = clamp(colore - doppia(simili, 1.5))
 
   /* ── decoro: quanto basta per il registro, mai rumore ── */
   const deco = g.els.filter(e => e.kind === 'ornament' || e.kind === 'glyph' || e.kind === 'seal' || (e.kind === 'path' && !/^(foto|velo)/.test(e.name)) || e.kind === 'line' || (e.kind === 'text' && e.deco) || (e.kind === 'circle' && !/^(foto|ponte)/.test(e.name)))
@@ -193,7 +201,7 @@ export function esamina(g: G): Esame {
     const b = boxOf(e); if (!b) return false
     return !g.els.some(x => (isText(x) || x.kind === 'image') && (() => { const y = isText(x) ? textBox(x) : boxOf(x)!; return y.x < b.x + b.w && y.x + y.w > b.x && y.y < b.y + b.h && y.y + y.h > b.y })())
   })()).length
-  if (isolati) { decoro -= 2.5 * isolati; difetti.push(`${isolati === 1 ? 'un segno isolato' : `${isolati} segni isolati`}: riempitivo che non dialoga con il contenuto`) }
+  if (isolati) { decoro -= doppia(isolati, 2); difetti.push(`${isolati === 1 ? 'un segno isolato' : `${isolati} segni isolati`}: riempitivo che non dialoga con il contenuto`) }
   decoro = clamp(decoro)
 
   /* ── sperimentazione: gesti da grafico, quanti ne chiede l'energia ── */
@@ -218,7 +226,7 @@ export function esamina(g: G): Esame {
   // voto severo: la media pesata passa per una curva (tutto "corretto" non basta per l'eccellenza),
   // ogni difetto toglie punti, un criterio debole mette un tetto
   const media = (Object.keys(PESI) as Criterio[]).reduce((a, k) => a + PESI[k] * criteri[k], 0)
-  let voto = 100 * (media / 10) ** 2.4 - 2.5 * difetti.length
+  let voto = 100 * (media / 10) ** 2.4 - doppia(Math.min(difetti.length, 6), 1.5)
   const tetti: [boolean, number][] = [
     [contenuto < 8, 50], [leggibilita < 6, 50], [Math.min(...Object.values(criteri)) < 4, 58],
     [sperimentazione < 6, 66], [gerarchia < 5.5, 64], [Math.min(...Object.values(criteri)) < 6, 70],
@@ -229,8 +237,8 @@ export function esamina(g: G): Esame {
   return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g) }
 }
 
-/** Frazione della tavola occupata dalla più grande zona continua vuota (griglia 16×16). */
-function spazioMorto(g: G) {
+/** Zone continue vuote (griglia 16×16), come frazioni della tavola, dalla più grande. */
+function spazioMorto(g: G): number[] {
   const N = 16, cw = g.W / N, ch = g.H / N, area = g.W * g.H
   const pieno = Array.from({ length: N * N }, () => false)
   for (const e of g.els) {
@@ -247,7 +255,7 @@ function spazioMorto(g: G) {
       for (let j = Math.max(0, Math.floor(b.y / ch)); j <= Math.min(N - 1, Math.floor((b.y + b.h) / ch)); j++) pieno[j * N + i] = true
   }
   const visto = new Set<number>()
-  let max = 0
+  const zone: number[] = []
   for (let k = 0; k < N * N; k++) {
     if (pieno[k] || visto.has(k)) continue
     let n = 0
@@ -260,9 +268,9 @@ function spazioMorto(g: G) {
         if (ni >= 0 && nj >= 0 && ni < N && nj < N && !pieno[nk] && !visto.has(nk)) { visto.add(nk); coda.push(nk) }
       }
     }
-    max = Math.max(max, n)
+    zone.push(n / (N * N))
   }
-  return max / (N * N)
+  return zone.sort((a, b) => b - a)
 }
 
 /** Un testo che attraversa il bordo di una foto o di un campo: la composizione si lega, non è a scomparti. */

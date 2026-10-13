@@ -88,13 +88,20 @@ for (const nome of contenuti) {
   for (const format of formati) {
     const t0 = Date.now()
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
-    const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })
+    // --vecchio: le proposte di prima (una per sistema); altrimenti come nello Studio: vivaio, critico, le migliori diverse
+    let res, info = ''
+    if (args.vecchio || sistemi) res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })
+    else {
+      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0) })
+      res = p.items
+      info = ` · ${p.promosse} promosse su ${p.candidate} candidate in ${p.giri} giri`
+    }
     const items = res.map(r => ({
       url: r.url, label: `${r.sistema}${r.ok ? (r.esame ? `  ${r.esame.voto} ${r.esame.promossa ? '✓' : '✗ bocciata'}` : '') : '  — scartata'}`,
       sub: r.ok ? (r.esame ? (r.esame.difetti[0] ?? `${r.registro} · ${r.stile} · gesti: ${r.esame.gesti.join(', ')}`) : `${r.registro} · ${r.stile}`) : (r.reasons[0] ?? ''),
     }))
     const cols = format === 'orizzontale' ? 3 : 4
-    const sheet = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format}`, items, cols, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
+    const sheet = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format}${info}`, items, cols: res.length > 8 ? (format === 'orizzontale' ? 4 : 6) : cols, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
     fs.writeFileSync(path.join(out, `${nome}-${format}.jpg`), Buffer.from(sheet.split(',')[1], 'base64'))
     const ok = res.filter(r => r.ok).length
     report.push({ contenuto: nome, formato: format, ok, totale: res.length, secondi: (Date.now() - t0) / 1000,
@@ -102,7 +109,7 @@ for (const nome of contenuti) {
       esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, stile: r.stile })),
       tempi: Object.fromEntries(res.map(r => [r.sistema, r.ms])) })
     const voti = res.filter(r => r.esame).map(r => r.esame.voto)
-    console.log(`${nome.padEnd(12)} ${format.padEnd(12)} ${ok}/${res.length} voti ${voti.join(' ')}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
+    console.log(`${nome.padEnd(12)} ${format.padEnd(12)}${info} ${ok}/${res.length} voti ${voti.join(' ')}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
   }
 }
 await browser.close()

@@ -4,7 +4,7 @@
  * vetrina.mjs (Playwright).
  */
 import * as fabric from 'fabric'
-import { generateSystem, proposeKnobs, tintaFoto, type Knobs } from '@/components/studio/designer/gen'
+import { generateSystem, proposeKnobs, proponi, tintaFoto, type Knobs } from '@/components/studio/designer/gen'
 import { styleById } from '@/components/studio/designer/styles'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
@@ -45,6 +45,20 @@ async function run(job: Job): Promise<Result[]> {
   return out
 }
 
+/** Le proposte come le vede lo Studio: vivaio ampio, critico, selezione delle migliori diverse. */
+async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number }> {
+  ;(globalThis as { __designerSink?: string[] }).__designerSink = []
+  const t0 = performance.now()
+  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme })
+  const items: Result[] = []
+  for (const sc of p.scene) {
+    const k = sc.knobs as Knobs
+    const st = styleById(k.stile)
+    items.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, registro: st.registro, esame: sc.esame })
+  }
+  return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri }
+}
+
 /** Foglio contatti composto nella pagina: niente dipendenze esterne per le immagini. */
 async function sheet(o: { title: string; items: { url?: string; label: string; sub: string }[]; cols: number; cellW: number; ratio: number }) {
   const pad = 24, labelH = 46, cellH = Math.round(o.cellW * o.ratio)
@@ -70,4 +84,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte }

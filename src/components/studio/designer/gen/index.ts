@@ -83,7 +83,7 @@ export async function tintaFoto(url?: string) {
  * del contenuto, una da un registro vicino), ognuna con due o tre sistemi
  * del suo registro. Varietà tra le identità, coerenza dentro ciascuna.
  */
-export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhoto: boolean; sistemi?: SistemaId[]; tinta?: number; seme?: number }): Knobs[] {
+export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhoto: boolean; sistemi?: SistemaId[]; tinta?: number; seme?: number; ampio?: boolean | number }): Knobs[] {
   const r = rng(hashText(allText(c)) ^ (opts.seme ?? 0))
   const registro = opts.styleId ? styleById(opts.styleId).registro : inferRegistro(allText(c))
   const tipo = c.tipo && c.tipo !== 'copertina' ? c.tipo : undefined
@@ -95,8 +95,16 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
     costruttivo: { trattamento: 'retino' }, riso: { trattamento: 'riso', sovrastampa: 0.7 }, strisce: { trattamento: 'pellicola' },
     eco: { trattamento: 'retino' }, ritaglio: { trattamento: 'pellicola' }, orbita: { trattamento: 'duotone' },
   }
+  const vicini = [...VICINI[registro]].sort(() => r.next() - 0.5)
   const identita = opts.styleId
-    ? [{ stile: opts.styleId, registro, n: 8 }]
+    ? [{ stile: opts.styleId, registro, n: opts.ampio ? 6 * (opts.ampio === true ? 5 : opts.ampio) : 8 }]
+    : opts.ampio
+    ? Array.from({ length: opts.ampio === true ? 5 : opts.ampio }, (_, i) => {
+        // vivaio ampio per la selezione del critico: metà identità nel registro del contenuto
+        // (una su due accordata alla foto), metà dai registri vicini; sei composizioni ciascuna
+        const reg = i % 2 === 0 || !vicini.length ? registro : vicini[Math.floor(i / 2) % vicini.length]
+        return { stile: idIdentita(reg, r.int(1, 99999), { tinta: i % 3 === 0 ? opts.tinta : undefined }), registro: reg, n: 6 }
+      })
     : [
         // la prima accordata alla foto, la seconda libera, la terza da un registro vicino
         { stile: idIdentita(registro, r.int(1, 99999), { tinta: opts.tinta }), registro, n: 3 },
@@ -113,7 +121,9 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
     // contenuto (elenco, programma…) le proposte sono il sistema dedicato e il compositore.
     const mano = [...tutti.filter(x => !usati.has(x)), ...tutti]
     const scelti = opts.sistemi ?? (tipo
-      ? [...(dedicato ? [dedicato] : []), 'composto', 'composto', 'composto'] as SistemaId[]
+      ? [...(dedicato ? [dedicato, dedicato] : []), ...Array(id.n).fill('composto')] as SistemaId[]
+      : opts.ampio
+      ? ['composto', ...mano.slice(0, id.n - 2), 'composto'] as SistemaId[]
       : ['composto', ...mano.slice(0, id.n - 1), ...(id.n > 3 ? ['composto'] : [])] as SistemaId[])
     for (const sistema of scelti.slice(0, id.n)) {
       usati.add(sistema)
@@ -126,4 +136,60 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
     }
   }
   return out
+}
+
+export interface Proposte { scene: Scene[]; candidate: number; promosse: number; giri: number }
+
+/**
+ * Le proposte: un vivaio ampio di candidate (identità × sistemi × ossature),
+ * tutte esaminate dal critico; restano le migliori promosse, diverse tra loro
+ * per ossatura, sistema e identità. Se le promosse non bastano si apre un
+ * altro giro con semi nuovi (al massimo `giri`); in ultimo si completa con le
+ * bocciate migliori, segnate come tali.
+ */
+export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; giri?: number; vivaio?: number; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
+  const n = o.n ?? 12
+  // si genera quattro volte quello che si mostra: il critico sceglie su un vivaio ampio
+  const vivaio = o.vivaio ?? n * 4
+  const tinta = await tintaFoto(o.photo)
+  const tutte: Scene[] = []
+  let candidate = 0, giro = 0
+  const maxGiri = o.giri ?? 3
+  for (; giro < maxGiri; giro++) {
+    const pool = giro === 0 && o.knobs?.length
+      ? o.knobs
+      : proposeKnobs(c, { hasPhoto: !!o.photo, styleId: o.styleId, tinta, seme: (o.seme ?? 0) + giro * 104729, ampio: Math.max(3, Math.ceil(vivaio / 6)) })
+    for (const [i, k] of pool.entries()) {
+      const sc = await generateSystem(c, format, k, o.photo, { tentativi: k.sistema === 'composto' ? 8 : 4 })
+      candidate++
+      o.onProgress?.(i + 1, pool.length)
+      if (sc) tutte.push(sc)
+    }
+    // un altro giro prima di accettare doppioni: si ferma solo quando le 12 sono tutte di sistemi diversi
+    if (scegli(tutte, n, true, 1).length >= n) break
+  }
+  const promosse = scegli(tutte, n, true)
+  const scene = promosse.length >= n ? promosse : [...promosse, ...scegli(tutte.filter(x => !promosse.includes(x)), n - promosse.length, false)]
+  return { scene, candidate, promosse: tutte.filter(x => x.esame?.promossa).length, giri: Math.min(giro + 1, maxGiri) }
+}
+
+/** Selezione: per voto, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità. */
+function scegli(tutte: Scene[], n: number, soloPromosse: boolean, maxLivello = 3): Scene[] {
+  const cand = tutte.filter(x => !soloPromosse || x.esame?.promossa).sort((a, b) => (b.esame?.voto ?? 0) - (a.esame?.voto ?? 0))
+  // prima un solo esemplare per sistema (niente coppie quasi uguali), poi si allarga se non bastano
+  for (const [perSistema, perStile] of ([[1, 3], [2, 4], [3, 6]] as const).slice(0, maxLivello)) {
+    const out: Scene[] = []
+    const firme = new Set<string>(), sist = new Map<string, number>(), stili = new Map<string, number>()
+    for (const sc of cand) {
+      const k = sc.knobs as Knobs | undefined
+      const sis = k?.sistema ?? sc.layout, st = k?.stile ?? sc.style
+      const firma = `${sis}|${sc.esame?.firma ?? ''}`
+      const tetto = sis === 'composto' ? perSistema + 2 : perSistema
+      if (firme.has(firma) || (sist.get(sis) ?? 0) >= tetto || (stili.get(st) ?? 0) >= perStile) continue
+      out.push(sc); firme.add(firma); sist.set(sis, (sist.get(sis) ?? 0) + 1); stili.set(st, (stili.get(st) ?? 0) + 1)
+      if (out.length >= n) return out
+    }
+    if (out.length >= n || perSistema === maxLivello) return out
+  }
+  return []
 }
