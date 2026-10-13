@@ -14,6 +14,7 @@ import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
+import { arcLine, arrowNE, asterisk, baseText, capH, inkCanvas, inkOf, inkText, ringText, rule, sizeForWidth, wrap } from './design'
 import { WARPS, band as distBand, extrude, extrudeStriped, glints, shine, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
@@ -2059,6 +2060,236 @@ const trama: Recipe = {
   },
 }
 
+// ─── DESIGN TIPOGRAFICO ──────────────────────────────────────────────────────
+
+/** palette da studio: un fondo, un inchiostro, un solo accento */
+const DESIGN_PALS: { label: string; bg: string; ink: string; acc: string }[] = [
+  { label: 'Crema e inchiostro', bg: '#f1ebe0', ink: '#161412', acc: '#d6371f' },
+  { label: 'Bianco ottico', bg: '#f6f6f2', ink: '#0f0f0f', acc: '#2340ff' },
+  { label: 'Nero e acido', bg: '#0e0e0e', ink: '#f2f0ea', acc: '#cfff2e' },
+  { label: 'Rosso Torino', bg: '#c8231c', ink: '#f6efe4', acc: '#141010' },
+  { label: 'Cobalto', bg: '#1d36e8', ink: '#f3efe6', acc: '#ff8a3d' },
+  { label: 'Verde bottiglia', bg: '#163b2c', ink: '#efe6cf', acc: '#e9b44c' },
+  { label: 'Rosa cipria', bg: '#f2d4d0', ink: '#3a1015', acc: '#c2262e' },
+  { label: 'Sabbia', bg: '#d9cbb0', ink: '#2b2219', acc: '#8a2b1c' },
+]
+const dTone = (o: Job): Tone => { const p = DESIGN_PALS[num(o, 'pal')] ?? DESIGN_PALS[0]; return { id: 'd', label: p.label, bg: p.bg, ink: p.ink, acc: p.acc, dark: luma(p.bg) < 0.45 } }
+
+const PAIRS: { label: string; a: Face; b: Face }[] = [
+  { label: 'Grotesk + corsivo', a: FACES.grotesk, b: FACES.corsivo },
+  { label: 'Condensato + corsivo', a: FACES.condensato, b: FACES.corsivo },
+  { label: 'Bodoni + grotesk', a: FACES.bodoni, b: FACES.grotesk },
+  { label: 'Espanso + corsivo', a: FACES.espanso, b: FACES.corsivo },
+]
+const MICRO: Face = FACES.mono
+
+const lockup: Recipe = {
+  id: 'lockup', label: 'Lockup editoriale', cat: 'Design tipografico', hint: 'composizione da locandina su griglia: titolo, corsivo, filetti, dati in mono — pochi colori, molto bianco',
+  params: [P.text('Pizza|Party', 'Titolo'), { key: 'sub', label: 'Sottotitolo', type: 'text', def: 'una notte di forno a legna e vinili' },
+    { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3, Torino|Dalle 21:00' }, { key: 'num', label: 'Numero', type: 'text', def: '07' },
+    P.sel('layout', 'Impaginazione', ['Svizzero', 'Centrato', 'Colonna']), P.sel('pair', 'Caratteri', PAIRS.map(x => x.label)),
+    P.sel('pal', 'Colori', DESIGN_PALS.map(x => x.label)), P.sel('mark', 'Segno', ['Nessuno', 'Cerchio pieno', 'Freccia', 'Asterisco']), P.range('grain', 'Grana', 0, 30, 6)],
+  render: o => {
+    const t = dTone(o), S = SS(o), W = o.W, H = o.H
+    const pair = PAIRS[num(o, 'pair')] ?? PAIRS[0]
+    const title = lines(str(o, 'text') || 'Artismi'), sub = str(o, 'sub'), info = lines(str(o, 'info')), nr = str(o, 'num')
+    const { c, ctx } = stage(o, t)
+    const m = Math.round(S * 0.06), ms = S * 0.0155, lw = Math.max(1, S * 0.0016)
+    const lay = num(o, 'layout'), mark = num(o, 'mark')
+    const top = `${nr ? 'N° ' + nr : ''}`, right = 'Artismi — Torino'
+    const drawMark = (x: number, y: number, r: number) => {
+      if (mark === 1) { ctx.fillStyle = t.acc; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill() }
+      if (mark === 2) arrowNE(ctx, x, y, r * 1.5, Math.max(2, r * 0.16), t.acc)
+      if (mark === 3) asterisk(ctx, x, y, r, 3, Math.max(2, r * 0.22), t.acc, Math.PI / 2)
+    }
+    if (lay === 0) {
+      // testata: micro testi e filetto
+      baseText(ctx, MICRO, top, ms, m, m + ms, t.ink)
+      baseText(ctx, MICRO, right, ms, W - m, m + ms, t.ink, 'right')
+      rule(ctx, m, W - m, m + ms * 2, lw, t.ink)
+      // piede: filetto e colonne di dati
+      const cols = Math.max(1, Math.min(3, info.length)), cw = (W - 2 * m) / cols
+      const footTop = H - m - ms * 1.6 * Math.ceil(info.length / cols)
+      rule(ctx, m, W - m, footTop - ms * 1.8, lw, t.ink)
+      info.forEach((s2, i) => baseText(ctx, MICRO, s2, ms, m + (i % cols) * cw, footTop + ms + Math.floor(i / cols) * ms * 1.6, t.ink))
+      // titolo: righe alterne, il tondo a tutta larghezza, il corsivo rientrato a destra
+      const avail = { y0: m + ms * 2 + S * 0.05, y1: footTop - ms * 1.8 - S * 0.04 }
+      const subSize = S * 0.034
+      const subLines = sub ? wrap(pair.b, sub, subSize, (W - 2 * m) * 0.5) : []
+      const subH = subLines.length ? subLines.length * subSize * 1.12 + S * 0.03 : 0
+      const rows = title.map((s2, i) => {
+        const f = i % 2 ? pair.b : pair.a
+        const w = (W - 2 * m) * (i % 2 ? 0.8 : 1)
+        const sz = sizeForWidth(f, i % 2 ? s2.toLowerCase() : s2, w)
+        const k = inkOf(f, i % 2 ? s2.toLowerCase() : s2, sz)
+        return { s: i % 2 ? s2.toLowerCase() : s2, f, sz, h: k.asc + k.desc, w }
+      })
+      const gap = S * 0.012
+      let tot = rows.reduce((a, r) => a + r.h, 0) + gap * (rows.length - 1)
+      const room = avail.y1 - avail.y0 - subH
+      const k = tot > room ? room / tot : 1
+      tot *= k
+      let y = avail.y0
+      let lastRight = 0
+      rows.forEach((r, i) => {
+        const b = inkText(ctx, r.f, r.s, r.sz * k, i % 2 ? W - m : m, y, t.ink, i % 2 ? 'right' : 'left')
+        y += r.h * k + gap * k
+        lastRight = b.x + b.w
+      })
+      void lastRight
+      // sottotitolo in corsivo sulla metà destra, sotto al titolo
+      subLines.forEach((s2, i) => baseText(ctx, pair.b, s2, subSize, W / 2, y + S * 0.03 + subSize * (0.8 + i * 1.12), t.ink))
+      if (mark) drawMark(m + S * 0.022, y + S * 0.03 + subSize * 0.52, S * 0.022)
+    } else if (lay === 1) {
+      // centrato: cornice sottile doppia, tutto in asse, il titolo in corsivo
+      const fr = m * 0.55
+      ctx.strokeStyle = t.ink; ctx.lineWidth = lw
+      ctx.strokeRect(fr, fr, W - 2 * fr, H - 2 * fr)
+      ctx.strokeRect(fr + lw * 4, fr + lw * 4, W - 2 * fr - lw * 8, H - 2 * fr - lw * 8)
+      const fT = pair.a === FACES.grotesk || pair.a === FACES.condensato || pair.a === FACES.espanso ? pair.b : pair.a
+      const cx = W / 2
+      baseText(ctx, MICRO, [top, right].filter(Boolean).join('   ·   '), ms, cx, m + ms * 2.2, t.ink, 'center')
+      const rows = title.map(s2 => { const sz = sizeForWidth(fT, s2, W * 0.7); const k2 = inkOf(fT, s2, sz); return { s: s2, sz, h: k2.asc + k2.desc } })
+      const gap = S * 0.01
+      const subSize = S * 0.03
+      const room = H * 0.52
+      let tot = rows.reduce((a, r) => a + r.h, 0) + gap * (rows.length - 1)
+      const k = tot > room ? room / tot : 1
+      tot *= k
+      let y = H * 0.47 - tot / 2
+      rows.forEach(r => { inkText(ctx, fT, r.s, r.sz * k, cx, y, t.ink, 'center'); y += (r.h + gap) * k })
+      // divisorio: filetto con il segno al centro
+      const dy = y + S * 0.045
+      rule(ctx, cx - S * 0.16, cx - S * 0.03, dy, lw, t.ink); rule(ctx, cx + S * 0.03, cx + S * 0.16, dy, lw, t.ink)
+      if (mark) drawMark(cx, dy, S * 0.014); else { ctx.fillStyle = t.acc; ctx.save(); ctx.translate(cx, dy); ctx.rotate(Math.PI / 4); ctx.fillRect(-S * 0.008, -S * 0.008, S * 0.016, S * 0.016); ctx.restore() }
+      if (sub) wrap(FACES.grotesk, sub, subSize * 0.62, W * 0.5).forEach((s2, i) => baseText(ctx, FACES.grotesk, s2, subSize * 0.62, cx, dy + S * 0.06 + i * subSize * 0.9, t.ink, 'center', 0.12))
+      info.forEach((s2, i) => baseText(ctx, MICRO, s2, ms, cx, H - m - ms * 1.2 - (info.length - 1 - i) * ms * 1.7, t.ink, 'center'))
+    } else {
+      // colonna: titolo ruotato lungo il bordo sinistro, testi a bandiera a destra
+      const f = pair.a, word = title.join(' ')
+      const len = H - 2 * m
+      let sz = sizeForWidth(f, word, len)
+      let k2 = inkOf(f, word, sz)
+      const maxThick = W * 0.42
+      if (k2.asc + k2.desc > maxThick) { sz *= maxThick / (k2.asc + k2.desc); k2 = inkOf(f, word, sz) }
+      const thick = k2.asc + k2.desc
+      ctx.save(); ctx.translate(m, H - m); ctx.rotate(-Math.PI / 2)
+      inkText(ctx, f, word, sz, 0, 0, t.acc, 'left')
+      ctx.restore()
+      const x0 = m + thick + S * 0.05, cw = W - m - x0
+      baseText(ctx, MICRO, top || '—', ms, x0, m + ms, t.ink)
+      baseText(ctx, MICRO, right, ms, W - m, m + ms, t.ink, 'right')
+      rule(ctx, x0, W - m, m + ms * 2, lw, t.ink)
+      const subSize = Math.min(S * 0.06, sizeForWidth(pair.b, 'una notte di forno', cw))
+      const sl = sub ? wrap(pair.b, sub, subSize, cw) : []
+      sl.forEach((s2, i) => baseText(ctx, pair.b, s2, subSize, x0, m + ms * 2 + S * 0.06 + subSize * (0.8 + i * 1.08), t.ink))
+      rule(ctx, x0, W - m, H - m - ms * 1.7 * info.length - ms * 0.8, lw, t.ink)
+      info.forEach((s2, i) => baseText(ctx, MICRO, s2, ms, x0, H - m - (info.length - 1 - i) * ms * 1.7, t.ink))
+      // il numero grande chiude la colonna, appoggiato al filetto del piede
+      const footRule = H - m - ms * 1.7 * info.length - ms * 0.8
+      if (nr) {
+        const nf = pair.b, nsz = Math.min(sizeForWidth(nf, nr, cw * 0.62), (footRule - m) * 0.4)
+        const nk = inkOf(nf, nr, nsz)
+        inkText(ctx, nf, nr, nsz, W - m, footRule - S * 0.03 - nk.asc - nk.desc, t.ink, 'right')
+      }
+      if (mark) drawMark(x0 + S * 0.03, footRule - S * 0.06, S * 0.03)
+    }
+    return finish(c, o, t, 'lockup', null)
+  },
+}
+
+/** testata e piede in micro testo, comuni alle tavole tipografiche */
+function microFrame(ctx: Ctx, o: Job, t: Tone, m: number, info: string[], nr: string) {
+  const S = SS(o), W = o.W, H = o.H, ms = S * 0.0155
+  baseText(ctx, MICRO, nr ? 'N° ' + nr : '—', ms, m, m + ms, t.ink)
+  baseText(ctx, MICRO, 'Artismi — Torino', ms, W - m, m + ms, t.ink, 'right')
+  const cols = Math.max(1, Math.min(3, info.length)), cw = (W - 2 * m) / cols
+  const rows = Math.ceil(info.length / cols)
+  info.forEach((s2, i) => {
+    const c2 = i % cols, al: CanvasTextAlign = cols === 1 ? 'left' : c2 === 0 ? 'left' : c2 === cols - 1 ? 'right' : 'center'
+    const x = al === 'left' ? m + c2 * cw : al === 'right' ? W - m : m + cw * (c2 + 0.5)
+    baseText(ctx, MICRO, s2, ms, x, H - m - (rows - 1 - Math.floor(i / cols)) * ms * 1.6, t.ink, al)
+  })
+  return { top: m + ms * 2, bottom: H - m - rows * ms * 1.6 - ms * 0.4 }
+}
+
+/** riga resa a una risoluzione che regge lo stiramento, poi stesa nel riquadro */
+function stretchLine(f: Face, s: string, w: number, h: number, color: string) {
+  const sw = sizeForWidth(f, s, w), k = inkOf(f, s, sw), sh = sw * h / Math.max(1, k.asc + k.desc)
+  return inkCanvas(f, s, Math.min(Math.max(sw, sh), 1600), color)
+}
+
+const TENSION_FACES: { label: string; f: Face }[] = [
+  { label: 'Condensato', f: FACES.condensato }, { label: 'Grotesk', f: FACES.grotesk }, { label: 'Espanso', f: FACES.espanso }, { label: 'Bodoni corsivo', f: FACES.bodoni },
+]
+
+const tensione: Recipe = {
+  id: 'tensione', label: 'Tipo sotto tensione', cat: 'Design tipografico', hint: 'lettere fuori scala: righe stirate fino a riempire il foglio, crescendo, onda di altezze, parola tagliata dal formato',
+  params: [P.text('Pizza|Party|Torino', 'Testo'), { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3|Dalle 21:00' }, { key: 'num', label: 'Numero', type: 'text', def: '07' },
+    P.sel('mode', 'Gesto', ['Riempi', 'Crescendo', 'Onda di altezze', 'Taglio']), P.sel('face', 'Carattere', TENSION_FACES.map(x => x.label)),
+    P.sel('pal', 'Colori', DESIGN_PALS.map(x => x.label), 1), P.sel('accent', 'Accento', ['Nessuno', 'Una riga', 'Prima lettera']),
+    P.range('wave', 'Onde', 1, 6, 2), P.range('depth', 'Escursione', 10, 90, 60), P.tog('bleed', 'Al vivo', false), P.range('grain', 'Grana', 0, 30, 6)],
+  render: o => {
+    const t = dTone(o), S = SS(o), W = o.W, H = o.H
+    const f = TENSION_FACES[num(o, 'face')]?.f ?? FACES.condensato
+    const words = lines(str(o, 'text') || 'Artismi'), info = lines(str(o, 'info'))
+    const { c, ctx } = stage(o, t)
+    const m = Math.round(S * 0.06)
+    const fr = microFrame(ctx, o, t, m, info, str(o, 'num'))
+    const bleed = on(o, 'bleed'), x0 = bleed ? 0 : m, x1 = bleed ? W : W - m
+    const y0 = fr.top + S * 0.03, y1 = fr.bottom - S * 0.03
+    const gap = S * 0.008, mode = num(o, 'mode'), acc = num(o, 'accent')
+    const colOf = (i: number) => (acc === 1 && i === (words.length > 1 ? 1 : 0) ? t.acc : t.ink)
+    const put = (src: HTMLCanvasElement, x: number, y: number, w: number, h: number, i: number) => {
+      ctx.drawImage(src, x, y, w, h)
+      if (acc === 2 && i === 0) {
+        // prima lettera nel colore d'accento: si ridisegna solo la sua fetta
+        const s0 = words[0], k0 = inkOf(f, s0, 100), k1 = inkOf(f, s0.slice(0, 1), 100)
+        const frac = Math.min(1, (k1.w + (k0.l - k1.l)) / k0.w + 0.01)
+        const tint = makeCanvas(src.width, src.height)
+        tint.ctx.drawImage(src, 0, 0); tint.ctx.globalCompositeOperation = 'source-in'; tint.ctx.fillStyle = t.acc; tint.ctx.fillRect(0, 0, src.width * frac, src.height)
+        tint.ctx.globalCompositeOperation = 'destination-in'; tint.ctx.fillRect(0, 0, src.width * frac, src.height)
+        ctx.drawImage(tint.c, x, y, w, h)
+      }
+    }
+    if (mode === 3) {
+      // taglio: la prima parola alta quanto il foglio utile, esce dal bordo destro;
+      // le altre parole stanno in una riga di corsivo sotto, nel loro spazio
+      const rest = words.slice(1).join(' ')
+      const rs = S * 0.052, band = rest ? rs * 1.6 : 0
+      const s0 = words[0], hh = y1 - y0 - band
+      const sz = sizeForWidth(f, s0, 100), k = inkOf(f, s0, sz)
+      const scale = hh / (k.asc + k.desc)
+      const src = inkCanvas(f, s0, Math.min(sz * scale, 1800), colOf(0))
+      put(src, x0, y0, (k.w * scale), hh, 0)
+      if (rest) baseText(ctx, FACES.corsivo, rest, rs, m, y1, acc === 1 ? t.acc : t.ink)
+    } else {
+      const n = words.length
+      const weights = words.map((_, i) => (mode === 1 ? Math.pow(1.75, i) : 1))
+      const wsum = weights.reduce((a, b) => a + b, 0)
+      const hh = y1 - y0 - gap * (n - 1)
+      let y = y0
+      words.forEach((s2, i) => {
+        const h = hh * weights[i] / wsum, w = x1 - x0
+        const src = stretchLine(f, s2, w, h, colOf(i))
+        if (mode !== 2) put(src, x0, y, w, h, i)
+        else {
+          // onda di altezze: la riga a fette verticali, ognuna alta quanto dice l'onda, appoggiate alla base
+          const N = 240, waves = num(o, 'wave'), dep = num(o, 'depth') / 100
+          for (let j = 0; j < N; j++) {
+            const u = (j + 0.5) / N
+            const k = 1 - dep * (0.5 + 0.5 * Math.cos((u * waves + i * 0.5) * Math.PI * 2))
+            const sx = (j / N) * src.width, sw = src.width / N + 0.6
+            ctx.drawImage(src, sx, 0, sw, src.height, x0 + (j / N) * w, y + h - h * k, w / N + 0.6, h * k)
+          }
+        }
+        y += h + gap
+      })
+    }
+    return finish(c, o, t, 'tensione', null)
+  },
+}
+
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, quaderno, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,
@@ -2066,6 +2297,7 @@ export const RECIPES: Recipe[] = [
   timbro, datario, timbroParola, hanko, adesivo, foglioAdesivi, ceralacca, toppa, biglietto, nastro,
   tattoo,
   groovy, gonfiabile, eco, trama,
+  lockup, tensione,
   francobollo, valigia, fiammiferi, cartellino, exlibris, scontrino, bottiglia, stemma,
 ]
 export const RECIPE_CATS = [...new Set(RECIPES.map(r => r.cat))]
