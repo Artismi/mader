@@ -2475,9 +2475,23 @@ const locandina: Recipe = {
         const tTop = y
         rows.forEach(r => { inkText(ctx, r.f, r.s, r.sz * k, r.right ? W - m : m, y, t.ink, r.right ? 'right' : 'left'); y += (r.h + gap) * k })
         rule(ctx, m, W - m, fr.top + S * 0.012, lw, t.ink)
-        const top = fr.top + S * 0.04, bot = tTop - S * 0.04
-        if (sub) baseText(ctx, pair.b, sub, S * 0.026, m, top + S * 0.026, t.ink)
-        placeIn(ctx, heroCanvas(S * 0.9), m, top + (sub ? S * 0.05 : 0), W - 2 * m, bot - top - (sub ? S * 0.05 : 0))
+        // tavola da catalogo: l'elemento poggia su un filetto subito sopra il titolo,
+        // chiuso da crocini di taglio, con la sua didascalia sotto il filetto
+        const ms = S * 0.0145
+        const ground = tTop - S * 0.045, top = fr.top + S * 0.05 + (sub ? S * 0.045 : 0)
+        if (sub) baseText(ctx, pair.b, sub, S * 0.026, m, fr.top + S * 0.05, t.ink)
+        const hb = placeIn(ctx, heroCanvas(S * 0.9), m + S * 0.04, top, W - 2 * m - S * 0.08, ground - top, 'bottom')
+        rule(ctx, m, W - m, ground, lw, t.ink)
+        baseText(ctx, MICRO, `Fig. ${str(o, 'num') || '01'} — ${hero.label}`, ms, m, ground + ms * 1.6, t.ink)
+        baseText(ctx, MICRO, `${Math.round(hb.w / S * 100)} × ${Math.round(hb.h / S * 100)}`, ms, W - m, ground + ms * 1.6, t.ink, 'right')
+        // crocini agli angoli del riquadro dell'elemento
+        const pad = S * 0.02, cl = S * 0.022
+        ctx.save(); ctx.strokeStyle = t.ink; ctx.lineWidth = lw; ctx.beginPath()
+        for (const [x, y, sx, sy] of [[hb.x - pad, hb.y - pad, 1, 1], [hb.x + hb.w + pad, hb.y - pad, -1, 1]] as const) {
+          ctx.moveTo(x, y + sy * cl); ctx.lineTo(x, y); ctx.lineTo(x + sx * cl, y)
+        }
+        // asse verticale tratteggiato dal crocino alto fino al filetto: tiene l'elemento in squadra
+        ctx.stroke(); ctx.setLineDash([lw * 3, lw * 4]); ctx.beginPath(); ctx.moveTo(hb.x + hb.w / 2, hb.y - pad - cl); ctx.lineTo(hb.x + hb.w / 2, hb.y - pad * 0.3); ctx.stroke(); ctx.restore()
       } else {
         // copertina: l'elemento chiuso in un riquadro a filetto, il titolo sotto in asse
         const bx = m, by = fr.top + S * 0.03, bw = W - 2 * m, bh = (fr.bottom - by) * 0.64
