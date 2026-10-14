@@ -9,6 +9,8 @@
  *     vuoto (rilevatore di ripetizioni) si passa al successivo;
  *   - A1: una chiamata scritta male (come testo, JSON rotto, nome con prefisso)
  *     si ripara e si esegue; il modello si cambia solo dopo due riparazioni fallite;
+ *   - A2: regia per passo (steer.ts): strumento obbligatorio al primo passo se il
+ *     compito è un'azione, fase nel promemoria, esecutore diverso dal pianificatore;
  *   - senza interfaccia nessuno può confermare: gli strumenti distruttivi (e le
  *     scritture che chiedono conferma, come la fattura) non vengono eseguiti ma
  *     restituiti come proposte, che il chiamante mostra all'utente.
@@ -20,6 +22,7 @@ import type { AiTask } from '@/lib/ai/model-provider'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef, type ToolGroup } from './tools'
 import { createTrace } from './trace'
 import { createRepairBudget, createToolCallRepair, parseTextToolCalls } from './repair'
+import { createPrepareStep, isActionRequest, risksOf } from './steer'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
 import { CORE_TOOLS } from './core-tools'
 import { SYSTEM_TOOLS } from './system-tools'
@@ -70,6 +73,8 @@ export interface RunAgentInput {
   focus?: string
   /** pagina da cui parte la richiesta (es. '/editoriale'): ai modelli deboli si danno gli strumenti di quella pagina */
   pagina?: string
+  /** A2: modello che esegue i passi dopo il primo (il candidato pianifica); costa meno, rompe la cache tra i due */
+  esecutore?: ModelCandidate
   /** definizioni al posto di quelle di sistema (prove) */
   defs?: Def[]
   /** modelli al posto del registro (prove) */
@@ -174,6 +179,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   }
 
   const maxPassi = input.maxPassi ?? 12
+  const risks = risksOf(defs)
   for (const c of lista) {
     const trace = createTrace(`runAgent ${c.label}`)
     const ac = new AbortController()
@@ -187,6 +193,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     const usage = { input: 0, cached: 0, output: 0 }
     let passi = 0
     let fallitePrima = 0
+    let giro = 0
     // se il chiamante ha già scelto gruppi o strumenti vale la sua scelta; altrimenti ai deboli il sottoinsieme di base
     const activeTools = input.pagina && !input.gruppi?.length && !input.strumenti?.length ? toolsForContext(defs, { strength: c.profile.strength, pathname: input.pagina, always: ['updatePlan'] }) : undefined
     try {
@@ -198,6 +205,12 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
           tools,
           activeTools: activeTools as never,
           experimental_repairToolCall: repair,
+          prepareStep: createPrepareStep({
+            azione: giro === 0 && isActionRequest(input.compito),
+            risks,
+            active: activeTools,
+            modelloPerPasso: input.esecutore ? (n => (n > 0 || giro > 0 ? input.esecutore!.model : undefined)) : undefined,
+          }),
           // lo stallo ferma il giro anche se il fornitore ignora l'abort (si controlla tra un passo e l'altro);
           // anche due chiamate illeggibili fermano il giro
           stopWhen: [stepCountIs(maxPassi - passi), () => stallo, ({ steps }) => fallitePrima + invalidCalls(steps as never) >= 2],
@@ -205,6 +218,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
           maxRetries: 0,
         })
         passi += r.steps.length
+        giro++
         usage.input += r.totalUsage.inputTokens ?? 0
         usage.cached += r.totalUsage.cachedInputTokens ?? 0
         usage.output += r.totalUsage.outputTokens ?? 0

@@ -310,3 +310,49 @@ test('runAgent ripara nome e JSON rotto di una chiamata nativa', async () => {
   assert.equal(r.modello, 'debole')
   assert.deepEqual(salvati, ['x'])
 })
+
+/* ── A2: regia per passo ──────────────────────────────────────────────── */
+
+const steer = await import('../../src/lib/agent/steer')
+
+test('isActionRequest: verbi che cambiano il sistema sì, domande e testi no', () => {
+  for (const t of ['Programma 3 post per la settimana', 'crea un incarico per lunedì', 'Sposta la riunione a giovedì', 'ricordami di chiamare Luca']) assert.equal(steer.isActionRequest(t), true, t)
+  for (const t of ['Come creo un incarico?', 'scrivimi una caption per il post', 'quali incarichi ho oggi?', 'ciao']) assert.equal(steer.isActionRequest(t), false, t)
+})
+
+test('phaseOf: leggere → scrivere → verificare → chiudere', () => {
+  const risks = { leggi: 'read', scrivi: 'write' } as const
+  const s = (toolName: string, output: unknown = { success: true }) => ({ toolCalls: [], toolResults: [{ toolName, output }] }) as never
+  assert.equal(steer.phaseOf([], risks), 'leggere')
+  assert.equal(steer.phaseOf([s('leggi')], risks), 'scrivere')
+  assert.equal(steer.phaseOf([s('leggi'), s('scrivi', { success: false })], risks), 'scrivere')
+  assert.equal(steer.phaseOf([s('leggi'), s('scrivi')], risks), 'verificare')
+  assert.equal(steer.phaseOf([s('leggi'), s('scrivi'), s('leggi')], risks), 'chiudere')
+  assert.match(steer.phaseNote('scrivere', risks), /fase: scrivere;.*strumenti utili: scrivi<\/promemoria>/)
+})
+
+test('prepareStep: required solo al primo passo di un\'azione; fase in coda senza toccare il prefisso', async () => {
+  const prep = steer.createPrepareStep({ azione: true, risks: { leggi: 'read' } })
+  const msgs = [{ role: 'user', content: 'crea' }] as never[]
+  const p0 = await prep({ stepNumber: 0, steps: [], messages: msgs } as never)
+  assert.equal(p0.toolChoice, 'required')
+  assert.equal(p0.messages, undefined)
+  const p1 = await prep({ stepNumber: 1, steps: [], messages: msgs } as never)
+  assert.equal(p1.toolChoice, undefined)
+  assert.deepEqual(p1.messages!.slice(0, 1), msgs)
+  assert.match(String(p1.messages!.at(-1)!.content), /^<promemoria>fase: leggere/)
+})
+
+test('runAgent: strumento obbligatorio al primo passo e esecutore dal secondo', async () => {
+  const visti: Record<string, unknown>[] = []
+  const vistiEsec: Record<string, unknown>[] = []
+  const salvati: unknown[] = []
+  const r = await runAgent({ compito: 'salva la nota "ciao"', defs: [salvaDef(salvati)],
+    candidati: [copione('pianifica', [chiama('salvaNota', { testo: 'ciao' })], visti)],
+    esecutore: copione('esegue', [testo('Nota n1 salvata.')], vistiEsec) })
+  assert.equal(r.ok, true)
+  assert.deepEqual(visti[0].toolChoice, { type: 'required' })
+  assert.equal(visti.length, 1)
+  assert.equal(vistiEsec.length, 1)
+  assert.match(JSON.stringify(vistiEsec[0].prompt), /fase: verificare/)
+})
