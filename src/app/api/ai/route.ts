@@ -23,6 +23,7 @@ import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
+import { focusText } from '@/lib/kernel/graph'
 
 export const maxDuration = 120 // lavori in più passi e regia dello Studio
 
@@ -582,7 +583,7 @@ function buildCrewStreamResponse(
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action, pathname } = body
+    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action, pathname, focus } = body
 
     // ── RESUME ACTION ────────────────────────────────────────────────────────
     if (action === 'resume') {
@@ -903,7 +904,7 @@ QUANTITÀ BOARD:
       skills: allActiveSkills,
       modelNote: lowLevelDesign ? undefined : COMPOSE_ONLY_NOTE.trim(),
     })
-    const reminder = reminderText({ now: new Date(), pathname, ctx, canvasSnapshot, activeSkills, otherSkills })
+    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills })
 
     // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
     const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {

@@ -7,6 +7,8 @@ export * from './domains/client'
 export * from './domains/task'
 export * from './domains/idea'
 export * from './domains/post'
+export * from './domains/graph'
+export * from './graph'
 export * from './events'
 
 import { wireEvents } from './events'

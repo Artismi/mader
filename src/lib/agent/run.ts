@@ -20,6 +20,7 @@ import { createTrace } from './trace'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
 import { CORE_TOOLS } from './core-tools'
 import { SYSTEM_TOOLS } from './system-tools'
+import { focusText } from '@/lib/kernel/graph'
 
 type Def = AgentToolDef<z.ZodTypeAny>
 
@@ -62,6 +63,8 @@ export interface RunAgentInput {
   task?: AiTask
   maxPassi?: number
   riservato?: boolean
+  /** nodo in focus (es. 'client:abc'): il contesto parte da lui e dai suoi vicini (K3) */
+  focus?: string
   /** pagina da cui parte la richiesta (es. '/editoriale'): ai modelli deboli si danno gli strumenti di quella pagina */
   pagina?: string
   /** definizioni al posto di quelle di sistema (prove) */
@@ -153,7 +156,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const log: string[] = []
   const defs = headless(selectDefs(input.defs ?? serverToolDefs(), input), chiamate, proposte)
   const system = agentSystemPrompt(defs, now)
-  const prompt = input.contesto?.trim() ? `${input.compito}\n\n<contesto>\n${input.contesto.trim()}\n</contesto>` : input.compito
+  // K3: il contesto parte dal nodo in focus e dai suoi vicini; il resto l'agente lo chiede al grafo
+  const contesto = [input.focus ? focusText(input.focus) : '', input.contesto?.trim() ?? ''].filter(Boolean).join('\n\n')
+  const prompt = contesto ? `${input.compito}\n\n<contesto>\n${contesto}\n</contesto>` : input.compito
 
   const lista = input.candidati ?? candidatesFor({ task: input.task ?? 'general', tools: true, preferisci: 'forte' }, { choice: input.modello, riservato: input.riservato })
   if (!lista.length) {

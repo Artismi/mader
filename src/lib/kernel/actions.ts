@@ -11,7 +11,7 @@ import type { z } from 'zod'
 import type { AgentToolDef, Risk, ToolGroup } from '@/lib/agent/tools'
 
 export type ActionRisk = 'read' | 'write' | 'destructive' | 'external'
-export type Domain = 'task' | 'idea' | 'post' | 'client' | 'quote' | 'memory' | 'design'
+export type Domain = 'task' | 'idea' | 'post' | 'client' | 'quote' | 'memory' | 'design' | 'graph'
 
 export interface ActionContext {
   /** chi agisce: 'user', 'agent', 'agent:<profilo>', 'rule:<id>', 'sync:<connettore>' */

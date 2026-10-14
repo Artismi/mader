@@ -126,6 +126,8 @@ export interface ReminderParts {
   ctx: OperativeContext
   canvasSnapshot?: string
   activeSkills: Skill[]
+  /** nodo in focus e vicini (K3, da focusText del grafo) */
+  focus?: string
   /** skill pertinenti rimaste fuori per il tetto: il modello le carica se servono */
   otherSkills?: string[]
 }
@@ -139,6 +141,7 @@ export function reminderText(r: ReminderParts): string {
   const parts = [
     `Data: ${date} (${iso}, ${dayBand(r.now)})`,
     r.pathname ? `Pagina aperta: ${r.pathname}` : '',
+    r.focus ?? '',
     situazione ? `## Situazione\n${situazione}` : '',
     r.ctx.clientVaults.length ? r.ctx.clientVaults.join('\n\n') : '',
     r.ctx.activatedFiles.length ? r.ctx.activatedFiles.join('\n\n') : '',

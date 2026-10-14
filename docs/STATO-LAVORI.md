@@ -15,11 +15,12 @@ File breve da leggere per primo in una sessione nuova, invece di rileggere conve
 - 74c85a5: dieta del prompt: stabile da ~12,6k a ~4,4k token, dal vivo da ~90k a ~20,6k per passo.
 - 960eb08: G5, la maestra sulle scritture (controlli in `verify`/`after`).
 - 13a764d: G6, banco di 20 compiti (gemini-flash-lite-latest 15/19 eseguiti).
-- K1 (commit "feat(kernel): K1 azioni uniche"): `src/lib/kernel`, domini task/idea/post/client usati da chat, Server Action, /os e Ctrl+K.
-- K2 (commit "feat(kernel): K2 eventi e provenienza"): tabella `events`, storia sul nodo, "Cambiato da ieri" in Oggi, link `origin` unico.
+- 65b62dc: K1: `src/lib/kernel`, domini task/idea/post/client usati da chat, Server Action, /os e Ctrl+K.
+- 3333e02: K2: tabella `events`, storia sul nodo, "Cambiato da ieri" in Oggi, link `origin` unico.
+- K3 (commit "feat(kernel): K3 grafo e grounding"): indice dei nodi, `graphSearch`/`graphRelated`/`clientContext`, focus nel contesto dell'agente. **Fermo dopo K3**: K4–K8 da decidere con l'utente; K0 attende il permesso per un secondo modello (Claude, a pagamento).
 
 ## In coda, una cosa alla volta
-1. **Guscio** (worktree brave-bohr): completare il registro dei modelli e `runAgent`; poi gli id dei modelli ritirati; dieta del prompt (da ~90k a meno di 15k token); G5; G6; poi K1–K3. Fermarsi dopo K3.
+1. **Guscio e nucleo** (worktree brave-bohr): fatti fino a K3 (vedi sopra). Prossimo: decidere K4–K8 con l'utente; seconda misura del banco con un altro modello.
 2. **Q0** (worktree proprio, da `claude/ecstatic-mendel-t4tibq`): confronto cieco automatico. I concorrenti si generano via API (Gemini immagini, GPT Image via OpenRouter, Canva solo se automatizzabile); giudica una giuria di 3 modelli; il giudizio dell'utente è facoltativo.
 3. **D1** (worktree proprio, da `claude/ecstatic-mendel-t4tibq`): decompilatore (strati, testo vivo con render-and-compare, verifica di fedeltà) in `designer/decompila/`.
 

@@ -8,7 +8,7 @@ import { runAgent } from '@/lib/agent/run'
  * prepara un preventivo…). Stessi strumenti e controlli della chat; le azioni
  * che chiedono conferma tornano come `proposte`.
  *
- * POST { compito, contesto?, gruppi?, strumenti?, modello?, maxPassi?, riservato? }
+ * POST { compito, focus?, contesto?, gruppi?, strumenti?, modello?, maxPassi?, riservato? }
  */
 export const maxDuration = 120
 
@@ -22,6 +22,7 @@ const bodySchema = z.object({
   modello: z.string().optional(),
   maxPassi: z.number().int().min(1).max(24).optional(),
   riservato: z.boolean().optional(),
+  focus: z.string().regex(/^[a-z]+:.+/).optional(),
 })
 
 export async function POST(req: Request) {

@@ -8,7 +8,7 @@
 import { z } from 'zod'
 import { searchMemories, searchVault } from '@/lib/vault'
 import type { AgentToolDef } from './tools'
-import { actionTool, clientGet, ideaList, postList, postUpdate } from '@/lib/kernel'
+import { actionTool, clientContext, clientGet, graphRelated, graphSearch, ideaList, postList, postUpdate } from '@/lib/kernel'
 
 /* ── dal nucleo (K1) ───────────────────────────────────────────────────── */
 
@@ -19,6 +19,10 @@ export const readEditorialPlan = actionTool(postList)
 export const updateEditorialPost = actionTool(postUpdate)
 export const listIdeas = actionTool(ideaList)
 export const getClient = actionTool(clientGet)
+// K3: il contesto si va a prendere (grafo), non si incolla tutto nel prompt
+export const searchGraphTool = actionTool(graphSearch)
+export const relatedTool = actionTool(graphRelated)
+export const clientContextTool = actionTool(clientContext)
 
 /* ── piano di lavoro ───────────────────────────────────────────────────── */
 
@@ -89,4 +93,4 @@ export const directDesign: AgentToolDef<typeof directDesignSchema> = {
   },
 }
 
-export const SYSTEM_TOOLS = [updatePlan, readEditorialPlan, updateEditorialPost, listIdeas, getClient, searchMemory, directDesign] as unknown as AgentToolDef<z.ZodTypeAny>[]
+export const SYSTEM_TOOLS = [updatePlan, readEditorialPlan, updateEditorialPost, listIdeas, getClient, searchGraphTool, relatedTool, clientContextTool, searchMemory, directDesign] as unknown as AgentToolDef<z.ZodTypeAny>[]

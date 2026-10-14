@@ -66,7 +66,7 @@ export function Ask({ onClose }: { onClose: () => void }) {
   const doIt = (compito: string) => {
     const st = useOs.getState()
     st.say('Ci lavoro…')
-    fetch('/api/ai/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compito, contesto: node ? `Sto guardando: ${node.title ?? here.ref} (${here.ref})` : undefined, maxPassi: 10 }) })
+    fetch('/api/ai/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compito, focus: here.ref && !here.ref.startsWith('list:') ? here.ref : undefined, maxPassi: 10 }) })
       .then(r => r.json())
       .then((j: { ok?: boolean; testo?: string; error?: string; proposte?: { strumento: string }[] }) => {
         if (j.error) { st.say(j.error, true); return }
