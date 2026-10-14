@@ -7,16 +7,19 @@
  *   - i modelli vengono dal registro (scelta dell'utente, poi gli altri
  *     fornitori); con quota finita, errore del servizio o modello che gira a
  *     vuoto (rilevatore di ripetizioni) si passa al successivo;
+ *   - A1: una chiamata scritta male (come testo, JSON rotto, nome con prefisso)
+ *     si ripara e si esegue; il modello si cambia solo dopo due riparazioni fallite;
  *   - senza interfaccia nessuno può confermare: gli strumenti distruttivi (e le
  *     scritture che chiedono conferma, come la fattura) non vengono eseguiti ma
  *     restituiti come proposte, che il chiamante mostra all'utente.
  */
-import { generateText, stepCountIs } from 'ai'
+import { generateText, stepCountIs, type ModelMessage, type StepResult, type ToolSet } from 'ai'
 import type { z } from 'zod'
 import { candidatesFor, noteFailure, type ModelCandidate } from '@/lib/ai/model-registry'
 import type { AiTask } from '@/lib/ai/model-provider'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef, type ToolGroup } from './tools'
 import { createTrace } from './trace'
+import { createRepairBudget, createToolCallRepair, parseTextToolCalls } from './repair'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
 import { CORE_TOOLS } from './core-tools'
 import { SYSTEM_TOOLS } from './system-tools'
@@ -136,7 +139,12 @@ function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[]): Def[
 
 /** Chiamate a strumento scritte nel testo (`<default_api:readTasks …>`, `<tool_call>`, `print(default_api.…)`): il segno di un modello che non usa gli strumenti nativi. */
 export function looksLikeTextToolCall(text: string): boolean {
-  return /<\s*(default_api:|tool_call\b|function_call\b)|```tool_code|\bprint\(default_api\./i.test(text)
+  return parseTextToolCalls(text, []).scritte
+}
+
+/** Chiamate che l'AI SDK non è riuscito a leggere nemmeno dopo la riparazione. */
+export function invalidCalls(steps: StepResult<ToolSet>[]): number {
+  return steps.reduce((n, s) => n + s.toolCalls.filter(t => (t as { invalid?: boolean }).invalid).length, 0)
 }
 
 export function agentSystemPrompt(defs: Def[], now: Date): string {
@@ -165,33 +173,74 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     return { ok: false, testo: 'Nessun modello con strumenti disponibile: aggiungi ANTHROPIC_API_KEY o GEMINI_API_KEY, oppure collega OpenRouter.', modello: '—', passi: 0, chiamate, proposte, log }
   }
 
+  const maxPassi = input.maxPassi ?? 12
   for (const c of lista) {
     const trace = createTrace(`runAgent ${c.label}`)
     const ac = new AbortController()
     let stallo = false
     const guard = createRepeatGuard(name => { stallo = true; log.push(`${c.label}: ripete ${name} a vuoto, passo al modello successivo`); ac.abort() })
+    const tools = buildToolSet(defs, trace, guard)
+    const names = Object.keys(tools)
+    const budget = createRepairBudget(2)
+    const repair = createToolCallRepair(budget, s => log.push(`${c.label}: ${s}`))
+    const messages: ModelMessage[] = [{ role: 'user', content: prompt }]
+    const usage = { input: 0, cached: 0, output: 0 }
+    let passi = 0
+    let fallitePrima = 0
+    // se il chiamante ha già scelto gruppi o strumenti vale la sua scelta; altrimenti ai deboli il sottoinsieme di base
+    const activeTools = input.pagina && !input.gruppi?.length && !input.strumenti?.length ? toolsForContext(defs, { strength: c.profile.strength, pathname: input.pagina, always: ['updatePlan'] }) : undefined
     try {
-      const r = await generateText({
-        model: c.model,
-        system,
-        prompt,
-        tools: buildToolSet(defs, trace, guard),
-        // se il chiamante ha già scelto gruppi o strumenti vale la sua scelta; altrimenti ai deboli il sottoinsieme di base
-        activeTools: (input.pagina && !input.gruppi?.length && !input.strumenti?.length ? toolsForContext(defs, { strength: c.profile.strength, pathname: input.pagina, always: ['updatePlan'] }) : undefined) as never,
-        // lo stallo ferma il giro anche se il fornitore ignora l'abort (si controlla tra un passo e l'altro)
-        stopWhen: [stepCountIs(input.maxPassi ?? 12), () => stallo],
-        abortSignal: ac.signal,
-        maxRetries: 0,
-      })
-      if (stallo) continue
-      // modello che scrive la chiamata come testo invece di usare lo strumento: si passa al successivo
-      if (!r.steps.some(s => s.toolCalls.length) && looksLikeTextToolCall(r.text)) {
-        log.push(`${c.label}: ha scritto la chiamata come testo invece di usare lo strumento, passo al modello successivo`)
-        continue
+      while (passi < maxPassi) {
+        const r = await generateText({
+          model: c.model,
+          system,
+          messages,
+          tools,
+          activeTools: activeTools as never,
+          experimental_repairToolCall: repair,
+          // lo stallo ferma il giro anche se il fornitore ignora l'abort (si controlla tra un passo e l'altro);
+          // anche due chiamate illeggibili fermano il giro
+          stopWhen: [stepCountIs(maxPassi - passi), () => stallo, ({ steps }) => fallitePrima + invalidCalls(steps as never) >= 2],
+          abortSignal: ac.signal,
+          maxRetries: 0,
+        })
+        passi += r.steps.length
+        usage.input += r.totalUsage.inputTokens ?? 0
+        usage.cached += r.totalUsage.cachedInputTokens ?? 0
+        usage.output += r.totalUsage.outputTokens ?? 0
+        if (stallo) break
+        budget.fallite = fallitePrima + invalidCalls(r.steps as never)
+        fallitePrima = budget.fallite
+        if (budget.esaurito) { log.push(`${c.label}: due chiamate illeggibili anche dopo la riparazione, passo al modello successivo`); break }
+        messages.push(...r.response.messages)
+
+        // A1: chiamate scritte come testo → si leggono e si eseguono qui, poi il giro riprende
+        const scritte = parseTextToolCalls(r.text, names)
+        if (scritte.scritte) {
+          if (!scritte.chiamate.length) {
+            budget.ko()
+            fallitePrima = budget.fallite
+            if (budget.esaurito) { log.push(`${c.label}: chiamate scritte come testo e illeggibili due volte, passo al modello successivo`); break }
+            log.push(`${c.label}: chiamata scritta come testo e illeggibile, chiedo di riprovare`)
+            messages.push({ role: 'user', content: `<promemoria>Hai scritto una chiamata a strumento come testo e non si riesce a leggerla. Usa gli strumenti nativi (function calling), con i nomi esatti: ${names.join(', ')}.</promemoria>` })
+            continue
+          }
+          const risultati: string[] = []
+          for (const [i, t] of scritte.chiamate.entries()) {
+            const out = await tools[t.toolName].execute!(t.input, { toolCallId: `testo-${passi}-${i}`, messages })
+            risultati.push(`- ${t.toolName} ${JSON.stringify(t.input)} → ${JSON.stringify(out)}`)
+          }
+          if (stallo) break
+          budget.ok()
+          log.push(`${c.label}: riparate ${scritte.chiamate.length} chiamate scritte come testo`)
+          messages.push({ role: 'user', content: `<promemoria>Hai scritto le chiamate come testo invece di usare gli strumenti: le ho lette ed eseguite io.\n${risultati.join('\n')}\nContinua il compito usando gli strumenti nativi (function calling), non il testo.</promemoria>` })
+          continue
+        }
+        trace.finish({ steps: passi, inputTokens: usage.input, cachedInputTokens: usage.cached, outputTokens: usage.output })
+        log.push(`${c.label}: ${passi} passi${budget.riuscite ? ` · ${budget.riuscite} riparazioni` : ''}`)
+        return { ok: true, testo: r.text.trim(), modello: c.label, passi, chiamate, proposte, log, token: usage }
       }
-      trace.finish({ steps: r.steps.length, inputTokens: r.totalUsage.inputTokens, cachedInputTokens: r.totalUsage.cachedInputTokens, outputTokens: r.totalUsage.outputTokens })
-      log.push(`${c.label}: ${r.steps.length} passi`)
-      return { ok: true, testo: r.text.trim(), modello: c.label, passi: r.steps.length, chiamate, proposte, log, token: { input: r.totalUsage.inputTokens ?? 0, cached: r.totalUsage.cachedInputTokens ?? 0, output: r.totalUsage.outputTokens ?? 0 } }
+      if (passi >= maxPassi && !stallo && !budget.esaurito) log.push(`${c.label}: passi finiti (${maxPassi}) senza chiudere, passo al modello successivo`)
     } catch (e) {
       if (stallo) continue
       const kind = noteFailure(c, e)

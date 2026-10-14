@@ -201,12 +201,13 @@ test('looksLikeTextToolCall riconosce le chiamate scritte come testo', async () 
   assert.equal(looksLikeTextToolCall('Hai tre incarichi in scadenza.'), false)
 })
 
-test('runAgent: chi scrive la chiamata come testo viene sostituito', async () => {
+test('runAgent: la chiamata scritta come testo si ripara; chi la ripete a vuoto viene sostituito (A1)', async () => {
   const pigro = finto('pigro', [step([{ type: 'text', text: 'Controllo. <default_api:readTasks status="todo">' }], 'stop')])
   const bravo = finto('bravo2', [step([{ type: 'text', text: 'Nessun incarico in scadenza.' }], 'stop')])
   const r = await runAgent({ compito: 'quali incarichi ho?', candidati: [pigro, bravo] })
   assert.equal(r.modello, 'bravo2')
-  assert.ok(r.log.some(l => /pigro: ha scritto la chiamata come testo/.test(l)))
+  assert.ok(r.log.some(l => /pigro: riparate 1 chiamate scritte come testo/.test(l)))
+  assert.ok(r.log.some(l => /pigro: ripete readTasks a vuoto/.test(l)))
 })
 
 test('profili: "gemini" non è un modello mini; le taglie contano solo come parti del nome', () => {

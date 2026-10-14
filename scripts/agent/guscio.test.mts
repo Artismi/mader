@@ -220,3 +220,93 @@ test('updatePlan: un solo passo in corso', () => {
   assert.equal(ok.avanzamento, '1/2')
   assert.equal(ok.prossimo, 'b')
 })
+
+/* ── A1: riparare, non sostituire ─────────────────────────────────────── */
+
+const rep = await import('../../src/lib/agent/repair')
+const { runAgent } = await import('../../src/lib/agent/run')
+const { MockLanguageModelV3 } = await import('ai/test')
+const reg = await import('../../src/lib/ai/model-registry')
+
+test('repairJson: apici, chiavi nude, True/None, virgole finali, parentesi aperte, recinti', () => {
+  assert.deepEqual(rep.repairJson(`{'a': 'l"x', b: True, c: None, d: [1, 2,],}`), { a: 'l"x', b: true, c: null, d: [1, 2] })
+  assert.deepEqual(rep.repairJson('```json\n{"titolo": "Notte", "n": 3'), { titolo: 'Notte', n: 3 })
+  assert.deepEqual(rep.repairJson('ecco: {"a": 1} e poi altro testo'), { a: 1 })
+  assert.equal(rep.repairJson('niente qui'), undefined)
+})
+
+test('parseHermes legge <tool_call> con arguments oggetto o stringa', () => {
+  const c = rep.parseHermes('ok <tool_call>{"name": "createIdea", "arguments": {"title": "X"}}</tool_call> e <tool_call>{"name":"readTasks","arguments":"{\\"status\\": \\"todo\\"}"}</tool_call>')
+  assert.deepEqual(c, [{ toolName: 'createIdea', input: { title: 'X' } }, { toolName: 'readTasks', input: { status: 'todo' } }])
+})
+
+test('parseGemini legge <default_api:…/> e print(default_api.…)', () => {
+  assert.deepEqual(rep.parseGemini('<default_api:readTasks status="todo" limit="5"/>'), [{ toolName: 'readTasks', input: { status: 'todo', limit: 5 } }])
+  assert.deepEqual(rep.parseGemini('```tool_code\nprint(default_api.createIdea(title="Dal tornio", platforms=["instagram"], urgent=True))\n```'),
+    [{ toolName: 'createIdea', input: { title: 'Dal tornio', platforms: ['instagram'], urgent: true } }])
+})
+
+test('parseTextToolCalls tiene solo strumenti esistenti, con il nome giusto', () => {
+  const r = rep.parseTextToolCalls('<tool_call>{"name":"default_api:CREATEIDEA","arguments":{}}</tool_call><tool_call>{"name":"inventato","arguments":{}}</tool_call>', ['createIdea'])
+  assert.equal(r.scritte, true)
+  assert.deepEqual(r.chiamate, [{ toolName: 'createIdea', input: {} }])
+  assert.equal(rep.parseTextToolCalls('nessuna chiamata qui', ['createIdea']).scritte, false)
+})
+
+test('createToolCallRepair: nome con prefisso e JSON rotto; null se non si ripara', async () => {
+  const { NoSuchToolError, InvalidToolInputError } = await import('ai')
+  const budget = rep.createRepairBudget()
+  const fix = rep.createToolCallRepair(budget)
+  const tools = { createIdea: {} } as never
+  const base = { type: 'tool-call' as const, toolCallId: '1' }
+  const a = await fix({ toolCall: { ...base, toolName: 'default_api:createIdea', input: "{title: 'X'}" }, tools, error: new NoSuchToolError({ toolName: 'default_api:createIdea' }) } as never)
+  assert.deepEqual([a?.toolName, JSON.parse(a!.input)], ['createIdea', { title: 'X' }])
+  const b = await fix({ toolCall: { ...base, toolName: 'createIdea', input: '{"title": "Y",' }, tools, error: new InvalidToolInputError({ toolName: 'createIdea', toolInput: '', cause: new Error('x') }) } as never)
+  assert.deepEqual(JSON.parse(b!.input), { title: 'Y' })
+  const c = await fix({ toolCall: { ...base, toolName: 'boh', input: '{}' }, tools, error: new NoSuchToolError({ toolName: 'boh' }) } as never)
+  assert.equal(c, null)
+  assert.equal(budget.riuscite, 2)
+})
+
+/* banco finto: un modello che risponde a copione, uno strumento di scrittura che registra */
+const usoFinto = { inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 5, text: 5, reasoning: 0 } }
+const passo = (content: unknown[], unified: 'tool-calls' | 'stop' = 'stop') => ({ content, finishReason: { unified, raw: unified }, usage: usoFinto, warnings: [] })
+const testo = (t: string) => passo([{ type: 'text', text: t }])
+const chiama = (toolName: string, input: unknown, id = '1') => passo([{ type: 'tool-call', toolCallId: id, toolName, input: typeof input === 'string' ? input : JSON.stringify(input) }], 'tool-calls')
+function copione(label: string, risposte: ReturnType<typeof passo>[], visti?: Record<string, unknown>[]) {
+  let i = 0
+  const model = new MockLanguageModelV3({ modelId: label, doGenerate: async (o: Record<string, unknown>) => { visti?.push(o); return risposte[Math.min(i++, risposte.length - 1)] as never } })
+  return { id: `mock:${label}`, provider: 'anthropic' as const, modelId: label, label, model, profile: reg.profileOf('anthropic', 'claude-sonnet-5-5') }
+}
+function salvaDef(salvati: unknown[]) {
+  return { name: 'salvaNota', group: 'memoria', risk: 'write', description: 'salva una nota', inputSchema: z.object({ testo: z.string() }), execute: ({ testo }: { testo: string }) => { salvati.push(testo); return { success: true, id: `n${salvati.length}` } } } as never
+}
+
+test('runAgent esegue la chiamata scritta come testo e continua con lo stesso modello', async () => {
+  const salvati: unknown[] = []
+  const r = await runAgent({ compito: 'nota "ciao"', defs: [salvaDef(salvati)], candidati: [
+    copione('debole', [testo('<tool_call>{"name": "salvaNota", "arguments": {"testo": "ciao"}}</tool_call>'), testo('Nota n1 a posto.')]),
+    copione('caro', [testo('non dovrei servire')]),
+  ] })
+  assert.equal(r.ok, true)
+  assert.equal(r.modello, 'debole')
+  assert.deepEqual(salvati, ['ciao'])
+  assert.ok(r.log.some(l => /riparate 1/.test(l)))
+})
+
+test('runAgent cambia modello solo dopo due riparazioni fallite', async () => {
+  const r = await runAgent({ compito: 'nota', defs: [salvaDef([])], candidati: [
+    copione('confuso', [testo('<tool_call>non si legge</tool_call>'), testo('<tool_call>ancora no</tool_call>')]),
+    copione('bravo', [testo('Nessuna nota da salvare.')]),
+  ] })
+  assert.equal(r.modello, 'bravo')
+  assert.ok(r.log.some(l => /confuso: chiamata scritta come testo e illeggibile, chiedo/.test(l)))
+  assert.ok(r.log.some(l => /illeggibili due volte/.test(l)))
+})
+
+test('runAgent ripara nome e JSON rotto di una chiamata nativa', async () => {
+  const salvati: unknown[] = []
+  const r = await runAgent({ compito: 'nota "x"', defs: [salvaDef(salvati)], candidati: [copione('debole', [chiama('default_api:salvaNota', "{testo: 'x',}"), testo('Nota n1.')])] })
+  assert.equal(r.modello, 'debole')
+  assert.deepEqual(salvati, ['x'])
+})

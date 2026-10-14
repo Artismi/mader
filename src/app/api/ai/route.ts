@@ -7,6 +7,7 @@ import { messageText, routeOnDemandSkills } from '@/lib/ai/skill-router'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@/lib/agent/tools'
 import { toolsForContext } from '@/lib/agent/run'
 import { createTrace } from '@/lib/agent/trace'
+import { createToolCallRepair } from '@/lib/agent/repair'
 import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
 import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
 import { SYSTEM_TOOLS } from '@/lib/agent/system-tools'
@@ -932,6 +933,8 @@ QUANTITÀ BOARD:
         },
       },
       tools: buildToolSet(defs, trace, createRepeatGuard()),
+      // A1: nome con prefisso o JSON rotto si ripara a regole invece di fallire
+      experimental_repairToolCall: createToolCallRepair(undefined, s => console.log(`[agente] ${modelLabel}: ${s}`)),
       // ai modelli deboli un sottoinsieme fisso di strumenti per la pagina aperta
       activeTools: toolsForContext(defs, { strength: profile.strength, pathname, always: ['loadSkill', 'getCanvasState', 'composeDesign', 'editDesign', 'updateCanvasElements'] }) as never,
       onFinish: ({ steps, totalUsage }) => {
