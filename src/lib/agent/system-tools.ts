@@ -30,12 +30,17 @@ export const planSchema = z.object({
   passi: z.array(z.object({
     testo: z.string().describe('passo breve, all\'imperativo'),
     stato: z.enum(['da_fare', 'in_corso', 'fatto']),
+    // A3: il contratto del compito; a fine lavoro il codice confronta le voci con il registro delle prove
+    prova: z.object({
+      strumento: z.string().describe('strumento di scrittura che dimostra il passo'),
+      almeno: z.number().int().min(1).optional().describe('quante volte deve riuscire (default 1)'),
+    }).optional().describe('facoltativo: come si dimostra il passo, es. {"strumento":"updateEditorialPost","almeno":3}'),
   })).min(1).max(15),
 })
 
 export const updatePlan: AgentToolDef<typeof planSchema> = {
   name: 'updatePlan', group: 'piano', risk: 'read', maxChars: 3000,
-  description: 'Scrive o aggiorna il piano di lavoro per un compito in più fasi (più di tre azioni). Manda ogni volta la lista intera; un solo passo "in_corso" alla volta. L\'utente vede la lista in chat. Non serve per domande semplici.',
+  description: 'Scrive o aggiorna il piano di lavoro per un compito in più fasi (più di tre azioni). Manda ogni volta la lista intera; un solo passo "in_corso" alla volta. L\'utente vede la lista in chat. Non serve per domande semplici. Il piano è un contratto: chiudi solo quando ogni passo è "fatto" e le scritture risultano riuscite.',
   inputSchema: planSchema,
   verify: ({ passi }) => {
     const inCorso = passi.filter(p => p.stato === 'in_corso').length

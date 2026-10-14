@@ -6,7 +6,7 @@
  */
 export interface Trace {
   tool(name: string, ms: number, ok: boolean): void
-  finish(info: { steps: number; inputTokens?: number; cachedInputTokens?: number; outputTokens?: number; compacted?: string }): void
+  finish(info: { steps: number; inputTokens?: number; cachedInputTokens?: number; outputTokens?: number; compacted?: string; prove?: string }): void
 }
 
 export function createTrace(label: string): Trace {
@@ -14,10 +14,10 @@ export function createTrace(label: string): Trace {
   const calls: { name: string; ms: number; ok: boolean }[] = []
   return {
     tool(name, ms, ok) { calls.push({ name, ms, ok }) },
-    finish({ steps, inputTokens = 0, cachedInputTokens = 0, outputTokens = 0, compacted }) {
+    finish({ steps, inputTokens = 0, cachedInputTokens = 0, outputTokens = 0, compacted, prove }) {
       const cache = inputTokens ? Math.round((cachedInputTokens / inputTokens) * 100) : 0
       const tools = calls.map(c => `${c.name}${c.ok ? '' : '✗'}(${c.ms}ms)`).join(' ') || '—'
-      console.log(`[agente] ${label} · ${steps} passi · in ${inputTokens} (cache ${cache}%) · out ${outputTokens} · ${((Date.now() - t0) / 1000).toFixed(1)}s${compacted ? ` · ${compacted}` : ''} · strumenti: ${tools}`)
+      console.log(`[agente] ${label} · ${steps} passi · in ${inputTokens} (cache ${cache}%) · out ${outputTokens} · ${((Date.now() - t0) / 1000).toFixed(1)}s${compacted ? ` · ${compacted}` : ''} · strumenti: ${tools}${prove ? ` · prove: ${prove}` : ''}`)
     },
   }
 }

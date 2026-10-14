@@ -334,10 +334,10 @@ test('phaseOf: leggere → scrivere → verificare → chiudere', () => {
 test('prepareStep: required solo al primo passo di un\'azione; fase in coda senza toccare il prefisso', async () => {
   const prep = steer.createPrepareStep({ azione: true, risks: { leggi: 'read' } })
   const msgs = [{ role: 'user', content: 'crea' }] as never[]
-  const p0 = await prep({ stepNumber: 0, steps: [], messages: msgs } as never)
+  const p0 = (await prep({ stepNumber: 0, steps: [], messages: msgs } as never))!
   assert.equal(p0.toolChoice, 'required')
   assert.equal(p0.messages, undefined)
-  const p1 = await prep({ stepNumber: 1, steps: [], messages: msgs } as never)
+  const p1 = (await prep({ stepNumber: 1, steps: [], messages: msgs } as never))!
   assert.equal(p1.toolChoice, undefined)
   assert.deepEqual(p1.messages!.slice(0, 1), msgs)
   assert.match(String(p1.messages!.at(-1)!.content), /^<promemoria>fase: leggere/)
@@ -355,4 +355,75 @@ test('runAgent: strumento obbligatorio al primo passo e esecutore dal secondo', 
   assert.equal(visti.length, 1)
   assert.equal(vistiEsec.length, 1)
   assert.match(JSON.stringify(vistiEsec[0].prompt), /fase: verificare/)
+})
+
+/* ── A3: chiudere solo con le prove ───────────────────────────────────── */
+
+const ev = await import('../../src/lib/agent/evidence')
+
+test('objectsOf/provaOf: successo per oggetto, non per chiamata', () => {
+  assert.deepEqual(ev.objectsOf('x', { success: true, id: 'a' }), { oggetti: ['a'], falliti: 0 })
+  assert.deepEqual(ev.objectsOf('slot', { success: true, count: 2 }), { oggetti: ['slot#1', 'slot#2'], falliti: 0 })
+  const p = ev.provaOf('sposta', 'write', {}, { success: true, ids: ['a', 'b'], errori: ['c', 'd', 'e'] })
+  assert.equal(p.esito, 'parziale')
+  assert.equal(ev.provaOf('sposta', 'write', {}, { success: false, error: 'no' }).esito, 'errore')
+})
+
+test('checkClosure: promessa senza azione, conteggio, piano non finito, voce con prova', () => {
+  const scritto = (id: string) => ({ strumento: 'salvaNota', rischio: 'write' as const, esito: 'ok' as const, oggetti: [id] })
+  assert.match(ev.checkClosure({ prove: [], testo: 'Ho programmato i post.', azione: true })[0], /nessuna scrittura riuscita/)
+  assert.deepEqual(ev.checkClosure({ prove: [], testo: 'Non ho creato niente: mancano le date.', azione: true }), [])
+  assert.deepEqual(ev.checkClosure({ prove: [], testo: 'Ho creato tre varianti qui sotto.' }), [], 'richiesta solo di testo: niente rilevatore')
+  assert.match(ev.checkClosure({ prove: [scritto('a')], testo: 'Ho programmato 3 post.', azione: true })[0], /ne risulta 1/)
+  const piano = { strumento: 'updatePlan', rischio: 'read' as const, esito: 'ok' as const, input: { passi: [
+    { testo: 'leggi il piano', stato: 'fatto' },
+    { testo: 'programma i post', stato: 'fatto', prova: { strumento: 'salvaNota', almeno: 2 } },
+    { testo: 'avvisa il cliente', stato: 'da_fare' },
+  ] } }
+  const m = ev.checkClosure({ prove: [piano, scritto('a')], testo: 'Fatto.' })
+  assert.equal(m.length, 2)
+  assert.match(m.join('|'), /risultano 1 salvaNota riusciti, ne servono 2/)
+  assert.match(m.join('|'), /«avvisa il cliente» del piano è ancora «da_fare»/)
+  assert.deepEqual(ev.checkClosure({ prove: [{ ...piano, input: { passi: [{ testo: 'programma', stato: 'fatto', prova: { strumento: 'salvaNota', almeno: 2 } }] } }, scritto('a'), scritto('b')], testo: 'Ho programmato 2 post.' }), [])
+  const parziale = { strumento: 'sposta', rischio: 'write' as const, esito: 'parziale' as const, oggetti: ['a', 'b'], falliti: 3 }
+  assert.match(ev.checkClosure({ prove: [parziale], testo: 'Spostati.' })[0], /riuscito su 2 elementi, 3 non riusciti/)
+  assert.deepEqual(ev.checkClosure({ prove: [parziale], testo: 'Spostati 2; 3 non sono riusciti.' }), [])
+})
+
+test('runAgent: promessa senza azione → riprende con il motivo e chiude quando le prove ci sono', async () => {
+  const salvati: unknown[] = []
+  const visti: Record<string, unknown>[] = []
+  const r = await runAgent({ compito: 'salva la nota "ciao"', defs: [salvaDef(salvati)], candidati: [copione('pigro', [
+    testo('Ho salvato la nota.'),
+    chiama('salvaNota', { testo: 'ciao' }),
+    testo('Ho salvato la nota (n1).'),
+  ], visti)] })
+  assert.equal(r.ok, true)
+  assert.equal(r.modello, 'pigro')
+  assert.deepEqual(salvati, ['ciao'])
+  assert.ok(r.log.some(l => /chiusura senza prove \(1\/3\)/.test(l)))
+  assert.match(JSON.stringify(visti[1].prompt), /Non chiudere ancora/)
+  assert.equal(r.chiamate[0].rischio, 'write')
+  assert.deepEqual(r.chiamate[0].oggetti, ['n1'])
+})
+
+test('runAgent: dopo tre riprese senza prove passa al modello successivo con il registro', async () => {
+  const salvati: unknown[] = []
+  const visti: Record<string, unknown>[] = []
+  const r = await runAgent({ compito: 'salva le note "a" e "b"', defs: [salvaDef(salvati)], candidati: [
+    copione('bugiardo', [chiama('salvaNota', { testo: 'a' }), testo('Ho salvato 2 note.')]),
+    copione('onesto', [chiama('salvaNota', { testo: 'b' }), testo('Ho salvato 2 note (n1, n2).')], visti),
+  ] })
+  assert.equal(r.ok, true)
+  assert.equal(r.modello, 'onesto')
+  assert.ok(r.log.some(l => /bugiardo: tre riprese senza prove/.test(l)))
+  assert.match(JSON.stringify(visti[0].prompt), /<registro>.*salvaNota: ok \(n1\)/)
+  assert.deepEqual(salvati, ['a', 'b'])
+})
+
+test('runAgent: se nessuno chiude con le prove restituisce l\'ultima risposta come non riuscita', async () => {
+  const r = await runAgent({ compito: 'salva la nota', defs: [salvaDef([])], candidati: [copione('solo', [testo('Ho salvato la nota.')])] })
+  assert.equal(r.ok, false)
+  assert.equal(r.testo, 'Ho salvato la nota.')
+  assert.equal(r.modello, 'solo')
 })

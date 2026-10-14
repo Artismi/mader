@@ -11,6 +11,9 @@
  *     si ripara e si esegue; il modello si cambia solo dopo due riparazioni fallite;
  *   - A2: regia per passo (steer.ts): strumento obbligatorio al primo passo se il
  *     compito è un'azione, fase nel promemoria, esecutore diverso dal pianificatore;
+ *   - A3: si chiude solo con le prove (evidence.ts): se il registro non conferma
+ *     piano e risposta il giro riprende con il motivo, al massimo 3 volte, poi il
+ *     compito passa al modello successivo insieme al registro;
  *   - senza interfaccia nessuno può confermare: gli strumenti distruttivi (e le
  *     scritture che chiedono conferma, come la fattura) non vengono eseguiti ma
  *     restituiti come proposte, che il chiamante mostra all'utente.
@@ -23,6 +26,8 @@ import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef, type Too
 import { createTrace } from './trace'
 import { createRepairBudget, createToolCallRepair, parseTextToolCalls } from './repair'
 import { createPrepareStep, isActionRequest, risksOf } from './steer'
+import { checkClosure, provaOf, registroText, type EsitoProva } from './evidence'
+import type { Risk } from './tools'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
 import { CORE_TOOLS } from './core-tools'
 import { SYSTEM_TOOLS } from './system-tools'
@@ -82,7 +87,8 @@ export interface RunAgentInput {
   now?: Date
 }
 
-export interface Chiamata { strumento: string; input: unknown; esito: 'ok' | 'errore' | 'proposta' | 'respinta'; motivo?: string }
+/** Una voce del registro delle prove (A3): esito per chiamata, oggetti toccati, elementi falliti. */
+export interface Chiamata { strumento: string; input: unknown; esito: EsitoProva; motivo?: string; rischio?: Risk; oggetti?: string[]; falliti?: number }
 export interface Proposta { strumento: string; input: unknown; motivo: string }
 
 export interface RunAgentResult {
@@ -117,7 +123,7 @@ function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[]): Def[
     // anche i rifiuti della maestra vanno registrati, con il motivo: servono a capire i fallimenti (banco G6)
     verify: d.verify ? async (input: unknown) => {
       const problems = (await d.verify!(input as never)) ?? []
-      if (problems.length) chiamate.push({ strumento: d.name, input, esito: 'respinta', motivo: problems.join(' | ').slice(0, 300) })
+      if (problems.length) chiamate.push({ strumento: d.name, input, esito: 'respinta', rischio: d.risk, motivo: problems.join(' | ').slice(0, 300) })
       return problems
     } : undefined,
     execute: async (input: unknown) => {
@@ -126,16 +132,15 @@ function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[]): Def[
       if (confirm) {
         const motivo = d.risk === 'destructive' ? 'azione distruttiva' : 'richiede la conferma dell\'utente'
         proposte.push({ strumento: d.name, input, motivo })
-        chiamate.push({ strumento: d.name, input, esito: 'proposta' })
+        chiamate.push({ strumento: d.name, input, esito: 'proposta', rischio: d.risk })
         return { success: false, proposta: true, message: `Non eseguito: ${motivo}. L'azione è registrata come proposta e l'utente la confermerà dall'interfaccia. Continua con il resto.` }
       }
       try {
         const out = await d.execute(input as never)
-        const failed = !!out && typeof out === 'object' && (out as { success?: boolean }).success === false
-        chiamate.push({ strumento: d.name, input, esito: failed ? 'errore' : 'ok' })
+        chiamate.push({ ...provaOf(d.name, d.risk, input, out), input })
         return out
       } catch (e) {
-        chiamate.push({ strumento: d.name, input, esito: 'errore' })
+        chiamate.push({ strumento: d.name, input, esito: 'errore', rischio: d.risk })
         throw e
       }
     },
@@ -180,6 +185,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
 
   const maxPassi = input.maxPassi ?? 12
   const risks = risksOf(defs)
+  const azione = isActionRequest(input.compito)
+  let ultimo: { testo: string; modello: string; passi: number; token: RunAgentResult['token'] } | undefined
   for (const c of lista) {
     const trace = createTrace(`runAgent ${c.label}`)
     const ac = new AbortController()
@@ -189,7 +196,10 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     const names = Object.keys(tools)
     const budget = createRepairBudget(2)
     const repair = createToolCallRepair(budget, s => log.push(`${c.label}: ${s}`))
-    const messages: ModelMessage[] = [{ role: 'user', content: prompt }]
+    // il modello successivo riceve il registro: non rifà quello che è già riuscito
+    const registro = registroText(chiamate)
+    const messages: ModelMessage[] = [{ role: 'user', content: registro ? `${prompt}\n\n${registro}` : prompt }]
+    let riprese = 0
     const usage = { input: 0, cached: 0, output: 0 }
     let passi = 0
     let fallitePrima = 0
@@ -206,7 +216,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
           activeTools: activeTools as never,
           experimental_repairToolCall: repair,
           prepareStep: createPrepareStep({
-            azione: giro === 0 && isActionRequest(input.compito),
+            azione: giro === 0 && azione,
             risks,
             active: activeTools,
             modelloPerPasso: input.esecutore ? (n => (n > 0 || giro > 0 ? input.esecutore!.model : undefined)) : undefined,
@@ -250,8 +260,17 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
           messages.push({ role: 'user', content: `<promemoria>Hai scritto le chiamate come testo invece di usare gli strumenti: le ho lette ed eseguite io.\n${risultati.join('\n')}\nContinua il compito usando gli strumenti nativi (function calling), non il testo.</promemoria>` })
           continue
         }
-        trace.finish({ steps: passi, inputTokens: usage.input, cachedInputTokens: usage.cached, outputTokens: usage.output })
-        log.push(`${c.label}: ${passi} passi${budget.riuscite ? ` · ${budget.riuscite} riparazioni` : ''}`)
+        // A3: chiude solo se il registro conferma piano e risposta
+        const motivi = checkClosure({ prove: chiamate, testo: r.text, azione })
+        if (motivi.length) {
+          ultimo = { testo: r.text.trim(), modello: c.label, passi, token: usage }
+          if (++riprese > 3) { log.push(`${c.label}: tre riprese senza prove, il compito passa al modello successivo con il registro`); break }
+          log.push(`${c.label}: chiusura senza prove (${riprese}/3): ${motivi[0]}`)
+          messages.push({ role: 'user', content: `<promemoria>Non chiudere ancora: il registro delle prove non conferma il lavoro.\n- ${motivi.join('\n- ')}\nContinua con gli strumenti, poi rispondi dicendo solo quello che risulta fatto.</promemoria>` })
+          continue
+        }
+        trace.finish({ steps: passi, inputTokens: usage.input, cachedInputTokens: usage.cached, outputTokens: usage.output, prove: `${chiamate.filter(x => x.rischio && x.rischio !== 'read' && x.esito === 'ok').length} scritture ok${riprese ? `, ${riprese} riprese` : ''}` })
+        log.push(`${c.label}: ${passi} passi${budget.riuscite ? ` · ${budget.riuscite} riparazioni` : ''}${riprese ? ` · ${riprese} riprese` : ''}`)
         return { ok: true, testo: r.text.trim(), modello: c.label, passi, chiamate, proposte, log, token: usage }
       }
       if (passi >= maxPassi && !stallo && !budget.esaurito) log.push(`${c.label}: passi finiti (${maxPassi}) senza chiudere, passo al modello successivo`)
@@ -261,5 +280,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       log.push(`${c.label}: ${kind} · ${String((e as Error)?.message ?? e).slice(0, 160)}`)
     }
   }
+  // nessuno ha chiuso con le prove: si restituisce l'ultima risposta, segnata come non riuscita
+  if (ultimo) return { ok: false, ...ultimo, chiamate, proposte, log }
   return { ok: false, testo: 'Nessun modello è riuscito a completare il compito.', modello: '—', passi: 0, chiamate, proposte, log }
 }

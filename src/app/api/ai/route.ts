@@ -9,6 +9,7 @@ import { toolsForContext } from '@/lib/agent/run'
 import { createTrace } from '@/lib/agent/trace'
 import { createToolCallRepair } from '@/lib/agent/repair'
 import { createPrepareStep, isActionRequest, risksOf } from '@/lib/agent/steer'
+import { checkClosure, proveFromSteps } from '@/lib/agent/evidence'
 import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
 import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
 import { SYSTEM_TOOLS } from '@/lib/agent/system-tools'
@@ -942,8 +943,11 @@ QUANTITÀ BOARD:
       activeTools: activeTools as never,
       // A2: strumento obbligatorio al primo passo se la richiesta è un'azione; fase nel promemoria
       prepareStep: createPrepareStep({ azione: messages[messages.length - 1]?.role === 'user' && isActionRequest(userQuery), risks: risksOf(defs), active: activeTools }),
-      onFinish: ({ steps, totalUsage }) => {
+      onFinish: ({ steps, totalUsage, text }) => {
+        // A3 in chat: in streaming non si riprende il giro; la traccia segna le chiusure senza prove
+        const motivi = checkClosure({ prove: proveFromSteps(steps as never, risksOf(defs)), testo: text, azione: isActionRequest(userQuery) })
         trace.finish({
+          prove: motivi.length ? `SENZA PROVE: ${motivi[0]}` : undefined,
           steps: steps.length,
           inputTokens: totalUsage.inputTokens,
           cachedInputTokens: totalUsage.cachedInputTokens,
