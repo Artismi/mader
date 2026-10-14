@@ -366,6 +366,75 @@ export function growth(ctx: Ctx, r: Rnd, seed: number, x: number, y: number, ang
   branch(x, y, angle, S * 0.035 * opts.weight, S * 0.2, opts.depth)
 }
 
+/**
+ * Albero vascolare rifinito: ogni ramo si assottiglia di continuo e i figli
+ * partono dalla larghezza che il padre ha in punta (niente grumi alle
+ * biforcazioni); le punte finiscono in ago; i rami che andrebbero ad accavallarsi
+ * con quelli già cresciuti vengono potati; sul tronco, anelli da vertebra.
+ * Chi chiama passa il risultato da un raccordo liquido per ammorbidire le forcelle.
+ */
+export function vessel(ctx: Ctx, r: Rnd, x: number, y: number, angle: number, S: number, opts: { depth: number; spread: number; weight: number; nodes: boolean; half?: number }) {
+  const cell = S * 0.01, grid = new Map<string, number>(), parentOf = new Map<number, number>()
+  const key = (px: number, py: number) => `${Math.floor(px / cell)},${Math.floor(py / cell)}`
+  // parente stretto: sé, un antenato o un fratello (che nasce dalla stessa forcella)
+  const kin = (a: number, b: number) => {
+    if (parentOf.get(a) === parentOf.get(b)) return true
+    for (let x = parentOf.get(a); x !== undefined; x = parentOf.get(x)) if (x === b) return true
+    return false
+  }
+  // occupato da un ramo estraneo entro una cella di distanza
+  const busy = (px: number, py: number, id: number) => {
+    const gx = Math.floor(px / cell), gy = Math.floor(py / cell)
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const v = grid.get(`${gx + dx},${gy + dy}`); if (v !== undefined && v !== id && !kin(id, v)) return true }
+    return false
+  }
+  let ids = 0
+  const branch = (x0: number, y0: number, a: number, w0: number, len: number, d: number, parent: number) => {
+    const id = ++ids
+    parentOf.set(id, parent)
+    // curva dolce: l'angolo ruota piano lungo il ramo, verso l'esterno e poi in su
+    const bend = d === opts.depth && opts.half !== undefined ? 0 : range(r, -0.35, 0.35) / len
+    const { pts, angles } = walk(x0, y0, a, len, t => bend * (1 - t), Math.max(1.5, S / 700))
+    // potatura: se oltre il primo quarto il ramo entra nello spazio di un altro, si ferma lì
+    let cut = pts.length
+    for (let i = Math.floor(pts.length * 0.25); i < pts.length; i++) {
+      const [px, py] = pts[i]
+      if (busy(px, py, id)) { cut = i; break }
+      if (opts.half !== undefined && d < opts.depth && px < opts.half - w0 * 0.15) { cut = i; break }
+    }
+    const P = pts.slice(0, Math.max(3, cut)), A = angles.slice(0, Math.max(3, cut))
+    const pruned = cut < pts.length
+    const w1 = d === 0 || pruned ? 0 : w0 * 0.7
+    taper(ctx, P, t => Math.max(0.6, w0 + (w1 - w0) * Math.pow(t, d === 0 || pruned ? 0.8 : 1)))
+    for (const [px, py] of P) { const k = key(px, py); if (!grid.has(k)) grid.set(k, id) }
+    // il tronco non finisce tagliato: sotto scende una radice che si chiude in punta
+    if (parent === 0) { const root = walk(x0, y0, a + Math.PI, len * 0.35, () => 0, Math.max(1.5, S / 700)).pts; taper(ctx, root, t => w0 * Math.pow(1 - t, 1.4)) }
+    // anelli da vertebra sul tronco e sui rami grossi
+    if (opts.nodes && d >= opts.depth - 1) {
+      const rings = Math.max(2, Math.round(len / (S * 0.035)))
+      for (let k = 1; k < rings; k++) {
+        const i = Math.floor((k / rings) * (P.length - 1)), t = i / (P.length - 1), ww = w0 + (w1 - w0) * t
+        ctx.beginPath(); ctx.ellipse(P[i][0], P[i][1], ww * 0.62, ww * 0.18, A[i] + Math.PI / 2, 0, Math.PI * 2); ctx.fill()
+      }
+    }
+    if (d === 0 || pruned) return
+    const [ex, ey] = P[P.length - 1], ea = A[A.length - 1]
+    const kids = d >= opts.depth - 1 && r() < 0.35 ? 3 : 2
+    for (let k = 0; k < kids; k++) {
+      const off = (k - (kids - 1) / 2) * opts.spread * range(r, 0.75, 1.15) * (kids === 3 ? 0.8 : 1)
+      // metà specchiata: i figli che puntano oltre l'asse li disegna lo specchio
+      if (opts.half !== undefined && ex < opts.half + w1 * 2 && Math.cos(ea + off) < 0.05) continue
+      branch(ex, ey, ea + off, w1 * (kids === 3 ? 0.8 : 0.9), len * range(r, 0.68, 0.82), d - 1, id)
+    }
+    // un ago laterale, corto e inclinato verso la punta
+    if (d <= 2 && r() < 0.55) {
+      const i = Math.floor(range(r, 0.35, 0.7) * (P.length - 1)), side = r() < 0.5 ? -1 : 1, t = i / (P.length - 1)
+      thorn(ctx, P[i][0], P[i][1], A[i] + side * range(r, 0.45, 0.8), len * range(r, 0.18, 0.3), (w0 + (w1 - w0) * t) * 0.7, side * 0.25)
+    }
+  }
+  branch(x, y, angle, S * 0.042 * opts.weight, S * 0.17, opts.depth, 0)
+}
+
 // ─── inchiostro ──────────────────────────────────────────────────────────────
 
 /**

@@ -8,7 +8,7 @@ import {
   newMask, noise2, polar, range, remap, rng, slices, smoothstep, stretch, text, xerox,
   type Ctx, type Face, type Mask, type Rnd,
 } from './raster'
-import { SILHOUETTES, band, flick, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, whip, type Pt } from './strokes'
+import { SILHOUETTES, band, flick, growth, vessel, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, whip, type Pt } from './strokes'
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, foam, membrane, neuralNet } from './organic'
 import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
@@ -424,15 +424,18 @@ const alieno: Recipe = {
   render: o => {
     const t = tone(o), S = SS(o), lay = num(o, 'layout')
     const opts = { depth: num(o, 'depth'), spread: num(o, 'spread') / 100, weight: num(o, 'weight') / 100, nodes: on(o, 'nodes') }
-    const m = drawMask(o.W, o.H, ctx => {
+    const raw = drawMask(o.W, o.H, ctx => {
       const cx = o.W / 2
-      if (lay === 0) mirrored(ctx, cx, () => growth(ctx, rng(o.seed), o.seed, cx, o.H * 0.84, -Math.PI / 2 - 0.25, S, opts))
+      // metà destra cresciuta e specchiata: la potatura non lascia passare la linea di mezzo
+      if (lay === 0) mirrored(ctx, cx, () => vessel(ctx, rng(o.seed), cx, o.H * 0.86, -Math.PI / 2, S, { ...opts, half: cx }))
       else if (lay === 1) {
         const n = 5 + (o.seed % 3)
-        for (let i = 0; i < n; i++) growth(ctx, rng(o.seed + 31), o.seed, cx, o.H / 2, (i / n) * Math.PI * 2, S * 0.78, { ...opts, depth: Math.max(2, opts.depth - 1) })
-        ctx.beginPath(); ctx.arc(cx, o.H / 2, S * 0.035 * opts.weight, 0, Math.PI * 2); ctx.fill()
-      } else mirrored(ctx, cx, () => growth(ctx, rng(o.seed), o.seed, cx, o.H * 0.14, Math.PI / 2 - 0.3, S, opts))
+        for (let i = 0; i < n; i++) vessel(ctx, rng(o.seed + 31 + i), cx, o.H / 2, (i / n) * Math.PI * 2 - Math.PI / 2, S * 0.78, { ...opts, depth: Math.max(2, opts.depth - 1) })
+        ctx.beginPath(); ctx.arc(cx, o.H / 2, S * 0.03 * opts.weight, 0, Math.PI * 2); ctx.fill()
+      } else mirrored(ctx, cx, () => vessel(ctx, rng(o.seed), cx, o.H * 0.12, Math.PI / 2, S, { ...opts, half: cx }))
     })
+    // raccordo: le forcelle diventano morbide come un getto unico, le punte restano aghi
+    const m = combine(raw, liquid(raw, S * 0.004, 0.5, 0.1), 'max')
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.01)
     return finish(c, o, t, 'alieno', ['XENO—FORM', code(o, 'xeno'), BRAND, 'BIOMECH'])
