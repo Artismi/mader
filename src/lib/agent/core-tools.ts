@@ -9,6 +9,8 @@ import { clients, editorialPosts, ideas, quotes, tasks } from '@/lib/db'
 import { instagramScores, labInputSchema, runLab } from '@/lib/ai/instagram'
 import { saveMemory } from '@/lib/vault'
 import type { AgentToolDef } from './tools'
+import { avvisiSocial, budget, clienteEsiste, dataIso, testoSocial, tutti } from './checks'
+import { findClient } from './system-tools'
 
 const taskSchema = z.object({
   title: z.string().describe("Il nome dell'incarico"),
@@ -37,6 +39,15 @@ const d = <S extends z.ZodTypeAny>(def: AgentToolDef<S>) => def as unknown as Ag
 
 export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
         d({ name: 'createTask', group: 'lavoro', risk: 'write',
+          verify: ({ title, deadlinePattern, clientId }) => tutti(
+            budget('title', title, 120, 3),
+            dataIso('deadlinePattern', deadlinePattern, { futura: true, obbligatoria: true }),
+            clienteEsiste('clientId', clientId),
+          ),
+          after: ({ title }, out) => {
+            const id = (out as { id?: string }).id
+            return id && tasks.getById(id)?.title === title ? [] : [`l'incarico "${title}" non risulta salvato: rileggi con readTasks prima di dire che è fatto.`]
+          },
           description: 'Crea un nuovo incarico nel sistema.',
           inputSchema: taskSchema,
           execute: async ({ title, category, deadlinePattern, clientId }: z.infer<typeof taskSchema>) => {
@@ -47,8 +58,10 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
               if (!isNaN(d.getTime())) parsedDate = d
             } catch { /* usa default */ }
 
-            tasks.create({
-              client_id: clientId,
+            // il modello può passare il nome o l'ID corto: nel database va l'ID completo
+            const client = clientId ? findClient(clientId) : undefined
+            const t = tasks.create({
+              client_id: client && !('error' in client) ? client.id : undefined,
               title,
               type: category,
               category: 'task',
@@ -59,11 +72,21 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
             return {
               success: true,
               message: `Incarico "${title}" creato per il ${parsedDate.toLocaleDateString('it-IT')}.`,
+              id: t?.id,
             }
           },
         }),
 
         d({ name: 'createRecurringEngagement', group: 'lavoro', risk: 'write',
+          verify: ({ title, days, startHour, endHour, startDate, endDate }) => tutti(
+            budget('title', title, 120, 3),
+            dataIso('startDate', startDate, { futura: true, obbligatoria: true }),
+            dataIso('endDate', endDate, { futura: true, obbligatoria: true }),
+            endDate < startDate ? ['endDate: viene prima di startDate.'] : [],
+            endHour <= startHour ? ['endHour: deve essere dopo startHour.'] : [],
+            (new Date(endDate).getTime() - new Date(startDate).getTime()) / 864e5 > 366 ? ["periodo: più di un anno di slot, chiedi conferma all'utente o accorcia."] : [],
+            days.length ? [] : ['days: indica almeno un giorno della settimana.'],
+          ),
           description: 'Crea slot ricorrenti per impegni fissi settimanali.',
           inputSchema: recurringSchema,
           execute: async ({ title, days, startHour, endHour, startDate, endDate }: z.infer<typeof recurringSchema>) => {
@@ -126,6 +149,11 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
         }),
 
         d({ name: 'updateTaskStatus', group: 'lavoro', risk: 'write',
+          verify: ({ taskId }) => taskId.length < 8 ? ['taskId: servono almeno gli 8 caratteri mostrati da readTasks.'] : tasks.getAll({ limit: 500 }).some(t => t.id.startsWith(taskId)) ? [] : [`taskId: l'incarico ${taskId} non esiste. Leggi gli ID con readTasks.`],
+          after: ({ taskId, newStatus }) => {
+            const t = tasks.getAll({ limit: 500 }).find(x => x.id.startsWith(taskId))
+            return t?.status === newStatus ? [] : [`lo stato dell'incarico ${taskId} risulta "${t?.status}", non "${newStatus}".`]
+          },
           description: 'Aggiorna lo stato di un incarico esistente.',
           inputSchema: z.object({
             taskId: z.string().describe('ID parziale del task (almeno 8 caratteri)'),
@@ -141,6 +169,11 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
         }),
 
         d({ name: 'createIdea', group: 'idee', risk: 'write',
+          verify: ({ text, title, clientId }) => tutti(budget('text', text, 2000, 5), budget('title', title, 120), clienteEsiste('clientId', clientId)),
+          after: (_i, out) => {
+            const id = (out as { id?: string }).id
+            return id && ideas.getAll().some(i => i.id === id) ? [] : ["l'idea non risulta salvata: rileggi con listIdeas."]
+          },
           description: 'Cattura una nuova idea creativa nel sistema.',
           inputSchema: z.object({
             text: z.string().describe("Il contenuto dell'idea"),
@@ -186,6 +219,20 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
         }),
 
         d({ name: 'saveInstagramDraft', group: 'social', risk: 'write',
+          verify: ({ client, title, content, format, scheduledAt, caption }) => tutti(
+            clienteEsiste('client', client, { obbligatorio: true }),
+            budget('title', title, 80, 3),
+            budget('content', content, 5000, 10),
+            dataIso('scheduledAt', scheduledAt, { futura: true }),
+            // la caption (o il contenuto di un post singolo) deve essere pronta: lint e testo non generato
+            testoSocial(caption ? 'caption' : 'content', caption ?? (format === 'post' ? content : undefined)),
+            budget('caption', caption, 2200),
+          ),
+          after: ({ caption, content, format }, out) => {
+            const id = (out as { postId?: string }).postId
+            const salvato = id && editorialPosts.getById(id) ? [] : ['il post non risulta nel piano editoriale: rileggi con readEditorialPlan.']
+            return [...salvato, ...avvisiSocial(caption ?? (format === 'post' ? content : undefined)).map(a => `da rivedere: ${a}`)]
+          },
           description: 'Salva un contenuto Instagram approvato dall\'utente nel piano editoriale (board Editoriale) con formato, formula hook e punteggi. Usalo SOLO dopo il "sì" dell\'utente. Non pubblica nulla.',
           inputSchema: z.object({
             client: z.string().describe('ID cliente (anche i primi 8 caratteri) o nome'),
@@ -224,6 +271,10 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
         }),
 
         d({ name: 'remember', group: 'memoria', risk: 'write',
+          verify: ({ content, contextType, contextId }) => tutti(
+            budget('content', content, 500, 5),
+            contextType === 'client' ? clienteEsiste('contextId', contextId, { obbligatorio: true }) : [],
+          ),
           description: 'Memorizza un fatto persistente o una preferenza del cliente nel sistema (Memory).',
           inputSchema: z.object({
             content: z.string().describe('Il fatto da ricordare'),
@@ -237,6 +288,13 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
         }),
 
         d({ name: 'createFinancialDocument', group: 'finanze', risk: 'write',
+          verify: ({ clientId, title, items }) => tutti(
+            clienteEsiste('clientId', clientId, { obbligatorio: true }),
+            budget('title', title, 120, 3),
+            items.length ? [] : ['items: serve almeno una voce.'],
+            items.some(i => i.unitPrice <= 0) ? ["items: ogni voce deve avere un prezzo maggiore di zero (chiedi all'utente se non lo sai)."] : [],
+            items.some(i => !i.desc?.trim()) ? ['items: ogni voce deve avere una descrizione.'] : [],
+          ),
           // la fattura ha valore fiscale: conferma dell'utente; il preventivo resta una bozza libera
           needsApproval: (i: { type: string }) => i.type === 'fattura',
           description: 'Crea un preventivo o una fattura nel sistema basandosi sui dettagli forniti dal cliente o discussi.',
@@ -252,11 +310,12 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
             notes: z.string().optional().describe('Note aggiuntive, scadenze o termini di pagamento'),
           }),
           execute: async ({ type, clientId, title, items, notes }) => {
-            const client = clients.getById(clientId)
-            if (!client) return { success: false, message: 'Cliente non trovato. Usa searchClient per trovare l\'ID corretto.' }
-            
+            // nome, ID corto o completo: nel documento va l'ID completo
+            const client = findClient(clientId)
+            if ('error' in client) return { success: false, message: client.error }
+
             const doc = quotes.create({
-              client_id: clientId,
+              client_id: client.id,
               client_name: client.name,
               title,
               number: quotes.nextNumber(type),

@@ -158,8 +158,10 @@ test('runAgent esegue uno strumento vero e risponde', async () => {
 })
 
 test('runAgent: la fattura senza interfaccia diventa una proposta, il preventivo no', async () => {
+  const { clients } = await import('../../src/lib/db/index')
+  const cli = clients.create({ name: 'Studio Fattura', category: 'cliente' } as never)
   const m = finto('m2', [
-    step([{ type: 'tool-call', toolCallId: 't1', toolName: 'createFinancialDocument', input: JSON.stringify({ type: 'fattura', clientId: 'x', title: 'Logo', items: [{ desc: 'logo', qty: 1, unitPrice: 500 }] }) }], 'tool-calls'),
+    step([{ type: 'tool-call', toolCallId: 't1', toolName: 'createFinancialDocument', input: JSON.stringify({ type: 'fattura', clientId: cli.id, title: 'Logo', items: [{ desc: 'logo', qty: 1, unitPrice: 500 }] }) }], 'tool-calls'),
     step([{ type: 'text', text: 'Fattura da confermare.' }], 'stop'),
   ])
   const r = await runAgent({ compito: 'emetti la fattura', candidati: [m] })

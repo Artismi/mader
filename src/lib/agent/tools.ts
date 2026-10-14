@@ -30,6 +30,12 @@ export interface AgentToolDef<S extends z.ZodTypeAny> {
   maxChars?: number
   /** La maestra sull'ingresso: errori precisi (vuoto = va bene). */
   verify?: (input: z.infer<S>) => string[] | Promise<string[]>
+  /**
+   * Controllo dopo l'esecuzione (rilettura): problemi trovati su quello che è
+   * stato scritto davvero. Non annulla la scrittura: il risultato li riporta in
+   * `controlli` perché il modello li corregga o li dica all'utente.
+   */
+  after?: (input: z.infer<S>, output: unknown) => string[] | Promise<string[]>
   /** Conferma dell'utente: di default solo per gli strumenti distruttivi. */
   needsApproval?: boolean | ((input: z.infer<S>) => boolean | Promise<boolean>)
   /** Esecuzione lato server. Gli strumenti del canvas restituiscono una conferma: li esegue il client. */
@@ -113,8 +119,12 @@ export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?:
           ok = false
           return withHint({ success: false, error: `Richiesta da correggere prima di eseguire:\n- ${problems.join('\n- ')}` })
         }
-        const out = await def.execute(input)
+        let out = await def.execute(input)
         if (out && typeof out === 'object' && (out as { success?: boolean }).success === false) ok = false
+        if (ok && def.after) {
+          const controlli = await def.after(input, out)
+          if (controlli.length) out = out && typeof out === 'object' && !Array.isArray(out) ? { ...(out as object), controlli } : { risultato: out, controlli }
+        }
         return withHint(capResult(out, def.maxChars ?? DEFAULT_MAX))
       } catch (e) {
         ok = false

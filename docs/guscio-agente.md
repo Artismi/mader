@@ -164,13 +164,31 @@ In grassetto gli strumenti nuovi di questa fase.
   - la prova della conferma su `clearBoard` si è fermata per la quota esaurita di Gemini e resta da fare nell'app.
 - **Misura da affrontare**: ogni chiamata manda circa 90k token di prompt stabile, soprattutto per l'architettura di `defaults.ts` e le skill fisse. Con la cache costa poco, ma rallenta e diluisce l'attenzione. Il prossimo passo di contesto è portare le skill fisse nel catalogo (`loadSkill`) e accorciare l'architettura.
 - **Da fare**:
-  - **G5**, cioè i controlli di uscita per strumento: per esempio i testi social passati da `instagramScores` prima di `saveInstagramDraft`, e le date nel passato;
   - **G6**, cioè i compiti reali con verifica, da scegliere con l'utente;
   - misurare la quota in cache con un modello vero, leggendo la riga `[agente]`.
 
 G6 richiede compiti reali scelti con l'utente.
 
 ---
+
+## 5a. G5: la maestra sulle scritture (fatta, 14 ottobre 2026)
+
+I controlli sono riusabili e stanno in `src/lib/agent/checks.ts`. Ogni strumento che scrive li mette in `verify`, prima di scrivere, e in `after`, che rilegge quello che è stato scritto.
+
+| Strumento | Prima di scrivere | Dopo (rilettura) |
+|---|---|---|
+| `createTask` | titolo 3–120 caratteri, data ISO non nel passato, cliente esistente | l'incarico esiste con quel titolo |
+| `createRecurringEngagement` | date ISO future, fine dopo l'inizio, ore coerenti, al massimo un anno di slot | — |
+| `updateTaskStatus` | l'incarico esiste (almeno 8 caratteri dell'ID) | lo stato è davvero cambiato |
+| `createIdea` | testo, titolo, cliente esistente | l'idea esiste |
+| `saveInstagramDraft` | cliente obbligatorio ed esistente, budget di titolo, contenuto e caption, data futura, caption (o post singolo) senza difetti gravi del lint e non segnalata come testo generato | il post è nel piano; gli avvisi del lint arrivano come "da rivedere" |
+| `updateEditorialPost` | data programmata non nel passato; testo per Instagram passato dal lint | — |
+| `remember` | 5–500 caratteri; un ricordo per cliente vuole un cliente esistente | — |
+| `createFinancialDocument` | cliente esistente, almeno una voce, prezzi maggiori di zero, descrizioni | — |
+
+- **Cliente in chiaro**: `createTask` e `createFinancialDocument` accettano nome, ID corto o ID completo, e nel database salvano sempre l'ID completo. Prima un nome finiva com'era nel campo `client_id`.
+- **Il modello vede l'esito**: gli errori tornano al modello come frasi da correggere. I problemi trovati dopo la scrittura arrivano in `controlli` nel risultato.
+- **Test**: `maestra.test.mts`, 8 test.
 
 ## 5b. Tutti i modelli, tutti gli strumenti (fasi G7–G8, 14 ottobre 2026)
 

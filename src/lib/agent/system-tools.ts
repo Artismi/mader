@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { clients, editorialPosts, ideas, socialAnalytics, type Client, type EditorialPost } from '@/lib/db'
 import { searchMemories, searchVault } from '@/lib/vault'
 import type { AgentToolDef } from './tools'
+import { dataIso, testoSocial } from './checks'
 
 /* ── utilità condivise ─────────────────────────────────────────────────── */
 
@@ -149,6 +150,12 @@ export const updateEditorialPost: AgentToolDef<typeof updatePostSchema> = {
     const errs: string[] = []
     if (!findPost(id)) errs.push(`post "${id}" non trovato: leggi gli ID con readEditorialPlan.`)
     if (dataProgrammata && !ISO_DATE.test(dataProgrammata)) errs.push(`dataProgrammata: "${dataProgrammata}" non è ISO (AAAA-MM-GGTHH:MM).`)
+    // G5: niente programmazioni nel passato; un testo per Instagram deve passare il lint della caption
+    else if (dataProgrammata && stato !== 'pubblicato') errs.push(...dataIso('dataProgrammata', dataProgrammata, { futura: true }))
+    if (contenuto !== undefined) {
+      const canaliPost = canali ?? findPost(id)?.channels ?? []
+      if (canaliPost.some(ch => ch.toLowerCase() === 'instagram')) errs.push(...testoSocial('contenuto', contenuto.split('--- CAPTION ---').pop()))
+    }
     if (stato === 'programmato' && !dataProgrammata && !findPost(id)?.scheduled_at) errs.push('per "programmato" serve una dataProgrammata.')
     if (stato === undefined && dataProgrammata === undefined && titolo === undefined && contenuto === undefined && canali === undefined) errs.push('non hai indicato nessuna modifica.')
     return errs
