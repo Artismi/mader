@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { LogOut, User, Sparkles, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
+import { AiProviderCard } from "@/components/settings/ai-provider-card";
 
 export default async function SettingsPage() {
     const supabase = await createClient();
@@ -24,6 +26,11 @@ export default async function SettingsPage() {
                     <p><span className="font-medium text-primary">ID:</span> <span className="font-mono text-xs">{user?.id}</span></p>
                 </div>
             </div>
+
+            {/* Modelli AI (OpenRouter) */}
+            <Suspense fallback={null}>
+                <AiProviderCard />
+            </Suspense>
 
             {/* AI */}
             <Link href="/settings/skills" className="block">

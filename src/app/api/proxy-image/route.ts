@@ -1,5 +1,32 @@
 import { NextResponse } from 'next/server';
 
+const isGenerator = (u: string) => /^https:\/\/image\.pollinations\.ai\//.test(u)
+
+// una richiesta alla volta verso il generatore (in questo processo del server)
+let chain: Promise<unknown> = Promise.resolve()
+function queued<T>(job: () => Promise<T>): Promise<T> {
+  const run = chain.then(job, job)
+  chain = run.catch(() => undefined)
+  return run
+}
+
+const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+async function fetchWithRetry(url: string): Promise<Response> {
+  let last: Response | null = null
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(60000) })
+      const type = r.headers.get('content-type') ?? ''
+      if (r.ok && type.startsWith('image/')) return r
+      last = r
+      if (r.status !== 429 && r.status < 500 && r.ok) return r
+    } catch { /* timeout o rete: si ritenta */ }
+    await wait(2000 * 2 ** attempt)
+  }
+  return last ?? new Response('Generatore non disponibile', { status: 504 })
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const rawUrl = searchParams.get('url');
@@ -27,8 +54,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Timeout esteso a 30s per generatori AI come Pollinations (lenti per design)
-    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(30000) });
+    // I generatori gratuiti (Pollinations) accettano poche richieste alla volta:
+    // in fila, con nuovi tentativi se rifiutano o sono lenti
+    const response = isGenerator(imageUrl) ? await queued(() => fetchWithRetry(imageUrl)) : await fetch(imageUrl, { signal: AbortSignal.timeout(30000) });
 
     if (!response.ok) {
       return new NextResponse(`Failed to fetch image: ${response.status} ${response.statusText}`, { status: response.status });

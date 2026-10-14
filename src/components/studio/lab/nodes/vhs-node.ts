@@ -1,5 +1,5 @@
-import { 
-  vec2, float, sin, step, floor
+import {
+  vec2, vec4, float, sin, step, floor, mix, texture
 } from 'three/tsl'
 import { gnoise, getSelectionMask } from './shared-tsl'
 
@@ -31,4 +31,29 @@ export const vhsDistort = (
   const mask = getSelectionMask(vUv, uSelectionRect, uSelectionActive, uSelectionFeather)
   
   return vUv.add(distortion.mul(mask))
+}
+
+/**
+ * VHS Color Effect — horizontal chroma bleed (R/B channel offset)
+ * Simulates the color-channel separation artifact of degraded tape.
+ * bleed controls the lateral separation distance.
+ */
+export const vhsColorEffect = (
+  sourceTex: any,
+  fc: any,
+  vUv: any,
+  uTime: any,
+  uIntensity: any,
+  uBleed: any
+) => {
+  const offset = uBleed.mul(uIntensity).mul(0.006)
+  const rSample = texture(sourceTex, vUv.add(vec2(offset, float(0)))).r
+  const bSample = texture(sourceTex, vUv.sub(vec2(offset, float(0)))).b
+  const bleedAmt = uIntensity.mul(0.6)
+  return vec4(
+    mix(fc.r, rSample, bleedAmt),
+    fc.g,
+    mix(fc.b, bSample, bleedAmt),
+    fc.a
+  )
 }

@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creative OS — cerchi</title>
+<style>
+  :root {
+    --bg: #eeebe4;
+    --surface: #fbfaf7;
+    --sunk: #e8e4dc;
+    --line: #dad3c7;
+    --ink: #17150f;
+    --t2: #4b463e;
+    --t3: #888174;
+    --hot: #ff4f1f;          /* l'unico colore vivo: dove l'app pensa e dove agisci */
+    --hot-soft: #ffe5da;
+    --ok: #1f7a4d;
+    --ease: cubic-bezier(.2,.8,.2,1);
+    --spring: cubic-bezier(.34,1.4,.64,1);
+    --mono: "Space Mono", ui-monospace, Consolas, monospace;
+    --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font: 15px/1.55 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--t2);
+    display: grid; grid-template-columns: 268px 1fr auto; overflow: hidden; -webkit-font-smoothing: antialiased;
+    /* identità: onde concentriche che partono dalla ghiera */
+    background: repeating-radial-gradient(circle at 134px 138px, transparent 0 63px, rgba(23,21,15,.045) 64px, transparent 65px), var(--bg);
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  :focus-visible { outline: 2px solid var(--hot); outline-offset: 3px; border-radius: 999px; }
+
+  /* ───────── SINISTRA: ghiera · catena · chiedi ───────── */
+  .left { display: flex; flex-direction: column; align-items: center; padding: 22px 18px; gap: 26px; overflow: auto; }
+
+  .dial { position: relative; width: 232px; height: 232px; flex: none; border-radius: 50%; }
+  .dial .track { position: absolute; inset: 22px; border-radius: 50%; border: 1.5px solid var(--line); }
+  .dial .spot { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px; border-radius: 50%; display: grid; place-items: center;
+                background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 6px 14px -8px rgba(23,21,15,.3);
+                transition: transform .7s var(--spring), background .2s, color .2s, box-shadow .2s; }
+  .dial .spot:hover { box-shadow: 0 0 0 1.5px var(--ink); }
+  .dial .spot[aria-current] { background: var(--ink); color: var(--surface); box-shadow: 0 0 0 5px var(--bg), 0 0 0 6.5px var(--ink); }
+  .dial .spot .n { position: absolute; top: -4px; right: -4px; min-width: 19px; height: 19px; border-radius: 10px; background: var(--hot); color: #fff; font: 700 10px/19px var(--mono); text-align: center; padding: 0 4px; box-shadow: 0 0 0 2px var(--bg); }
+  .dial .core { position: absolute; inset: 62px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 14px 30px -16px rgba(23,21,15,.35); display: grid; place-items: center; text-align: center; padding: 8px; }
+  .dial .core b { display: block; font: 700 17px/1.1 var(--display); color: var(--ink); letter-spacing: -.01em; }
+  .dial .core small { display: block; margin-top: 4px; font: 10px/1.3 var(--mono); color: var(--t3); }
+  .dial .core.preview b { color: var(--t3); }
+  .dial .hint { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font: 10px var(--mono); color: var(--t3); opacity: 0; transition: opacity .2s; }
+  .dial:hover .hint { opacity: 1; }
+
+  .chain { width: 100%; }
+  .chain h4 { font: 10px var(--mono); color: var(--t3); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 8px 8px; }
+  .step { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 8px; border-radius: 999px; text-align: left; transition: background .15s; }
+  button.step:hover { background: rgba(23,21,15,.05); }
+  .step:not(:last-child)::after { content: ""; position: absolute; left: 21px; top: 33px; height: 18px; width: 2px; background: var(--line); }
+  .step .c { width: 28px; height: 28px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 2px var(--line); background: var(--bg); display: grid; place-items: center; font: 10px var(--mono); color: var(--t3); }
+  .step .l { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step.now .c { background: var(--ink); color: var(--surface); box-shadow: none; }
+  .step.now .l { color: var(--ink); font-weight: 600; }
+  .step.next .c { box-shadow: inset 0 0 0 2px var(--hot); color: var(--hot); background: var(--surface); }
+  .step.next .l { color: var(--hot); }
+
+  .ask { margin-top: auto; width: 100%; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 6px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); color: var(--t2); font-size: 14px; transition: box-shadow .2s; }
+  .ask:hover { box-shadow: 0 0 0 1.5px var(--ink); }
+  .ask .o { width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: var(--hot); display: grid; place-items: center; }
+  .ask kbd { margin-left: auto; font: 10px var(--mono); color: var(--t3); padding-right: 8px; }
+
+  /* ───────── BLOCCO PRINCIPALE ───────── */
+  .stage { position: relative; padding: 18px 64px 18px 0; min-width: 0; display: flex; }
+  .main { position: relative; flex: 1; min-width: 0; background: var(--surface); border-radius: 40px; box-shadow: 0 0 0 1px var(--line), 0 40px 80px -50px rgba(23,21,15,.45); overflow: hidden; display: flex; flex-direction: column; }
+  .inner { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .fwd { animation: fwd .4s var(--ease); } .bwd { animation: bwd .4s var(--ease); } .fade { animation: fade .35s var(--ease); }
+  @keyframes fwd { from { opacity: 0; transform: translateX(36px); } }
+  @keyframes bwd { from { opacity: 0; transform: translateX(-36px); } }
+  @keyframes fade { from { opacity: 0; } }
+
+  .scroll { flex: 1; overflow: auto; transition: opacity .25s, filter .25s; }
+  /* velo durante la scelta dei petali: il contenuto si allontana, petali e centro restano nitidi */
+  .veil { position: absolute; inset: 0; z-index: 5; background: rgba(251,250,247,.82); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .main.choosing .veil { opacity: 1; pointer-events: auto; }
+  .petal-hub { position: absolute; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: var(--ink); color: var(--surface); display: grid; place-items: center; transform: rotate(45deg); }
+  .col { max-width: 720px; margin: 0 auto; padding: 44px 48px 96px; }
+  .head { display: flex; align-items: center; gap: 18px; margin-bottom: 30px; }
+  .head .tt { flex: 1; min-width: 0; }
+  .kicker { font: 11px var(--mono); color: var(--t3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .tag { font: 600 12px "Segoe UI", system-ui; text-transform: none; letter-spacing: 0; color: var(--hot); background: var(--hot-soft); padding: 2px 10px; border-radius: 999px; }
+  .saved { color: var(--ok); }
+  h1 { font: 700 36px/1.08 var(--display); color: var(--ink); letter-spacing: -.03em; }
+  .lead { margin-top: 10px; color: var(--t2); font-size: 16px; }
+  .orb { width: 68px; height: 68px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--sunk); color: var(--ink); font: 700 19px/1 var(--display); box-shadow: inset 0 0 0 1px var(--line); }
+
+  .act { display: flex; align-items: center; gap: 10px; }
+  .primary { height: 54px; padding: 0 24px 0 9px; border-radius: 999px; background: var(--ink); color: var(--surface); display: inline-flex; align-items: center; gap: 12px; font-weight: 600; font-size: 15px; transition: transform .2s var(--spring); box-shadow: 0 10px 24px -14px rgba(23,21,15,.6); }
+  .primary .dot { width: 36px; height: 36px; border-radius: 50%; background: var(--hot); display: grid; place-items: center; color: #fff; transition: transform .3s var(--spring); }
+  .primary:hover { transform: translateY(-2px); }
+  .primary:hover .dot { transform: rotate(-12deg) scale(1.06); }
+  .plus { width: 54px; height: 54px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line); display: grid; place-items: center; color: var(--ink); transition: transform .45s var(--spring), background .2s, box-shadow .2s; position: relative; z-index: 7; background: var(--surface); }
+  .plus:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .plus[aria-expanded=true] { transform: rotate(135deg); background: var(--ink); color: var(--surface); box-shadow: none; }
+
+  .petals { position: absolute; width: 0; height: 0; z-index: 6; }
+  .petal { position: absolute; width: 84px; height: 84px; margin: -42px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 16px 30px -14px rgba(23,21,15,.4);
+           display: grid; place-items: center; align-content: center; text-align: center; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.15;
+           opacity: 0; transform: translate(0,0) scale(.3); transition: transform .5s var(--spring), opacity .2s, box-shadow .2s; pointer-events: none; }
+  .petal svg.i { margin: 0 auto 4px; }
+  .petal:hover { box-shadow: 0 0 0 1.5px var(--ink), 0 16px 30px -14px rgba(23,21,15,.4); }
+  .petal.best { background: var(--ink); color: var(--surface); }
+  .petal.best svg.i { color: var(--hot); }
+  .petal small { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font: 10px/1.3 var(--mono); color: var(--hot); white-space: nowrap; font-weight: 400; }
+  .petals.on .petal { opacity: 1; pointer-events: auto; }
+
+  h2 { font: 10px var(--mono); color: var(--t3); letter-spacing: .1em; text-transform: uppercase; margin: 36px 0 10px; display: flex; justify-content: space-between; }
+
+  .row { display: flex; align-items: center; gap: 14px; padding: 10px 14px 10px 10px; margin: 0 -10px; border-radius: 999px; cursor: pointer; transition: background .15s, transform .2s var(--ease); }
+  .row:hover { background: var(--sunk); }
+  .row:active { transform: scale(.995); }
+  .row.was { background: var(--hot-soft); }
+  .row .av { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); color: var(--ink); font: 700 13px system-ui; flex: none; transition: background .15s; }
+  .row:hover .av { background: var(--surface); }
+  .row .mn { flex: 1; min-width: 0; }
+  .row .t { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .m { font-size: 13px; color: var(--t3); }
+  .row .w { font: 11px var(--mono); color: var(--t3); }
+  .pill { font-size: 12px; font-weight: 600; color: var(--hot); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--hot); }
+
+  .today { display: grid; grid-template-columns: 236px 1fr; gap: 34px; align-items: center; }
+  .clock { position: relative; width: 236px; height: 236px; }
+  .clock svg { width: 100%; height: 100%; overflow: visible; }
+  .clock .mid { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+  .clock .mid b { font: 700 36px/1 var(--mono); color: var(--ink); letter-spacing: -.05em; }
+  .clock .mid small { display: block; margin-top: 8px; font-size: 13px; color: var(--t2); }
+  .clock .mid em { font-style: normal; color: var(--hot); font-weight: 600; }
+  .clock .ev { cursor: pointer; transition: stroke-width .2s; }
+  .clock .ev:hover { stroke-width: 20; }
+  .why { font-size: 13px; color: var(--t3); margin-top: 10px; display: flex; gap: 8px; align-items: baseline; }
+  .why::before { content: "✦"; color: var(--hot); }
+  .hero { position: relative; padding: 24px 26px; border-radius: 30px; background: var(--ink); color: var(--surface); cursor: pointer; transition: transform .3s var(--spring); overflow: hidden; }
+  .hero::after { content: ""; position: absolute; right: -40px; top: -40px; width: 140px; height: 140px; border-radius: 50%; border: 1.5px solid rgba(255,79,31,.5); box-shadow: 0 0 0 22px rgba(255,79,31,.06), 0 0 0 44px rgba(255,79,31,.04); }
+  .hero:hover { transform: translateY(-3px); }
+  .hero .lbl { font: 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--hot); }
+  .hero .t { font: 700 23px/1.22 var(--display); margin: 8px 0 4px; letter-spacing: -.015em; }
+  .hero .m { font-size: 14px; color: #bdb6aa; }
+  .hero .why { color: #bdb6aa; }
+
+  .letter { font-size: 18px; line-height: 1.72; color: var(--ink); max-width: 62ch; }
+  .letter p + p { margin-top: 14px; }
+  .letter mark { background: linear-gradient(transparent 55%, var(--hot-soft) 55%); color: inherit; padding: 0 1px; }
+  .attach { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px; padding: 7px 16px 7px 7px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; color: var(--ink); }
+  .attach .av { width: 32px; height: 32px; border-radius: 50%; background: var(--sunk); display: grid; place-items: center; }
+  .quote { border-radius: 24px; background: var(--sunk); padding: 12px 20px; font-size: 14px; color: var(--t2); margin-bottom: 18px; }
+  .quote .txt { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  textarea { width: 100%; min-height: 240px; border: 0; font-family: inherit; font-size: 18px; line-height: 1.72; color: var(--ink); resize: none; outline: none; background: transparent; }
+  textarea::placeholder { color: var(--t3); }
+  .suggest { display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 0 18px 0 6px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--hot); color: var(--hot); font-weight: 600; font-size: 14px; margin-bottom: 14px; transition: background .2s; }
+  .suggest .o { width: 32px; height: 32px; border-radius: 50%; background: var(--hot); color: #fff; display: grid; place-items: center; }
+  .suggest:hover { background: var(--hot-soft); }
+  .sugnote { font-size: 13px; color: var(--hot); margin: 0 0 12px; display: none; }
+  .sugnote.on { display: block; }
+  .ring-progress { display: flex; align-items: center; gap: 16px; }
+  .ring-progress svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+
+  /* ───────── SATELLITI in orbita ───────── */
+  .orbit { position: absolute; right: 0; top: 0; bottom: 0; width: 120px; pointer-events: none; z-index: 4; }
+  .orbit svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .sat { position: absolute; right: 37px; top: 50%; width: 56px; height: 56px; margin-top: -28px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 10px 22px -12px rgba(23,21,15,.45);
+         display: grid; place-items: center; color: var(--ink); pointer-events: auto; transition: transform .6s var(--spring), background .2s, color .2s, box-shadow .2s; }
+  .sat:hover { box-shadow: 0 0 0 1.5px var(--ink), 0 10px 22px -12px rgba(23,21,15,.45); }
+  .sat[aria-pressed=true] { background: var(--ink); color: var(--surface); box-shadow: 0 0 0 4px var(--bg), 0 0 0 5.5px var(--ink); }
+  .sat.smart::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid var(--hot); animation: pulse 2.4s var(--ease) infinite; }
+  @keyframes pulse { 0%,100% { opacity: .9; transform: scale(1); } 50% { opacity: .15; transform: scale(1.14); } }
+  .sat .tip { position: absolute; right: 68px; top: 50%; transform: translate(6px, -50%); white-space: nowrap; background: var(--ink); color: var(--surface); font-size: 13px; padding: 7px 14px; border-radius: 999px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .3s var(--ease); }
+  .sat:hover .tip, .sat:focus-visible .tip, .sat.speak .tip { opacity: 1; transform: translate(0, -50%); }
+  .sat.smart .tip { background: var(--hot); }
+
+  .accs { width: 0; overflow: hidden; transition: width .45s var(--ease); display: flex; flex-direction: column; gap: 14px; padding: 18px 0; }
+  .accs.on { width: 330px; padding: 18px 18px 18px 0; overflow: auto; }
+  .acc { background: var(--surface); border-radius: 30px; box-shadow: 0 0 0 1px var(--line); padding: 20px 22px 22px; animation: pop .45s var(--spring); }
+  @keyframes pop { from { opacity: 0; transform: scale(.85); } }
+  .acc .ah { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px; }
+  .acc .ah .tt { flex: 1; }
+  .acc .k { font: 10px var(--mono); color: var(--t3); letter-spacing: .06em; text-transform: uppercase; }
+  .acc h3 { font: 700 18px/1.2 var(--display); color: var(--ink); margin-top: 2px; }
+  .ib { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--t3); transition: background .15s; }
+  .ib:hover { background: var(--sunk); color: var(--ink); }
+  .slots { display: flex; flex-wrap: wrap; gap: 8px; }
+  .slots button { width: 64px; height: 64px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line); font: 11px/1.25 var(--mono); color: var(--ink); display: grid; place-items: center; text-align: center; transition: all .2s var(--spring); }
+  .slots button:hover { box-shadow: inset 0 0 0 1.5px var(--ink); transform: scale(1.05); }
+  .slots button[aria-pressed=true] { background: var(--ink); color: var(--surface); box-shadow: none; }
+  .slots button.best:not([aria-pressed=true]) { box-shadow: inset 0 0 0 2px var(--hot); }
+  .accbtn { width: 100%; height: 46px; border-radius: 999px; background: var(--ink); color: var(--surface); font-weight: 600; margin-top: 16px; transition: transform .2s var(--spring); }
+  .accbtn:hover { transform: translateY(-1px); }
+  .lines { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .lines td { padding: 9px 0; border-bottom: 1px dashed var(--line); color: var(--ink); }
+  .lines td:last-child { text-align: right; font-family: var(--mono); font-size: 13px; }
+  .lines tr:last-child td { border: 0; font-weight: 700; }
+
+  /* ───────── CHIEDI (Ctrl+K) ───────── */
+  .k { position: fixed; inset: 0; z-index: 50; display: none; place-items: start center; padding-top: 12vh; background: rgba(238,235,228,.6); backdrop-filter: blur(6px); }
+  .k.on { display: grid; animation: fade .2s; }
+  .kbox { width: min(600px, 92vw); background: var(--surface); border-radius: 32px; box-shadow: 0 0 0 1px var(--line), 0 40px 80px -30px rgba(23,21,15,.5); overflow: hidden; animation: pop .4s var(--spring); }
+  .kin { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .kin .o { width: 44px; height: 44px; border-radius: 50%; background: var(--ink); color: var(--hot); display: grid; place-items: center; flex: none; }
+  .kin input { flex: 1; border: 0; outline: none; font: 18px var(--display); color: var(--ink); background: transparent; }
+  .kin input::placeholder { color: var(--t3); }
+  .klist { max-height: 54vh; overflow: auto; padding: 8px 10px 12px; }
+  .klist h5 { font: 10px var(--mono); color: var(--t3); letter-spacing: .1em; text-transform: uppercase; padding: 12px 10px 6px; }
+  .kit { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px 8px 8px; border-radius: 999px; text-align: left; }
+  .kit .av { width: 36px; height: 36px; border-radius: 50%; background: var(--sunk); display: grid; place-items: center; color: var(--ink); font: 700 12px system-ui; flex: none; }
+  .kit .mn { flex: 1; min-width: 0; }
+  .kit .t { color: var(--ink); font-weight: 600; }
+  .kit .m { font-size: 12px; color: var(--t3); }
+  .kit.sug .av { background: var(--hot-soft); color: var(--hot); }
+  .kit[aria-selected=true] { background: var(--sunk); }
+  .kit kbd { font: 10px var(--mono); color: var(--t3); }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px); opacity: 0; background: var(--ink); color: var(--surface); padding: 12px 20px; border-radius: 999px; font-size: 14px; transition: all .35s var(--spring); pointer-events: none; display: flex; gap: 10px; align-items: center; z-index: 60; }
+  .toast::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--hot); }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="i-euro" viewBox="0 0 24 24"><path d="M18 7a7 7 0 1 0 0 10M4 10h10M4 14h10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 24 24"><path d="M9 17l-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<aside class="left">
+  <div class="dial" id="dial" role="navigation" aria-label="Sezioni: gira con la rotella o con le frecce"></div>
+  <div class="chain" id="chain" aria-label="Percorso"></div>
+  <button class="ask" data-ask><span class="o"><svg class="i"><use href="#i-spark"/></svg></span>Chiedi o cerca<kbd>Ctrl K</kbd></button>
+</aside>
+
+<div class="stage">
+  <section class="main" id="main" aria-live="polite"></section>
+  <div class="orbit" id="orbit" aria-label="Accessori suggeriti"></div>
+</div>
+<aside class="accs" id="accs" aria-label="Blocchi accessori"></aside>
+
+<div class="k" id="k" role="dialog" aria-label="Chiedi o cerca">
+  <div class="kbox"><div class="kin"><span class="o"><svg class="i"><use href="#i-spark"/></svg></span><input id="kq" placeholder="Cerca una persona, un lavoro… o chiedi cosa fare" autocomplete="off"></div><div class="klist" id="klist" role="listbox"></div></div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* REGOLE
+   stessa famiglia → il blocco si trasforma (dal punto in cui hai cliccato)
+   famiglia diversa → accessorio: satellite in orbita → pannello
+   catena di cerchi / Alt+← → si torna con memoria
+   intelligenza visibile: ogni suggerimento ha un perché */
+const HUB = new Set(['list', 'client', 'project'])
+const FAMILY = { mail: 'comm', reply: 'comm', project: 'work', task: 'work', client: 'people', design: 'studio' }
+const KIND = { list: '', mail: 'mail', reply: 'risposta', client: 'cliente', project: 'progetto', task: 'task', design: 'design' }
+const SECTIONS = [['oggi', 'Oggi', 'sun'], ['messaggi', 'Messaggi', 'inbox'], ['clienti', 'Clienti', 'users'], ['lavori', 'Lavori', 'check'], ['studio', 'Studio', 'pen'], ['archivio', 'Archivio', 'archive']]
+
+const D = {
+  oggi: { kind: 'list', title: 'Oggi' },
+  messaggi: { kind: 'list', title: 'Messaggi', lead: 'Ordinati per quanto contano, non per data.', groups: () => [['Da rispondere', mails(true)], ['Letti', mails(false)]] },
+  clienti: { kind: 'list', title: 'Clienti', lead: 'Prima chi aspetta una tua risposta.', groups: () => [['Attivi', ['c1', 'c2', 'c3'].sort((a, b) => waiting(b) - waiting(a))]] },
+  lavori: { kind: 'list', title: 'Lavori', lead: 'Questa settimana, in ordine di scadenza.', groups: () => [['In scadenza', ['t1', 't2', 't3']], ['Progetti', ['p1']]] },
+  studio: { kind: 'list', title: 'Studio', lead: 'Riprendi da dove avevi lasciato.', groups: () => [['Recenti', ['g1', 'g2']]] },
+  archivio: { kind: 'list', title: 'Archivio', lead: 'Note, idee e file.', groups: () => [['Recenti', []]] },
+
+  m1: { kind: 'mail', title: 'Preventivo logo', who: 'Mario Rossi', ini: 'MR', client: 'c1', urgent: true, when: 'ieri 18:42', file: 'brief-rossi.pdf',
+        html: ['Ciao! Avremmo bisogno di un <mark>preventivo</mark> per il restyling del logo e delle grafiche social, entro fine mese.', 'Ti allego il brief. <mark>Possiamo sentirci la prossima settimana</mark> per parlarne?'],
+        why: 'chiede preventivo e appuntamento: bastano 20 min',
+        sats: [['client', 'c1', 'Rossi Srl'], ['calendar', null, 'Chiede di sentirvi → proponi un orario', true], ['quote', null, 'Chiede un preventivo → bozza pronta']],
+        petals: [['Preventivo', 'euro', 'quote', 'dal brief'], ['Evento', 'cal', 'calendar'], ['Task', 'check', 'task']],
+        draft: 'Ciao Mario,\n\ngrazie per il brief! Ti preparo il preventivo per logo e grafiche social entro lunedì.\n\nPer sentirci: ti va bene martedì alle 11:00?\n\nA presto' },
+  m2: { kind: 'mail', title: 'Foto nuova collezione', who: 'Luca Ferri', ini: 'LF', client: 'c2', urgent: true, when: 'oggi 9:10',
+        html: ['Ti mando le foto per i <mark>post di novembre</mark>. Fammi sapere se servono altri scatti.'], why: 'collegata al task "Post di novembre" in scadenza venerdì',
+        sats: [['client', 'c2', 'Bicicleria'], ['task', 't2', 'Collegata a "Post di novembre"', true]], petals: [['Task', 'check', 'task', 'per le foto']],
+        draft: 'Ciao Luca, ricevute! Le guardo oggi e ti dico entro domani se servono altri scatti.' },
+  m3: { kind: 'mail', title: 'Conferma call', who: 'Anna Mossetto', ini: 'AM', client: 'c3', urgent: false, when: 'oggi 8:02', html: ['Confermo la call di domani alle 10.'], sats: [['client', 'c3', 'Mossetto']], petals: [], draft: 'Perfetto, a domani!' },
+  c1: { kind: 'client', title: 'Rossi Srl', ini: 'RS', lead: 'Mario Rossi · aspetta una tua risposta da ieri', items: () => [['Prossima cosa', mails(true).filter(m => D[m].client === 'c1')], ['Progetti', ['p1']], ['Design', ['g1']]], sats: [['quote', null, 'Preventivo in bozza']], petals: [['Progetto', 'file', 'project'], ['Preventivo', 'euro', 'quote', 'in bozza']] },
+  c2: { kind: 'client', title: 'Bicicleria', ini: 'BI', lead: 'Luca Ferri · 1 lavoro in corso', items: () => [['Prossima cosa', mails(true).filter(m => D[m].client === 'c2')], ['Lavori', ['t2']]], sats: [], petals: [] },
+  c3: { kind: 'client', title: 'Mossetto', ini: 'MO', lead: 'Anna Mossetto · call domani alle 10', items: () => [['Messaggi', ['m3']]], sats: [], petals: [] },
+  p1: { kind: 'project', title: 'Restyling logo', ini: 'RL', lead: 'Rossi Srl · consegna 31 ottobre', client: 'c1', progress: .35, items: () => [['Task', ['t1', 't3']], ['Design', ['g1', 'g2']]], sats: [['client', 'c1', 'Rossi Srl']], petals: [['Task', 'check', 'task', 'manca la consegna'], ['Design', 'pen', 'design']] },
+  t1: { kind: 'task', title: 'Consegnare moodboard', meta: 'Restyling logo', when: 'oggi', parent: 'p1', client: 'c1', sats: [['client', 'c1', 'Rossi Srl']], petals: [] },
+  t2: { kind: 'task', title: 'Post di novembre', meta: 'Bicicleria', when: 'ven', client: 'c2', sats: [['client', 'c2', 'Bicicleria']], petals: [] },
+  t3: { kind: 'task', title: 'Varianti colore', meta: 'Restyling logo', when: 'lun', parent: 'p1', client: 'c1', sats: [], petals: [] },
+  g1: { kind: 'design', title: 'Logo — variante B', meta: 'Restyling logo', when: 'ieri', client: 'c1', sats: [['client', 'c1', 'Rossi Srl']], petals: [] },
+  g2: { kind: 'design', title: 'Logo — variante A', meta: 'Restyling logo', when: '3 gg', client: 'c1', sats: [], petals: [] },
+}
+const mails = urgent => ['m1', 'm2', 'm3'].filter(m => !!D[m].urgent === urgent)
+const waiting = c => mails(true).filter(m => D[m].client === c).length
+
+let chain = [], accs = [], petalsOpen = false, origin = null, hoverSec = null
+const drafts = {}
+const cur = () => chain[chain.length - 1]
+const ico = n => `<svg class="i"><use href="#i-${n}"/></svg>`
+const stepName = s => s.kind === 'reply' ? 'Risposta' : D[s.id].title
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+const activeSec = () => SECTIONS.findIndex(s => s[0] === chain[0].id)
+
+/* ───── navigazione ───── */
+function remember() { const c = cur(); if (!c) return; const s = document.querySelector('#main .scroll'); if (s) c.mem.scroll = s.scrollTop; const ta = document.getElementById('draft'); if (ta) drafts[c.id] = ta.value }
+function go(id, kind = D[id].kind) {
+  const here = cur()
+  if (here && !(HUB.has(here.kind) || FAMILY[here.kind] === FAMILY[kind])) return openAcc(kind, id)
+  remember(); if (here) here.mem.from = id
+  const same = here && here.id === id
+  chain.push({ id, kind, mem: {} }); petalsOpen = false
+  render(same ? 'morph' : 'fwd')
+}
+function back(to = chain.length - 2) { if (to < 0 || to >= chain.length - 1) return; remember(); chain = chain.slice(0, to + 1); petalsOpen = false; render('bwd') }
+function root(id) { remember(); chain = [{ id, kind: 'list', mem: {} }]; accs = []; petalsOpen = false; renderAccs(); render('fade') }
+function openAcc(kind, id) {
+  const key = kind + ':' + (id ?? '')
+  if (accs.some(a => a.key === key)) accs = accs.filter(a => a.key !== key)
+  else { accs.unshift({ key, kind, id, for: cur().id }); accs = accs.slice(0, 2) }
+  renderAccs(); renderOrbit()
+}
+
+/* ───── ghiera: si gira con clic, rotella, frecce ───── */
+const dialSub = (v, active) => v !== null && v !== active ? 'clic per aprire' : (chain.length > 1 ? `${chain.length - 1} ${chain.length === 2 ? 'passo' : 'passi'}` : 'inizio')
+function renderDial() {
+  const active = activeSec(), R = 92, step = 360 / SECTIONS.length
+  const counts = { messaggi: mails(true).length }
+  const spots = SECTIONS.map(([id, label, icon], i) => {
+    const a = ((i - active) * step - 90) * Math.PI / 180      // la sezione attiva gira sempre in alto
+    return `<button class="spot" data-root="${id}" data-i="${i}" aria-label="${label}" ${i === active ? 'aria-current="true"' : ''}
+      style="transform: translate(${(Math.cos(a) * R).toFixed(1)}px, ${(Math.sin(a) * R).toFixed(1)}px)">${ico(icon)}${counts[id] ? `<span class="n">${counts[id]}</span>` : ''}</button>`
+  }).join('')
+  document.getElementById('dial').innerHTML = `<div class="track"></div>${spots}
+    <div class="core"><div><b>${SECTIONS[active][1]}</b><small>${dialSub(null, active)}</small></div></div><div class="hint">rotella per girare</div>`
+}
+function previewDial(v) {
+  const core = document.querySelector('#dial .core'); if (!core) return
+  const active = activeSec()
+  core.classList.toggle('preview', v !== null && v !== active)
+  core.querySelector('b').textContent = SECTIONS[v ?? active][1]
+  core.querySelector('small').textContent = dialSub(v, active)
+}
+let wheelLock = 0
+document.addEventListener('wheel', e => {
+  if (!e.target.closest('#dial')) return
+  e.preventDefault()
+  if (Date.now() - wheelLock < 260) return
+  wheelLock = Date.now()
+  root(SECTIONS[(activeSec() + (e.deltaY > 0 ? 1 : -1) + SECTIONS.length) % SECTIONS.length][0])
+}, { passive: false })
+document.addEventListener('mouseover', e => { const s = e.target.closest('#dial .spot'); const v = s ? +s.dataset.i : null; if (v !== hoverSec) { hoverSec = v; previewDial(v) } })
+
+/* ───── catena, con il prossimo passo consigliato ───── */
+function nextHint() {
+  const c = cur(), n = D[c.id]
+  if (c.kind === 'mail' && n.urgent) return 'Rispondi'
+  if (c.kind === 'reply') return 'Invia'
+  if (c.id === 'oggi') { const h = heroItem(); return D[h].kind === 'mail' ? 'Rispondi a ' + D[h].who.split(' ')[0] : D[h].title }
+  return null
+}
+function renderChain() {
+  const nh = nextHint()
+  document.getElementById('chain').innerHTML = `<h4>Percorso</h4>` + chain.map((s, i) =>
+    `<button class="step ${i === chain.length - 1 ? 'now' : ''}" data-to="${i}" ${i === chain.length - 1 ? 'aria-current="step"' : ''}><span class="c">${i + 1}</span><span class="l">${stepName(s)}</span></button>`).join('')
+    + (nh ? `<div class="step next"><span class="c">✦</span><span class="l">poi: ${nh}</span></div>` : '')
+}
+
+/* ───── righe e viste ───── */
+function row(id) {
+  const n = D[id], was = cur().mem.from === id ? ' was' : ''
+  const avHtml = n.ini ?? ico({ task: 'check', design: 'pen', project: 'file' }[n.kind] ?? 'file')
+  const sub = n.kind === 'mail' ? `${n.who} · ${n.when}` : [KIND[n.kind], n.meta].filter(Boolean).join(' · ')
+  const right = n.urgent ? `<span class="pill">da rispondere</span>` : `<span class="w">${n.when ?? ''}</span>`
+  return `<div class="row${was}" data-go="${id}" tabindex="0"><span class="av">${avHtml}</span><div class="mn"><div class="t">${n.title}</div><div class="m">${sub}</div></div>${right}</div>`
+}
+const group = ([l, ids]) => `<h2>${l}<span>${ids.length}</span></h2>` + (ids.length ? ids.map(row).join('') : `<p style="color:var(--t3)">Tutto fatto qui.</p>`)
+const heroItem = () => mails(true)[0] ?? 't1'
+
+function clock() {
+  const r = 100, C = 2 * Math.PI * r, f = h => (h - 8) / 12
+  const arc = (from, to, color, w, extra = '') => `<circle ${extra} cx="118" cy="118" r="${r}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"
+     stroke-dasharray="${((f(to) - f(from)) * C).toFixed(1)} ${C.toFixed(1)}" stroke-dashoffset="${(-f(from) * C).toFixed(1)}" transform="rotate(-90 118 118)"/>`
+  const now = 9 + 40 / 60, a = (f(now) * 360 - 90) * Math.PI / 180
+  const ticks = Array.from({ length: 13 }, (_, i) => { const b = (i / 12 * 360 - 90) * Math.PI / 180; return `<circle cx="${(118 + Math.cos(b) * 117).toFixed(1)}" cy="${(118 + Math.sin(b) * 117).toFixed(1)}" r="${i % 3 ? 1.2 : 2.2}" fill="var(--t3)"/>` }).join('')
+  const lbl = (h, t) => { const b = (f(h) * 360 - 90) * Math.PI / 180; return `<text x="${(118 + Math.cos(b) * 134).toFixed(1)}" y="${(118 + Math.sin(b) * 134 + 3).toFixed(1)}" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="var(--t3)">${t}</text>` }
+  return `<div class="clock" role="img" aria-label="Giornata: call alle 10, lavoro dalle 15:30 alle 17:30, ora sono le 9:40"><svg viewBox="0 0 236 236">
+    <circle cx="118" cy="118" r="${r}" fill="none" stroke="var(--sunk)" stroke-width="14"/>${ticks}
+    ${arc(8, now, 'var(--line)', 14)}${arc(10, 10.5, 'var(--ink)', 14, 'class="ev" data-go="c3"')}${arc(15.5, 17.5, 'var(--ink)', 14, 'class="ev" data-go="p1"')}
+    ${lbl(8, '8')}${lbl(11, '11')}${lbl(14, '14')}${lbl(17, '17')}
+    <circle cx="${(118 + Math.cos(a) * r).toFixed(1)}" cy="${(118 + Math.sin(a) * r).toFixed(1)}" r="10" fill="var(--hot)" stroke="var(--surface)" stroke-width="3.5"/>
+    </svg><div class="mid"><div><b>9:40</b><small>tra 20 min<br><em>Call con Anna</em></small></div></div></div>`
+}
+function progressRing(p) {
+  const C = 2 * Math.PI * 28
+  return `<div class="ring-progress"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="28" fill="none" stroke="var(--sunk)" stroke-width="7"/>
+    <circle cx="36" cy="36" r="28" fill="none" stroke="var(--hot)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(p * C).toFixed(1)} ${C.toFixed(1)}"/></svg>
+    <div><b style="color:var(--ink);font:700 22px var(--mono)">${Math.round(p * 100)}%</b><div style="font-size:13px;color:var(--t3)">2 task su 6 · al ritmo attuale consegni in tempo</div></div></div>`
+}
+
+function view(c) {
+  const n = D[c.id]
+  if (c.id === 'oggi') {
+    const h = heroItem(), hn = D[h], pending = mails(true).length
+    const others = [...mails(true), 't1', 't2'].filter(x => x !== h).slice(0, 3)
+    return { kicker: 'venerdì 9 ottobre', title: pending ? 'Buongiorno' : 'Tutto in ordine',
+      lead: pending ? `${pending === 1 ? 'Una persona aspetta' : `${pending} persone aspettano`} una tua risposta. Prima della call hai 20 minuti.` : 'Nessuno aspetta risposte. Puoi concentrarti sul lavoro creativo.',
+      body: `<div class="today">${clock()}<div>
+        <div class="hero" data-go="${h}" tabindex="0"><div class="lbl">Inizia da qui</div><div class="t">${hn.kind === 'mail' ? 'Rispondi a ' + hn.who : hn.title}</div>
+        <div class="m">${hn.kind === 'mail' ? `"${hn.title}" · ${hn.when}` : hn.meta}</div><div class="why">${hn.why ?? 'in scadenza oggi'}</div></div></div></div>
+        <h2>Poi<span>${others.length}</span></h2>${others.map(row).join('')}` }
+  }
+  if (c.kind === 'list') return { title: n.title, lead: n.lead, body: n.groups().map(group).join('') }
+  const actions = {
+    mail: `<button class="primary" data-morph="reply"><span class="dot">${ico('reply')}</span>Rispondi</button>`,
+    reply: `<button class="primary" data-send><span class="dot">${ico('send')}</span>Invia</button>`,
+    client: `<button class="primary"><span class="dot">${ico('plus')}</span>Nuovo</button>`,
+    project: `<button class="primary"><span class="dot">${ico('plus')}</span>Nuovo task</button>`,
+    task: `<button class="primary" data-done><span class="dot">${ico('check')}</span>Fatto</button>`,
+    design: `<button class="primary"><span class="dot">${ico('pen')}</span>Apri</button>`,
+  }
+  const plus = (n.petals?.length && c.kind !== 'reply') ? `<button class="plus" data-petals aria-expanded="${petalsOpen}" aria-label="Cosa puoi fare da qui">${ico('plus')}</button>` : ''
+  const action = `<div class="act">${plus}${actions[c.kind]}</div>`
+  if (c.kind === 'mail') return { kicker: `mail · ${D[n.client].title}`, title: n.title, orb: n.ini, action,
+    body: `<p style="font-size:14px;color:var(--t3);margin:-16px 0 24px">${n.who} · ${n.when}</p><div class="letter">${n.html.map(p => `<p>${p}</p>`).join('')}</div>
+      ${n.file ? `<div class="attach"><span class="av">${ico('file')}</span>${n.file}</div>` : ''}
+      ${n.html.some(p => p.includes('mark')) ? `<p class="why" style="margin-top:26px">ho sottolineato le richieste · gli strumenti giusti sono nei cerchi a destra</p>` : ''}` }
+  if (c.kind === 'reply') return { kicker: `<span class="tag">stessa mail · ora rispondi</span><span class="saved" id="saved">${drafts[c.id] ? '● bozza salvata' : ''}</span>`, title: `Risposta a ${n.who.split(' ')[0]}`, orb: n.ini, action,
+    body: `<div class="quote"><b style="color:var(--ink)">${n.who}:</b> <span class="txt">${n.html.join(' ').replace(/<[^>]+>/g, '')}</span></div>
+      ${drafts[c.id] ? '' : `<button class="suggest" data-suggest><span class="o">${ico('spark')}</span>Scrivi una bozza per me</button>`}
+      <p class="sugnote" id="sugnote">✦ bozza scritta da quello che chiede ${n.who.split(' ')[0]}: rileggila prima di inviare</p>
+      <textarea id="draft" placeholder="Scrivi la risposta…" aria-label="Risposta">${drafts[c.id] ?? ''}</textarea>` }
+  if (c.kind === 'client' || c.kind === 'project') return { kicker: KIND[c.kind], title: n.title, lead: n.lead, orb: n.ini, action,
+    body: (n.progress ? progressRing(n.progress) : '') + n.items().map(group).join('') }
+  if (c.kind === 'task') return { kicker: `task · ${n.meta}`, title: n.title, lead: `Scadenza: ${n.when}`, action,
+    body: `<h2>Checklist<span>0/2</span></h2>${['Raccogliere i riferimenti', 'Impaginare la moodboard'].map(t => `<div class="row" style="cursor:default"><span class="av" style="background:none;box-shadow:inset 0 0 0 1.5px var(--line)"></span><div class="mn"><div class="t" style="font-weight:500">${t}</div></div></div>`).join('')}` }
+  if (c.kind === 'design') return { kicker: `design · ${n.meta}`, title: n.title, action, body: `<div style="aspect-ratio:1;max-width:400px;border-radius:50%;background:var(--sunk);display:grid;place-items:center;color:var(--t3);margin:0 auto;box-shadow:inset 0 0 0 1px var(--line)">anteprima</div>` }
+}
+
+function render(anim) {
+  const c = cur(), v = view(c), main = document.getElementById('main')
+  main.innerHTML = `<div class="inner ${anim === 'morph' ? '' : anim}"><div class="scroll"><div class="col">
+    <div class="head">${v.orb ? `<span class="orb">${v.orb}</span>` : ''}<div class="tt">${v.kicker ? `<div class="kicker">${v.kicker}</div>` : ''}<h1>${v.title}</h1>${v.lead ? `<p class="lead">${v.lead}</p>` : ''}</div>${v.action ?? ''}</div>
+    ${v.body}</div></div><div class="veil" data-veil></div><div class="petals ${petalsOpen ? 'on' : ''}" id="petals"></div></div>`
+  /* trasformazione: il nuovo stato si apre a cerchio dal punto in cui hai cliccato */
+  if (anim === 'morph' && origin && !reduced()) {
+    const r = main.getBoundingClientRect(), x = origin.x - r.left, y = origin.y - r.top
+    main.firstElementChild.animate([{ clipPath: `circle(0px at ${x}px ${y}px)` }, { clipPath: `circle(${Math.hypot(r.width, r.height)}px at ${x}px ${y}px)` }], { duration: 560, easing: 'cubic-bezier(.2,.8,.2,1)' })
+  }
+  main.querySelector('.scroll').scrollTop = c.mem.scroll ?? 0
+  main.classList.toggle('choosing', petalsOpen)
+  const ta = document.getElementById('draft')
+  if (ta) { ta.focus(); ta.oninput = () => { drafts[c.id] = ta.value; const s = document.getElementById('saved'); if (s) s.textContent = ta.value ? '● bozza salvata' : '' } }
+  renderPetals(); renderDial(); renderChain(); renderOrbit()
+}
+
+/* Petali: ventaglio verso il basso; il resto si attenua */
+function renderPetals() {
+  const n = D[cur().id], el = document.getElementById('petals'), plus = document.querySelector('[data-petals]')
+  if (!el || !plus || !n.petals) return
+  const m = document.getElementById('main').getBoundingClientRect(), p = plus.getBoundingClientRect()
+  el.style.left = (p.left + p.width / 2 - m.left) + 'px'; el.style.top = (p.top + p.height / 2 - m.top) + 'px'
+  const k = n.petals.length
+  el.innerHTML = (petalsOpen ? `<button class="petal-hub" data-petals aria-label="Chiudi">${ico('plus')}</button>` : '') + n.petals.map(([label, icon, kind, why], i) => {
+    const ang = (k === 1 ? 110 : 75 + i * 75 / (k - 1)) * Math.PI / 180, r = 128
+    const tr = petalsOpen ? `transform:translate(${(Math.cos(ang) * r).toFixed(1)}px, ${(Math.sin(ang) * r).toFixed(1)}px) scale(1);transition-delay:${i * 45}ms` : ''
+    return `<button class="petal ${why ? 'best' : ''}" data-petal="${kind}" style="${tr}">${ico(icon)}${label}${why ? `<small>✦ ${why}</small>` : ''}</button>`
+  }).join('')
+}
+function setPetals(on) { petalsOpen = on; document.getElementById('main').classList.toggle('choosing', on); document.querySelector('[data-petals]')?.setAttribute('aria-expanded', on); document.getElementById('petals')?.classList.toggle('on', on); renderPetals() }
+
+/* Satelliti su un arco d'orbita: il consigliato parla per 4 secondi, poi solo al passaggio */
+let speakTimer
+function renderOrbit() {
+  const c = cur(), n = D[c.id]
+  const list = c.kind === 'reply' ? (n.sats ?? []).filter(s => s[0] !== 'client') : (n.sats ?? [])
+  const icon = { client: 'users', calendar: 'cal', quote: 'euro', task: 'check' }
+  const el = document.getElementById('orbit'), h = el.getBoundingClientRect().height, R = 420, gap = 74
+  const off = dy => R - Math.sqrt(R * R - dy * dy)
+  const pts = list.map((_, i) => { const dy = (i - (list.length - 1) / 2) * gap; return { dy, dx: -off(dy) } })   // orbita convessa attorno al blocco
+  const edge = (83 - off(h / 2)).toFixed(1)
+  const arc = list.length ? `<svg aria-hidden="true"><path d="M ${edge} 0 A ${R} ${R} 0 0 1 ${edge} ${h}" fill="none" stroke="var(--t3)" stroke-opacity=".5" stroke-dasharray="2 7"/></svg>` : ''
+  el.innerHTML = arc + list.map(([kind, id, tip, smart], i) => {
+    const key = kind + ':' + (id ?? ''), open = accs.some(a => a.key === key)
+    const label = kind === 'client' ? `<span style="font:700 13px system-ui">${D[id].ini}</span>` : ico(icon[kind])
+    return `<button class="sat ${smart && !open ? 'smart speak' : ''}" data-sat="${kind}" data-id="${id ?? ''}" aria-pressed="${open}" aria-label="${tip}"
+      style="transform: translate(${pts[i].dx.toFixed(1)}px, ${pts[i].dy.toFixed(1)}px)">${label}<span class="tip">${tip}</span></button>`
+  }).join('')
+  clearTimeout(speakTimer); speakTimer = setTimeout(() => document.querySelectorAll('.sat.speak').forEach(s => s.classList.remove('speak')), 4000)
+}
+
+function renderAccs() {
+  const el = document.getElementById('accs')
+  el.classList.toggle('on', accs.length > 0)
+  el.innerHTML = accs.map((a, i) => {
+    const forName = D[a.for]?.title ?? ''
+    if (a.kind === 'calendar') return acc(i, `per · ${forName}`, 'Proponi un orario', `
+      <div class="slots">${[['lun', '10:00'], ['lun', '15:00'], ['mar', '11:00', 1], ['mar', '16:30'], ['mer', '9:30']].map(([d, h, best]) => `<button data-slot="${d} ${h}" aria-pressed="false" class="${best ? 'best' : ''}">${d}<br>${h}</button>`).join('')}</div>
+      <p class="why">martedì 11:00 è libero per entrambi</p><button class="accbtn" data-insert>Inserisci nella risposta</button>`)
+    if (a.kind === 'quote') return acc(i, `per · ${forName}`, 'Preventivo', `
+      <table class="lines"><tr><td>Logo, 3 varianti</td><td>€ 900</td></tr><tr><td>Grafiche social × 6</td><td>€ 340</td></tr><tr><td>Totale</td><td>€ 1.240</td></tr></table>
+      <p class="why">voci ricavate dal brief allegato</p><button class="accbtn" data-attach>Allega alla risposta</button>`)
+    if (!a.id) return acc(i, `da · ${forName}`, `Nuovo ${KIND[a.kind] || a.kind}`, `<p class="why" style="margin-top:0">sarà collegato a ${forName}</p><button class="accbtn" data-make>Crea</button>`)
+    const n = D[a.id]
+    return acc(i, KIND[n.kind], n.title, `<p>${n.lead ?? n.meta ?? ''}</p><button class="accbtn" data-promote="${i}">Apri al centro</button>`)
+  }).join('')
+}
+const acc = (i, k, title, body) => `<section class="acc"><div class="ah"><div class="tt"><div class="k">${k}</div><h3>${title}</h3></div>
+  <button class="ib" title="Chiudi (Esc)" data-close="${i}">${ico('x')}</button></div>${body}</section>`
+
+/* ───── Chiedi (Ctrl+K): prima i suggerimenti per ciò che stai guardando ───── */
+let kSel = 0, kItems = []
+function suggestions() {
+  const c = cur(), n = D[c.id], s = []
+  if (c.kind === 'mail' && n.urgent) s.push(['Rispondi a ' + n.who.split(' ')[0], 'aspetta da ' + n.when, () => go(c.id, 'reply'), 'reply'])
+  if (c.kind === 'mail' || c.kind === 'reply') (n.sats ?? []).filter(x => x[0] !== 'client').forEach(([kind, id, tip]) => {
+    const label = tip.split('→').pop().trim()
+    s.push([label.charAt(0).toUpperCase() + label.slice(1), tip.split('→')[0].trim(), () => openAcc(kind, id), { calendar: 'cal', quote: 'euro' }[kind] ?? 'check'])
+  })
+  if (c.kind === 'list') { const h = heroItem(); s.push([D[h].kind === 'mail' ? 'Rispondi a ' + D[h].who : D[h].title, D[h].why ?? 'il più urgente', () => openFromK(h), 'arrow']) }
+  return s
+}
+function openK() { document.getElementById('k').classList.add('on'); const q = document.getElementById('kq'); q.value = ''; fillK(''); q.focus() }
+function closeK() { document.getElementById('k').classList.remove('on') }
+function fillK(q) {
+  q = q.trim().toLowerCase()
+  const sug = q ? [] : suggestions()
+  const nodes = Object.entries(D).filter(([, n]) => n.kind !== 'list' && (!q || [n.title, n.who, n.meta, D[n.client]?.title].join(' ').toLowerCase().includes(q))).slice(0, 7)
+  const secs = SECTIONS.filter(([, l]) => q && l.toLowerCase().includes(q))
+  kItems = [...sug.map(([t, m, fn, icon]) => ({ t, m, fn, av: ico(icon), sug: true })),
+            ...secs.map(([id, l, icon]) => ({ t: l, m: 'sezione', fn: () => root(id), av: ico(icon) })),
+            ...nodes.map(([id, n]) => ({ t: n.title, m: [KIND[n.kind], n.who ?? n.meta].filter(Boolean).join(' · '), fn: () => openFromK(id), av: n.ini ?? ico({ task: 'check', design: 'pen', project: 'file' }[n.kind]) }))]
+  kSel = 0
+  document.getElementById('klist').innerHTML = kItems.length ? (sug.length ? '<h5>✦ suggeriti adesso</h5>' : '') + kItems.map((it, i) => (i === sug.length && sug.length ? '<h5>tutto il resto</h5>' : '') +
+    `<button class="kit ${it.sug ? 'sug' : ''}" role="option" data-k="${i}" aria-selected="${i === 0}"><span class="av">${it.av}</span><span class="mn"><span class="t">${it.t}</span><br><span class="m">${it.m}</span></span>${i === 0 ? '<kbd>Invio</kbd>' : ''}</button>`).join('')
+    : '<p style="padding:20px;color:var(--t3)">Nessun risultato. Prova con il nome di una persona.</p>'
+}
+/* aprire da Ctrl+K: si riparte dalla sezione giusta, così la catena ha senso */
+function openFromK(id) { const sec = { mail: 'messaggi', client: 'clienti', project: 'lavori', task: 'lavori', design: 'studio' }[D[id].kind]; remember(); chain = [{ id: sec, kind: 'list', mem: {} }]; accs = []; renderAccs(); go(id) }
+function pickK(i) { const it = kItems[i]; if (!it) return; closeK(); it.fn() }
+document.getElementById('kq').addEventListener('input', e => fillK(e.target.value))
+
+/* ───── eventi ───── */
+function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 2600) }
+function ensureReply() { const c = cur(); if (c.kind === 'mail') go(c.id, 'reply'); return document.getElementById('draft') }
+function typeOut(ta, text) {
+  if (reduced()) { ta.value = text; ta.dispatchEvent(new Event('input')); return }
+  let i = 0; const tick = () => { ta.value = text.slice(0, i += 3); ta.dispatchEvent(new Event('input')); if (i < text.length) requestAnimationFrame(tick) }; tick()
+}
+
+document.addEventListener('click', e => {
+  origin = { x: e.clientX, y: e.clientY }
+  if (e.target.id === 'k') return closeK()
+  const t = e.target.closest('[data-go],[data-morph],[data-sat],[data-to],[data-root],[data-close],[data-promote],[data-slot],[data-insert],[data-attach],[data-send],[data-petals],[data-petal],[data-suggest],[data-make],[data-ask],[data-k],[data-done],[data-veil]')
+  if (!t) { if (petalsOpen) setPetals(false); return }
+  const d = t.dataset
+  if ('veil' in d) setPetals(false)
+  else if ('k' in d) pickK(+d.k)
+  else if ('ask' in d) openK()
+  else if ('root' in d) root(d.root)
+  else if ('to' in d) back(+d.to)
+  else if ('morph' in d) go(cur().id, d.morph)
+  else if ('go' in d) go(d.go)
+  else if ('sat' in d) openAcc(d.sat, d.id || null)
+  else if ('petals' in d) setPetals(!petalsOpen)
+  else if ('petal' in d) { setPetals(false); openAcc(d.petal, null) }
+  else if ('close' in d) { accs.splice(+d.close, 1); renderAccs(); renderOrbit() }
+  else if ('promote' in d) { const a = accs.splice(+d.promote, 1)[0]; renderAccs(); remember(); cur().mem.from = a.id; chain.push({ id: a.id, kind: D[a.id].kind, mem: {} }); petalsOpen = false; render('fwd') }
+  else if ('slot' in d) t.parentElement.querySelectorAll('[data-slot]').forEach(b => b.setAttribute('aria-pressed', b === t))
+  else if ('insert' in d) { const s = document.querySelector('[data-slot][aria-pressed=true]') ?? document.querySelector('[data-slot].best'); const ta = ensureReply(); if (!ta) return toast('Apri la mail per rispondere'); ta.value = (ta.value ? ta.value.trimEnd() + '\n\n' : '') + `Ti va bene ${s.dataset.slot.replace('lun', 'lunedì').replace('mar', 'martedì').replace('mer', 'mercoledì')}?`; ta.dispatchEvent(new Event('input')); toast('Orario inserito nella risposta') }
+  else if ('attach' in d) { if (!ensureReply()) return toast('Apri la mail per allegarlo'); toast('Preventivo allegato') }
+  else if ('make' in d) { accs = accs.filter(a => a.id); renderAccs(); renderOrbit(); toast('Creato e collegato') }
+  else if ('done' in d) { toast('Fatto. Bel lavoro'); back(0) }
+  else if ('suggest' in d) { typeOut(document.getElementById('draft'), D[cur().id].draft); t.remove(); document.getElementById('sugnote').classList.add('on') }
+  else if ('send' in d) {
+    const n = D[cur().id]; delete drafts[cur().id]; n.urgent = false; accs = []; renderAccs()
+    const next = mails(true)[0]
+    toast(next ? `Inviata · prossima: ${D[next].who}` : 'Inviata · nessuno aspetta più risposte')
+    back(0)
+  }
+})
+document.addEventListener('keydown', e => {
+  const kOpen = document.getElementById('k').classList.contains('on')
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); kOpen ? closeK() : openK(); return }
+  if (kOpen) {
+    if (e.key === 'Escape') closeK()
+    else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && kItems.length) { e.preventDefault(); kSel = (kSel + (e.key === 'ArrowDown' ? 1 : -1) + kItems.length) % kItems.length; document.querySelectorAll('.kit').forEach((b, i) => b.setAttribute('aria-selected', i === kSel)); document.querySelector('.kit[aria-selected=true]')?.scrollIntoView({ block: 'nearest' }) }
+    else if (e.key === 'Enter') pickK(kSel)
+    return
+  }
+  if (e.target.closest?.('#dial') && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { root(SECTIONS[(activeSec() + (e.key === 'ArrowRight' ? 1 : -1) + SECTIONS.length) % SECTIONS.length][0]); document.querySelector('#dial .spot[aria-current]')?.focus(); return }
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); back() }
+  else if (e.key === 'Escape') { if (petalsOpen) setPetals(false); else if (accs.length) { accs.shift(); renderAccs(); renderOrbit() } else back() }
+  else if (e.key === 'Enter' && e.target.matches('.row,.hero')) e.target.click()
+})
+addEventListener('resize', () => { renderPetals(); renderOrbit() })
+
+chain = [{ id: 'oggi', kind: 'list', mem: {} }]; render('fade')
+</script>
+</body>
+</html>

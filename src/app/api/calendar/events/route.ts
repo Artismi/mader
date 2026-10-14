@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { tokens, bookings } from '@/lib/db'
+import { googleAuth } from '@/lib/google/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +23,7 @@ export async function GET() {
   const tokenData = tokens.get('google')
   if (tokenData?.provider_token) {
     try {
-      const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-      )
-      oauth2Client.setCredentials({
-        access_token: tokenData.provider_token,
-        refresh_token: tokenData.provider_refresh_token,
-      })
+      const oauth2Client = googleAuth()!  // rinnovo automatico (lib/google/auth)
 
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
       const timeMax = new Date()

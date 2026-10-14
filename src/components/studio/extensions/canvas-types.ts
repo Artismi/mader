@@ -73,6 +73,7 @@ export interface SelState {
   fontFamily: string
   fontSize: number
   bold: boolean
+  fontWeight?: string
   italic: boolean
   underline: boolean
   linethrough: boolean

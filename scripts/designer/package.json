@@ -1,0 +1,11 @@
+{
+  "name": "designer-vetrina",
+  "private": true,
+  "type": "module",
+  "description": "Banco di prova del motore designer: npm run designer:vetrina dalla radice del progetto",
+  "dependencies": {
+    "esbuild": "^0.24.0",
+    "fabric": "7.2.0",
+    "playwright-core": "^1.48.2"
+  }
+}

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // banco di prova del motore designer (dipendenze proprie)
+    "scripts/designer/node_modules/**",
+    "scripts/designer/out/**",
   ]),
 ]);
 

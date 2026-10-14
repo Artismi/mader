@@ -1,4 +1,5 @@
-import { google } from '@ai-sdk/google'
+import { google } from '@/lib/ai/google'
+import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 
@@ -99,7 +100,8 @@ Return ONLY valid JSON matching the schema. No markdown, no explanations.`
 
 export async function generateSceneGraph(prompt: string): Promise<SceneGraph> {
   const { object } = await generateObject({
-    model: google('gemini-2.5-flash'),
+    // con OpenRouter collegato usa il modello scelto dall'utente, non Gemini
+    model: getOpenRouterKey() ? resolveModel('openrouter', 'design').model : google('gemini-2.5-flash'),
     schema: SceneGraphSchema,
     system: SCHEMA_SYSTEM_PROMPT,
     prompt: `Generate a conceptual diagram for: ${prompt}`,

@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 import { VaultBrowser } from '@/components/ui/vault-browser'
 import { VaultEditor } from '@/components/ui/vault-editor'
 import { MemoryManager } from '@/components/ui/memory-manager'
-import { BrainGraph } from '@/components/ui/brain-graph'
+import dynamic from 'next/dynamic'
+// react-force-graph-2d tocca window al caricamento: solo client
+const BrainGraph = dynamic(() => import('@/components/ui/brain-graph').then(m => m.BrainGraph), { ssr: false })
 import type { TreeNode } from '@/components/ui/brain-tree'
 
 interface BrainContentEditorProps {

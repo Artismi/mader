@@ -1,7 +1,5 @@
-import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
 import * as aiSdk from 'ai'
-import { convertToModelMessages, stepCountIs } from 'ai'
+import { convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type UIMessageStreamWriter } from 'ai'
 import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
@@ -10,7 +8,13 @@ import { labInputSchema, runLab, instagramScores } from '@/lib/ai/instagram'
 import { messageText, routeOnDemandSkills, formatSkillCatalog } from '@/lib/ai/skill-router'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
+import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
+import { designOpSchema, designOpsToolDescription, VISUAL_SOURCE_HELP, VISUAL_TREATMENTS } from '@/lib/design/design-ops-spec'
+import { FINISH_IDS, RECIPES } from '@/lib/design/compose-recipes'
+import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
+import { composeToolDescription } from '@/lib/design/compose-prompt'
+import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
 
@@ -98,7 +102,8 @@ const canvasElementSchema = z.object({
   effects: z.array(z.string()).optional().describe("['3d', 'glass', 'clay', 'neon', 'glitch', 'riso', 'bloom', 'grain']"),
   effectProps: z.record(z.string(), z.unknown()).optional(),
   // Path / Shape
-  shapeId: z.string().optional().describe("ID da SHAPE_MAP (es. 'Swiss Cross', 'Fluid Wave', 'Dense Halftone')."),
+  shapeId: z.string().optional().describe("Nome esatto di una forma della LIBRERIA GRAFICA (es. 'Sparkle', 'Bloom Line', 'Dot Sparkle', 'Saturn Sparkle'). Usalo con type 'path'."),
+  angle: z.number().optional().describe("Rotazione in gradi (es. 12 per un accento inclinato)."),
   pathData: z.string().optional(),
   scaleX: z.number().optional(),
   scaleY: z.number().optional(),
@@ -147,6 +152,77 @@ const canvasUpdateSchema = z.object({
     effects: z.array(z.string()).optional(),
     effectProps: z.record(z.string(), z.unknown()).optional(),
   }),
+})
+
+
+// ── composeDesign: l'AI descrive, lo Studio impagina ───────────────────────
+/** Modelli abbastanza bravi da impaginare a coordinate (createDesignBoards). */
+function isStrongDesignModel(label: string) {
+  if (/:free\b/i.test(label)) return false
+  return /claude-(sonnet|opus|fable)|gpt-5|gpt-4\.1|\bo3\b|gemini-(2\.5|3)-pro|grok-4/i.test(label)
+}
+
+const COMPOSE_ONLY_NOTE = `
+
+## Come creare grafiche (obbligatorio)
+Per ogni grafica nuova chiama SOLO composeDesign: non esiste uno strumento a coordinate.
+- Scegli una ricetta (recipe) adatta al contenuto: lo Studio propone più versioni pulite.\n- Se vuoi un carattere materico aggiungi finish (es. carta, grana, polvere, y2k): usa i pack di texture dell'utente.\n- Senza foto, dai forza con visual: per esempio un glifo in cromo a raggiera, una parola in vetro, un generatore in oro.
+- Scrivi contenuti veri e completi: title, subtitle, body, cta, brand, eventuali meta/tags.
+- Per foto: content.image.query con 2-4 parole in inglese sul soggetto (lo Studio cerca una foto vera libera da diritti).
+- Lascia allo Studio posizioni, misure, caratteri ed effetti.
+Per modificare elementi esistenti usa updateCanvasElements ed editDesign con gli ID dello stato del canvas.`
+
+const composeBoardSchema = z.object({
+  name: z.string().optional().describe('Nome della tavola'),
+  recipe: z.string().optional().describe(`Ricetta pulita (impaginazione-stile), consigliata: ${RECIPES.map(r => `${r.id} [${r.family}]`).join(', ')}`),
+  variants: z.number().optional().describe('Quante proposte diverse (1-4, predefinito 3 per una tavola sola)'),
+  finish: z.array(z.string()).optional().describe(`Finiture con i pack di texture e asset dell'utente, max 2: ${FINISH_IDS.join(', ')}`),
+  visual: z.object({
+    source: z.string().describe(VISUAL_SOURCE_HELP),
+    treatment: z.string().optional().describe(`trattamento: ${VISUAL_TREATMENTS.join(', ')}`),
+    arrangement: z.string().optional().describe('solo, raggiera, pioggia, specchio, griglia, eco'),
+    size: z.number().optional(), x: z.number().optional(), y: z.number().optional(), color: z.string().optional(), count: z.number().optional(), opacity: z.number().optional(),
+  }).optional().describe("Visual d'impatto dietro ai testi, fatto con glifi, parole, PNG dei pack o generatori + materiale 3D e filtri. Ottimo quando non c'è una foto."),
+  format: z.string().optional().describe(`Formato: ${Object.keys(FORMATS).join(', ')}`),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  // stringhe libere: lo Studio riconosce anche nomi scritti male (modelli piccoli); un enum rifiuterebbe la chiamata
+  style: z.string().describe(`Stile: ${STYLES.map(s => s.id).join(', ')}`),
+  layout: z.string().describe(`Impaginazione: ${LAYOUTS.map(l => l.id).join(', ')}`),
+  palette: z.number().int().min(0).max(4).optional(),
+  colors: z.object({ bg: z.string(), ink: z.string(), accent: z.string(), muted: z.string(), surface: z.string() }).partial().optional()
+    .describe('Colori del brand del cliente, se noti (hex)'),
+  content: z.object({
+    title: z.string(),
+    eyebrow: z.string().optional(),
+    subtitle: z.string().optional(),
+    body: z.string().optional(),
+    cta: z.string().optional(),
+    meta: z.array(z.string()).optional(),
+    quote: z.string().optional(),
+    author: z.string().optional(),
+    stats: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+    items: z.array(z.string()).optional(),
+    brand: z.string().optional(),
+    badge: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    image: z.object({
+      url: z.string().optional(),
+      query: z.string().optional().describe('2-4 parole in inglese per cercare una FOTO VERA libera da diritti, es. "coffee beans dark stone". Preferiscila a prompt'),
+      prompt: z.string().optional().describe('solo se serve un\'immagine inventata: descrizione per il generatore'),
+      alt: z.string().optional(),
+    }).optional(),
+  }),
+  titleEffect: z.string().optional(),
+  imageLook: z.string().optional(),
+  imageEffect: z.string().optional(),
+  background: z.string().optional(),
+  displayFont: z.string().optional(),
+  textFont: z.string().optional(),
+  align: z.string().optional().describe('left o center'),
+  decor: z.array(z.string()).optional().describe(`Interventi in più rispetto a quelli dello stile: ${DECOR_IDS.join(', ')}`),
+  noDecor: z.boolean().optional(),
+  density: z.string().optional().describe('essenziale, ricco o massimo'),
 })
 
 // ── Crew pipeline helpers ──────────────────────────────────────────────────
@@ -238,30 +314,65 @@ function needsOfficePipeline(query: string): boolean {
   return ALL_OFFICE_TRIGGERS.some(t => q.includes(t)) && !needsCrewPipeline(query)
 }
 
+// ── UI message stream ────────────────────────────────────────────────────────
+// Il client usa useChat (AI SDK v6): le risposte che non passano da streamText
+// (schema, office, crew) devono uscire come UI message stream, non nel vecchio
+// data stream v1 ("0:", "b:", "a:"…) che il client non legge più.
+
+function uiStreamResponse(execute: (writer: UIMessageStreamWriter) => Promise<void> | void): Response {
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.write({ type: 'start' })
+        writer.write({ type: 'start-step' })
+        await execute(writer)
+        writer.write({ type: 'finish-step' })
+        writer.write({ type: 'finish' })
+      },
+    }),
+  })
+}
+
+/** Una parte di testo che resta aperta finché non si chiude o arriva un tool. */
+function textPart(writer: UIMessageStreamWriter) {
+  let id: string | null = null
+  return {
+    write(delta: string) {
+      if (!id) {
+        id = `txt_${crypto.randomUUID()}`
+        writer.write({ type: 'text-start', id })
+      }
+      writer.write({ type: 'text-delta', id, delta })
+    },
+    close() {
+      if (id) writer.write({ type: 'text-end', id })
+      id = null
+    },
+  }
+}
+
+/** Emette una chiamata tool già eseguita (input + output) senza passare dal modello. */
+function writeToolCall(writer: UIMessageStreamWriter, toolName: string, input: unknown, output: unknown) {
+  const toolCallId = `${toolName}_${crypto.randomUUID()}`
+  writer.write({ type: 'tool-input-available', toolCallId, toolName, input })
+  writer.write({ type: 'tool-output-available', toolCallId, output })
+}
+
+const OFFICE_EMOJI: Record<string, string> = { excel: '📊', word: '📄', powerpoint: '📽️' }
+
 function buildOfficeStreamResponse(data: {
   doc_type: string
   title: string
   download_url: string
   preview_text: string
 }): Response {
-  const enc = new TextEncoder()
-  const tcId = `office_${Date.now()}`
-  const emojiMap: Record<string, string> = { excel: '📊', word: '📄', powerpoint: '📽️' }
-  const emoji = emojiMap[data.doc_type] ?? '📎'
-
-  const chunks: Uint8Array[] = [
-    enc.encode(`0:${JSON.stringify(`\n${emoji} **${data.title}** (${data.doc_type})\n${data.preview_text}\n`)}\n`),
-    enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateOfficeDocument' })}\n`),
-    enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ doc_type: data.doc_type }) })}\n`),
-    enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, ...data } })}\n`),
-    enc.encode(`e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`),
-    enc.encode(`d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`),
-  ]
-
-  return new Response(
-    new ReadableStream<Uint8Array>({ start(c) { chunks.forEach(ch => c.enqueue(ch)); c.close() } }),
-    { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-Vercel-AI-Data-Stream': 'v1', 'Cache-Control': 'no-cache' } },
-  )
+  const emoji = OFFICE_EMOJI[data.doc_type] ?? '📎'
+  return uiStreamResponse(writer => {
+    const text = textPart(writer)
+    text.write(`\n${emoji} **${data.title}** (${data.doc_type})\n${data.preview_text}\n`)
+    text.close()
+    writeToolCall(writer, 'generateOfficeDocument', { doc_type: data.doc_type }, { success: true, ...data })
+  })
 }
 
 function extractClientName(query: string, ctx: { clientVaults?: string[] }): string {
@@ -276,11 +387,10 @@ function extractClientName(query: string, ctx: { clientVaults?: string[] }): str
   return ''
 }
 
-// ── Schema → AI SDK stream response ──────────────────────────────────────────
+// ── Schema → UI message stream ───────────────────────────────────────────────
 /**
- * Costruisce una risposta AI SDK UI v1 per uno schema SVG già generato.
- * Emette un messaggio testuale di conferma + il tool call generateConceptualSchema
- * con l'SVG nel result, che il client usa per caricare lo schema nel canvas.
+ * Risposta per uno schema SVG già generato: testo di conferma + tool call
+ * generateConceptualSchema con l'SVG nell'output, che il client carica nel canvas.
  */
 function buildSchemaStreamResponse(data: {
   svg: string
@@ -289,57 +399,27 @@ function buildSchemaStreamResponse(data: {
   node_count: number
   edge_count: number
 }): Response {
-  const enc = new TextEncoder()
-  const tcId = `schema_${Date.now()}`
-
-  const chunks: Uint8Array[] = [
-    // Testo introduttivo
-    enc.encode(`0:${JSON.stringify(`\n🗺️ **Schema generato**: ${data.title}\n${data.node_count} nodi · ${data.edge_count} connessioni · layout ${data.layout_type}\n`)}\n`),
-    // Tool call begin
-    enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateConceptualSchema' })}\n`),
-    // Tool call args
-    enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ prompt: data.title }) })}\n`),
-    // Tool result con SVG
-    enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, svg: data.svg, title: data.title, layout_type: data.layout_type, node_count: data.node_count, edge_count: data.edge_count } })}\n`),
-    // Finish
-    enc.encode(`e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`),
-    enc.encode(`d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`),
-  ]
-
-  const readable = new ReadableStream<Uint8Array>({
-    start(controller) {
-      chunks.forEach(c => controller.enqueue(c))
-      controller.close()
-    },
-  })
-
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'X-Vercel-AI-Data-Stream': 'v1',
-      'Cache-Control': 'no-cache',
-    },
+  return uiStreamResponse(writer => {
+    const text = textPart(writer)
+    text.write(`\n🗺️ **Schema generato**: ${data.title}\n${data.node_count} nodi · ${data.edge_count} connessioni · layout ${data.layout_type}\n`)
+    text.close()
+    writeToolCall(writer, 'generateConceptualSchema', { prompt: data.title }, { success: true, ...data })
   })
 }
 
 // ── Crew SSE → AI SDK stream converter ───────────────────────────────────────
 /**
  * Legge lo stream SSE dalla crew Python e lo converte nel formato
- * AI SDK UI v1 (data stream protocol), mostrando ogni pensiero degli agenti
+ * UI message stream, mostrando ogni pensiero degli agenti
  * come testo in chat. Alla fine, se ci sono boards pronti, emette il tool call
  * createDesignBoards per aggiornare il canvas senza un secondo LLM call.
  */
 function buildCrewStreamResponse(
   crewSseBody: ReadableStream<Uint8Array>,
 ): Response {
-  const enc = new TextEncoder()
-
-  // Emette un testo nel protocollo AI SDK UI v1: `0:"<escaped>"\n`
-  const textDelta = (text: string): Uint8Array =>
-    enc.encode(`0:${JSON.stringify(text)}\n`)
-
-  const readable = new ReadableStream<Uint8Array>({
-    async start(controller) {
+  return uiStreamResponse(async writer => {
+      const text = textPart(writer)
+      const textDelta = (t: string) => text.write(t)
       const reader = crewSseBody.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -375,7 +455,7 @@ function buildCrewStreamResponse(
                 const header = attempt === 1
                   ? `\n🧠 **Pipeline Multi-Agente avviato** — 5 agenti in sequenza\n\n`
                   : `\n🔄 **Retry ${attempt}** — il Critic ha richiesto revisioni\n\n`
-                controller.enqueue(textDelta(header))
+                textDelta(header)
                 break
               }
 
@@ -384,6 +464,8 @@ function buildCrewStreamResponse(
                 const log = event.log as string | undefined
                 const toolName = event.tool as string | undefined
                 const toolInput = event.tool_input as string | undefined
+                const agent = (event.agent as string | undefined) ?? 'Agente'
+                const emoji = (event.emoji as string | undefined) ?? '🤖'
 
                 // Nuovo formato strutturato per UI Accordion
                 let stepContent = `<agent_step agent="${agent}" emoji="${emoji}">\n`
@@ -392,7 +474,7 @@ function buildCrewStreamResponse(
                 if (toolName) stepContent += `[TOOL name="${toolName}"]${toolInput || ''}[/TOOL]\n`
                 stepContent += `</agent_step>\n`
                 
-                controller.enqueue(textDelta(stepContent))
+                textDelta(stepContent)
                 break
               }
 
@@ -400,24 +482,24 @@ function buildCrewStreamResponse(
                 const agent = event.agent as string
                 const step = event.step as number
                 const total = event.total as number
-                controller.enqueue(textDelta(`✓ **${agent}** completato (${step}/${total})\n\n`))
+                textDelta(`✓ **${agent}** completato (${step}/${total})\n\n`)
                 break
               }
 
               case 'retry': {
                 const score = event.score as number ?? 0
                 const issues = (event.issues as string[] ?? []).slice(0, 3)
-                controller.enqueue(textDelta(`\n⚠️ Score: **${score}/100** — sotto soglia. Issues:\n`))
-                issues.forEach(issue => controller.enqueue(textDelta(`- ${issue}\n`)))
-                controller.enqueue(textDelta('\n'))
+                textDelta(`\n⚠️ Score: **${score}/100** — sotto soglia. Issues:\n`)
+                issues.forEach(issue => textDelta(`- ${issue}\n`))
+                textDelta('\n')
                 break
               }
 
               case 'clarification_needed': {
                 hasClarification = true
                 const questions = event.questions as string[] ?? []
-                controller.enqueue(textDelta(`\n❓ Ho bisogno di qualche informazione prima di procedere:\n\n`))
-                questions.forEach((q, i) => controller.enqueue(textDelta(`**${i + 1}.** ${q}\n`)))
+                textDelta(`\n❓ Ho bisogno di qualche informazione prima di procedere:\n\n`)
+                questions.forEach((q, i) => textDelta(`**${i + 1}.** ${q}\n`))
                 break
               }
 
@@ -430,17 +512,17 @@ function buildCrewStreamResponse(
                 const scoreEmoji = finalScore >= 75 ? '✅' : '⚠️'
                 const warning = event.warning as string | undefined
 
-                controller.enqueue(textDelta(
+                textDelta(
                   `\n${scoreEmoji} **Pipeline completato** — qualità: ${finalScore}/100\n`
-                ))
+                )
                 if (finalSuggestions.length > 0) {
-                  controller.enqueue(textDelta(`💡 ${finalSuggestions[0]}\n`))
+                  textDelta(`💡 ${finalSuggestions[0]}\n`)
                 }
                 if (warning) {
-                  controller.enqueue(textDelta(`⚠️ ${warning}\n`))
+                  textDelta(`⚠️ ${warning}\n`)
                 }
                 if (!approved && finalBoards) {
-                  controller.enqueue(textDelta(`\nCanvas consegnato nonostante lo score basso — puoi modificarlo manualmente.\n`))
+                  textDelta(`\nCanvas consegnato nonostante lo score basso — puoi modificarlo manualmente.\n`)
                 }
                 break
               }
@@ -453,24 +535,23 @@ function buildCrewStreamResponse(
                   node_count: event.node_count as number,
                   edge_count: event.edge_count as number,
                 }
-                controller.enqueue(textDelta(
+                textDelta(
                   `\n🗺️ **Schema generato**: ${finalSchema.title}\n${finalSchema.node_count} nodi · ${finalSchema.edge_count} connessioni · layout ${finalSchema.layout_type}\n`
-                ))
+                )
                 break
               }
 
               case 'office_ready': {
-                const emojiMap: Record<string, string> = { excel: '📊', word: '📄', powerpoint: '📽️' }
                 finalOffice = {
                   doc_type: event.doc_type as string,
                   title: event.title as string,
                   download_url: event.download_url as string,
                   preview_text: event.preview_text as string,
                 }
-                const officeEmoji = emojiMap[finalOffice.doc_type] ?? '📎'
-                controller.enqueue(textDelta(
+                const officeEmoji = OFFICE_EMOJI[finalOffice.doc_type] ?? '📎'
+                textDelta(
                   `\n${officeEmoji} **${finalOffice.title}** (${finalOffice.doc_type}) pronto — ${finalOffice.preview_text}\n`
-                ))
+                )
                 break
               }
 
@@ -479,25 +560,23 @@ function buildCrewStreamResponse(
                 const msg = event.message as string
                 const cpBoards = event.boards as unknown[] ?? []
                 
-                controller.enqueue(textDelta(`\n⏸️ **Checkpoint raggiunto**: ${cpId}\n${msg}\n`))
-                controller.enqueue(textDelta(`Il sistema è in attesa del tuo feedback o di un eventuale spostamento manuale degli elementi.\n`))
+                textDelta(`\n⏸️ **Checkpoint raggiunto**: ${cpId}\n${msg}\n`)
+                textDelta(`Il sistema è in attesa del tuo feedback o di un eventuale spostamento manuale degli elementi.\n`)
                 
                 // Opzionalmente inviamo i board correnti per aggiornare la UI se necessario
                 if (cpBoards.length > 0) {
-                    const tcId = `checkpoint_${Date.now()}`
-                    controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'createDesignBoards' })}\n`))
-                    controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ boards: cpBoards }) })}\n`))
-                    controller.enqueue(enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, checkpoint_id: cpId } })}\n`))
+                  text.close()
+                  writeToolCall(writer, 'createDesignBoards', { boards: cpBoards }, { success: true, checkpoint_id: cpId })
                 }
                 break
               }
 
               case 'warning':
-                controller.enqueue(textDelta(`\n⚠️ ${event.message as string}\n`))
+                textDelta(`\n⚠️ ${event.message as string}\n`)
                 break
 
               case 'error':
-                controller.enqueue(textDelta(`\n❌ Errore crew: ${event.message as string}\n`))
+                textDelta(`\n❌ Errore crew: ${event.message as string}\n`)
                 break
             }
           }
@@ -506,83 +585,16 @@ function buildCrewStreamResponse(
         reader.releaseLock()
       }
 
-      // ── Fine stream: emette tool call o chiusura ─────────────────────────
-      if (finalBoards && finalBoards.length > 0 && !hasClarification) {
-        // Bypass LLM bridge: costruiamo il tool call direttamente nel stream
-        // senza una seconda chiamata a Gemini. I boards sono già pronti.
-        const tcId = `crew_${Date.now()}`
-        const argsStr = JSON.stringify({ boards: finalBoards })
-
-        // Tool call begin
-        controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'createDesignBoards' })}\n`))
-        // Tool call args delta (tutto in un chunk)
-        controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: argsStr })}\n`))
-        // Tool result
-        controller.enqueue(enc.encode(`a:${JSON.stringify({
-          toolCallId: tcId,
-          result: { success: true, rendered: finalBoards.length, score: finalScore },
-        })}\n`))
-
-        // Finish step con tool-calls
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
-      } else if (finalOffice && !hasClarification) {
-        const tcId = `office_${Date.now()}`
-        controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateOfficeDocument' })}\n`))
-        controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ doc_type: finalOffice.doc_type }) })}\n`))
-        controller.enqueue(enc.encode(`a:${JSON.stringify({ toolCallId: tcId, result: { success: true, ...finalOffice } })}\n`))
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
-      } else if (finalSchema && !hasClarification) {
-        // Schema branch: emette tool call direttamente senza secondo LLM call
-        const tcId = `schema_${Date.now()}`
-        controller.enqueue(enc.encode(`b:${JSON.stringify({ toolCallId: tcId, toolName: 'generateConceptualSchema' })}\n`))
-        controller.enqueue(enc.encode(`c:${JSON.stringify({ toolCallId: tcId, argsTextDelta: JSON.stringify({ prompt: finalSchema.title }) })}\n`))
-        controller.enqueue(enc.encode(`a:${JSON.stringify({
-          toolCallId: tcId,
-          result: {
-            success: true,
-            svg: finalSchema.svg,
-            title: finalSchema.title,
-            layout_type: finalSchema.layout_type,
-            node_count: finalSchema.node_count,
-            edge_count: finalSchema.edge_count,
-          },
-        })}\n`))
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'tool-calls', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
-      } else {
-        // Solo testo (clarification o errore senza boards)
-        controller.enqueue(enc.encode(
-          `e:${JSON.stringify({ finishReason: 'stop', usage: { promptTokens: 0, completionTokens: 0 }, isContinued: false })}\n`
-        ))
-        controller.enqueue(enc.encode(
-          `d:${JSON.stringify({ finishReason: 'stop', usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-        ))
+      // ── Fine stream: emette il tool call finale (niente seconda chiamata LLM) ──
+      text.close()
+      if (hasClarification) return
+      if (finalBoards && finalBoards.length > 0) {
+        writeToolCall(writer, 'createDesignBoards', { boards: finalBoards }, { success: true, rendered: finalBoards.length, score: finalScore })
+      } else if (finalOffice) {
+        writeToolCall(writer, 'generateOfficeDocument', { doc_type: finalOffice.doc_type }, { success: true, ...finalOffice })
+      } else if (finalSchema) {
+        writeToolCall(writer, 'generateConceptualSchema', { prompt: finalSchema.title }, { success: true, ...finalSchema })
       }
-
-      controller.close()
-    },
-  })
-
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'X-Vercel-AI-Data-Stream': 'v1',
-      'Cache-Control': 'no-cache',
-    },
   })
 }
 
@@ -622,10 +634,14 @@ export async function POST(req: Request) {
       extraFiles: Array.isArray(extraVaultFiles) ? extraVaultFiles : undefined,
     })
 
+    // Con OpenRouter scelto, crew e schema Python (che usano sempre Gemini) si
+    // saltano: la richiesta la fa il modello dell'utente, con i tool del canvas.
+    const usingOpenRouter = !!getOpenRouterKey() && (modelId === 'openrouter' || !modelId)
+
     // ── SCHEMA DISPATCHER ────────────────────────────────────────────────────
     // Richieste di schema/mappa concettuale → crew /schema (via Next.js API).
     // Priorità: viene valutato PRIMA del canvas crew, perché non richiede crew completa.
-    if (needsSchemaPipeline(userQuery) && !needsCrewPipeline(userQuery)) {
+    if (!usingOpenRouter && needsSchemaPipeline(userQuery) && !needsCrewPipeline(userQuery)) {
       try {
         const schemaRes = await fetch('http://127.0.0.1:8765/schema', {
           method: 'POST',
@@ -668,7 +684,7 @@ export async function POST(req: Request) {
     // ── END OFFICE DISPATCHER ─────────────────────────────────────────────────
 
     // ── CREW DISPATCHER (streaming) ──────────────────────────────────────────
-    if (needsCrewPipeline(userQuery)) {
+    if (!usingOpenRouter && needsCrewPipeline(userQuery)) {
       try {
         const clientName = extractClientName(userQuery, ctx)
         const crewRes = await fetch('http://127.0.0.1:8765/canvas/stream', {
@@ -721,8 +737,12 @@ export async function POST(req: Request) {
       architecture,
       ctx.snapshot,
       canvasSnapshot
-        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements. Per modifiche chirurgiche NON usare clearBoard.\n---`
+        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements (testi, colori, posizioni) ed editDesign (allinea, distribuisci, pathfinder, offset/sticker, ripetizioni, fusioni, testo curvo, maschere, ricolora, palette, livelli, esporta). Per modifiche chirurgiche NON usare clearBoard.\n---`
         : '',
+      isCreativeQuery
+        ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
+        : '',
+      graphicLibraryPrompt(),
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
       formatSkillCatalog(onDemand.catalog),
@@ -741,16 +761,21 @@ export async function POST(req: Request) {
     ].filter(Boolean).join('\n\n')
     const modelMessages = await convertToModelMessages(messages)
 
-    const model = modelId === 'gemini'
-      ? google('gemini-2.5-flash')
-      : anthropic('claude-3-5-sonnet-latest')
+    // Le richieste grafiche (o fatte con il canvas aperto) vanno al modello forte,
+    // il resto a quello economico
+    const task = isCreativeQuery || canvasSnapshot ? 'design' : 'general'
+    const { model, label: modelLabel } = resolveModel(modelId, task)
+    // I modelli piccoli o gratuiti impaginano male a coordinate: per loro solo composeDesign,
+    // dove lo Studio fa griglia, foto, effetti e tipografia da sé
+    const lowLevelDesign = isStrongDesignModel(modelLabel)
+    console.log(`[ai] richiesta ${task} → ${modelLabel}${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
 
     const result = tracedStreamText({
       model,
-      system: SYSTEM_PROMPT,
+      system: lowLevelDesign ? SYSTEM_PROMPT : SYSTEM_PROMPT + COMPOSE_ONLY_NOTE,
       messages: modelMessages,
       stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought (AI SDK v6)
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
@@ -758,7 +783,7 @@ export async function POST(req: Request) {
         isEnabled: true,
         functionId: 'canvas-ai-agent',
         metadata: {
-          modelId: modelId ?? 'anthropic',
+          modelId: modelLabel,
           hasCanvas: !!canvasSnapshot,
         },
       },
@@ -1034,8 +1059,15 @@ export async function POST(req: Request) {
         // Canvas tools: hanno execute stub per permettere il chaining multi-step
         // (stopWhen: stepCountIs). L'esecuzione reale avviene client-side via handleAICommand;
         // il server ritorna solo una conferma immediata.
-        createDesignBoards: tool({
-          description: `Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
+        composeDesign: tool({
+          description: composeToolDescription(),
+          inputSchema: z.object({ boards: z.array(composeBoardSchema).min(1) }),
+          execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
+        }),
+
+        ...(lowLevelDesign ? { createDesignBoards: tool({
+          description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
+Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
 DIMENSIONI STANDARD — scegli in base al contenuto:
 - Social Square: width:1080, height:1080
@@ -1079,7 +1111,7 @@ QUANTITÀ BOARD:
             success: true,
             rendered: boards?.length ?? 0,
           }),
-        }),
+        }) } : {}),
 
         updateCanvasElements: tool({
           description: 'Modifica coordinate, testi, font, colori ecc. in elementi esistenti del canvas.',
@@ -1092,6 +1124,12 @@ QUANTITÀ BOARD:
             success: true,
             updated: updates?.length ?? 0,
           }),
+        }),
+
+        editDesign: tool({
+          description: designOpsToolDescription,
+          inputSchema: z.object({ ops: z.array(designOpSchema).min(1) }),
+          execute: async ({ ops }) => ({ success: true, ops: ops.length }),
         }),
 
         clearBoard: tool({
@@ -1181,7 +1219,14 @@ QUANTITÀ BOARD:
       },
     })
 
-    return result.toUIMessageStreamResponse()
+    return result.toUIMessageStreamResponse({
+      // l'errore in chat dice anche quale modello ha fallito
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`[ai] errore da ${modelLabel}:`, msg)
+        return `${msg} (modello: ${modelLabel})`
+      },
+    })
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

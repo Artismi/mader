@@ -11,8 +11,9 @@ import { cn } from "@/lib/utils";
 import { useSidebar } from '@/components/layout/SidebarContext';
 import { useApp } from '@/components/layout/AppContext';
 import { useChatStore, ChatSession, Message } from '../studio/hooks/use-chat-store';
+import { InspirationPortal } from './inspiration-portal';
 
-type ModelId = 'claude' | 'gemini';
+type ModelId = 'openrouter' | 'claude' | 'gemini';
 
 // ── Tipi contesto ─────────────────────────────────────────────────────────────
 
@@ -39,12 +40,16 @@ function userMessageDisplayText(m: UIMessage): string {
 // Solo i tool che modificano il canvas — generateAIImage è un passo intermedio,
 // non viene mostrato in chat come conferma finale.
 const CANVAS_TOOL_LABELS: Record<string, string> = {
+    composeDesign: 'Grafica impaginata nel canvas',
     createDesignBoards: 'Tavola creata nel canvas',
     updateCanvasElements: 'Canvas aggiornato',
     clearBoard: 'Tavola svuotata',
     deleteElements: 'Elementi eliminati',
     getCanvasState: 'Canvas letto',
+    generateConceptualSchema: 'Schema caricato nel canvas',
 };
+
+const messageText = (m: UIMessage) => m.parts.filter(isTextUIPart).map(p => p.text).join('');
 
 function assistantMessageDisplayText(m: UIMessage): string | null {
     const text = m.parts.filter(isTextUIPart).map(p => p.text).join('').trim();
@@ -295,13 +300,13 @@ function GenerativeUI({ data }: { data: any }) {
 
 // Canvas tools are client-side (no execute on the server). Their UI state is
 // 'input-available' (not 'output-available') so they need a dedicated check.
-const CANVAS_TOOLS = new Set(['createDesignBoards', 'updateCanvasElements', 'clearBoard', 'deleteElements', 'getCanvasState']);
+const CANVAS_TOOLS = new Set(['composeDesign', 'createDesignBoards', 'updateCanvasElements', 'editDesign', 'clearBoard', 'deleteElements', 'getCanvasState', 'generateConceptualSchema']);
 
 function QuickActions({ lastMessage, onAction, disabled, inputRef }: { 
     lastMessage?: UIMessage, 
     onAction: (text: string) => void,
     disabled: boolean,
-    inputRef: React.RefObject<HTMLInputElement>
+    inputRef: React.RefObject<HTMLInputElement | null>
 }) {
     const options = useMemo(() => {
         if (!lastMessage || lastMessage.role !== 'assistant') return [];
@@ -385,7 +390,6 @@ export function AIChatWidget() {
         return activeSession.messages.map(m => ({
             id: m.id,
             role: m.role,
-            content: m.content,
             parts: [{ type: 'text', text: m.content }]
         }));
     }, [activeSession]);
@@ -428,9 +432,37 @@ export function AIChatWidget() {
     const clearContext = () => { setClientSetting('auto'); setExtraFiles([]) }
 
     const [selectedModel, setSelectedModel] = useState<ModelId>('gemini');
+    const [openRouterConnected, setOpenRouterConnected] = useState(false);
+    const orConnectedRef = useRef(false);
+
+    // Con OpenRouter collegato si parte dal modello dell'utente. Si ricontrolla
+    // quando la finestra torna in primo piano (collegamento fatto nel browser).
+    useEffect(() => {
+        const check = () => fetch('/api/ai/provider')
+            .then(r => r.json())
+            .then(d => {
+                const connected = !!d?.openrouter?.connected;
+                if (connected !== orConnectedRef.current) {
+                    orConnectedRef.current = connected;
+                    setOpenRouterConnected(connected);
+                    setSelectedModel(m => connected ? 'openrouter' : m === 'openrouter' ? 'gemini' : m);
+                }
+            })
+            .catch(() => {});
+        check();
+        window.addEventListener('focus', check);
+        return () => window.removeEventListener('focus', check);
+    }, []);
     const [input, setInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     const [lastEngineReport, setLastEngineReport] = useState<{ id: string, items: string[] } | null>(null);
+    const [isInspirationOpen, setIsInspirationOpen] = useState(false);
+    const [inspirationQuery, setInspirationQuery] = useState('');
+
+    const handleInspirationComplete = (urls: string[]) => {
+        const refsString = urls.map(u => `[REFERENCE_URL: ${u}]`).join('\n');
+        sendMessage({ text: `Analizza queste immagini selezionate e genera un Design Blueprint parametrico basato sulla loro struttura visiva (Visual Mimicry):\n${refsString}` });
+    };
 
     useEffect(() => {
         const handler = (e: Event) => {
@@ -482,6 +514,8 @@ export function AIChatWidget() {
                         toolName,
                         result: undefined,
                         args: part.input as Record<string, unknown> | undefined,
+                        // l'SVG dello schema arriva nell'output del tool, non nell'input
+                        output: part.state === 'output-available' ? part.output : undefined,
                         timestamp: Date.now(),
                     });
                 }
@@ -491,9 +525,9 @@ export function AIChatWidget() {
         [router, pushAiCommand, activeSessionId, addMessage],
     );
 
-    const { messages, status, sendMessage, setMessages, error, stop, reload } = useChat({
+    const { messages, status, sendMessage, setMessages, error, stop, regenerate } = useChat({
         transport,
-        initialMessages,
+        messages: initialMessages,
         onFinish,
     });
 
@@ -639,15 +673,15 @@ export function AIChatWidget() {
                             <span className="text-[10px] font-black tracking-[0.2em] uppercase text-white/30">Creative Nexus v3.0</span>
                             <ProgressMeter status={{ 
                                 target: messages.some(m => {
-                                    const c = (m.content || '').toLowerCase();
+                                    const c = messageText(m).toLowerCase();
                                     return c.includes('target') || c.includes('pubblico') || c.includes('soggetto') || c.includes('cliente') || c.includes('destinatari');
                                 }), 
                                 tone: messages.some(m => {
-                                    const c = (m.content || '').toLowerCase();
+                                    const c = messageText(m).toLowerCase();
                                     return c.includes('tono') || c.includes('vibe') || c.includes('mood') || c.includes('atmosfera') || c.includes('stile');
                                 }), 
                                 assets: messages.some(m => {
-                                    const c = (m.content || '').toLowerCase();
+                                    const c = messageText(m).toLowerCase();
                                     return c.includes('asset') || c.includes('logo') || c.includes('immagine') || c.includes('font') || c.includes('colori');
                                 })
                             }} />
@@ -658,18 +692,16 @@ export function AIChatWidget() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-0.5 bg-white/[0.03] rounded-lg p-0.5 border border-white/10 backdrop-blur-sm">
-                            {(['gemini', 'claude'] as ModelId[]).map(m => (
-                                <button key={m} onClick={() => setSelectedModel(m)} className={cn(
-                                    "px-3 py-1 rounded-md text-[9px] font-black tracking-widest transition-all",
-                                    selectedModel === m
-                                        ? "bg-accent/80 text-white shadow-[0_0_15px_rgba(124,58,237,0.4)]"
-                                        : "text-white/20 hover:text-white/40"
-                                )}>
-                                    {m.toUpperCase()}
-                                </button>
-                            ))}
-                        </div>
+                        <select
+                            value={selectedModel}
+                            onChange={e => setSelectedModel(e.target.value as ModelId)}
+                            title="Modello AI"
+                            className="max-w-[120px] bg-white/[0.03] border border-white/10 rounded-lg px-2 py-1 text-[9px] font-black tracking-widest uppercase text-white/80 focus:outline-none focus:border-accent/60 cursor-pointer"
+                        >
+                            {openRouterConnected && <option value="openrouter" className="bg-[#141414]">OpenRouter</option>}
+                            <option value="gemini" className="bg-[#141414]">Gemini</option>
+                            <option value="claude" className="bg-[#141414]">Claude</option>
+                        </select>
                     </div>
                 </div>
 
@@ -988,11 +1020,11 @@ export function AIChatWidget() {
                         </p>
                         <button 
                             onClick={() => {
-                                if (typeof reload === 'function') {
-                                    reload();
+                                if (typeof regenerate === 'function') {
+                                    regenerate();
                                 } else {
                                     const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-                                    if (lastUserMsg) sendMessage(lastUserMsg.content);
+                                    if (lastUserMsg) sendMessage({ text: messageText(lastUserMsg) });
                                 }
                             }}
                             className="w-fit mt-1 px-3 py-1.5 rounded-lg bg-red-400/10 hover:bg-red-400/20 text-red-400 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
@@ -1047,6 +1079,13 @@ export function AIChatWidget() {
                     )}
                 </form>
             </div>
+            
+            <InspirationPortal 
+                isOpen={isInspirationOpen}
+                onClose={() => setIsInspirationOpen(false)}
+                initialQuery={inspirationQuery}
+                onSelectionComplete={handleInspirationComplete}
+            />
             </div>
         </div>
     );

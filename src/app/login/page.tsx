@@ -9,9 +9,12 @@ export default function LoginPage() {
             provider: 'google',
             options: {
                 redirectTo: `${window.location.origin}/auth/callback`,
-                scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly',
+                // gmail.send serve per rispondere dal guscio
+                scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send',
                 queryParams: {
                     access_type: 'offline',
+                    // senza consenso esplicito Google non ridà il refresh token e il collegamento scade dopo un'ora
+                    prompt: 'consent',
                 },
                 skipBrowserRedirect: true,
             }

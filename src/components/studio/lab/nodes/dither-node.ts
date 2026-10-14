@@ -1,6 +1,6 @@
-import { 
-  vec3, floor, mod, float,
-  screenUV, uniform, mix, clamp
+import {
+  vec3, vec4, floor, mod, float, uv,
+  mix, clamp, step
 } from 'three/tsl'
 
 /**
@@ -9,23 +9,23 @@ import {
  */
 export const ditherNode = (
   inputColor: any,
-  uMode: any, // 0: 4x4, 1: 8x8
+  uMode: any, // -1: disabled, 0: 4x4, 1: 8x8
   uColorDepth: any
 ) => {
-  // Bayer 4x4 Pre-calculated values (scaled to 1.0)
   const bayer4 = (p: any) => {
-    const x = mod(floor(p.x), 4.0)
-    const y = mod(floor(p.y), 4.0)
-    // Simplified Bayer 4x4 formula
-    return mod(x.add(y.mul(4.0)), 16.0).div(16.0) 
+    const x = mod(floor(p.x), float(4))
+    const y = mod(floor(p.y), float(4))
+    return mod(x.add(y.mul(float(4))), float(16)).div(float(16))
   }
 
-  const pos = screenUV.mul(uniform(float(1000))) // Screen-space pixels
+  // Object-local pixel coordinates (consistent with object position, not screen)
+  const pos = uv().mul(float(1000))
   const threshold = bayer4(pos)
-  
-  // Quantization
-  const levels = clamp(uColorDepth, 1.0, 255.0)
-  const quantized = floor(inputColor.rgb.mul(levels).add(threshold.sub(0.5))).div(levels)
 
-  return vec3(quantized)
+  const levels = clamp(uColorDepth, float(1), float(255))
+  const quantized = floor(inputColor.rgb.mul(levels).add(threshold.sub(float(0.5)))).div(levels)
+
+  // step(0, uMode): 0.0 when uMode < 0 (disabled), 1.0 when uMode >= 0 (enabled)
+  const enabled = step(float(0), uMode)
+  return mix(inputColor, vec4(vec3(quantized), inputColor.a), enabled)
 }

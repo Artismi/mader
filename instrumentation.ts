@@ -38,6 +38,8 @@ export async function register() {
   sdk.start()
 
   // Graceful shutdown
-  process.on('SIGTERM', () => { sdk.shutdown() })
-  process.on('SIGINT',  () => { sdk.shutdown() })
+  if (typeof process !== 'undefined' && process?.on) {
+    process.on('SIGTERM', () => { sdk.shutdown() })
+    process.on('SIGINT',  () => { sdk.shutdown() })
+  }
 }

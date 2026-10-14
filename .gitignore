@@ -47,3 +47,13 @@ lint-output2.txt
 tsc_err.txt
 tsc_error.txt
 ts-error.txt
+
+# binari copiati da node_modules (scripts/copy-vendor.mjs)
+/public/vendor/
+/public/models/
+
+
+# banco di prova del motore designer
+/scripts/designer/node_modules
+/scripts/designer/out
+/scripts/designer/out-*

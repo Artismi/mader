@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as fabric from 'fabric'
 import {
@@ -10,7 +10,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Link2, Sparkles, Trash2, ChevronDown, ChevronLeft, Layers,
   ArrowRight, ArrowLeft, ArrowLeftRight, Library,
-  LassoSelect, Zap, Star, Scissors, PenTool,
+  LassoSelect, Zap, Star, Scissors, PenTool, Hexagon, LayoutTemplate,
   Eye, EyeOff, Lock, Unlock, GripVertical, Sliders, X, Palette,
   Search, Cpu, Highlighter, Play, Merge, Ghost, Maximize2, Heart, Droplets,
   Waves, Cloud, Triangle, LayoutList, LayoutGrid, Magnet,
@@ -29,10 +29,14 @@ import * as Matter from 'matter-js'
 import { SpringIntegrator } from '@/lib/motion/spring-physics'
 
 // Libraries
-import { ALL_FONTS, FONT_CATEGORIES, injectGoogleFont } from './libraries/font-library'
+import { injectGoogleFont } from './libraries/font-library'
+import { FontPicker } from './FontPicker'
+import { ensureFont, fontEntry, refreshTexts, watchCanvasFonts, WEIGHT_NAMES } from './libraries/font-loader'
 import { TEXTURE_LIBRARY, BRICOLAGE_ASSETS } from './libraries/texture-library'
-import { SHAPE_LIBRARY, ICONS_LIBRARY } from './libraries/shape-library'
+import { SHAPE_LIBRARY, ICONS_LIBRARY, FILLED_SHAPE_CATEGORIES, FILLED_ICONS } from './libraries/shape-library'
 import { PRO_ASSETS } from './libraries/pro-assets'
+import { GeneratePanel } from './GeneratePanel'
+import { PackPanel, type PackItem, type PackInfo } from './PackPanel'
 import {
   BRUSH_TYPES, createCrayonBrush, createSprayBrush,
   createMarkerBrush, createInkBrush, createGenerativeBrush,
@@ -56,10 +60,11 @@ import {
   ThermalFilter, PrismFilter, NeonGlowFilter, HolographicFilter, BloomFilter, PixelateFilter,
   // Texture
   GrainFilter, FiberFilter, EliteHalftone, ASCIIFilter,
-  // Style
   Risograph, EliteClay, OilPaintFilter, OutlineFilter,
   DuotoneFilter, VignetteFilter, PosterizeFilter, VolumetricDepthFilter,
 } from './extensions/filters'
+
+import { Vanguard3DInjector } from './lab/Vanguard3DInjector'
 
 import { solveBoard, type LayoutBoard } from '@/lib/design/engine'
 import * as generative from '@/lib/design/generative'
@@ -102,7 +107,7 @@ interface Props {
   imageUrlQueue?: string | null
 }
 
-type Tool = 'select' | 'lasso' | 'text' | 'rect' | 'circle' | 'line' | 'pen' | 'pencil' | 'eraser' | 'image' | 'scissors'
+type Tool = 'select' | 'lasso' | 'text' | 'rect' | 'circle' | 'polygon' | 'star' | 'line' | 'pen' | 'pencil' | 'eraser' | 'image' | 'scissors'
 
 // ─── FONTS ───────────────────────────────────────────────────────────────────
 
@@ -207,6 +212,59 @@ const getObjId = (obj: any): string => {
   return obj.objId
 }
 import { type SelState, D } from './extensions/canvas-types'
+import { attachFx, applyFx } from './fx/engine'
+import { fxDef, newFx, type FxId } from './fx/catalog'
+import { FxPanel } from './fx/FxPanel'
+import { Orbit3D } from './fx/Orbit3D'
+
+// ─── Colori e posizioni di default ────────────────────────────────────────────
+// Un oggetto nuovo deve vedersi: scuro su una tavola chiara, chiaro sul fondo scuro.
+const SHAPE_FILL = '#c7c2f6'
+const artboardAt = (canvas: fabric.Canvas, x: number, y: number) =>
+  canvas.getObjects().filter(o => (o as any).isArtboard).reverse().find(o => {
+    const b = o.getBoundingRect(); return x >= b.left && x <= b.left + b.width && y >= b.top && y <= b.top + b.height
+  })
+const isLight = (c: unknown) => {
+  if (typeof c !== 'string') return true
+  const m = c.match(/^#?([0-9a-f]{6})$/i) ?? c.match(/^#?([0-9a-f]{3})$/i)
+  if (!m) return !/^(black|#000)/i.test(c)
+  const h = m[1].length === 3 ? m[1].split('').map(x => x + x).join('') : m[1]
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16))
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55
+}
+function inkAt(canvas: fabric.Canvas, x: number, y: number) {
+  const ab = artboardAt(canvas, x, y)
+  return ab ? (isLight(ab.fill) ? '#1a1a1a' : '#ffffff') : '#ffffff'
+}
+/** centro della vista (in coordinate della scena), dove compaiono gli oggetti dalla libreria */
+function dropPoint(canvas: fabric.Canvas) {
+  const v = canvas.viewportTransform, z = canvas.getZoom()
+  return { x: (canvas.getWidth() / 2 - v[4]) / z - 100, y: (canvas.getHeight() / 2 - v[5]) / z - 100 }
+}
+
+// ─── Gruppi (Fabric 7: niente più toGroup()) ─────────────────────────────────
+function groupSelection(canvas: fabric.Canvas) {
+  const a = canvas.getActiveObject()
+  if (!(a instanceof fabric.ActiveSelection)) return
+  const objs = a.getObjects().filter(o => !(o as any).isArtboard)
+  if (objs.length < 2) return
+  canvas.discardActiveObject()
+  objs.forEach(o => canvas.remove(o))
+  const g = new fabric.Group(objs)
+  getObjId(g)
+  canvas.add(g); canvas.setActiveObject(g); canvas.requestRenderAll()
+}
+function ungroupSelection(canvas: fabric.Canvas) {
+  const g = canvas.getActiveObject()
+  if (!(g instanceof fabric.Group) || g instanceof fabric.ActiveSelection) return
+  const idx = canvas.getObjects().indexOf(g)
+  const objs = g.removeAll()
+  canvas.remove(g)
+  objs.forEach((o, i) => { canvas.insertAt(idx + i, o); o.setCoords() })
+  canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas }))
+  canvas.requestRenderAll()
+}
+
 import { useCanvasHistory } from './hooks/use-canvas-history'
 import { useCanvasLayers } from './hooks/use-canvas-layers'
 import { useProjectSync } from './hooks/use-project-sync'
@@ -218,9 +276,44 @@ import { useAnimationEngine } from './hooks/use-animation-engine'
 import { AnimationTimeline } from './animation-timeline'
 
 import { WebGPULabEngine } from './lab/WebGPULabEngine'
+import { WebGPUObjectOverlay, type WebGPUObjectOverlayHandle } from './lab/WebGPUObjectOverlay'
 import { LabPanel } from './lab/LabPanel'
-import { useLabStore } from './hooks/use-lab-store'
+import { Vanguard3DEngine } from './lab/Vanguard3DEngine'
+import { useLabStore, LAB_GLOBAL_KEYS, LAB_FILTER_DEFAULTS } from './hooks/use-lab-store'
 import { useSidebar } from '../layout/SidebarContext'
+import { composeBoard, boardSize } from './compose/compose'
+import { childrenOf, installArtboards, boardOf } from './arrange/artboards'
+import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
+import { boardLabel, boardToDataURL, listBoards } from './arrange/export'
+import { TextCurveControl } from './text/TextCurveControl'
+import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
+import { runPathOp } from './vector/pathfinder'
+import { pathDoubleClick } from './vector/direct-select'
+import { describeCanvas, runDesignOps } from './ai/design-ops'
+import { boardTopLeft, fitBoard, placeInBoard } from './ai/board-fit'
+import { normalizeBoards } from '@/lib/design/compose-normalize'
+import { resolvePhoto } from './ai/photos'
+import { applyFinish } from './ai/finish'
+import { DesignPanel } from './designer/DesignPanel'
+import { renderScene } from './designer/render'
+import type { Scene as DesignScene } from './designer/types'
+import { buildVisual, type VisualSpec } from './ai/visual'
+import { isCropping, startCrop } from './image/crop'
+
+/** origine delle misure X/Y: l'angolo in alto a sinistra della tavola che contiene l'oggetto */
+function boardOrigin(canvas: fabric.Canvas, obj: fabric.FabricObject) {
+  const ab = (obj as any).isArtboard ? undefined : boardOf(canvas, obj)
+  if (!ab) return { x: 0, y: 0 }
+  const c = ab.getCenterPoint()
+  return { x: c.x - (ab.width * ab.scaleX) / 2, y: c.y - (ab.height * ab.scaleY) / 2 }
+}
+/** misure come in un programma di grafica: angolo in alto a sinistra del riquadro, rispetto alla tavola */
+function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
+  const o = boardOrigin(canvas, obj), r = obj.getBoundingRect()
+  return { x: Math.round(r.left - o.x), y: Math.round(r.top - o.y), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) }
+}
+import { cutout } from './compose/cutout'
+import type { ComposeBoard } from '@/lib/design/compose-spec'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
@@ -296,7 +389,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const [showFX, setShowFX] = useState(false)
   const [canvasReady, setCanvasReady] = useState(false)
   const [showAB, setShowAB] = useState(false)
+  const [showCervello, setShowCervello] = useState(false)
   const [showFP, setShowFP] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
   const [showLib, setShowLib] = useState(false)
   const [showLayers, setShowLayers] = useState(false)
   const [showImgFx, setShowImgFx] = useState(false)
@@ -367,6 +462,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const physicsObjsRef = useRef<Set<any>>(new Set())
   const subtitleObjsRef = useRef<Set<any>>(new Set())
 
+  // ── Lab System ──────────────────────────────────────────────────────────────
+  const [labPersistedObjects, setLabPersistedObjects] = useState<any[]>([])
+  const [labSelectedObj, setLabSelectedObj] = useState<any | null>(null)
+  const [selFabricType, setSelFabricType] = useState<string>('')
+  const [gpuLabReady, setGpuLabReady] = useState(false)
+  const [v3dAspect, setV3dAspect] = useState(1)
+  const labOverlayRef = useRef<WebGPUObjectOverlayHandle | null>(null)
+  const suppressLabSyncRef = useRef(false)
+
+
   // Animated filter types: { FX key → filter .type string }
   const ANIMATED_FX: Record<string, string> = {
     liquid: 'LiquidMotion', wavy: 'Wavy', glitch: 'Glitch', vhs: 'VHSFilter',
@@ -399,43 +504,12 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
    */
   const buildSemanticManifest = () => {
     const canvas = fabricRef.current; if (!canvas) return ''
-    const artboards = canvas.getObjects().filter(o => (o as any).isArtboard)
-    const elements = canvas.getObjects().filter(o => !(o as any).isArtboard && !o.get('name')?.startsWith('label_'))
-
-    let manifest = `Il progetto contiene ${artboards.length} tavole.\n\n`
-    
-    artboards.forEach(ab => {
-      const name = ab.get('name') || 'Senza nome'
-      const abBounds = ab.getBoundingRect(false)
-      const children = elements.filter(o => 
-        o.left! >= abBounds.left && o.left! <= abBounds.left + abBounds.width &&
-        o.top! >= abBounds.top && o.top! <= abBounds.top + abBounds.height
-      )
-
-      manifest += `## Tavola: ${name}\n`
-      manifest += `- Dimensioni: ${ab.width}x${ab.height}\n`
-      manifest += `- Elementi: ${children.length}\n`
-      
-      const texts = children.filter(o => o.type === 'textbox' || o.type === 'i-text') as fabric.Textbox[]
-      if (texts.length > 0) {
-        manifest += `  - Testi:\n`
-        texts.forEach(t => {
-            manifest += `    - "${t.text}" (${t.fontFamily}, ${t.fill})\n`
-        })
-      }
-
-      const shapes = children.filter(o => o.type !== 'textbox' && o.type !== 'i-text')
-      if (shapes.length > 0) {
-        manifest += `  - Forme/Asset: ${shapes.map(s => s.type).join(', ')}\n`
-      }
-      manifest += `\n`
-    })
-
-    return manifest
+    // stato per l'IA: tavole, elementi con ID, posizioni relative alla tavola, colori
+    return describeCanvas(canvas)
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
-  const { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory } =
+  const { pushHistory, undo, redo, syncActiveArtboardAfterLoad, resetHistory, restoring, restoringRef } =
     useCanvasHistory(fabricRef, activeArtboardIdRef, setActiveArtboardId)
 
   const { layers, refreshLayers, layerSelect, layerToggleVisible, layerToggleLock, layerMoveUp, layerMoveDown, layerBringToFront, layerSendToBack, layerDelete } =
@@ -457,6 +531,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     setShowProjectList,
     setActiveArtboardId,
     getManifest: buildSemanticManifest,
+    restoring,
+    pushHistory,
+    onNewProject: () => { addArtboard(1080, 1080, 'Social Square', 'social'); fitToArtboards() },
   })
 
   useEffect(() => { activeArtboardIdRef.current = activeArtboardId }, [activeArtboardId])
@@ -488,6 +565,67 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     setArtboardBadges(newBadges)
   }, [])
+
+  // Clear persisted Lab overlays when Lab is deactivated
+  useEffect(() => {
+    if (!store.labActive) {
+      // Restore objectCaching on any text objects that were modified for lab mode
+      const canvas = fabricRef.current
+      if (canvas) {
+        canvas.getObjects().forEach((o: any) => {
+          if (o._labOriginalCaching !== undefined) {
+            o.set('objectCaching', o._labOriginalCaching)
+            delete o._labOriginalCaching
+          }
+        })
+        canvas.requestRenderAll()
+      }
+      setLabPersistedObjects([])
+      setLabSelectedObj(null)
+    }
+  }, [store.labActive])
+
+  // Reset GPU readiness when leaving artboard mode
+  useEffect(() => {
+    if (!store.labActive || store.filterTarget !== 'artboard') setGpuLabReady(false)
+  }, [store.labActive, store.filterTarget])
+
+  // When the user switches to Object mode with an object already selected on canvas,
+  // syncLabSelection (bound to Fabric events) won't fire automatically.
+  // Re-sync manually so labSelectedObj is populated and the 3D preview can render.
+  useEffect(() => {
+    if (store.filterTarget !== 'object') return
+    if (!fabricRef.current) return
+    const objects = fabricRef.current.getActiveObjects() as any[]
+    if (objects.length === 0) return
+    const obj = objects[0]
+    setLabPersistedObjects(prev => prev.includes(obj) ? prev : [...prev, obj])
+    setLabSelectedObj(obj)
+    suppressLabSyncRef.current = true
+    useLabStore.getState().set(obj.labParams ?? LAB_FILTER_DEFAULTS)
+    suppressLabSyncRef.current = false
+  }, [store.filterTarget])
+
+  // Bake Lab effect onto the Fabric object (replaces original with PNG)
+  const handleLabApply = useCallback((dataUrl: string, targetObj: any) => {
+    const canvas = fabricRef.current
+    if (!canvas || !targetObj) return
+    fabric.FabricImage.fromURL(dataUrl).then((img: fabric.FabricImage) => {
+      img.set({
+        left:   targetObj.left,
+        top:    targetObj.top,
+        scaleX: targetObj.getScaledWidth()  / (img.width  ?? 1),
+        scaleY: targetObj.getScaledHeight() / (img.height ?? 1),
+        angle:  0,
+      })
+      canvas.remove(targetObj)
+      canvas.add(img)
+      canvas.setActiveObject(img)
+      canvas.requestRenderAll()
+      pushHistory()
+      setLabPersistedObjects((prev: any[]) => prev.filter((o: any) => o !== targetObj))
+    })
+  }, [pushHistory])
 
   const cleanupOrphanedLabels = React.useCallback((canvas: fabric.Canvas) => {
     const objs = canvas.getObjects()
@@ -555,6 +693,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       selection: true,
     })
     fabricRef.current = canvas
+    const detachFx = attachFx(canvas)   // effetti su qualsiasi oggetto, ricostruiti da JSON/annulla
+    const detachFonts = watchCanvasFonts(canvas)   // ogni testo carica il suo carattere
+    const detachBoards = installArtboards(canvas)   // le tavole tagliano il contenuto e lo portano con sé
     ;(canvas as any)._springIntegrator = springIntegratorRef.current
     ;(canvasRef.current as any)._fabric = canvas
 
@@ -583,6 +724,18 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     canvas.on('object:removed', () => syncManifest())
     canvas.on('path:created', () => syncManifest())
     
+    // ── Cronologia e salvataggio automatico: ogni modifica reale lascia un passo ──
+    // (gli oggetti temporanei, come il lazo o l'anteprima della penna, sono excludeFromExport)
+    const onChange = (e: { target?: fabric.FabricObject }) => {
+      if (restoringRef.current || e?.target?.excludeFromExport) return
+      pushHistory(); scheduleAutoSave(); refreshLayers()
+    }
+    canvas.on('object:added', onChange)
+    canvas.on('object:removed', onChange)
+    canvas.on('object:modified', onChange)
+    canvas.on('text:changed', onChange)
+    canvas.on('history:restored' as never, () => refreshLayers())
+
     // Initial sync
     syncManifest()
     setCanvasReady(true)
@@ -600,24 +753,54 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     // ── Lab Selection Sync ──────────────────────────────────
     const syncLabSelection = () => {
+      const labStore = useLabStore.getState()
       const objects = canvas.getActiveObjects()
+
       if (objects.length === 0) {
-        store.set({ selectionActive: false, selectionRect: [0, 0, 1, 1] })
+        setLabSelectedObj(null)
+        setSelFabricType('')
         return
       }
 
-      const primary = objects[0] as any
-      const cw = canvas.getWidth(), ch = canvas.getHeight()
-      const rect = primary.getBoundingRect(true, true)
-      const normalizedRect: [number, number, number, number] = [rect.left/cw, rect.top/ch, rect.width/cw, rect.height/ch]
+      const obj = objects[0] as any
+      setSelFabricType(obj.type || '')
 
-      // Deep Sync: Push current store params into the object immediately
-      const { set: _set, labActive, selectionActive, selectionRect: _sr, ...params } = store
-      objects.forEach(obj => {
-        (obj as any).labParams = { ...((obj as any).labParams || {}), ...params }
-      })
+      setLabSelectedObj(obj)
 
-      store.set({ selectionActive: true, selectionRect: normalizedRect })
+      // Load this object's saved params into the store.
+      suppressLabSyncRef.current = true
+      if (labStore.filterTarget === 'object') {
+        labStore.set(obj.labParams ?? LAB_FILTER_DEFAULTS)
+      } else {
+        // Even in Artboard mode, we must load the object's 3D state so the UI reflects it!
+        const p = obj.labParams ?? {}
+        labStore.set({
+           threeDEnabled: p.threeDEnabled ?? false,
+           threeDDepth: p.threeDDepth ?? 2.2,
+           threeDBevel: p.threeDBevel ?? 0.05,
+           threeDMaterial: p.threeDMaterial ?? 'chrome',
+           threeDMotion: p.threeDMotion ?? true,
+        })
+      }
+      suppressLabSyncRef.current = false
+
+      if (!labStore.labActive) return
+      if (labStore.filterTarget !== 'object') return
+
+      // Text objects cache their pixels by default which prevents WebGPU from reading
+      // updated content. Disable caching while in object lab mode and store the original
+      // value so it can be restored when the lab is deactivated.
+      const isText = ['textbox', 'i-text', 'text'].includes(obj.type || '')
+      if (isText) {
+        if (obj._labOriginalCaching === undefined) {
+          obj._labOriginalCaching = obj.objectCaching
+        }
+        obj.set('objectCaching', false)
+        canvas.requestRenderAll()
+      }
+
+      // Track object for persistent overlay
+      setLabPersistedObjects(prev => prev.includes(obj) ? prev : [...prev, obj])
     }
 
     canvas.on('selection:created', syncLabSelection)
@@ -635,36 +818,51 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     })
     canvas.on('object:scaling', syncLabSelection)
 
-    // Bi-directional Sync: Lab UI -> Active Objects
-    const labSubscription = useLabStore.subscribe((state) => {
+    // Lab UI → active object params (object mode only)
+    // Also: when Lab is activated or mode switches to 'object', sync the current canvas selection
+    // so the overlay appears without requiring a re-click.
+    const labSubscription = useLabStore.subscribe((state, prev) => {
+      const justActivated = state.labActive && !prev.labActive
+      const justSwitchedToObject = state.filterTarget === 'object' && prev.filterTarget !== 'object' && state.labActive
+      if (!suppressLabSyncRef.current && (justActivated || justSwitchedToObject)) {
+        syncLabSelection()
+      }
+
+      if (suppressLabSyncRef.current) return
       if (!canvas || !state.labActive) return
-      
+      if (state.filterTarget !== 'object') return
+
       const activeObjects = canvas.getActiveObjects()
       if (activeObjects.length === 0) return
 
-      const { set: _set, labActive, selectionActive, selectionRect, ...params } = state
+      // Persist params to the object
+      const filterParams: Record<string, unknown> = {}
       
-      activeObjects.forEach(obj => {
-        getObjId(obj as any);
-        const oldParams = JSON.stringify((obj as any).labParams)
-        const newParams = { ...((obj as any).labParams || {}), ...params }
-        
-        if (oldParams !== JSON.stringify(newParams)) {
-          console.info(`[LabBridge] Syncing params to ${obj.type}`)
-          ;(obj as any).labParams = newParams
-          obj.set('dirty', true) // Mark for engine refresh
+      if (state.filterTarget === 'object') {
+        for (const [k, v] of Object.entries(state)) {
+          if (!LAB_GLOBAL_KEYS.has(k)) filterParams[k] = v
         }
+      } else {
+        // In artboard mode, ONLY persist the 3D Genesis parameters
+        const objKeys = ['threeDEnabled', 'threeDDepth', 'threeDBevel', 'threeDMaterial', 'threeDMotion']
+        for (const k of objKeys) {
+           filterParams[k] = state[k as keyof typeof state]
+        }
+      }
+
+      activeObjects.forEach(obj => {
+        ;(obj as any).labParams = { ...((obj as any).labParams ?? {}), ...filterParams }
       })
-      canvas.requestRenderAll()
     })
 
-    // Video DOM cleanup: rimuove il <video> nascosto quando l'oggetto viene cancellato dal canvas
+    // Video DOM cleanup + Lab overlay cleanup when object is removed from canvas
     canvas.on('object:removed', (e: any) => {
       const obj = e.target
       if ((obj as any).isVideo) {
         const vid = (obj as any).videoElement as HTMLVideoElement | undefined
         if (vid?.parentElement) vid.parentElement.removeChild(vid)
       }
+      setLabPersistedObjects((prev: any[]) => prev.filter((o: any) => o !== obj))
     })
 
     // Auto-apply filters for special brushes (Chrome)
@@ -708,7 +906,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const t = obj as fabric.Textbox
         setSel({
           ...D, ...base, type: 'text', fontFamily: t.fontFamily || 'Inter', fontSize: t.fontSize || 24,
-          bold: t.fontWeight === 'bold', italic: t.fontStyle === 'italic', underline: !!t.underline, linethrough: !!t.linethrough,
+          bold: t.fontWeight === 'bold' || Number(t.fontWeight) >= 600, fontWeight: String(t.fontWeight ?? 400), italic: t.fontStyle === 'italic', underline: !!t.underline, linethrough: !!t.linethrough,
           textAlign: t.textAlign || 'left', lineHeight: t.lineHeight || 1.2, charSpacing: t.charSpacing || 0,
           fillColor: (t.fill as string) || '#ffffff', strokeText: !!t.stroke && (t.strokeWidth || 0) > 0,
           strokeTextColor: (t.stroke as string) || '#000000', strokeTextWidth: t.strokeWidth || 1
@@ -726,7 +924,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const refreshInsp = () => {
       const obj = canvas.getActiveObject()
       if (!obj) { setInsp(null); return }
-      setInsp({ x: Math.round(obj.left || 0), y: Math.round(obj.top || 0), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) })
+      setInsp(inspOf(canvas, obj))
     }
     canvas.on('selection:created', () => { refreshSel(); refreshInsp() })
     canvas.on('selection:updated', () => { refreshSel(); refreshInsp() })
@@ -824,7 +1022,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // Double-click → bezier edit for Path, vertex edit for polylines, or video modal
     canvas.on('mouse:dblclick', e => {
       if (toolRef.current === 'pen') { finalizePenPath(); return }
-      if (e.target?.type === 'path') { enterBzEdit(e.target as fabric.Path); return }
+      // tracciati: selezione diretta dei punti (il secondo doppio clic aggiunge un punto); immagini: ritaglio nella cornice
+      if (e.target?.type === 'path') { pathDoubleClick(canvas, e.target as fabric.Path, e.scenePoint); return }
+      if (e.target?.type === 'image' && !(e.target as any).isVideo && !isCropping(canvas)) { startCrop(canvas, e.target); return }
       if (e.target?.type === 'polyline') { toggleVertexEdit(e.target as any, canvas); return }
 
       if ((e.target as any)?.isVideo) {
@@ -962,18 +1162,12 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       }
       // Ctrl+0 — fit to screen
       if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-        // No preventDefault to allow global UI zoom reset in RootShell
-        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]); canvas.setZoom(1); setZoom(1)
-        canvas.requestRenderAll(); return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
         e.preventDefault()
-        const a = canvas.getActiveObject()
-        if (a?.type === 'activeSelection') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const g = (a as any).toGroup?.() ?? (a as any).group?.()
-          if (g) { canvas.setActiveObject(g); canvas.requestRenderAll() }
-        }
+        fitToArtboards(); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        if (e.shiftKey) ungroupSelection(canvas); else groupSelection(canvas)
         return
       }
       if (e.key === 'Enter') {
@@ -1015,16 +1209,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const tm: Record<string, Tool> = { v: 'select', a: 'lasso', t: 'text', r: 'rect', c: 'circle', l: 'line', f: 'pen', p: 'pencil', e: 'eraser', i: 'image', x: 'scissors' }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && tm[e.key.toLowerCase()]) changeTool(tm[e.key.toLowerCase()])
     }
-    // Initial action: Load first project or create artboard
-    setTimeout(() => {
+    // Initial action: Load first project or create artboard.
+    // Il timer va annullato allo smontaggio: in sviluppo React monta due volte
+    // e senza pulizia nascevano due tavole sovrapposte.
+    const initTimer = setTimeout(() => {
+      if (fabricRef.current !== canvas) return
       if (canvas.getObjects().filter(o => !(o as any).isArtboard).length === 0) {
         if (designProjects.length > 0) {
           loadProject(designProjects[0]).then(() => {
             cleanupOrphanedLabels(canvas)
+            fitToArtboards()
           })
         } else {
           // Default artboard if totally empty
-          addArtboard(1080, 1080, 'Social Square', 'social')
+          restoring(async () => { addArtboard(1080, 1080, 'Social Square', 'social') })
+          fitToArtboards()
+          pushHistory(true)
         }
       } else {
         cleanupOrphanedLabels(canvas)
@@ -1150,6 +1350,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     fxAnimRafRef.current = requestAnimationFrame(fxTick)
 
     return () => {
+      clearTimeout(initTimer)
+      detachFx()
+      detachFonts()
+      detachBoards()
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
@@ -1178,26 +1382,65 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const runner = Matter.Runner.create()
     const bodiesMap = new Map<string, any>()
 
-    // Create ground
-    const ground = Matter.Bodies.rectangle(canvas.width! / 2, canvas.height! + 50, canvas.width! * 2, 100, { isStatic: true })
-    Matter.World.add(engine.world, ground)
+    const W = canvas.width! || 800
+    const H = canvas.height! || 600
+    const WALL = 60
 
-    // Initial Body Sync
+    // Boundaries: ground + left + right + ceiling
+    const ground  = Matter.Bodies.rectangle(W / 2, H + WALL / 2,     W * 2, WALL, { isStatic: true })
+    const wallL   = Matter.Bodies.rectangle(-WALL / 2, H / 2,         WALL,  H * 2, { isStatic: true })
+    const wallR   = Matter.Bodies.rectangle(W + WALL / 2, H / 2,      WALL,  H * 2, { isStatic: true })
+    const ceiling = Matter.Bodies.rectangle(W / 2, -WALL / 2,         W * 2, WALL, { isStatic: true })
+    Matter.World.add(engine.world, [ground, wallL, wallR, ceiling])
+
+    /** Create the correct Matter body for a Fabric object */
+    const makeBody = (obj: fabric.FabricObject) => {
+      const center = obj.getCenterPoint()
+      const ang = (obj.angle || 0) * (Math.PI / 180)
+      const opts = { restitution: 0.5, friction: 0.1, angle: ang }
+      if (obj.type === 'circle') {
+        const r = Math.max(1, ((obj as any).radius || 50) * (obj.scaleX || 1))
+        return Matter.Bodies.circle(center.x, center.y, r, opts)
+      }
+      return Matter.Bodies.rectangle(
+        center.x, center.y,
+        Math.max(1, obj.getScaledWidth()),
+        Math.max(1, obj.getScaledHeight()),
+        opts,
+      )
+    }
+
+    // Initial body sync — all existing eligible objects
     canvas.getObjects().forEach(obj => {
       if ((obj as any).isArtboard || !obj.selectable) return
-      const id = (obj as any).objId || getObjId(obj)
-      const center = obj.getCenterPoint()
-      const body = Matter.Bodies.rectangle(center.x, center.y, obj.getScaledWidth(), obj.getScaledHeight(), {
-        restitution: 0.5,
-        friction: 0.1,
-        angle: (obj.angle || 0) * (Math.PI / 180)
-      })
+      const id = getObjId(obj)
+      const body = makeBody(obj)
       bodiesMap.set(id, body)
       Matter.World.add(engine.world, body)
     })
 
     physicsRef.current = { engine, runner, bodies: bodiesMap }
     Matter.Runner.run(runner, engine)
+
+    // Register objects added after physics was enabled
+    const onAdded = (e: any) => {
+      const obj = e.target
+      if (!obj || (obj as any).isArtboard || !obj.selectable) return
+      const id = getObjId(obj)
+      if (!bodiesMap.has(id)) {
+        const body = makeBody(obj)
+        bodiesMap.set(id, body)
+        Matter.World.add(engine.world, body)
+      }
+    }
+    const onRemoved = (e: any) => {
+      const obj = e.target; if (!obj) return
+      const id = (obj as any).objId
+      const body = bodiesMap.get(id)
+      if (body) { Matter.World.remove(engine.world, body); bodiesMap.delete(id) }
+    }
+    canvas.on('object:added',   onAdded)
+    canvas.on('object:removed', onRemoved)
 
     let animId: number
     const tick = () => {
@@ -1215,6 +1458,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           })
           obj.setCoords()
         } else if (body && canvas.getActiveObject() === obj) {
+          // User is dragging — push body to match
           const center = obj.getCenterPoint()
           Matter.Body.setPosition(body, { x: center.x, y: center.y })
           Matter.Body.setAngle(body, (obj.angle || 0) * (Math.PI / 180))
@@ -1229,6 +1473,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     return () => {
       cancelAnimationFrame(animId)
+      canvas.off('object:added',   onAdded)
+      canvas.off('object:removed', onRemoved)
       Matter.Runner.stop(runner)
       Matter.Engine.clear(engine)
     }
@@ -1296,7 +1542,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (tool === 'eraser') { canvas.selection = false; canvas.defaultCursor = 'cell' }
     if (tool === 'lasso') { canvas.selection = false; canvas.defaultCursor = 'crosshair' }
     if (tool === 'scissors') { canvas.selection = false; canvas.defaultCursor = 'crosshair' }
-    if (['text', 'rect', 'circle', 'line', 'pen', 'image'].includes(tool)) { canvas.defaultCursor = 'crosshair'; canvas.selection = false }
+    if (['text', 'rect', 'circle', 'polygon', 'star', 'line', 'pen', 'image'].includes(tool)) { canvas.defaultCursor = 'crosshair'; canvas.selection = false }
   }, [tool, sel.brushType, sel.brushWidth, sel.brushColor, sel.brushThinning, sel.brushSmoothing, sel.brushStreamline, sel.brushTaperStart, sel.brushTaperEnd, sel.brushJitter])
 
 
@@ -1360,7 +1606,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     if (t === 'lasso') {
       lassoPoints.current = [{ x: p.x, y: p.y }]
-      const poly = new fabric.Polyline([{ x: p.x, y: p.y }], { fill: 'rgba(99,102,241,0.08)', stroke: '#6366f1', strokeWidth: 1.5, strokeDashArray: [5, 3], selectable: false, evented: false })
+      const poly = new fabric.Polyline([{ x: p.x, y: p.y }], { fill: 'rgba(99,102,241,0.08)', stroke: '#6366f1', strokeWidth: 1.5, strokeDashArray: [5, 3], selectable: false, evented: false, excludeFromExport: true })
       lassoLine.current = poly; canvas.add(poly); return
     }
 
@@ -1405,7 +1651,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (t === 'text') {
       const txt = new fabric.Textbox('Scrivi qualcosa...', {
         left: p.x, top: p.y, width: 350,
-        fill: '#ffffff', fontSize: 28, fontFamily: 'Inter',
+        fill: inkAt(canvas, p.x, p.y), fontSize: 28, fontFamily: 'Inter',
         editable: true, textAlign: 'left'
       })
       canvas.add(txt)
@@ -1420,17 +1666,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       return
     }
     if (t === 'rect') {
-      const r = new fabric.Rect({ left: p.x, top: p.y, width: 200, height: 200, fill: 'rgba(255,255,255,0.1)', stroke: '#ffffff', strokeWidth: 2, rx: 8, ry: 8 })
+      const r = new fabric.Rect({ left: p.x, top: p.y, width: 200, height: 200, fill: SHAPE_FILL, strokeWidth: 0, rx: 0, ry: 0 })
       canvas.add(r); canvas.setActiveObject(r); setTool('select'); return
     }
     if (t === 'circle') {
-      const el = new fabric.Ellipse({ left: p.x, top: p.y, rx: 80, ry: 80, fill: 'rgba(255,255,255,0.1)', stroke: '#ffffff', strokeWidth: 2 })
+      const el = new fabric.Ellipse({ left: p.x, top: p.y, rx: 100, ry: 100, fill: SHAPE_FILL, strokeWidth: 0 })
       canvas.add(el); canvas.setActiveObject(el); setTool('select'); return
+    }
+    if (t === 'polygon' || t === 'star') {
+      // forma viva: lati, punte e arrotondamento si cambiano poi dal pannello Vettoriale
+      const sh = makeLiveShape(t === 'star' ? DEFAULT_STAR : DEFAULT_POLYGON, { x: p.x, y: p.y }, { fill: SHAPE_FILL })
+      canvas.add(sh); canvas.setActiveObject(sh); setTool('select'); return
     }
     if (t === 'line') {
       const snap = findSnapPoint(canvas, p.x, p.y)
       const sx = snap ? snap.x : p.x, sy = snap ? snap.y : p.y
-      const line = new ArrowLine([sx, sy, sx, sy], { stroke: '#ffffff', strokeWidth: 2, selectable: false, evented: false })
+      const line = new ArrowLine([sx, sy, sx, sy], { stroke: inkAt(canvas, sx, sy), strokeWidth: 2, selectable: false, evented: false, excludeFromExport: true })
       line.isConnector = snapRef.current; line.startObjId = snap ? snap.objId : null
       canvas.add(line); tempLine.current = line; lineStart.current = { x: sx, y: sy }; drawingLine.current = true; return
     }
@@ -1511,7 +1762,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const ex = snap ? snap.x : p.x, ey = snap ? snap.y : p.y
       const start = lineStart.current!, d = Math.hypot(ex - start.x, ey - start.y)
       if (d < 5) { canvas.remove(line) }
-      else { line.set({ x2: ex, y2: ey, selectable: true, evented: true, endObjId: snap ? snap.objId : null }); line.setCoords(); canvas.setActiveObject(line) }
+      else { line.set({ x2: ex, y2: ey, selectable: true, evented: true, excludeFromExport: false, endObjId: snap ? snap.objId : null }); line.setCoords(); canvas.setActiveObject(line); canvas.fire('object:modified', { target: line }) }
       drawingLine.current = false; tempLine.current = null; lineStart.current = null
       canvas.requestRenderAll(); setTool('select')
     }
@@ -1524,7 +1775,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const previewAnchors = [...anchors, makeAnchor(cursorX, cursorY)]
     const d = anchorsToBzPath(previewAnchors)
     if (penFabricPath.current) canvas.remove(penFabricPath.current)
-    const fp = new fabric.Path(d, { stroke: '#ffffff', strokeWidth: 2, fill: 'transparent', selectable: false, evented: false, objectCaching: false })
+    const fp = new fabric.Path(d, { stroke: inkAt(canvas, cursorX, cursorY), strokeWidth: 2, fill: 'transparent', selectable: false, evented: false, objectCaching: false, excludeFromExport: true })
     canvas.add(fp); penFabricPath.current = fp
     canvas.requestRenderAll()
   }
@@ -1536,7 +1787,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     if (anchors.length >= 2) {
       const d = anchorsToBzPath(anchors)
       const fp = new fabric.Path(d, {
-        stroke: '#ffffff', strokeWidth: 2, fill: 'transparent',
+        stroke: inkAt(canvas, anchors[0].x, anchors[0].y), strokeWidth: 2, fill: 'transparent',
         selectable: true, evented: true, objectCaching: false,
         lockScalingX: true, lockScalingY: true,
       })
@@ -1566,7 +1817,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const d = anchorsToBzPath(anchors)
       fp.set({ path: (fabric.util as any).parsePath(d), selectable: true, evented: true, hasControls: true })
         ; (fp as any)._bzAnchors = anchors.map(a => ({ ...a }))
-        ; (fp as any)._setPositionDimensions?.({})
+        ; fp.setBoundingBox(true)
       fp.setCoords(); canvas.setActiveObject(fp); pushHistory()
     }
     canvas.requestRenderAll()
@@ -1585,9 +1836,30 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const a = document.createElement('a'); a.href = url; a.download = 'canvas.svg'; a.click()
       URL.revokeObjectURL(url); return
     }
-    const url = canvas.toDataURL({ format: format as 'png' | 'jpeg', quality: 1, multiplier })
+    // si esporta la tavola a misura vera (non la vista a schermo): quella dell'oggetto
+    // selezionato, altrimenti tutte le tavole, una per file
     const ext = format === 'jpg' ? 'jpg' : 'png'
-    const a = document.createElement('a'); a.href = url; a.download = `canvas@${multiplier}x.${ext}`; a.click()
+    const boardsAll = canvas.getObjects().filter(o => (o as any).isArtboard)
+    const active = canvas.getActiveObject()
+    const picked = active ? ((active as any).isArtboard ? active : boardOf(canvas, active)) : undefined
+    const targets = picked ? [picked] : boardsAll
+    const vt = canvas.viewportTransform.slice() as fabric.TMat2D
+    canvas.discardActiveObject()
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+    try {
+      const shots = targets.length ? targets.map(ab => {
+        // misura netta della tavola (senza lo spessore del bordo)
+        const w = Math.round(ab.width * ab.scaleX), h = Math.round(ab.height * ab.scaleY), cpt = ab.getCenterPoint()
+        const left = cpt.x - w / 2, top = cpt.y - h / 2
+        const name = String(ab.get('name') ?? 'tavola').replace(/^artboard_/, '').replace(/[^\w\- ]+/g, '').trim() || 'tavola'
+        return { name, url: canvas.toDataURL({ format: format === 'jpg' ? 'jpeg' : 'png', quality: 0.95, multiplier, left, top, width: w, height: h }) }
+      }) : [{ name: 'canvas', url: canvas.toDataURL({ format: format === 'jpg' ? 'jpeg' : 'png', quality: 0.95, multiplier }) }]
+      shots.forEach(sh => { const a = document.createElement('a'); a.href = sh.url; a.download = `${sh.name}@${multiplier}x.${ext}`; a.click() })
+    } finally {
+      canvas.setViewportTransform(vt)
+      if (active && canvas.getObjects().includes(active)) canvas.setActiveObject(active)
+      canvas.requestRenderAll()
+    }
   }
 
   // ── Apply text ────────────────────────────────────────────────────────────
@@ -1600,11 +1872,17 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       Object.assign((obj as any)._baseProps, props)
     }
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
+    if (props.fontFamily || props.fontWeight) {
+      const fam = String(props.fontFamily ?? (obj as fabric.Textbox).fontFamily)
+      ensureFont(fam, props.fontWeight ?? (obj as fabric.Textbox).fontWeight ?? 400).then(ok => { if (ok) refreshTexts(canvas, fam) })
+    }
     setSel(prev => ({
       ...prev,
+      ...(props.fontWeight !== undefined && { fontWeight: String(props.fontWeight) }),
       ...(props.fontFamily !== undefined && { fontFamily: props.fontFamily }),
       ...(props.fontSize !== undefined && { fontSize: props.fontSize as number }),
-      ...(props.fontWeight !== undefined && { bold: props.fontWeight === 'bold' }),
+      ...(props.fontWeight !== undefined && { bold: props.fontWeight === 'bold' || Number(props.fontWeight) >= 600 }),
       ...(props.fontStyle !== undefined && { italic: props.fontStyle === 'italic' }),
       ...(props.underline !== undefined && { underline: !!props.underline }),
       ...(props.linethrough !== undefined && { linethrough: !!props.linethrough }),
@@ -1627,6 +1905,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       Object.assign((obj as any)._baseProps, props)
     }
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
     setSel(prev => ({
       ...prev,
       ...(props.fill !== undefined && { fillColor: props.fill as string }),
@@ -1649,6 +1928,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     obj.set('fill', grad)
     if ((obj as any)._baseProps) (obj as any)._baseProps.fill = grad
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
   }
 
   // ── Shadow ────────────────────────────────────────────────────────────────
@@ -1659,6 +1939,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     obj.set('shadow', shadow)
     if ((obj as any)._baseProps) (obj as any)._baseProps.shadow = shadow
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
   }
 
   // ── Effect presets ────────────────────────────────────────────────────────
@@ -2066,6 +2347,37 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
 
 
+  /** Adatta la vista alle tavole (Ctrl+0 o clic sulla percentuale) */
+  /** Template del motore designer: una tavola nuova accanto alle altre, con la scena disegnata. */
+  async function placeDesign(sc: DesignScene) {
+    const canvas = fabricRef.current; if (!canvas) return
+    let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
+    x = Number.isFinite(x) ? x + 160 : 100
+    const title = sc.els.find(e => e.kind === 'text' && e.name === 'titolo') as Extract<DesignScene['els'][number], { kind: 'text' }> | undefined
+    const label = title ? title.lines.join(' ').slice(0, 32) : sc.label
+    const name = addArtboard(sc.w, sc.h, label, 'social', x + sc.w / 2, 100 + sc.h / 2)
+    const ab = canvas.getObjects().find(o => o.get('name') === name)
+    if (!ab) return
+    const slug = label.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'tavola'
+    await renderScene(canvas, ab, sc, slug)
+    fitToArtboards()
+    pushSnapshot()
+  }
+
+  function fitToArtboards() {
+    const canvas = fabricRef.current; if (!canvas) return
+    const abs = canvas.getObjects().filter(o => (o as any).isArtboard)
+    const list = abs.length ? abs : canvas.getObjects()
+    if (!list.length) { canvas.setViewportTransform([1, 0, 0, 1, 0, 0]); setZoom(1); return }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    list.forEach(o => { o.setCoords(); const r = o.getBoundingRect(); minX = Math.min(minX, r.left); minY = Math.min(minY, r.top); maxX = Math.max(maxX, r.left + r.width); maxY = Math.max(maxY, r.top + r.height) })
+    // getBoundingRect è in coordinate della scena: si annulla prima lo zoom corrente
+    const w = maxX - minX, h = maxY - minY
+    const z = Math.min((canvas.getWidth() * 0.86) / w, (canvas.getHeight() * 0.86) / h, 2)
+    canvas.setViewportTransform([z, 0, 0, z, (canvas.getWidth() - w * z) / 2 - minX * z, (canvas.getHeight() - h * z) / 2 - minY * z])
+    canvas.requestRenderAll(); setZoom(z); updateArtboardBadges()
+  }
+
   function renameArtboard(oldName: string, newName: string) {
     const canvas = fabricRef.current; if (!canvas) return
     const all = canvas.getObjects()
@@ -2085,13 +2397,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const artboardMap = new Map<string, { rect: fabric.Object, children: fabric.Object[] }>()
     abs.forEach(ab => {
       const name = ab.get('name')!
-      const b = ab.getBoundingRect(false)
-      const children = canvas.getObjects().filter(o =>
-        !(o as any).isArtboard &&
-        !o.get('name')?.startsWith('label_') &&
-        o.left! >= b.left && o.left! <= b.left + b.width &&
-        o.top! >= b.top && o.top! <= b.top + b.height
-      )
+      // stessa regola del resto dello Studio: un oggetto è della tavola che contiene il suo centro
+      const children = childrenOf(canvas, ab)
 
       artboardMap.set(name, { rect: ab, children })
     })
@@ -2142,6 +2449,34 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const canvas = fabricRef.current; if (!canvas) return
     if (!command || !command.toolName) return
 
+    // ─── 0. composeDesign: l'AI sceglie stile e contenuti, lo Studio impagina ──
+    if (command.toolName === 'composeDesign') {
+      const payload = command.result ?? command.args ?? {}
+      // pilota automatico: nomi scritti male, foto mancanti e layout neutri sistemati qui, per qualsiasi modello
+      const boards: ComposeBoard[] = normalizeBoards(payload)
+      if (!boards.length) return
+      // foto vere libere da diritti prima di quelle generate
+      await Promise.all(boards.map(b => resolvePhoto(b)))
+      let x = canvas.getObjects().filter(o => (o as any).isArtboard).reduce((m, o) => { const r = o.getBoundingRect(); return Math.max(m, r.left + r.width) }, -Infinity)
+      x = Number.isFinite(x) ? x + 160 : 100
+      for (let i = 0; i < boards.length; i++) {
+        const b = boards[i]
+        const { w, h } = boardSize(b)
+        const name = addArtboard(w, h, b.name || (b.content?.title || b.content?.quote)?.slice(0, 32) || `Tavola ${i + 1}`, 'social', x + w / 2, 100 + h / 2)
+        const ab = canvas.getObjects().find(o => o.get('name') === name)
+        if (ab) {
+          await composeBoard(canvas, ab, b, i, boards.length)
+          // finiture con i pack importati (carta, grana, luci, elementi): procedurali, stesse per lo stesso contenuto
+          if (b.finish?.length) await applyFinish(canvas, ab, b.finish, `${b.content.title}|${b.recipe ?? b.style}|${i}`)
+          if (b.visual?.source) await buildVisual(canvas, ab, { ...b.visual, arrangement: b.visual.arrangement as VisualSpec['arrangement'], seed: `${b.content.title}|${i}` })
+        }
+        x += w + 160
+      }
+      fitToArtboards()
+      pushSnapshot()
+      return
+    }
+
     // ─── 1. createDesignBoards ─────────────────────────────────────────────
     if (command.toolName === 'createDesignBoards') {
       const payload = command.result ?? command.args ?? {}
@@ -2154,6 +2489,11 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         items.forEach(item => { if (item.name && item.path) SHAPE_MAP[item.name] = item.path })
       })
       PRO_ASSETS.forEach(asset => { SHAPE_MAP[asset.name] = asset.path; SHAPE_MAP[asset.id] = asset.path })
+      // Ricerca tollerante del nome: maiuscole, spazi, trattini e punti non contano
+      const normShape = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const SHAPE_NORM: Record<string, string> = {}
+      Object.entries(SHAPE_MAP).forEach(([k, v]) => { SHAPE_NORM[normShape(k)] = v })
+      const findShape = (id: string) => SHAPE_MAP[id] || SHAPE_NORM[normShape(id)] || ''
 
       const deferredImages: Array<{ artboardName: string; boardW: number; boardH: number; el: any }> = []
 
@@ -2221,6 +2561,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         return resolveColor(el.color)
       }
 
+      const newBoards: fabric.FabricObject[] = []
       boards.forEach((b: any, bIdx: number) => {
         const boardW = b.width || 1080
         const boardH = b.height || 1080
@@ -2239,11 +2580,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         
         const rect = canvas.getObjects().find(o => o.get('name') === artboardName)
         if (!rect) return
-        const offsetX = rect.left!, offsetY = rect.top!
+        // l'IA ragiona dall'angolo in alto a sinistra della tavola (come Figma); Fabric 7 dal centro
+        const tl = boardTopLeft(rect)
+        const offsetX = tl.x, offsetY = tl.y
+        newBoards.push(rect)
 
         const elsByZIndex = [...(b.elements || [])].sort((a: any, c: any) => (a.zIndex ?? 0) - (c.zIndex ?? 0))
         elsByZIndex.forEach((el: any, index: number) => {
           const elId = el.id || `${b.name}_${el.type}_${index}`
+          // Una forma richiesta per nome è sempre un path, anche se l'AI ha scritto rect/circle
+          if (el.shapeId && el.type !== 'text' && el.type !== 'image') el.type = 'path'
           if (el.type === 'image' && el.url) {
             deferredImages.push({ artboardName, boardW, boardH, el: { ...el, id: elId } })
             return
@@ -2263,11 +2609,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
           const common: any = {
             left: offsetX + fx, top: offsetY + fy, name: elId, parentBoard: artboardName,
+            originX: 'left', originY: 'top',
             fill: buildFill(el), ...(el.opacity !== undefined && { opacity: el.opacity }),
             ...(el.stroke && { stroke: resolveColor(el.stroke) }),
             ...(el.strokeWidth !== undefined && { strokeWidth: el.strokeWidth }),
             ...(el.originX && { originX: el.originX }),
-            ...(el.originY && { originY: el.originY })
+            ...(el.originY && { originY: el.originY }),
+            ...(el.angle !== undefined && { angle: el.angle })
           }
 
           if (el.type === 'text') {
@@ -2293,9 +2641,17 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           } else if (el.type === 'circle') {
             obj = new fabric.Ellipse({ ...common, rx: elW / 2, ry: elH / 2 })
           } else if (el.type === 'path') {
-            let svgPath = (el.shapeId ? SHAPE_MAP[el.shapeId] : el.pathData) || ''
+            const svgPath = (el.shapeId ? findShape(el.shapeId) : el.pathData) || ''
             if (svgPath) {
-              obj = new fabric.Path(svgPath, { ...common, scaleX: (elW / 100), scaleY: (elH / 100) })
+              // Adatta la forma al box mantenendo le proporzioni e la centra nel box
+              const p = new fabric.Path(svgPath, { ...common })
+              const pw = p.width || 1, ph = p.height || 1, k = Math.min(elW / pw, elH / ph)
+              p.set({ scaleX: k, scaleY: k })
+              if (!el.originX || el.originX === 'left') p.set({ left: common.left + (elW - pw * k) / 2 })
+              if (!el.originY || el.originY === 'top') p.set({ top: common.top + (elH - ph * k) / 2 })
+              obj = p
+            } else if (el.shapeId) {
+              console.warn(`[createDesignBoards] forma non trovata: "${el.shapeId}"`)
             }
           } else if (el.type === 'line') {
             // x1,y1,x2,y2 sono coordinate relative alla posizione x,y dell'elemento
@@ -2322,7 +2678,12 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           }
 
           if (obj) {
-            if (el.effects) { (obj as any)._appliedFX = el.effects; (obj as any).fxProps = el.effectProps; reapplyAllEffects(obj) }
+            ;(obj as any)._z = el.zIndex ?? index
+            if (Array.isArray(el.effects)) {
+              // l'AI chiede effetti per nome: si usano quelli del motore fx che esistono davvero
+              ;(obj as any).fx = (el.effects as string[]).filter(id => fxDef(id)).map(id => ({ ...newFx(id as FxId), p: { ...newFx(id as FxId).p, ...(el.effectProps?.[id] ?? {}) } }))
+              applyFx(obj)
+            }
             canvas.add(obj)
           }
         })
@@ -2341,15 +2702,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           const loadUrl = el.url.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(el.url)}` : el.url
 
           return withTimeout(fabric.FabricImage.fromURL(loadUrl, { crossOrigin: 'anonymous' }), 8000).then(img => {
-            img.set({ left: artboard.left! + (el.x ?? 0), top: artboard.top! + (el.y ?? 0), name: el.id, parentBoard: artboardName })
+            img.set({ name: el.id, parentBoard: artboardName })
             if (el.w) img.scaleToWidth(el.w)
-            canvas.add(img); canvas.moveObjectTo(img, canvas.getObjects().indexOf(artboard) + 1)
+            placeInBoard(img, artboard, el.x ?? 0, el.y ?? 0)
+            // al suo livello: sotto gli elementi con zIndex più alto, sopra lo sfondo
+            const z = el.zIndex ?? 1
+            const above = canvas.getObjects().findIndex(o => (o as any).parentBoard === artboardName && ((o as any)._z ?? 0) > z)
+            ;(img as any)._z = z
+            if (above >= 0) canvas.insertAt(above, img); else canvas.add(img)
           }).catch(e => {
             console.error('[canvas] image load failed:', el.url, e)
             // Fallback placeholder
+            const ptl = boardTopLeft(artboard)
             const placeholder = new fabric.Rect({
-              left: artboard.left! + (el.x ?? 0),
-              top: artboard.top! + (el.y ?? 0),
+              originX: 'left', originY: 'top',
+              left: ptl.x + (el.x ?? 0),
+              top: ptl.y + (el.y ?? 0),
               width: el.w || 400,
               height: el.h || 400,
               fill: '#0f172a',
@@ -2359,8 +2727,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               parentBoard: artboardName
             })
             const labelText = new fabric.Textbox('Immagine Non Disponibile', {
-              left: artboard.left! + (el.x ?? 0) + 10,
-              top: artboard.top! + (el.y ?? 0) + 10,
+              originX: 'left', originY: 'top',
+              left: ptl.x + (el.x ?? 0) + 10,
+              top: ptl.y + (el.y ?? 0) + 10,
               fontSize: 16,
               fill: '#ef4444',
               fontFamily: 'Inter',
@@ -2372,10 +2741,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             canvas.moveObjectTo(labelText, canvas.getObjects().indexOf(artboard) + 2)
           })
         })).then(() => {
+          // tutto dentro la tavola prima di riordinarle: gli elementi seguono la loro tavola
+          newBoards.forEach(ab => fitBoard(canvas, ab))
           rearrangeArtboards('strip', 100, 1)
           canvas.requestRenderAll()
         })
       } else {
+        newBoards.forEach(ab => fitBoard(canvas, ab))
         rearrangeArtboards('strip', 100, 1)
       }
 
@@ -2434,8 +2806,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (changes.x !== undefined || changes.y !== undefined || changes.w !== undefined || changes.h !== undefined) {
           const ab = findParentArtboard(obj)
           if (ab) {
-            const abLeft = ab.left!
-            const abTop = ab.top!
+            const abTL = boardTopLeft(ab)
+            const abLeft = abTL.x
+            const abTop = abTL.y
             const abW = (ab as any).width || ab.getScaledWidth()
             const abH = (ab as any).height || ab.getScaledHeight()
             if (changes.w !== undefined) {
@@ -2445,14 +2818,14 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             if (changes.h !== undefined && obj.type !== 'textbox' && obj.type !== 'i-text') {
               obj.set('height', changes.h)
             }
-            if (changes.x !== undefined) {
-              const clamped = Math.max(0, Math.min(changes.x, abW - (obj.getScaledWidth?.() || 0)))
-              obj.set('left', abLeft + clamped)
-            }
-            if (changes.y !== undefined) {
-              const clamped = Math.max(0, Math.min(changes.y, abH - (obj.getScaledHeight?.() || 0)))
-              obj.set('top', abTop + clamped)
-            }
+            // x,y dall'angolo in alto a sinistra della tavola, qualunque sia l'origine dell'oggetto
+            obj.setCoords()
+            const ob = obj.getBoundingRect()
+            const cur = { x: ob.left - abLeft, y: ob.top - abTop }
+            const nx = changes.x !== undefined ? Math.max(0, Math.min(changes.x, abW - ob.width)) : cur.x
+            const ny = changes.y !== undefined ? Math.max(0, Math.min(changes.y, abH - ob.height)) : cur.y
+            obj.set({ left: obj.left + (nx - cur.x), top: obj.top + (ny - cur.y) })
+            obj.setCoords()
           }
         }
 
@@ -2515,6 +2888,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     }
 
     // ─── 4. deleteElements ────────────────────────────────────────────────
+    // ─── editDesign: strumenti di Disponi, Vettoriale e Colore ─────────────
+    if (command.toolName === 'editDesign') {
+      const payload = command.result ?? command.args ?? {}
+      const report = await runDesignOps(canvas, Array.isArray(payload.ops) ? payload.ops : [])
+      console.info('[editDesign]', report.join(' · '))
+    }
+
     if (command.toolName === 'deleteElements') {
       const payload = command.result ?? command.args ?? {}
       const ids = (payload.ids as string[]) || []
@@ -2527,7 +2907,35 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       pushHistory()
     }
 
-    // ─── 5. getCanvasState (read-only) ────────────────────────────────────
+    // ─── 5. generateConceptualSchema (SVG → gruppo editabile) ─────────────
+    if (command.toolName === 'generateConceptualSchema') {
+      const out = command.output ?? command.result ?? {}
+      if (out.success && typeof out.svg === 'string' && out.svg) {
+        const { objects } = await fabric.loadSVGFromString(out.svg)
+        const parts = objects.filter(Boolean) as fabric.FabricObject[]
+        if (parts.length > 0) {
+          const group = new fabric.Group(parts, { name: `schema_${Date.now()}` } as Partial<fabric.GroupProps>)
+          // Al centro della vista corrente, ridotto se più grande del 80% del viewport
+          const zoom = canvas.getZoom()
+          const vpt = canvas.viewportTransform ?? [1, 0, 0, 1, 0, 0]
+          const viewW = canvas.getWidth() / zoom
+          const viewH = canvas.getHeight() / zoom
+          const fit = Math.min(1, (viewW * 0.8) / (group.width || 1), (viewH * 0.8) / (group.height || 1))
+          group.scale(fit)
+          group.set({
+            originX: 'center', originY: 'center',
+            left: (-vpt[4] / zoom) + viewW / 2,
+            top: (-vpt[5] / zoom) + viewH / 2,
+          })
+          canvas.add(group)
+          canvas.setActiveObject(group)
+          canvas.requestRenderAll()
+          pushHistory()
+        }
+      }
+    }
+
+    // ─── 6. getCanvasState (read-only) ────────────────────────────────────
     if (command.toolName === 'getCanvasState') {
       const snapshot = canvas.getObjects()
         .filter(o => !(o as any).isArtboard)
@@ -2544,6 +2952,15 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // Always push a snapshot after any tool was (at least tried to be) executed
     pushSnapshot()
   }
+
+  // in sviluppo: comandi AI eseguibili dalla console e dai test
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') Object.assign(window, {
+      __aiCommand: handleAICommand, __cutout: cutout,
+      // tavole esportate come png, per i test visivi
+      __boardsPng: async (mult = 0.5) => { const c = fabricRef.current; if (!c) return []; const out = []; for (const ab of listBoards(c)) out.push({ name: boardLabel(ab), png: await boardToDataURL(c, ab, { format: 'png', multiplier: mult }) }); return out },
+    })
+  })
 
   // Handle aiCommands queue sequentially
   useEffect(() => {
@@ -2724,34 +3141,50 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // ── Remove BG ─────────────────────────────────────────────────────────────
   async function removeBg() {
     const canvas = fabricRef.current, obj = canvas?.getActiveObject()
-    if (!obj || obj.type !== 'image') return
+    if (!canvas || !(obj instanceof fabric.FabricImage)) return
     setBgR(true)
     try {
-      const bg = await import('@imgly/background-removal')
-      const fn = (bg as any).default ?? bg
-      const blob = await fn((obj as any).getElement().src)
-      const url = URL.createObjectURL(blob)
-      const img = await fabric.Image.fromURL(url, { crossOrigin: 'anonymous' })
-      img.set({ left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY })
-      canvas!.remove(obj); canvas!.add(img); canvas!.setActiveObject(img); canvas!.renderAll()
-    } catch (e: any) { alert('Errore: ' + e.message) } finally { setBgR(false) }
+      // scontorno in locale: stesso ritaglio, stessa posizione, stessi effetti
+      const cut = await cutout(obj.getElement() as HTMLImageElement)
+      const img = new fabric.FabricImage(cut)
+      const keep = ['left', 'top', 'scaleX', 'scaleY', 'angle', 'flipX', 'flipY', 'originX', 'originY', 'cropX', 'cropY', 'width', 'height', 'opacity', 'name', 'clipPath'] as const
+      keep.forEach(k => img.set(k, (obj as any)[k]))
+      ;(img as any).fx = (obj as any).fx; (img as any).look = (obj as any).look; (img as any).adjust = (obj as any).adjust; (img as any).parentBoard = (obj as any).parentBoard
+      applyFx(img)
+      const at = canvas.getObjects().indexOf(obj)
+      canvas.remove(obj); canvas.insertAt(at, img); canvas.setActiveObject(img); canvas.requestRenderAll()
+    } catch (e: any) { alert('Scontorno non riuscito: ' + e.message) } finally { setBgR(false) }
   }
 
   // ── Library ───────────────────────────────────────────────────────────────
-  function addLibShape(path: string) {
+  function addLibShape(path: string, filled = false) {
     const canvas = fabricRef.current; if (!canvas) return
-    const p = new fabric.Path(path, { left: 200, top: 200, fill: 'rgba(255,255,255,0.15)', stroke: '#ffffff', strokeWidth: 2, scaleX: 1.5, scaleY: 1.5 })
+    const { x, y } = dropPoint(canvas)
+    const look = filled ? { fill: '#ffffff', stroke: null, strokeWidth: 0 } : { fill: SHAPE_FILL, strokeWidth: 0 }
+    const p = new fabric.Path(path, { left: x, top: y, ...look, scaleX: 1.5, scaleY: 1.5 })
     canvas.add(p); canvas.setActiveObject(p); canvas.requestRenderAll()
   }
-  function addLibIcon(svgPath: string) {
+  function addLibIcon(svgPath: string, filled = false) {
     const canvas = fabricRef.current; if (!canvas) return
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${svgPath}"/></svg>`
+    const paint = filled ? 'fill="white" stroke="none"' : 'fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" ${paint}><path d="${svgPath}"/></svg>`
     fabric.loadSVGFromString(svg).then(({ objects }) => {
       const g = new fabric.Group(objects as fabric.FabricObject[], {
         left: 200, top: 200, scaleX: 3, scaleY: 3
       })
       canvas.add(g); canvas.setActiveObject(g); canvas.requestRenderAll()
     })
+  }
+
+  /** grafica del laboratorio (pannello Genera): immagine ad alta risoluzione, larga circa metà tavola */
+  async function addGeneratedImage(url: string, name: string) {
+    const canvas = fabricRef.current; if (!canvas) return
+    const img = await fabric.FabricImage.fromURL(url)
+    const k = 640 / Math.max(img.width || 1, img.height || 1)
+    const { x, y } = dropPoint(canvas)
+    img.set({ left: x, top: y, scaleX: k, scaleY: k })
+    ;(img as any).name = name
+    canvas.add(img); canvas.setActiveObject(img); canvas.requestRenderAll()
   }
 
   // ── Subtitles & AI ───────────────────────────────────────────────────────
@@ -3077,12 +3510,22 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     canvas.setViewportTransform(originalVpt || [1, 0, 0, 1, 0, 0]);
     labels.forEach(l => l.set('visible', true))
 
+    // Build artboard rect map (canvas pixel coords, no zoom) for video export
+    const artboardRects: Record<string, { left: number; top: number; width: number; height: number }> = {}
+    artboards.forEach(ab => {
+      const b2 = ab.getBoundingRect(false)
+      const id = (ab as any).objId || ab.name || ab.get('name') as string
+      artboardRects[id] = { left: b2.left, top: b2.top, width: b2.width, height: b2.height }
+    })
+
     setUniversalLaunchData({
       projectTitle: currentProjectNameRef.current,
       artboards: artboardsData,
       globalPalette: [...new Set(artboardsData.flatMap(a => a.palette))],
       animationTracks: anim.tracks,
-    })
+      // Extra data for video export
+      _artboardRects: artboardRects,
+    } as any)
 
     setShowLaunchHub(true)
   }
@@ -3193,46 +3636,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   function doBoolean(op: 'union' | 'subtract' | 'intersect') {
+    // stesso motore del pannello Vettoriale: ordine per livello, buchi e più contorni
     const canvas = fabricRef.current; if (!canvas) return
-    const active = canvas.getActiveObject()
-    if (!active || active.type !== 'activeSelection') {
-      alert("Seleziona almeno 2 forme per le operazioni booleane.")
-      return
-    }
-    const objs = (active as fabric.ActiveSelection).getObjects()
-    if (objs.length < 2) return
-
-    try {
-      const polys = objs.map(o => flattenFabricObj(o))
-      if (polys.some(p => p.length < 4)) {
-        alert("Uno degli oggetti non è convertibile in poligono.")
-        return
-      }
-
-      // polygon-clipping expects MultiPolygon = Polygon[][], Polygon = Ring[][], Ring = Pair[]
-      const toMP = (ring: polygonClipping.Pair[]): polygonClipping.MultiPolygon => [[[...ring]]]
-      let result: polygonClipping.MultiPolygon
-      if (op === 'union') result = polygonClipping.union(toMP(polys[0])[0], ...polys.slice(1).map(p => toMP(p)[0]))
-      else if (op === 'subtract') result = polygonClipping.difference(toMP(polys[0])[0], ...polys.slice(1).map(p => toMP(p)[0]))
-      else result = polygonClipping.intersection(toMP(polys[0])[0], ...polys.slice(1).map(p => toMP(p)[0]))
-
-      if (!result || result.length === 0) { alert('Nessuna intersezione trovata.'); return }
-
-      const d = multiPolyToSVGPath(result)
-      const src = objs[0]
-      const newPath = new fabric.Path(d, {
-        fill: (src as any).fill || '#ffffff',
-        stroke: (src as any).stroke || '',
-        strokeWidth: (src as any).strokeWidth || 0,
-        objectCaching: false,
-      })
-      canvas.remove(...objs)
-      canvas.discardActiveObject()
-      canvas.add(newPath)
-      canvas.setActiveObject(newPath)
-      canvas.requestRenderAll()
-      pushHistory()
-    } catch (e) { console.error('[doBoolean]', e) }
+    const msg = runPathOp(canvas, op)
+    if (msg) alert(msg)
   }
 
   // 2. Text on Path
@@ -3326,7 +3733,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   // 5. Hand-Drawn Mode (Rough.js)
-  function toggleHandDrawn() {
+  function toggleHandDrawn(roughness = 1.8, bowing = 1.2) {
     const canvas = fabricRef.current; if (!canvas) return
     const obj = canvas.getActiveObject()
     if (!obj) return
@@ -3354,12 +3761,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     } else if (obj.type === 'circle') {
       const r = (obj as any).radius || 50
       srcD = `M ${-r} 0 A ${r} ${r} 0 1 0 ${r} 0 A ${r} ${r} 0 1 0 ${-r} 0`
+    } else if (obj.type === 'ellipse') {
+      const rx = (obj as any).rx || 60, ry = (obj as any).ry || 40
+      srcD = `M ${-rx} 0 A ${rx} ${ry} 0 1 0 ${rx} 0 A ${rx} ${ry} 0 1 0 ${-rx} 0`
     } else { return }
 
     try {
       const gen = rough.generator()
       const drawable = gen.path(srcD, {
-        roughness: 1.8, bowing: 1.2,
+        roughness,
+        bowing,
         stroke: (obj as any).stroke || '#ffffff',
         strokeWidth: ((obj as any).strokeWidth || 1) * 1.2,
         fill: 'none', disableMultiStroke: false,
@@ -3381,6 +3792,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         strokeWidth: (obj as any).strokeWidth || 1.5, objectCaching: false,
       })
         ; (roughPath as any)._roughOriginalPath = srcD
+        ; (roughPath as any)._roughParams = { roughness, bowing }
 
       canvas.remove(obj); canvas.add(roughPath); canvas.setActiveObject(roughPath)
       setSel(p => ({ ...p, isHandDrawn: true }))
@@ -3442,6 +3854,33 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     img.src = tex.url;
   }
 
+  /** asset dei pack: texture, luci e foto coprono la tavola attiva con la fusione del pack; gli elementi entrano al centro */
+  function addPackAsset(item: PackItem, pack: PackInfo) {
+    const canvas = fabricRef.current; if (!canvas) return
+    fabric.FabricImage.fromURL(item.src, { crossOrigin: 'anonymous' }).then(img => {
+      const iw = img.width || 1, ih = img.height || 1
+      const full = pack.cat !== 'elementi'
+      const id = activeArtboardIdRef.current
+      const board = id ? canvas.getObjects().find(o => (o as any).isArtboard && o.get('name') === id) : undefined
+      if (full && board) {
+        const b = board.getBoundingRect()
+        const k = Math.max(b.width / iw, b.height / ih)
+        img.set({ scaleX: k, scaleY: k, left: b.left + (b.width - iw * k) / 2, top: b.top + (b.height - ih * k) / 2 })
+        ;(img as any).parentBoard = id
+      } else {
+        const z = canvas.getZoom(), v = canvas.viewportTransform
+        const vw = canvas.getWidth() / z, vh = canvas.getHeight() / z
+        const k = full ? Math.max(vw / iw, vh / ih) * 0.6 : Math.min(vw * 0.35 / iw, vh * 0.35 / ih, 1)
+        img.set({ scaleX: k, scaleY: k, left: -v[4] / z + (vw - iw * k) / 2, top: -v[5] / z + (vh - ih * k) / 2 })
+        if (id) (img as any).parentBoard = id
+      }
+      if (pack.blend) img.set('globalCompositeOperation', pack.blend as GlobalCompositeOperation)
+      ;(img as any).name = `${pack.name} · ${item.name}`
+      canvas.add(img); canvas.setActiveObject(img); canvas.requestRenderAll()
+      pushHistory()
+    })
+  }
+
   function addBricolage(asset: any) {
     const canvas = fabricRef.current; if (!canvas) return;
     const p = new fabric.Path(asset.path, {
@@ -3456,13 +3895,24 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   function applyFont(font: string) {
-    const canvas = fabricRef.current; if (!canvas) return;
-    injectGoogleFont(font);
-    const obj = canvas.getActiveObject();
-    if (obj && (obj.type === 'textbox' || obj.type === 'i-text' || obj.type === 'text')) {
-      (obj as fabric.Textbox).set({ fontFamily: font });
-      canvas.requestRenderAll();
-    }
+    const canvas = fabricRef.current; if (!canvas) return
+    const texts = canvas.getActiveObjects().filter(o => o instanceof fabric.Text) as fabric.Textbox[]
+    texts.forEach(t => { t.set({ fontFamily: font }); canvas.fire('object:modified', { target: t }) })
+    ensureFont(font).then(ok => { if (ok) refreshTexts(canvas, font) })
+    if (texts.length) setSel(p => ({ ...p, fontFamily: font }))
+    canvas.requestRenderAll()
+  }
+
+  /** abbinamento: il testo più grande prende il carattere del titolo, gli altri quello del testo */
+  function applyPairing(title: string, body: string) {
+    const canvas = fabricRef.current; if (!canvas) return
+    const texts = canvas.getActiveObjects().filter(o => o instanceof fabric.Text) as fabric.Textbox[]
+    if (!texts.length) return
+    const max = Math.max(...texts.map(t => (t.fontSize ?? 0) * (t.scaleY ?? 1)))
+    texts.forEach(t => { t.set({ fontFamily: (t.fontSize ?? 0) * (t.scaleY ?? 1) >= max ? title : body }); canvas.fire('object:modified', { target: t }) })
+    Promise.all([ensureFont(title), ensureFont(body)]).then(() => refreshTexts(canvas))
+    setSel(p => ({ ...p, fontFamily: texts.length === 1 ? title : p.fontFamily }))
+    canvas.requestRenderAll()
   }
 
   // ── Client canvas load ────────────────────────────────────────────────────
@@ -3597,13 +4047,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           </button>
           {showExport && typeof document !== 'undefined' && (
             <DropdownPortal triggerRef={exportBtnRef} alignRight>
-              <div className="bg-[#141414] border border-white/10 rounded-xl shadow-2xl p-2 flex flex-col gap-0.5 min-w-[130px]">
-                <p className="text-[7px] text-white/25 uppercase tracking-widest px-2 py-1">Formato</p>
-                {([['PNG 1x', 'png', 1], ['PNG 2x', 'png', 2], ['PNG 3x', 'png', 3], ['JPG 2x', 'jpg', 2], ['SVG', 'svg', 1]] as const).map(([label, fmt, mult]) => (
-                  <button key={label} onClick={() => { exportCanvas(fmt, mult); setShowExport(false) }}
-                    className="px-2.5 py-1.5 text-left text-[9px] font-bold text-white/60 hover:bg-white/[0.06] rounded-lg transition-colors">{label}</button>
-                ))}
-              </div>
+              <ExportMenu canvas={fabricRef.current} onLegacyExport={exportCanvas} onDone={() => setShowExport(false)} />
             </DropdownPortal>
           )}
 
@@ -3617,15 +4061,15 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         </div>
 
         {/* AI Control Center Floating Bar */}
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-top-4 duration-500">
           <button
-            onClick={() => setShowAB(!showAB)}
+            onClick={() => setShowCervello(!showCervello)}
             className={cn(
               "p-2 rounded-xl transition-all group flex items-center gap-2",
-              showAB ? "bg-accent/20 text-accent border border-accent/20" : "bg-white/5 text-white/40 hover:bg-white/10 border border-transparent"
+              showCervello ? "bg-accent/20 text-accent border border-accent/20" : "bg-white/5 text-white/40 hover:bg-white/10 border border-transparent"
             )}
           >
-            <Sparkles className={cn("w-4 h-4 transition-transform duration-500", showAB ? "scale-110" : "group-hover:scale-110")} />
+            <Sparkles className={cn("w-4 h-4 transition-transform duration-500", showCervello ? "scale-110" : "group-hover:scale-110")} />
             <span className="text-[10px] font-black uppercase tracking-widest pr-1">Art Director</span>
           </button>
           
@@ -3679,6 +4123,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               tool === 'circle' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
             <Circle className="w-4 h-4" />
           </button>
+          <button onClick={() => changeTool('polygon')} title="Poligono (lati e angoli dal pannello Vettoriale)"
+            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
+              tool === 'polygon' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
+            <Hexagon className="w-4 h-4" />
+          </button>
+          <button onClick={() => changeTool('star')} title="Stella (punte e rientro dal pannello Vettoriale)"
+            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
+              tool === 'star' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
+            <Star className="w-4 h-4" />
+          </button>
           <button onClick={() => changeTool('line')} title="Linea [L]"
             className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
               tool === 'line' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
@@ -3719,6 +4173,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
               tool === 'text' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
             <Type className="w-4 h-4" />
           </button>
+          <button onClick={() => setShowTemplates(v => !v)} title="Template: proposte procedurali, l'IA aiuta su richiesta"
+            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5', showTemplates ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
+            <LayoutTemplate className="w-4 h-4" />
+          </button>
           <button onClick={() => changeTool('image')} title="Immagine [I]"
             className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
               tool === 'image' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
@@ -3735,11 +4193,43 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         {/* ── CANVAS AREA ──────────────────────────────────────────────────────── */}
         <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden"
           onContextMenu={e => e.preventDefault()}>
-          <canvas ref={canvasRef} className="w-full h-full" />
+          {/* Fabric canvas is hidden only once WebGPU has rendered its first frame.
+              During GPU init the canvas stays visible — if GPU fails it stays visible forever. */}
+          <canvas ref={canvasRef} className="w-full h-full"
+            style={store.labActive && store.filterTarget === 'artboard' && gpuLabReady ? { opacity: 0 } : undefined} />
 
-          {/* WebGPU Lab Engine Overlay */}
-          {canvasReady && <WebGPULabEngine fabricCanvas={fabricRef.current} className="pointer-events-none" />}
+          {/* WebGPU Lab — artboard mode: full-canvas effect */}
+          {canvasReady && store.labActive && store.filterTarget === 'artboard' && (
+            <WebGPULabEngine fabricCanvas={fabricRef.current} className="pointer-events-none" onReady={() => setGpuLabReady(true)} />
+          )}
 
+          {/* WebGPU Lab — object mode: per-object persistent overlays */}
+          {canvasReady && store.labActive && store.filterTarget === 'object' && (
+            labPersistedObjects.map(obj => (
+              <WebGPUObjectOverlay
+                key={getObjId(obj)}
+                fabricObject={obj}
+                fabricCanvas={fabricRef.current}
+                isSelected={obj === labSelectedObj}
+                onApply={handleLabApply}
+                ref={obj === labSelectedObj ? labOverlayRef : undefined}
+              />
+            ))
+          )}
+
+          {/* 3D Genesis Injectors — Runs for any object with 3D enabled */}
+          {canvasReady && store.labActive && (
+            fabricRef.current?.getObjects().filter(o => 
+              (o as any).labParams?.threeDEnabled || (o === labSelectedObj && store.threeDEnabled)
+            ).map((obj: any) => (
+               <Vanguard3DInjector 
+                 key={`v3d-${getObjId(obj)}`} 
+                 fabricObject={obj} 
+                 isSelected={obj === labSelectedObj} 
+                 fabricCanvas={fabricRef.current} 
+               />
+            ))
+          )}
 
           {/* Grid overlay */}
           {showGrid && (
@@ -3784,7 +4274,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
                   anchors[idx] = { ...a, x, y, cp1x: a.cp1x + dx, cp1y: a.cp1y + dy, cp2x: a.cp2x + dx, cp2y: a.cp2y + dy }
                   const canvas = fabricRef.current
                   const fp = canvas?.getObjects().find(o => (o as any).objId === prev.pathId) as fabric.Path | undefined
-                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); (fp as any)._setPositionDimensions?.({}); fp.setCoords(); canvas.requestRenderAll() }
+                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); fp.setBoundingBox(true); fp.setCoords(); canvas.requestRenderAll() }
                   return { ...prev, anchors }
                 })
               }}
@@ -3795,7 +4285,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
                   anchors[idx] = mirrorHandle(anchors[idx], role, x, y)
                   const canvas = fabricRef.current
                   const fp = canvas?.getObjects().find(o => (o as any).objId === prev.pathId) as fabric.Path | undefined
-                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); (fp as any)._setPositionDimensions?.({}); fp.setCoords(); canvas.requestRenderAll() }
+                  if (fp && canvas) { const d = anchorsToBzPath(anchors); fp.set({ path: (fabric.util as any).parsePath(d) }); fp.setBoundingBox(true); fp.setCoords(); canvas.requestRenderAll() }
                   return { ...prev, anchors }
                 })
               }}
@@ -3822,6 +4312,15 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             </svg>
           )}
 
+          {/* Maniglia d'orbita per gli oggetti con materiale 3D */}
+          {canvasReady && <Orbit3D fabricRef={fabricRef} />}
+          {canvasReady && <ArrangeBar canvas={fabricRef.current} />}
+          {showTemplates && (
+            <div className="absolute right-4 top-4 z-[70]">
+              <DesignPanel onClose={() => setShowTemplates(false)} onApply={placeDesign} />
+            </div>
+          )}
+
           {/* Rulers */}
           {showRulers && <Rulers zoom={zoom} canvas={fabricRef.current} />}
 
@@ -3829,7 +4328,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {!showLaunchHub && artboardBadges.map(badge => (
             <div key={badge.id} className="absolute z-[23] pointer-events-auto transition-all duration-75"
               style={{ left: badge.left, top: badge.top }}>
-              <div className="flex items-center gap-1.5 px-2 h-7 bg-[#141414]/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl group hover:bg-[#1a1a1a]/80 transition-all">
+              <div className="flex items-center gap-1.5 px-2 h-7 bg-[#141414]/60 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_1px_6px_rgba(0,0,0,0.3)] group hover:bg-[#1a1a1a]/80 transition-all">
                 {/* Artboard Icon & ID */}
                 <div className="flex items-center gap-1.5">
                   <div className="w-4 h-4 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
@@ -3892,10 +4391,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onApplyPresetFilter={applyPresetFilter}
           onResetImgFilters={resetImgFilters}
           onApplyFont={applyFont}
+          onApplyPairing={applyPairing}
           onApplyTexture={applyTexture}
           onAddShape={addLibShape}
           onAddIcon={addLibIcon}
+          onAddGenerated={addGeneratedImage}
           onAddBricolage={addBricolage}
+          onAddPackAsset={addPackAsset}
           onLayerSelect={layerSelect}
           onLayerToggleVisible={layerToggleVisible}
           onLayerToggleLock={layerToggleLock}
@@ -3913,6 +4415,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           setShowImgFx={setShowImgFx}
           showFP={showFP}
           setShowFP={setShowFP}
+          labSelectedObj={labSelectedObj}
         />
 
         {showImgFx && sel.type === 'image' && (
@@ -3928,16 +4431,6 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
       </div>{/* end WORKSPACE ROW */}
 
-      {showSaveDialog && (
-        <SaveDialog
-          initialName={currentProjectName}
-          initialClientId={currentClientId}
-          initialDescription={currentUserDescription}
-          clients={clients}
-          onClose={() => setShowSaveDialog(false)}
-          onSave={saveProject}
-        />
-      )}
 
       {/* ── BOTTOM BAR ─────────────────────────────────────────────────────────
           Due categorie separate, due pillole.
@@ -3952,7 +4445,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             ['Snap', snapGrid, () => setSnapGrid(p => !p), 'S'],
             ['Ruler', showRulers, () => setShowRulers(p => !p), 'R'],
             ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), 'E'],
-            ['Organic', sel.isHandDrawn, () => setSel(p => ({ ...p, isHandDrawn: !p.isHandDrawn })), 'O'],
+            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), 'O'],
             ['Gravity', gravityEnabled, () => setGravityEnabled(p => !p), ''],
           ] as [string, boolean, () => void, string][]).map(([label, active, toggle, key]) => (
             <button key={label} onClick={toggle} title={key ? `${label} [${key}]` : label}
@@ -4014,7 +4507,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
             className="h-6 w-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors">
             <ZoomOut className="w-3 h-3" />
           </button>
-          <button onClick={() => { const c = fabricRef.current; if (!c) return; c.setViewportTransform([1, 0, 0, 1, 0, 0]); c.setZoom(1); setZoom(1) }}
+          <button onClick={() => fitToArtboards()}
             className="h-6 px-2 rounded-md text-[9px] font-black text-white/40 hover:text-white/70 hover:bg-white/[0.05] transition-colors w-14 text-center"
             title="Fit [Ctrl+0]">
             {Math.round(zoom * 100)}%
@@ -4052,21 +4545,14 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       )}
 
       {/* Art Director Dashboard Overlay */}
-      {showAB && (
+      {showCervello && (
         <div className="fixed inset-0 z-[500] pointer-events-none p-4">
           <div className="h-full flex flex-col pointer-events-auto">
-            <CervelloDashboard onClose={() => setShowAB(false)} />
+            <CervelloDashboard onClose={() => setShowCervello(false)} />
           </div>
         </div>
       )}
 
-      {/* Universal Launch Hub Overlay */}
-      {showLaunchHub && (
-        <UniversalLaunchHub 
-          onClose={() => setShowLaunchHub(false)} 
-          data={universalLaunchData}
-        />
-      )}
 
       {/* --- SHADER LAB OVERLAY --- */}
       {showFX && (
@@ -4109,10 +4595,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           onBringToFront={() => { layerBringToFront(); setCtxMenu(null) }}
           onSendToBack={() => { layerSendToBack(); setCtxMenu(null) }}
           onGroup={() => {
-            const canvas = fabricRef.current, objs = canvas?.getActiveObjects(); if (!objs?.length) return
-            const a = canvas!.getActiveObject() as any
-            const g = a.toGroup?.() ?? a.group?.()
-            if (g) { canvas!.setActiveObject(g); canvas!.requestRenderAll() }
+            const canvas = fabricRef.current; if (canvas) groupSelection(canvas)
             setCtxMenu(null)
           }}
           onClose={() => setCtxMenu(null)}
@@ -4120,7 +4603,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         document.body
       )}
       {showLaunchHub && universalLaunchData && (
-        <UniversalLaunchHub data={universalLaunchData} animationTracks={anim.tracks} onClose={() => setShowLaunchHub(false)} />
+        <UniversalLaunchHub
+          data={universalLaunchData}
+          animationTracks={anim.tracks}
+          onClose={() => setShowLaunchHub(false)}
+          fabricCanvasEl={fabricRef.current?.lowerCanvasEl as HTMLCanvasElement | null}
+          artboardRects={(universalLaunchData as any)?._artboardRects}
+        />
       )}
 
       {videoMode && (
@@ -4318,14 +4807,17 @@ interface PanelProps {
   onApplyPresetFilter: (f: any) => void
   onResetImgFilters: () => void
   onApplyFont: (f: string) => void
+  onApplyPairing: (title: string, body: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onApplyTexture: (t: any) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAddShape: (s: any) => void
+  onAddShape: (s: any, filled?: boolean) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAddIcon: (s: any) => void
+  onAddIcon: (s: any, filled?: boolean) => void
+  onAddGenerated: (url: string, name: string) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onAddBricolage: (s: any) => void
+  onAddPackAsset: (item: PackItem, pack: PackInfo) => void
   onLayerSelect: (id: string) => void
   onLayerToggleVisible: (id: string) => void
   onLayerToggleLock: (id: string) => void
@@ -4343,6 +4835,8 @@ interface PanelProps {
   setShowImgFx: React.Dispatch<React.SetStateAction<boolean>>
   showFP: boolean
   setShowFP: React.Dispatch<React.SetStateAction<boolean>>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  labSelectedObj: any | null
 }
 
 type PanelTab = 'prop' | 'layers' | 'lib' | 'lab'
@@ -4374,29 +4868,40 @@ function PropertiesPanel(props: PanelProps) {
     if (sel.type === 'line') tabs.push({ id: 'line', icon: <Minus className="w-3.5 h-3.5" />, label: 'Linea' })
     if (sel.type === 'image') tabs.push({ id: 'img', icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'Immagine' })
     if (sel.type === 'group') tabs.push({ id: 'group', icon: <Layers className="w-3.5 h-3.5" />, label: 'Gruppo' })
-    tabs.push({ id: 'lab', icon: <FlaskConical className={cn("w-3.5 h-3.5", store.labActive ? "text-accent" : "text-white/20")} />, label: 'Studio Lab' })
+    if (hasSelection) tabs.push({ id: 'fx', icon: <Sparkles className="w-3.5 h-3.5" />, label: sel.type === 'image' ? 'Modifica foto' : 'Effetti' })
+    tabs.push({ id: 'lab', icon: <FlaskConical className={cn("w-3.5 h-3.5", store.labActive ? "text-accent" : "text-white/20")} />, label: 'Sperimentale' })
     return tabs
   }, [sel.type, isPencil, hasSelection])
 
-  // Auto-switch propTab when available tabs change
+  // Scheda di partenza quando cambia il tipo di oggetto selezionato: testi e foto
+  // si aprono su stili/effetti, il resto sul colore. "Sperimentale" solo se scelto.
+  const lastSelType = React.useRef(sel.type)
   React.useEffect(() => {
-    if (availSubTabs.length > 0 && !availSubTabs.find(t => t.id === propTab)) {
-      setPropTab(availSubTabs[0].id)
-    }
-  }, [availSubTabs, propTab])
+    const changed = lastSelType.current !== sel.type
+    lastSelType.current = sel.type
+    if (changed && sel.type !== 'none') { setPropTab(sel.type === 'text' || sel.type === 'image' ? 'fx' : availSubTabs[0].id); return }
+    if (availSubTabs.length > 0 && !availSubTabs.find(t => t.id === propTab)) setPropTab(availSubTabs[0].id)
+  }, [availSubTabs, propTab, sel.type])
 
   const inspUpdate = (prop: string, val: number) => {
     const canvas = fabricRef.current; const obj = canvas?.getActiveObject(); if (!obj) return
     if (prop === 'width') { obj.scaleX = (val || 1) / obj.width!; obj.setCoords() }
     else if (prop === 'height') { obj.scaleY = (val || 1) / obj.height!; obj.setCoords() }
     else if (prop === 'angle') { obj.set({ angle: val }); obj.setCoords() }
-    else obj.set({ [prop]: val })
+    else {
+      // X/Y sono misurati dalla tavola: si sposta l'oggetto della differenza
+      const cur = inspOf(canvas!, obj)
+      if (prop === 'left') obj.set({ left: obj.left + (val - cur.x) })
+      else obj.set({ top: obj.top + (val - cur.y) })
+    }
+    obj.setCoords()
     canvas!.requestRenderAll()
+    canvas!.fire('object:modified', { target: obj })
     setInsp(p => p ? { ...p, [prop === 'left' ? 'x' : prop === 'top' ? 'y' : prop === 'width' ? 'w' : prop === 'height' ? 'h' : 'r']: val } : p)
   }
 
   return (
-    <div className="w-[240px] flex-shrink-0 flex flex-col border-l border-white/[0.05] bg-[#070707]/80 z-[20] overflow-hidden">
+    <div className="w-[300px] flex-shrink-0 flex flex-col border-l border-white/[0.05] bg-[#070707]/80 z-[20] overflow-hidden">
 
       {/* Tab bar */}
       <div className="h-9 flex-shrink-0 flex items-center border-b border-white/[0.05]">
@@ -4499,18 +5004,19 @@ function PropertiesPanel(props: PanelProps) {
               )}
 
               {/* Testo */}
-              {propTab === 'text' && sel.type === 'text' && (
-                <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink}
+              {propTab === 'text' && sel.type === 'text' && (<>
+                <TextBar sel={sel} onApply={props.onApplyText} onLink={props.onApplyLink} onPair={props.onApplyPairing}
                   showFP={props.showFP} setShowFP={props.setShowFP}
-                  showFX={false} setShowFX={() => { setPropTab('lab'); if (!store.labActive) store.set({ labActive: true }) }}
+                  showFX={false} setShowFX={() => setPropTab('fx')}
                   onShadow={props.onApplyShadow} onPreset={props.onApplyPreset} onUpdate={props.onUpdateFx}
                 />
-              )}
+                <TextCurveControl canvas={props.fabricRef.current} />
+              </>)}
 
               {/* Forma */}
               {propTab === 'shape' && sel.type === 'shape' && (
                 <ShapeBar sel={sel} onApply={props.onApplyShape} onShadow={props.onApplyShadow}
-                  onGrad={props.onApplyGradient} showFX={false} setShowFX={() => setPropTab('lab')}
+                  onGrad={props.onApplyGradient} showFX={false} setShowFX={() => setPropTab('fx')}
                   onBoolean={props.onDoBoolean} onBindTextToPath={() => { }} onPreset={props.onApplyPreset}
                   onUpdate={props.onUpdateFx}
                 />
@@ -4525,42 +5031,34 @@ function PropertiesPanel(props: PanelProps) {
               {/* Immagine */}
               {propTab === 'img' && sel.type === 'image' && (
                 <ImageBar sel={sel} onApply={props.onApplyShape} onRemoveBg={props.onRemoveBg}
-                  loading={props.bgRemoving} showFx={false} setShowFx={() => setPropTab('lab')}
+                  loading={props.bgRemoving} showFx={false} setShowFx={() => setPropTab('fx')}
                   onTraceImage={props.onTraceImage} onApplyAnimation={props.onApplyAnimation}
                 />
               )}
 
               {/* Gruppo */}
               {propTab === 'group' && sel.type === 'group' && (
-                <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v })} />
+                <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v / 100 })} />
               )}
 
-              {/* Effetti + Filtri immagine */}
-              {propTab === 'fx' && (
-                <div className="space-y-4">
-                  <div>
-                    <button onClick={() => setShowFX(true)}
-                      className="w-full mb-4 py-2 bg-accent/80 hover:bg-accent text-black text-[8px] font-black uppercase tracking-widest rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-accent/10">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Apri Shader Lab
-                    </button>
-                    <p className="text-[7px] font-black uppercase tracking-widest text-white/20 mb-2">Effetti Rapidi</p>
-                    <div className="space-y-1">
-                      {UNIFIED_FX_LIST.map(fx => (
-                        <FXRow key={fx.key} fx={fx} active={sel.appliedFX.includes(fx.key)} fxProps={sel.fxProps}
-                          onToggle={() => props.onApplyPreset(fx.key)}
-                          onUpdate={(k, p, v) => props.onUpdateFx(k, p, v)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {sel.type === 'image' && (
-                    <div>
-                      <p className="text-[7px] font-black uppercase tracking-widest text-white/20 mb-2">Filtri immagine</p>
-                      <ImgFxPanel onFilter={props.onApplyImgFilter} onPreset={props.onApplyPresetFilter}
-                        onReset={props.onResetImgFilters} onClose={() => { }} />
-                    </div>
-                  )}
+              {/* Effetti: filtri pronti, regolazioni, effetti a pila (motore fx, valido per ogni oggetto) */}
+              {propTab === 'fx' && hasSelection && (
+                <FxPanel fabricRef={fabricRef} selKey={sel} initialTab={sel.type === 'image' ? 'filtri' : sel.type === 'text' ? 'stili' : 'effetti'} />
+              )}
+
+              {/* 3D Genesis Preview — inline viewer shown when 3D is active + object selected */}
+              {propTab === 'lab' && store.threeDEnabled && props.labSelectedObj && (
+                <div className="h-60 flex-shrink-0">
+                  <Vanguard3DEngine
+                    fabricObject={props.labSelectedObj}
+                    isSelected
+                    onFrameUpdate={() => {
+                      // Drive Fabric re-renders from the panel engine's animation loop.
+                      // This engine is always visible (Chrome never throttles it), so
+                      // it serves as a reliable heartbeat for the canvas overlay.
+                      props.labSelectedObj?.canvas?.requestRenderAll?.()
+                    }}
+                  />
                 </div>
               )}
 
@@ -4597,9 +5095,11 @@ function PropertiesPanel(props: PanelProps) {
           <LibPanel
             onShape={props.onAddShape}
             onIcon={props.onAddIcon}
+            onGenerated={props.onAddGenerated}
             onFont={props.onApplyFont}
             onTexture={props.onApplyTexture}
             onBricolage={props.onAddBricolage}
+            onPack={props.onAddPackAsset}
             onGrad={props.onApplyGradient}
             onClose={() => setTab('prop')}
             inline
@@ -4732,18 +5232,14 @@ function BlendModeDrop({ value, onChange, onClose }: { value: string; onChange: 
 
 // ─── FONT PICKER ─────────────────────────────────────────────────────────────
 
-function FontDrop({ value, onChange, onClose }: { value: string; onChange: (f: string) => void; onClose: () => void }) {
-  return (
-    <div className="bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl p-2 w-52 max-h-72 overflow-y-auto scrollbar-hide">
-      {ALL_FONTS.map((f, i) => <button key={`${i}-${f}`} onClick={() => { onChange(f); onClose() }} className={cn('w-full text-left px-3 py-1.5 rounded-lg text-sm hover:bg-white/10', value === f ? 'text-accent' : 'text-white/70')} style={{ fontFamily: f }}>{f}</button>)}
-    </div>
-  )
+function FontDrop({ value, onChange, onPair, onClose }: { value: string; onChange: (f: string) => void; onPair?: (t: string, b: string) => void; onClose: () => void }) {
+  return <FontPicker value={value} onChange={f => { onChange(f); onClose() }} onPair={onPair && ((t, b) => { onPair(t, b); onClose() })} />
 }
 
 // ─── TEXT BAR ────────────────────────────────────────────────────────────────
 
-function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, onShadow, onPreset, onUpdate }: {
-  sel: SelState; onApply: (p: Partial<fabric.Textbox>) => void; onLink: () => void
+function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, onShadow, onPreset, onUpdate, onPair }: {
+  sel: SelState; onApply: (p: Partial<fabric.Textbox>) => void; onLink: () => void; onPair?: (title: string, body: string) => void
   showFP: boolean; setShowFP: (v: boolean) => void; showFX: boolean; setShowFX: (v: boolean) => void
   onShadow: (u: Partial<SelState>) => void; onPreset: (p: any) => void; onUpdate: (evt: string, p: string, v: any) => void
 }) {
@@ -4754,33 +5250,39 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
   const ib = (a: boolean) => cn('w-9 h-9 flex items-center justify-center rounded-lg transition-colors border-2 border-transparent', a ? 'bg-accent text-black' : 'text-white/40 hover:bg-white/10 hover:text-white')
   const PS = [{ l: 'H1', sz: 48, fw: 'bold' as const }, { l: 'H2', sz: 32, fw: 'bold' as const }, { l: 'H3', sz: 24, fw: 'bold' as const }, { l: 'CP', sz: 16, fw: 'normal' as const }, { l: 'C', sz: 12, fw: 'normal' as const }]
   return (
-    <div className="flex items-center gap-4 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex-shrink-0">
         <button ref={fontBtnRef} onClick={() => setShowFP(!showFP)} className="flex items-center gap-2 h-9 px-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white/80 hover:bg-white/10 min-w-[130px]" style={{ fontFamily: sel.fontFamily }}>
           {sel.fontFamily}<ChevronDown className="w-4 h-4 ml-auto opacity-40" />
         </button>
-        {showFP && typeof document !== 'undefined' && <DropdownPortal triggerRef={fontBtnRef}>
-          <FontDrop value={sel.fontFamily} onChange={f => onApply({ fontFamily: f })} onClose={() => setShowFP(false)} />
+        {showFP && typeof document !== 'undefined' && <DropdownPortal triggerRef={fontBtnRef} alignRight>
+          <FontDrop value={sel.fontFamily} onChange={f => onApply({ fontFamily: f })} onPair={onPair} onClose={() => setShowFP(false)} />
         </DropdownPortal>}
       </div>
+      {(fontEntry(sel.fontFamily)?.weights.length ?? 0) > 1 && (
+        <select value={String(sel.fontWeight === 'bold' ? 700 : sel.fontWeight === 'normal' ? 400 : sel.fontWeight || 400)} onChange={e => onApply({ fontWeight: Number(e.target.value) as never })}
+          className="h-9 px-2 bg-white/5 border border-white/10 rounded-xl text-[11px] text-white/80 focus:outline-none" aria-label="Peso del carattere">
+          {fontEntry(sel.fontFamily)!.weights.map(w => <option key={w} value={w} className="bg-[#141414]">{WEIGHT_NAMES[w] ?? w}</option>)}
+        </select>
+      )}
       <input type="number" value={sel.fontSize} min={6} max={400} onChange={e => onApply({ fontSize: parseInt(e.target.value) || 24 })} className="w-16 h-9 px-2 bg-white/5 border border-white/10 rounded-xl text-xs text-white uppercase font-black text-center focus:outline-none flex-shrink-0" />
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={() => onApply({ fontWeight: sel.bold ? 'normal' : 'bold' })} className={ib(sel.bold)}><Bold className="w-4 h-4" /></button>
         <button onClick={() => onApply({ fontStyle: sel.italic ? 'normal' : 'italic' })} className={ib(sel.italic)}><Italic className="w-4 h-4" /></button>
         <button onClick={() => onApply({ underline: !sel.underline })} className={ib(sel.underline)}><Underline className="w-4 h-4" /></button>
         <button onClick={() => onApply({ linethrough: !sel.linethrough })} className={ib(sel.linethrough)}><Strikethrough className="w-4 h-4" /></button>
       </div>
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={() => onApply({ textAlign: 'left' })} className={ib(sel.textAlign === 'left')}><AlignLeft className="w-4 h-4" /></button>
         <button onClick={() => onApply({ textAlign: 'center' })} className={ib(sel.textAlign === 'center')}><AlignCenter className="w-4 h-4" /></button>
         <button onClick={() => onApply({ textAlign: 'right' })} className={ib(sel.textAlign === 'right')}><AlignRight className="w-4 h-4" /></button>
         <button onClick={() => onApply({ textAlign: 'justify' })} className={ib(sel.textAlign === 'justify')}><AlignJustify className="w-4 h-4" /></button>
       </div>
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <CP value={sel.fillColor} onChange={c => onApply({ fill: c })} label="A" />
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       {/* Paragrafo — hover espande i preset */}
       <div className="relative flex-shrink-0"
         onMouseEnter={() => { clearTimeout(paraTimer.current); setShowPara(true) }}
@@ -4795,7 +5297,7 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
           </div>
         )}
       </div>
-      <div className="w-px h-6 bg-white/10 flex-shrink-0" />
+      <div className="hidden" />
       <button onClick={onLink} className={ib(false)} title="Aggiungi link"><Link2 className="w-4 h-4" /></button>
       <div className="flex-shrink-0">
         <button ref={fxBtnRef} onClick={() => setShowFX(!showFX)} className={cn('h-8 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 relative transition-all', showFX || sel.appliedFX?.length ? 'bg-accent/20 text-accent border border-accent/40' : 'bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20')}>
@@ -4826,18 +5328,18 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
   const bmBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const [showBM, setShowBM] = useState(false)
   return (
-    <div className="flex items-center gap-5 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <CP value={sel.fillColor} onChange={c => onApply({ fill: c })} label="Fill" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <CP value={sel.strokeColor} onChange={c => onApply({ stroke: c })} label="Bordo" />
       <input type="number" min={0} max={50} value={sel.strokeWidth} onChange={e => onApply({ strokeWidth: parseInt(e.target.value) || 0 })} className="w-14 h-8 px-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/80 text-center focus:outline-none flex-shrink-0" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-xl border border-white/5">
         <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Opacità</span>
         <input type="range" min={0} max={100} value={sel.opacity} onChange={e => onApply({ opacity: parseInt(e.target.value) / 100 })} className="w-24 accent-accent opacity-70 hover:opacity-100 transition-opacity" />
         <span className="text-[10px] font-black text-white/60 w-8">{sel.opacity}%</span>
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex-shrink-0">
         <button ref={fxBtnRef} onClick={() => setShowFX(!showFX)} className={cn('h-8 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all relative', showFX || sel.appliedFX?.length ? 'bg-accent/20 text-accent border border-accent/40' : 'bg-white/5 border border-white/10 text-white/40 hover:bg-white/10')}>
           <Sparkles className="w-3.5 h-3.5" /> Effetti
@@ -4847,7 +5349,7 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
           <ShapeFXPanel sel={sel} onShadow={onShadow} onGrad={onGrad} onPreset={onPreset} onUpdate={onUpdate} onClose={() => setShowFX(false)} />
         </DropdownPortal>}
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex-shrink-0 relative">
         <button ref={bmBtnRef} onClick={() => setShowBM(!showBM)}
           className={cn('h-8 px-3 rounded-xl text-[10px] font-black border uppercase tracking-widest flex items-center gap-2 transition-all',
@@ -4862,7 +5364,7 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
           </DropdownPortal>
         )}
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={() => onBoolean('union')} title="Unione" className="w-8 h-8 flex items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-emerald-400"><Merge className="w-4 h-4" /></button>
         <button onClick={() => onBoolean('subtract')} title="Sottrai" className="w-8 h-8 flex items-center justify-center rounded-lg text-white/40 hover:bg-white/10 hover:text-red-400"><Scissors className="w-4 h-4" /></button>
@@ -4878,16 +5380,16 @@ function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, 
 function LineBar({ sel, onApply, onStart, onEnd, onConn }: { sel: SelState; onApply: (p: Partial<fabric.Object>) => void; onStart: () => void; onEnd: () => void; onConn: () => void }) {
   const ib = (a: boolean) => cn('w-9 h-9 flex items-center justify-center rounded-xl border-2 transition-colors', a ? 'bg-accent text-black border-accent' : 'border-white/10 text-white/40 hover:bg-white/10 hover:text-white')
   return (
-    <div className="flex items-center gap-4 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <CP value={sel.strokeColor} onChange={c => onApply({ stroke: c })} label="Linea" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <input type="number" min={1} max={50} value={sel.strokeWidth} onChange={e => onApply({ strokeWidth: parseInt(e.target.value) || 1 })} className="w-14 h-8 px-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/80 text-center focus:outline-none flex-shrink-0" />
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <div className="flex items-center gap-1">
         <button onClick={onStart} className={ib(sel.hasStartArrow)} title="Ancoraggio Inizio"><ArrowLeft className="w-4 h-4" /></button>
         <button onClick={onEnd} className={ib(sel.hasEndArrow)} title="Ancoraggio Fine"><ArrowRight className="w-4 h-4" /></button>
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <button onClick={onConn}
         className={cn('h-8 px-4 rounded-xl border-2 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2', sel.isConnector ? 'bg-accent text-black border-accent' : 'border-white/10 text-white/40 hover:bg-white/10 hover:border-white/20')}>
         <ArrowLeftRight className="w-3.5 h-3.5" /> Aggancio
@@ -4903,13 +5405,13 @@ function ImageBar({ sel, onApply, onRemoveBg, loading, showFx, setShowFx, onTrac
   showFx: boolean; setShowFx: (v: boolean) => void; onTraceImage: () => void; onApplyAnimation: (a: string | null) => void
 }) {
   return (
-    <div className="flex items-center gap-6 flex-shrink-0">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-xl border border-white/5">
         <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Opacità</span>
         <input type="range" min={0} max={100} value={sel.opacity} onChange={e => onApply({ opacity: parseInt(e.target.value) / 100 })} className="w-24 accent-accent opacity-70 hover:opacity-100 transition-opacity" />
         <span className="text-[10px] font-black text-white/60 w-8">{sel.opacity}%</span>
       </div>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       {/* Filtri button — opens ImgFxPanel via portal (managed by parent via showImgFx state) */}
       <button onClick={() => setShowFx(!showFx)}
         className={cn('flex items-center gap-2 h-8 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors',
@@ -4922,7 +5424,7 @@ function ImageBar({ sel, onApply, onRemoveBg, loading, showFx, setShowFx, onTrac
       <button onClick={onTraceImage} className="flex items-center gap-2 h-8 px-4 rounded-xl bg-emerald-600/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all">
         <Zap className="w-3.5 h-3.5" /> Vettorializza
       </button>
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
       <button onClick={() => onApplyAnimation(sel.animation ? null : 'pulse')} className={cn('h-8 px-3 rounded-xl text-[10px] font-black border uppercase tracking-widest flex items-center gap-2 transition-all', sel.animation ? 'bg-amber-500 text-black border-amber-500' : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10')}>
         <Play className={cn('w-3.5 h-3.5', sel.animation && 'animate-spin')} /> Animazione
       </button>
@@ -4955,8 +5457,8 @@ function PencilBar({ sel, onApply }: { sel: SelState; onApply: (p: Partial<SelSt
   ]
 
   return (
-    <div className="flex items-center gap-5 flex-shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="flex bg-white/5 rounded-xl border border-white/10 p-1">
+    <div className="flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="flex flex-wrap bg-white/5 rounded-xl border border-white/10 p-1">
         {brushes.map(b => (
           <button key={b.id} onClick={() => onApply({ brushType: b.id })} title={b.label}
             className={cn('w-9 h-8 flex items-center justify-center rounded-lg transition-all',
@@ -4966,7 +5468,7 @@ function PencilBar({ sel, onApply }: { sel: SelState; onApply: (p: Partial<SelSt
         ))}
       </div>
 
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
 
       <div className="flex items-center gap-3">
         <span className="text-[9px] text-white/30 uppercase tracking-widest">Peso</span>
@@ -4976,7 +5478,7 @@ function PencilBar({ sel, onApply }: { sel: SelState; onApply: (p: Partial<SelSt
         <span className="text-[10px] font-black text-white/60 w-6">{sel.brushWidth}</span>
       </div>
 
-      <div className="w-px h-6 bg-white/10" />
+      <div className="hidden" />
 
       <CP value={sel.brushColor || '#ffffff'} onChange={c => onApply({ brushColor: c })} label="TRATTO" />
     </div>
@@ -5238,17 +5740,19 @@ function ShadowSec({ sel, onShadow }: { sel: SelState; onShadow: (u: Partial<Sel
 
 // ─── LIBRARY PANEL (Advanced Asset Explorer) ─────────────────────────────────
 
-function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onClose, inline = false }: {
-  onShape: (p: string) => void;
-  onIcon: (svgPath: string) => void;
+function LibPanel({ onShape, onIcon, onGenerated, onFont, onTexture, onBricolage, onPack, onGrad, onClose, inline = false }: {
+  onShape: (p: string, filled?: boolean) => void;
+  onIcon: (svgPath: string, filled?: boolean) => void;
+  onGenerated: (url: string, name: string) => void;
   onFont: (f: string) => void;
   onTexture: (tex: any) => void;
   onBricolage: (asset: any) => void;
+  onPack: (item: PackItem, pack: PackInfo) => void;
   onGrad: (c: string[], a?: number) => void;
   onClose: () => void;
   inline?: boolean
 }) {
-  const [tab, setTab] = useState<'fonts' | 'shapes' | 'icons' | 'textures' | 'bricolage'>('shapes')
+  const [tab, setTab] = useState<'genera' | 'pack' | 'fonts' | 'shapes' | 'icons' | 'textures' | 'bricolage'>('genera')
   const [search, setSearch] = useState('')
 
   return (
@@ -5263,7 +5767,7 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
 
       {/* Tabs */}
       <div className="flex px-2 py-1.5 bg-black/20 gap-1 overflow-x-auto scrollbar-hide">
-        {(['fonts', 'shapes', 'icons', 'textures', 'bricolage'] as const).map(t => (
+        {(['genera', 'pack', 'fonts', 'shapes', 'icons', 'textures', 'bricolage'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap',
               tab === t ? 'bg-white/10 text-accent shadow-inner' : 'text-white/30 hover:text-white/60')}>
@@ -5281,19 +5785,24 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
+        {tab === 'genera' && <GeneratePanel search={search} onInsert={onGenerated} />}
+        {tab === 'pack' && <PackPanel search={search} onInsert={onPack} onFill={it => onTexture({ name: it.name, type: 'overlay', url: it.src })} />}
+
         {tab === 'shapes' && (
           <div className="space-y-6">
             {Object.entries(SHAPE_LIBRARY).map(([cat, items]) => (
               <div key={cat}>
                 <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 ml-1">{cat}</p>
                 <div className="grid grid-cols-3 gap-2.5">
-                  {items.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(sh => (
-                    <button key={sh.name} onClick={() => onShape(sh.path)}
+                  {items.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(sh => {
+                    const filled = FILLED_SHAPE_CATEGORIES.has(cat)
+                    return (
+                    <button key={sh.name} onClick={() => onShape(sh.path, filled)}
                       className="aspect-square flex flex-col items-center justify-center gap-1.5 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all group">
-                      <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-lg"><path d={sh.path} fill="none" stroke="currentColor" strokeWidth="3" className="text-white/40 group-hover:text-white transition-colors" /></svg>
+                      <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-lg"><path d={sh.path} fill={filled ? 'currentColor' : 'none'} stroke={filled ? 'none' : 'currentColor'} strokeWidth="3" className="text-white/40 group-hover:text-white transition-colors" /></svg>
                       <span className="text-[7px] font-bold uppercase tracking-widest text-white/20 group-hover:text-white/50">{sh.name}</span>
                     </button>
-                  ))}
+                  )})}
                 </div>
               </div>
             ))}
@@ -5303,34 +5812,18 @@ function LibPanel({ onShape, onIcon, onFont, onTexture, onBricolage, onGrad, onC
         {tab === 'icons' && (
           <div className="grid grid-cols-3 gap-2.5">
             {ICONS_LIBRARY.filter(i => i.name.toLowerCase().includes(search.toLowerCase())).map(ic => (
-              <button key={ic.name} onClick={() => onIcon(ic.path)}
+              <button key={ic.name} onClick={() => onIcon(ic.path, FILLED_ICONS.has(ic.name))}
                 className="aspect-square flex flex-col items-center justify-center gap-1.5 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all group">
-                <svg viewBox="0 0 24 24" className="w-8 h-8 drop-shadow-lg"><path d={ic.path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 group-hover:text-white transition-colors" /></svg>
+                <svg viewBox="0 0 24 24" className="w-8 h-8 drop-shadow-lg">{FILLED_ICONS.has(ic.name)
+                  ? <path d={ic.path} fill="currentColor" className="text-white/40 group-hover:text-white transition-colors" />
+                  : <path d={ic.path} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/40 group-hover:text-white transition-colors" />}</svg>
                 <span className="text-[7px] font-bold uppercase tracking-widest text-white/20 group-hover:text-white/50">{ic.name}</span>
               </button>
             ))}
           </div>
         )}
 
-        {tab === 'fonts' && (
-          <div className="space-y-6">
-            {Object.entries(FONT_CATEGORIES).map(([cat, fonts]) => (
-              <div key={cat}>
-                <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 ml-1">{cat}</p>
-                <div className="flex flex-col gap-1.5">
-                  {fonts.filter(f => f.toLowerCase().includes(search.toLowerCase())).map((f, i) => (
-                    <button key={`${cat}-${f}-${i}`} onClick={() => onFont(f)}
-                      onMouseEnter={() => injectGoogleFont(f)}
-                      className="group flex flex-col px-4 py-3 bg-white/5 border border-white/8 rounded-2xl hover:bg-white/10 hover:border-accent/30 transition-all text-left">
-                      <span className="text-lg text-white/80 group-hover:text-white transition-colors" style={{ fontFamily: f }}>{f}</span>
-                      <span className="text-[7px] font-bold uppercase tracking-widest text-white/20">{f}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {tab === 'fonts' && <FontPicker value="" onChange={onFont} className="w-full max-h-none border-0 bg-transparent shadow-none" />}
 
         {tab === 'textures' && (
           <div className="space-y-6">

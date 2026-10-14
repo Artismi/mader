@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { google } from 'googleapis'
 import { messages, clientChannels, tokens } from '@/lib/db'
+import { googleAuth } from '@/lib/google/auth'
 
 function getGmailClient(accessToken: string) {
-  const oauth2Client = new google.auth.OAuth2()
-  oauth2Client.setCredentials({ access_token: accessToken })
-  return google.gmail({ version: 'v1', auth: oauth2Client })
+  // rinnovo automatico se c'è il refresh token (vedi lib/google/auth)
+  return google.gmail({ version: 'v1', auth: googleAuth(accessToken)! })
 }
 
 // GET /api/gmail — sincronizza le ultime 50 email da Gmail → SQLite e restituisce la lista

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 interface VaultEditorProps {
   path: string
-  onClose: () => void
+  onClose?: () => void
 }
 
 export function VaultEditor({ path, onClose }: VaultEditorProps) {
@@ -20,6 +20,8 @@ export function VaultEditor({ path, onClose }: VaultEditorProps) {
     setError(null)
     try {
       const res = await fetch(`/api/vault/file?path=${encodeURIComponent(path)}`)
+      // 404 = file non ancora creato: si parte vuoti, il salvataggio lo crea
+      if (res.status === 404) { setContent(''); return }
       if (!res.ok) throw new Error('Impossibile caricare il file')
       const text = await res.text()
       setContent(text)
@@ -56,12 +58,11 @@ export function VaultEditor({ path, onClose }: VaultEditorProps) {
       {/* Header */}
       <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.03]">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={onClose}
+          {onClose && (<button onClick={onClose}
             className="p-2 hover:bg-white/5 rounded-xl text-white/40 hover:text-white transition-all"
           >
             <ChevronLeft className="w-5 h-5" />
-          </button>
+          </button>)}
           <div>
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-sky-400" />

@@ -1,0 +1,505 @@
+{
+  "caffe": {
+    "foto": "caffe.jpg",
+    "c": {
+      "brand": "Tostatura Nera",
+      "kicker": "Nuovo blend",
+      "title": "Notte Etiope",
+      "numero": "250 g",
+      "body": "Note di cacao, spezie e frutti rossi. Tostato a Bologna in piccoli lotti.",
+      "details": [
+        "250 g",
+        "Etiopia Guji",
+        "Tostatura media"
+      ],
+      "cta": "Scopri il blend"
+    }
+  },
+  "ceramica": {
+    "foto": "ceramica.jpg",
+    "c": {
+      "brand": "Terra Mossa",
+      "kicker": "Collezione autunno",
+      "title": "Tazze in gres smaltate a mano",
+      "body": "Argilla toscana, smalti naturali e cottura a 1240 gradi. Ogni pezzo è diverso.",
+      "details": [
+        "Pezzi unici",
+        "Lavastoviglie"
+      ],
+      "cta": "Vedi la collezione"
+    }
+  },
+  "techno": {
+    "foto": "club.jpg",
+    "c": {
+      "brand": "Cassero Club",
+      "kicker": "Sabato 14 novembre",
+      "title": "Notte Industriale",
+      "numero": "14.11",
+      "body": "Sei ore di techno con tre live set e le luci di Studio Lumen.",
+      "details": [
+        "Dalle 23",
+        "Bologna",
+        "Ingresso 15 €"
+      ],
+      "cta": "Biglietti online"
+    }
+  },
+  "dischi": {
+    "foto": "vinile.jpg",
+    "c": {
+      "brand": "Lato B",
+      "kicker": "Mercato del disco",
+      "title": "Vinili usati, storie nuove",
+      "body": "Tremila dischi selezionati, giradischi revisionati e una sala d'ascolto.",
+      "details": [
+        "Domenica",
+        "Via Mascarella 12",
+        "Ingresso libero"
+      ],
+      "cta": "Vieni ad ascoltare"
+    }
+  },
+  "ristorante": {
+    "foto": "verdure.jpg",
+    "c": {
+      "brand": "Osteria Fiume",
+      "kicker": "Menu d'autunno",
+      "title": "L'orto entra in cucina",
+      "body": "Zucca, radicchio, funghi e cipolle di Tropea: il menu cambia con le stagioni.",
+      "details": [
+        "Cena",
+        "Martedì-Sabato"
+      ],
+      "cta": "Prenota un tavolo"
+    }
+  },
+  "mercato": {
+    "foto": "fragole.jpg",
+    "c": {
+      "brand": "Mercato Albinelli",
+      "kicker": "Questo weekend",
+      "title": "Fragole di Romagna",
+      "numero": "-20%",
+      "body": "Raccolte all'alba da tre aziende agricole della provincia.",
+      "details": [
+        "Sabato e domenica",
+        "Fino a esaurimento"
+      ],
+      "cta": "Passa al banco 14"
+    }
+  },
+  "viaggio": {
+    "foto": "lago.jpg",
+    "c": {
+      "brand": "Altrove",
+      "kicker": "Itinerari lenti",
+      "title": "Sette giorni sul lago",
+      "body": "Canoa all'alba, rifugi senza segnale e cene in baita. Gruppi di otto persone.",
+      "details": [
+        "7 giorni",
+        "Da giugno",
+        "Tutto incluso"
+      ],
+      "cta": "Scopri l'itinerario"
+    }
+  },
+  "beauty": {
+    "foto": "ritratto.jpg",
+    "c": {
+      "brand": "Maison Lune",
+      "kicker": "Nuovo siero",
+      "title": "La pelle, di notte",
+      "body": "Niacinamide e peptidi per una pelle più uniforme al risveglio.",
+      "details": [
+        "30 ml",
+        "Vegano",
+        "Senza profumo"
+      ],
+      "cta": "Provalo ora"
+    }
+  },
+  "mostra": {
+    "foto": "medusa.jpg",
+    "c": {
+      "brand": "Museo del Mare",
+      "kicker": "Mostra fino al 6 gennaio",
+      "title": "Creature della luce",
+      "body": "Meduse, sifonofori e pesci abissali: la bioluminescenza raccontata da vicino.",
+      "details": [
+        "Genova",
+        "Martedì-Domenica"
+      ],
+      "cta": "Acquista il biglietto"
+    }
+  },
+  "app": {
+    "c": {
+      "brand": "Salvadana",
+      "kicker": "Nuova app",
+      "title": "Metti da parte senza pensarci",
+      "body": "Arrotonda ogni spesa e risparmia la differenza, in automatico.",
+      "details": [
+        "Gratis",
+        "iOS e Android"
+      ],
+      "cta": "Scarica l'app"
+    }
+  },
+  "conferenza": {
+    "c": {
+      "brand": "Forma Festival",
+      "kicker": "Design e città",
+      "title": "Progettare il vuoto",
+      "numero": "2026",
+      "body": "Tre giorni di talk e laboratori sullo spazio pubblico, con 24 ospiti da 9 paesi.",
+      "details": [
+        "21-23 maggio",
+        "Milano",
+        "Ex Ansaldo"
+      ],
+      "cta": "Registrati"
+    }
+  },
+  "citazione": {
+    "c": {
+      "brand": "Studio Artismi",
+      "kicker": "Appunti di progetto",
+      "title": "Il bianco non è vuoto: è respiro",
+      "body": "Ogni pagina ha bisogno di spazio per farsi leggere.",
+      "details": [],
+      "cta": ""
+    }
+  },
+  "bambini": {
+    "foto": "orso.jpg",
+    "c": {
+      "brand": "Ludoteca Girotondo",
+      "kicker": "Sabato in famiglia",
+      "title": "Il bosco degli orsetti",
+      "numero": "3-8",
+      "body": "Laboratorio creativo con storie, pupazzi e merenda per bambini dai 3 agli 8 anni.",
+      "details": [
+        "Sabato ore 16",
+        "Ingresso libero"
+      ],
+      "cta": "Prenota un posto"
+    }
+  },
+  "arte": {
+    "foto": "medusa.jpg",
+    "c": {
+      "brand": "Spazio Varco",
+      "kicker": "Opening 21 novembre",
+      "title": "Corpi che emettono luce",
+      "body": "Installazione sonora e video di tre artisti tra biologia e performance.",
+      "details": [
+        "Milano",
+        "Ore 19",
+        "Fino al 20.12"
+      ],
+      "cta": "Ingresso libero"
+    }
+  },
+  "rivista": {
+    "foto": "ritratto.jpg",
+    "c": {
+      "brand": "Margini",
+      "kicker": "Numero 12 · Autunno",
+      "title": "La lentezza come forma di attenzione",
+      "body": "Conversazione con chi ha scelto di rallentare: tre storie, un saggio e un portfolio fotografico.",
+      "details": [
+        "96 pagine",
+        "In libreria"
+      ],
+      "cta": "Abbonati alla rivista"
+    }
+  },
+  "gioielli": {
+    "foto": "ritratto.jpg",
+    "c": {
+      "brand": "Aurea",
+      "kicker": "Collezione Sole",
+      "title": "Luce da indossare",
+      "body": "Orecchini e anelli in oro riciclato, lavorati a mano nel nostro atelier di Vicenza.",
+      "details": [
+        "Oro 18 kt",
+        "Pezzi numerati"
+      ],
+      "cta": "Prenota una visita"
+    }
+  },
+  "palestra": {
+    "c": {
+      "brand": "Forge Gym",
+      "kicker": "Nuovo corso",
+      "title": "Allenati come una squadra",
+      "numero": "6:30",
+      "body": "Allenamento funzionale di gruppo, quattro mattine a settimana, con coach dedicato.",
+      "details": [
+        "Lun-Gio",
+        "Ore 6:30",
+        "Prova gratuita"
+      ],
+      "cta": "Prenota la prova"
+    }
+  },
+  "barbiere": {
+    "c": {
+      "brand": "Bottega Baffo",
+      "kicker": "Dal 1972",
+      "title": "Barba, capelli e vinili",
+      "body": "Taglio classico, rasatura col panno caldo e la musica dei nostri dischi.",
+      "details": [
+        "Via Nazario Sauro 9",
+        "Su appuntamento"
+      ],
+      "cta": "Prenota il taglio"
+    }
+  },
+  "t_consigli": {
+    "foto": "caffe.jpg",
+    "c": {
+      "tipo": "consigli",
+      "brand": "Tostatura Nera",
+      "kicker": "Guida",
+      "title": "Come conservare il caffè a casa",
+      "voci": [
+        {
+          "titolo": "Barattolo ermetico",
+          "testo": "L'aria è il primo nemico: chiudi sempre bene dopo ogni uso."
+        },
+        {
+          "titolo": "Lontano dalla luce",
+          "testo": "Tienilo in dispensa, mai sul piano vicino ai fornelli."
+        },
+        {
+          "titolo": "Niente frigorifero",
+          "testo": "L'umidità rovina gli aromi e il caffè assorbe gli odori."
+        },
+        {
+          "titolo": "Macina al momento",
+          "testo": "Il caffè in grani resta fresco tre volte più a lungo."
+        }
+      ],
+      "cta": "Scopri le miscele"
+    }
+  },
+  "t_programma": {
+    "foto": "club.jpg",
+    "c": {
+      "tipo": "programma",
+      "brand": "Spazio Rotonda",
+      "kicker": "Sabato 14 marzo",
+      "title": "Il programma della notte",
+      "voci": [
+        {
+          "ora": "21:00",
+          "titolo": "Apertura porte"
+        },
+        {
+          "ora": "22:00",
+          "titolo": "Marta Kolb",
+          "testo": "live set, ambient"
+        },
+        {
+          "ora": "23:30",
+          "titolo": "Dj Ferro",
+          "testo": "techno"
+        },
+        {
+          "ora": "01:00",
+          "titolo": "Nausicaa b2b Rumore"
+        },
+        {
+          "ora": "03:00",
+          "titolo": "Chiusura"
+        }
+      ]
+    }
+  },
+  "t_menu": {
+    "foto": "verdure.jpg",
+    "c": {
+      "tipo": "menu",
+      "brand": "Osteria del Ponte",
+      "kicker": "Menu di stagione",
+      "title": "Pranzo d'autunno",
+      "voci": [
+        {
+          "titolo": "Vellutata di zucca",
+          "testo": "con semi tostati e olio al rosmarino",
+          "prezzo": "9 €"
+        },
+        {
+          "titolo": "Tortelli burro e salvia",
+          "prezzo": "14 €"
+        },
+        {
+          "titolo": "Guancia brasata",
+          "testo": "polenta morbida",
+          "prezzo": "18 €"
+        },
+        {
+          "titolo": "Torta di mele",
+          "prezzo": "6 €"
+        }
+      ]
+    }
+  },
+  "t_dati": {
+    "c": {
+      "tipo": "dati",
+      "brand": "Cooperativa Terra Viva",
+      "kicker": "Bilancio 2025",
+      "title": "Un anno di raccolto in numeri",
+      "voci": [
+        {
+          "valore": "68%",
+          "titolo": "prodotti venduti a km zero"
+        },
+        {
+          "valore": "42%",
+          "titolo": "acqua risparmiata con la goccia"
+        },
+        {
+          "valore": "85%",
+          "titolo": "imballaggi compostabili"
+        }
+      ]
+    }
+  },
+  "t_numeri": {
+    "c": {
+      "tipo": "dati",
+      "brand": "Festival Lungolago",
+      "kicker": "Edizione 2025",
+      "title": "Com'è andata",
+      "voci": [
+        {
+          "valore": "12.400",
+          "titolo": "visitatori"
+        },
+        {
+          "valore": "38",
+          "titolo": "concerti"
+        },
+        {
+          "valore": "3",
+          "titolo": "giorni"
+        },
+        {
+          "valore": "160",
+          "titolo": "volontari"
+        }
+      ]
+    }
+  },
+  "t_confronto": {
+    "c": {
+      "tipo": "confronto",
+      "brand": "Studio Pilates Sole",
+      "kicker": "Perché sceglierci",
+      "title": "Lezione di gruppo o privata?",
+      "colonne": [
+        {
+          "titolo": "In palestra",
+          "punti": [
+            "Classi da trenta persone",
+            "Esercizi uguali per tutti",
+            "Orari rigidi"
+          ]
+        },
+        {
+          "titolo": "Da noi",
+          "punti": [
+            "Massimo sei persone",
+            "Programma su misura",
+            "Prenoti dall'app"
+          ]
+        }
+      ]
+    }
+  },
+  "t_faq": {
+    "foto": "ceramica.jpg",
+    "c": {
+      "tipo": "faq",
+      "brand": "Bottega Argilla",
+      "kicker": "Corso base",
+      "title": "Le domande prima di iniziare",
+      "voci": [
+        {
+          "titolo": "Serve esperienza?",
+          "testo": "No, il corso parte da zero e il materiale è incluso."
+        },
+        {
+          "titolo": "Quanto dura?",
+          "testo": "Otto incontri da due ore, il martedì sera."
+        },
+        {
+          "titolo": "Porto a casa i pezzi?",
+          "testo": "Sì, dopo la cottura e la smaltatura."
+        }
+      ]
+    }
+  },
+  "t_timeline": {
+    "foto": "ritratto.jpg",
+    "c": {
+      "tipo": "timeline",
+      "brand": "Sartoria Ferri",
+      "kicker": "La nostra storia",
+      "title": "Tre generazioni di sartoria",
+      "voci": [
+        {
+          "valore": "1962",
+          "titolo": "La prima bottega",
+          "testo": "Nonno Aldo apre in via Saragozza."
+        },
+        {
+          "valore": "1988",
+          "titolo": "Il su misura",
+          "testo": "Arrivano gli abiti da cerimonia."
+        },
+        {
+          "valore": "2011",
+          "titolo": "La seconda sede",
+          "testo": "Apre il laboratorio a Milano."
+        },
+        {
+          "valore": "2024",
+          "titolo": "Online",
+          "testo": "Le misure si prendono anche in video."
+        }
+      ]
+    }
+  },
+  "t_passi": {
+    "foto": "fragole.jpg",
+    "c": {
+      "tipo": "passi",
+      "brand": "Cucina di Lia",
+      "kicker": "Ricetta",
+      "title": "Marmellata di fragole in quattro passi",
+      "voci": [
+        {
+          "titolo": "Lava e taglia",
+          "testo": "Un chilo di fragole mature, a pezzi."
+        },
+        {
+          "titolo": "Zucchero e limone",
+          "testo": "Lascia riposare due ore."
+        },
+        {
+          "titolo": "Cuoci piano",
+          "testo": "Quaranta minuti, mescolando spesso."
+        },
+        {
+          "titolo": "Invasa",
+          "testo": "Vasetti caldi, capovolti fino a sera."
+        }
+      ]
+    }
+  }
+}

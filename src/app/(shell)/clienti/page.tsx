@@ -157,7 +157,7 @@ function ClientCard({ client, color }: { client: any; color: 'sky' | 'amber' }) 
             <ChevronRight className="w-3 h-3 text-white/10 group-hover:text-white/30 transition-all" />
          </div>
          <div className="rounded-xl overflow-hidden border border-white/5 bg-black/40">
-            <VaultEditor clientId={client.id} initialContent={client.vault_md_content} />
+            <VaultEditor path={`clienti/${client.name.toLowerCase().replace(/\s+/g, '-')}-handbook.md`} />
          </div>
       </div>
     </div>
