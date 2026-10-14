@@ -56,3 +56,4 @@ ts-error.txt
 # banco di prova del motore designer
 /scripts/designer/node_modules
 /scripts/designer/out
+/scripts/designer/out-*
