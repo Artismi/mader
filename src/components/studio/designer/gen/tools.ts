@@ -12,6 +12,7 @@ import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
+import { conSpecifica, specializza } from './specializza'
 
 export interface Pal { bg: string; fg: string; acc: string; acc2: string; sec: string; srf: string; dark: boolean }
 
@@ -61,8 +62,10 @@ function palette(s: Style, inverti: boolean): Pal {
   return { bg, fg, acc, acc2: s.bg, sec: mix(fg, bg, 0.3), srf: mix(bg, fg, 0.12), dark: lum(bg) < 0.25 }
 }
 
-export function makeG(format: Format, s: Style, k: Knobs, c: DesignContent, photo?: string, pix?: Pix, seq?: Seq): G {
+export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, photo?: string, pix?: Pix, seq?: Seq): G {
   const [W, H] = FORMAT_SIZE[format]
+  // la specifica di progetto del brief orienta decori, foto ed enfasi
+  const { s, k } = conSpecifica(s0, k0, c)
   const ms = misure(format)
   return {
     W, H, u: ms.u, m: ms.m.l, g: ms.gut, T: ms.safe.y, B: ms.safe.y + ms.safe.h, ms, sc: scala(ms, rapportoDa(k.scala)),
@@ -444,6 +447,9 @@ function under(g: G, upto: number, px: number, py: number): { color: string; bus
   return res
 }
 
+/** Cosa c'è sotto un punto della tavola composta: colore e se il fondo è mosso. */
+export const sotto = (g: G, x: number, y: number) => under(g, g.els.length, x, y)
+
 function pathBox(d: string): Box | null {
   const xs: number[] = [], ys: number[] = []
   for (const m of d.matchAll(/M\s*(-?[\d.]+)\s+(-?[\d.]+)/g)) { xs.push(+m[1]); ys.push(+m[2]) }
@@ -581,6 +587,8 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   // numerati e le griglie di voci, dove lo specchio invertirebbe l'ordine di lettura
   if (o.specchio !== false && (g.seq?.specchio ?? (hashText(`${g.k.seme}|specchio`) % 10 < 4))) mirror(g)
   if (g.seq) seqMarks(g)
+  // la specifica del brief: segni, icone, effetto del titolo (poi i controlli di sempre)
+  specializza(g)
   if (!legible(g)) return null
   grainTop(g)
   // i testi veri e i sigilli stanno sopra la grana: nitidi, come li comporrebbe un tipografo

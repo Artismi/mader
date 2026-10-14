@@ -1,0 +1,18 @@
+{
+  "barbiere": {
+    "motivi": ["barbiere", "storia", "vinili"],
+    "testo": { "titolo": "timbro" },
+    "foto": { "look": "seppia" },
+    "segni": ["sigillo", "cornice"],
+    "enfasi": "Barba",
+    "evita": ["coriandoli", "stelle"]
+  },
+  "caffe": {
+    "motivi": ["caffe", "notte", "origine"],
+    "testo": { "titolo": ["bagliore", "ombra-netta"] },
+    "foto": { "look": "cinestill", "trattamento": "duotone" },
+    "segni": ["sigillo"],
+    "enfasi": "Etiope",
+    "evita": ["coriandoli"]
+  }
+}

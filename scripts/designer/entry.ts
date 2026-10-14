@@ -8,6 +8,8 @@ import { generateSystem, proposeKnobs, proponi, tintaFoto, type Knobs } from '@/
 import { styleById } from '@/components/studio/designer/styles'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
+import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
+import { ripiego } from '@/components/studio/designer/progetto/specifica'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
 export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; registro?: string; esame?: Scene['esame'] }
@@ -31,7 +33,8 @@ async function run(job: Job): Promise<Result[]> {
   const tinta = await tintaFoto(job.photo)
   const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi, tinta, seme: (job as { seme?: number }).seme })
   const out: Result[] = []
-  for (const k0 of ks) {
+  // primo: solo la prima identità (un esemplare per sistema), per confronti a parità di regolatori
+  for (const k0 of (job as { primo?: boolean }).primo ? ks.slice(0, job.sistemi?.length ?? ks.length) : ks) {
     const k = { ...k0, ...job.over }
     sink.length = 0
     const t0 = performance.now()
@@ -84,4 +87,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, motivi: () => MOTIVI, ripiego }
