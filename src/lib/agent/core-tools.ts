@@ -182,8 +182,10 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
             platforms: z.array(z.string()).optional(),
           }),
           execute: async ({ text, title, clientId, platforms }) => {
+            // nome, ID corto o completo: nel database va l'ID completo
+            const cli = clientId ? findClient(clientId) : undefined
             const idea = ideas.create({
-              client_id: clientId,
+              client_id: cli && !('error' in cli) ? cli.id : undefined,
               text,
               title,
               platforms: platforms || [],

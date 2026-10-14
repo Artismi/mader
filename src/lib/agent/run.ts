@@ -62,6 +62,8 @@ export interface RunAgentInput {
   task?: AiTask
   maxPassi?: number
   riservato?: boolean
+  /** pagina da cui parte la richiesta (es. '/editoriale'): ai modelli deboli si danno gli strumenti di quella pagina */
+  pagina?: string
   /** definizioni al posto di quelle di sistema (prove) */
   defs?: Def[]
   /** modelli al posto del registro (prove) */
@@ -69,7 +71,7 @@ export interface RunAgentInput {
   now?: Date
 }
 
-export interface Chiamata { strumento: string; input: unknown; esito: 'ok' | 'errore' | 'proposta' }
+export interface Chiamata { strumento: string; input: unknown; esito: 'ok' | 'errore' | 'proposta' | 'respinta'; motivo?: string }
 export interface Proposta { strumento: string; input: unknown; motivo: string }
 
 export interface RunAgentResult {
@@ -80,6 +82,8 @@ export interface RunAgentResult {
   chiamate: Chiamata[]
   proposte: Proposta[]
   log: string[]
+  /** token del modello che ha completato il compito */
+  token?: { input: number; cached: number; output: number }
 }
 
 /** Tutte le definizioni eseguibili sul server (niente strumenti del canvas: quelli li esegue il widget). */
@@ -99,6 +103,12 @@ function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[]): Def[
   return defs.map(d => ({
     ...d,
     needsApproval: false,
+    // anche i rifiuti della maestra vanno registrati, con il motivo: servono a capire i fallimenti (banco G6)
+    verify: d.verify ? async (input: unknown) => {
+      const problems = (await d.verify!(input as never)) ?? []
+      if (problems.length) chiamate.push({ strumento: d.name, input, esito: 'respinta', motivo: problems.join(' | ').slice(0, 300) })
+      return problems
+    } : undefined,
     execute: async (input: unknown) => {
       const ask = d.needsApproval ?? d.risk === 'destructive'
       const confirm = typeof ask === 'function' ? await ask(input as never) : ask
@@ -162,7 +172,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         prompt,
         tools: buildToolSet(defs, trace, guard),
         // se il chiamante ha già scelto gruppi o strumenti vale la sua scelta; altrimenti ai deboli il sottoinsieme di base
-        activeTools: (input.gruppi?.length || input.strumenti?.length ? undefined : toolsForContext(defs, { strength: c.profile.strength, always: ['updatePlan'] })) as never,
+        activeTools: (input.pagina && !input.gruppi?.length && !input.strumenti?.length ? toolsForContext(defs, { strength: c.profile.strength, pathname: input.pagina, always: ['updatePlan'] }) : undefined) as never,
         // lo stallo ferma il giro anche se il fornitore ignora l'abort (si controlla tra un passo e l'altro)
         stopWhen: [stepCountIs(input.maxPassi ?? 12), () => stallo],
         abortSignal: ac.signal,
@@ -176,7 +186,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       }
       trace.finish({ steps: r.steps.length, inputTokens: r.totalUsage.inputTokens, cachedInputTokens: r.totalUsage.cachedInputTokens, outputTokens: r.totalUsage.outputTokens })
       log.push(`${c.label}: ${r.steps.length} passi`)
-      return { ok: true, testo: r.text.trim(), modello: c.label, passi: r.steps.length, chiamate, proposte, log }
+      return { ok: true, testo: r.text.trim(), modello: c.label, passi: r.steps.length, chiamate, proposte, log, token: { input: r.totalUsage.inputTokens ?? 0, cached: r.totalUsage.cachedInputTokens ?? 0, output: r.totalUsage.outputTokens ?? 0 } }
     } catch (e) {
       if (stallo) continue
       const kind = noteFailure(c, e)

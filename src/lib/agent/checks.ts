@@ -44,16 +44,16 @@ export function budget(campo: string, v: string | undefined, max: number, min = 
 
 /**
  * Testo social pronto per la pubblicazione: lint della caption (prima riga,
- * hashtag, lunghezza…) e rilevatore di testo generato. Blocca solo i difetti
- * gravi (FIX, FLAGGED); i dubbi passano come avvisi in `after`.
+ * hashtag, lunghezza…). Blocca solo i difetti gravi del lint (FAIL); i dubbi
+ * e il parere del rilevatore di testo generato passano come avvisi in `after`.
  */
 export function testoSocial(campo: string, testo: string | undefined): string[] {
   const t = (testo ?? '').trim()
   if (!t) return []
   const lint = lintCaption(t)
   const out = lint.checks.filter(c => c.status === 'FAIL').map(c => `${campo}: ${c.label.toLowerCase()} da correggere (${c.detail}).`)
-  const human = detect(t)
-  if (human.verdict === 'FLAGGED') out.push(`${campo}: suona scritto da un'IA (human score ${human.humanScore.toFixed(1)}, punto debole: ${human.weakest}). Passalo da instagramLab con action "polish" e usa la versione pulita.`)
+  // il rilevatore di testo generato NON blocca: sui testi brevi sbaglia (banco G6: una caption scritta
+  // da una persona risultava FLAGGED). Il suo parere arriva come avviso in avvisiSocial.
   return out
 }
 
@@ -63,7 +63,8 @@ export function avvisiSocial(testo: string | undefined): string[] {
   if (!t) return []
   const lint = lintCaption(t)
   const out = lint.checks.filter(c => c.status === 'WARN').map(c => `${c.label.toLowerCase()}: ${c.detail}`)
-  if (detect(t).verdict === 'REVIEW') out.push('il testo è al limite del "generato": valuta instagramLab polish')
+  const human = detect(t)
+  if (human.verdict !== 'PASS') out.push(`il rilevatore lo giudica ${human.verdict === 'FLAGGED' ? 'probabilmente generato' : 'al limite'} (human score ${human.humanScore.toFixed(1)}, punto debole ${human.weakest}): se il testo non è dell'utente, valuta instagramLab polish`)
   return out
 }
 

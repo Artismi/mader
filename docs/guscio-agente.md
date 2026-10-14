@@ -164,7 +164,6 @@ In grassetto gli strumenti nuovi di questa fase.
   - la prova della conferma su `clearBoard` si è fermata per la quota esaurita di Gemini e resta da fare nell'app.
 - **Misura da affrontare**: ogni chiamata manda circa 90k token di prompt stabile, soprattutto per l'architettura di `defaults.ts` e le skill fisse. Con la cache costa poco, ma rallenta e diluisce l'attenzione. Il prossimo passo di contesto è portare le skill fisse nel catalogo (`loadSkill`) e accorciare l'architettura.
 - **Da fare**:
-  - **G6**, cioè i compiti reali con verifica, da scegliere con l'utente;
   - misurare la quota in cache con un modello vero, leggendo la riga `[agente]`.
 
 G6 richiede compiti reali scelti con l'utente.
@@ -210,6 +209,37 @@ I controlli sono riusabili e stanno in `src/lib/agent/checks.ts`. Ogni strumento
 | Dal vivo, "Quali incarichi scadono entro il 30?" | ~28k per passo (cache 46%) | ~19k per passo (cache 89%) |
 
 **Cosa resta:** gli **schemi degli strumenti**, circa 12k per passo: canvas e composeDesign (la sola descrizione circa 3,7k), più circa 2,9k degli strumenti di sistema. Il prossimo taglio è caricare gli schemi del canvas solo con il canvas aperto o dopo `loadSkill`, oppure accorciare la descrizione di `composeDesign`.
+
+## 5d. G6: banco di prova (fatto, 14 ottobre 2026)
+
+**Cos'è.** 20 compiti reali in `scripts/agent/banco/compiti.mts`:
+- incarichi 5, piano editoriale 5, clienti 3, idee 2, memoria 2, grafiche e testi 2, sicurezza 1;
+- ogni compito ha dati di partenza relativi a oggi e una **verifica automatica** sul database (incarico creato con cliente e data giusti, post spostato, preventivo con il totale giusto, fattura solo come proposta…) o sulla risposta.
+
+**Come si lancia.** Il runner `scripts/agent/banco.mts` esegue ogni modello in un processo separato, con un database temporaneo, e scrive il rapporto per modello in `scripts/agent/out/` (escluso da git):
+
+```bash
+node --import ./scripts/agent/register.mjs scripts/agent/banco.mts --env ../../../.env.local --modelli google:gemini-flash-lite-latest,anthropic:claude-haiku-5-5 --pausa 4000
+```
+
+Nel rapporto i compiti fermati da quota o servizio non disponibile risultano **non eseguiti** e non contano come bocciature. I rifiuti della maestra sono registrati con il motivo.
+
+**Prima misura** (`gemini-flash-lite-latest`, l'unico modello con quota libera durante la prova; due passate):
+- **15 compiti superati su 19 eseguiti**; `cli-post` non è mai partito per la quota.
+- Falliti per errori del modello:
+  - `cli-preventivo`: totale 830 invece di 1100, ha moltiplicato male le 10 foto;
+  - `piano-programma`: ha creato un incarico invece di programmare il post;
+  - `graf-regia`: ha scritto la bozza da solo invece di usare la regia dello Studio;
+  - `graf-hook`: chiamate a `instagramLab` sbagliate.
+- Gli ultimi tre sono stati rilanciati dopo le correzioni ma si sono fermati per la quota.
+
+**Difetti nostri trovati dal banco e corretti:**
+1. Il rilevatore di testo generato bloccava una caption scritta da una persona: sui testi brevi sbaglia. Ora segnala e non blocca; il lint continua a bloccare.
+2. `runAgent` dava ai modelli deboli solo gli strumenti di base, senza social e Studio. Ora il sottoinsieme vale solo con una `pagina` di riferimento.
+3. I rifiuti della maestra non erano registrati tra le chiamate. Ora lo sono, con il motivo.
+4. `createIdea` salvava il nome del cliente al posto dell'ID.
+
+**Da fare:** la misura su almeno due modelli richiesta da K0. Servono quote libere o una chiave a pagamento: `claude-haiku-5-5` costa circa 1 € per un giro completo, stima da verificare.
 
 ## 5b. Tutti i modelli, tutti gli strumenti (fasi G7–G8, 14 ottobre 2026)
 

@@ -9,7 +9,7 @@ export async function resolve(spec, ctx, next) {
   else if (spec.startsWith('.') && ctx.parentURL?.startsWith('file:')) url = new URL(spec, ctx.parentURL).href
   if (url) {
     const p = fileURLToPath(url)
-    for (const ext of ['', '.ts', '.tsx', '/index.ts']) if (isFile(p + ext)) return next(pathToFileURL(p + ext).href, ctx)
+    for (const ext of ['', '.ts', '.tsx', '.mts', '/index.ts']) if (isFile(p + ext)) return next(pathToFileURL(p + ext).href, ctx)
   }
   return next(spec, ctx)
 }
