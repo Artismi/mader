@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { generateText } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
+import { generateTextWith } from '@/lib/ai/model-registry'
 import { editorialPosts, messages, quotes, tasks } from '@/lib/db'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 import { googleStatus } from '@/lib/google/auth'
@@ -78,11 +77,9 @@ export async function POST(req: Request) {
 
   if (body.action === 'draft') {
     if (!m) return NextResponse.json({ error: 'Mail non trovata' }, { status: 404 })
-    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Manca ANTHROPIC_API_KEY in .env.local' }, { status: 400 })
     const plain = (m.content || '').replace(/<[^>]+>/g, ' ').slice(0, 4000)
     try {
-      const { text } = await generateText({
-        model: anthropic('claude-haiku-5-5'),
+      const { text } = await generateTextWith({ task: 'general', preferisci: 'leggero' }, {
         system: 'Sei l’assistente di un designer freelance italiano. Scrivi bozze di risposta brevi, cordiali e concrete, in italiano, senza firma e senza inventare prezzi o date non presenti. Se ti chiedono un appuntamento, proponi di concordare un orario.',
         prompt: `Mail di ${m.sender_name ?? m.sender_id}, oggetto "${m.subject ?? ''}":\n\n${plain}\n\nScrivi la bozza di risposta.`,
       })

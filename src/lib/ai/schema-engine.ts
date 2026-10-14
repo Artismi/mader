@@ -1,6 +1,4 @@
-import { google } from '@/lib/ai/google'
-import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
-import { generateObject } from 'ai'
+import { generateObjectWith } from '@/lib/ai/model-registry'
 import { z } from 'zod'
 
 // ── Schema Zod del Scene Graph ────────────────────────────────────────────────
@@ -99,9 +97,8 @@ Return ONLY valid JSON matching the schema. No markdown, no explanations.`
 // ── Stage 1: Gemini genera il Scene Graph ─────────────────────────────────────
 
 export async function generateSceneGraph(prompt: string): Promise<SceneGraph> {
-  const { object } = await generateObject({
-    // con OpenRouter collegato usa il modello scelto dall'utente, non Gemini
-    model: getOpenRouterKey() ? resolveModel('openrouter', 'design').model : google('gemini-2.5-flash'),
+  // il registro rispetta la scelta dell'utente e ripiega sugli altri fornitori
+  const { object } = await generateObjectWith({ task: 'design' }, {
     schema: SceneGraphSchema,
     system: SCHEMA_SYSTEM_PROMPT,
     prompt: `Generate a conceptual diagram for: ${prompt}`,

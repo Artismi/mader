@@ -249,15 +249,16 @@ const directDesignSchema = z.object({
   brief: z.string().min(10).describe('il brief completo: cosa, per chi, fatti, numeri, date, tono'),
   slide: z.union([z.number().int().min(1).max(10), z.literal('auto')]).optional().default(1).describe('1 = grafica singola; N o "auto" = carosello'),
   haFoto: z.boolean().optional(),
+  cliente: z.string().optional().describe('nome o ID del cliente: la regia legge brand, piano editoriale e memoria dal sistema'),
 })
 
 export const directDesign: AgentToolDef<typeof directDesignSchema> = {
   name: 'directDesign', group: 'studio', risk: 'read', maxChars: 12000,
   description: 'La regia dello Studio: dal brief produce testi verificati (budget di caratteri, niente frasi fatte né numeri inventati) e tre direzioni visive scelte dal menu del motore (sistema, stile, trattamento, regolatori). Per i caroselli anche la scaletta delle slide. Usa poi i testi e una direzione in composeDesign. Richiede da qualche secondo a un minuto.',
   inputSchema: directDesignSchema,
-  execute: async ({ brief, slide, haFoto }) => {
+  execute: async ({ brief, slide, haFoto, cliente }) => {
     const { regia } = await import('@/lib/ai/designer-roles')
-    const r = await regia(brief, { slides: slide, haFoto })
+    const r = await regia(brief, { slides: slide, haFoto, cliente })
     return {
       success: true,
       analisi: r.analisi,

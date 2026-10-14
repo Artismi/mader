@@ -172,6 +172,64 @@ G6 richiede compiti reali scelti con l'utente.
 
 ---
 
+## 5b. Tutti i modelli, tutti gli strumenti (fasi G7–G8, 14 ottobre 2026)
+
+Richiesta dell'utente: Claude, Gemini, OpenRouter e qualunque modello con una chiave devono poter usare il guscio, e anche i singoli strumenti dello Studio devono poter fare tutto nel sistema.
+
+### G7: registro unico dei modelli (`src/lib/ai/model-registry.ts`)
+
+- **Fornitori**: si usano quelli che hanno la chiave. OpenRouter con OAuth, Claude con `ANTHROPIC_API_KEY`, Gemini con `GEMINI_API_KEY` o `GOOGLE_GENERATIVE_AI_API_KEY`.
+- **Ordine**: prima la scelta fatta in chat (`modelId`), poi quella delle Impostazioni (`config ai.fornitore`), poi gli altri fornitori.
+- **Profilo di ogni modello**, dedotto dal nome:
+  - strumenti nativi (Gemma via API Gemini non li ha);
+  - visione;
+  - output strutturato;
+  - forza (`forte`, `medio`, `debole`);
+  - contesto.
+- **Scelta per bisogno**: `pickModel` e `candidatesFor` ricevono `{ task, tools?, vision?, structured?, preferisci? }`.
+  - `riservato` esclude Google gratuito (vale per i file del vault e per i lavori riservati).
+- **Quota e ripieghi**:
+  - `noteFailure` mette da parte un modello: 65 s se la quota è al minuto, 3 h se è giornaliera, 24 h se il modello non esiste, 10 min se il servizio non risponde;
+  - `withModels`, `generateTextWith` e `generateObjectWith` provano i candidati in ordine.
+- **Chi passa ora dal registro**:
+  - la chat;
+  - la catena dei ruoli dello Studio, che non ha più ID scritti nel codice ma preferenze per ruolo;
+  - planner, OS (bozze delle mail), Office, schemi, template-assist;
+  - le descrizioni delle immagini del vault.
+- **Bug corretti per strada**:
+  - `gemini-2.5-flash` era stato ritirato da Google e faceva fallire la scelta "gemini";
+  - le descrizioni del vault usavano `claude-haiku-4-5`;
+  - "gemini" contiene "mini" e veniva preso per un modello piccolo.
+
+### Adattamento ai modelli deboli
+
+- **Strumenti per pagina**: in chat un modello debole vede solo gli strumenti della pagina aperta (`toolsForContext` con `activeTools`).
+- **Il più forte del fornitore**: in chat e in `runAgent` si sceglie il modello più forte del fornitore scelto. Prova dal vivo: Gemini Flash-Lite aveva scritto la chiamata `readTasks` come testo invece di eseguirla.
+- **Catena dei ruoli**:
+  - output strutturato (`Output.object`) dove il modello lo regge, con ripiego sul JSON nel testo se lo schema non gli va bene;
+  - due giri per modello, poi il successivo;
+  - se la maestra ripete gli stessi errori si passa subito al successivo.
+- **Rilevatore di ripetizioni** (`createRepeatGuard`): alla seconda chiamata identica fallita suggerisce un altro approccio. Alla terza, in `runAgent` il modello viene sostituito.
+- **Chiamate scritte come testo** (`<default_api:…>`, `<tool_call>`): `runAgent` passa al modello successivo.
+
+### G8: il guscio come servizio (`src/lib/agent/run.ts`, `POST /api/ai/agent`)
+
+- `runAgent({ compito, contesto?, gruppi?, strumenti?, modello?, maxPassi? })`, senza streaming:
+  - stessi strumenti della chat (`core-tools.ts` + `system-tools.ts`), stessa maestra e stessa traccia;
+  - prompt snello: circa 9k token invece di circa 90k.
+- **Senza interfaccia nessuno conferma**: le azioni distruttive e la fattura non vengono eseguite. Tornano come `proposte`, che il chiamante mostra all'utente.
+- **Collegati allo Studio**:
+  - la **regia** (`/api/ai/design-direct` e lo strumento `directDesign`) accetta `cliente`: prima di scrivere legge scheda e vault, piano editoriale delle prossime quattro settimane e memoria (`contestoSistema` in `designer-roles.ts`);
+  - il **pannello Template** ha il campo Cliente e l'azione **"Fallo nel sistema"**. Per esempio "salvala come bozza nel piano di X per venerdì" passa da `/api/ai/agent` con i testi della grafica come contesto.
+
+### Prove
+
+- `npm run test:agente`: 41 test. Comprendono scelta del modello con chiavi simulate, ordine, riservato, visione, profili, quota e cascata, rilevatore di ripetizioni, e `runAgent` con un modello finto (strumento eseguito, fattura come proposta, sostituzione di un modello che gira a vuoto o scrive le chiamate come testo, gruppi).
+- **Dal vivo** (server di sviluppo, database di prova vuoto, sola chiave Gemini):
+  - `/api/ai/agent` con "salva come idea e crea un incarico entro il 24 ottobre": 3 strumenti, idea e incarico creati, 8,7k token;
+  - la chat ha letto l'incarico con `readTasks` (`gemini-flash-latest`, cache 46%).
+- **Non provati dal vivo**: Claude e OpenRouter (non c'erano chiavi nella prova), la regia con il cliente, il pannello Template nell'app e le card di conferma.
+
 ## 6. Fonti
 
 - Anthropic: *Effective context engineering for AI agents*, *Writing effective tools for agents*, *Building effective agents*, documentazione su prompt caching e tool use.

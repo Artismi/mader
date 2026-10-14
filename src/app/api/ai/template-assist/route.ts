@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { generateObject, generateText } from 'ai'
+import { generateText } from 'ai'
 import { z } from 'zod'
-import { resolveModel } from '@/lib/ai/model-provider'
+import { generateObjectWith, withModels } from '@/lib/ai/model-registry'
 
 /**
  * Assistente del pannello Template: dal brief compila i campi dei contenuti.
@@ -36,15 +36,19 @@ async function viaText(model: Parameters<typeof generateText>[0]['model'], promp
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
-  const { model, label } = resolveModel(typeof body.modelId === 'string' ? body.modelId : undefined, 'general')
   if (body.action !== 'contenuti') return NextResponse.json({ error: 'azione sconosciuta' }, { status: 400 })
-  const prompt = `Brief: ${String(body.brief ?? '')}\nCampi già scritti dall'utente (tienili se ci sono): ${JSON.stringify(body.content ?? {})}`
+  const prompt = `Brief: ${String(body.brief ?? '')}
+Campi già scritti dall'utente (tienili se ci sono): ${JSON.stringify(body.content ?? {})}`
+  const choice = typeof body.modelId === 'string' ? body.modelId : undefined
+  let label = 'nessun modello'
   try {
+    // output strutturato con chi lo regge; poi JSON nel testo come ripiego, sempre con la cascata dei modelli
     let content: z.infer<typeof contentSchema>
     try {
-      content = (await generateObject({ model, system: SYSTEM, schema: contentSchema, prompt })).object
+      ;({ object: content, label } = await generateObjectWith({ task: 'general' }, { system: SYSTEM, schema: contentSchema, prompt }, { choice }))
     } catch {
-      content = await viaText(model, prompt)
+      const r = await withModels({ task: 'general' }, c => viaText(c.model, prompt), { choice })
+      content = r.value; label = r.model.label
     }
     return NextResponse.json({ content, model: label })
   } catch (e) {

@@ -64,8 +64,36 @@ function errorText(e: unknown): string {
   return msg.length > 400 ? msg.slice(0, 400) + '…' : msg
 }
 
+/**
+ * Rilevatore di ripetizioni: la stessa chiamata identica che fallisce di nuovo
+ * (o che si ripete anche se riesce) è il segno che il modello gira a vuoto.
+ *   2ª ripetizione fallita → l'errore suggerisce un approccio diverso;
+ *   3ª → `onStallo` (runAgent passa al modello successivo) e il modello è invitato a fermarsi.
+ */
+export interface RepeatGuard {
+  after(name: string, input: unknown, failed: boolean): { hint?: string }
+}
+
+export function createRepeatGuard(onStallo?: (name: string) => void): RepeatGuard {
+  const counts = new Map<string, number>()
+  return {
+    after(name, input, failed) {
+      let key: string
+      try { key = `${name}:${JSON.stringify(input)}` } catch { return {} }
+      const n = (counts.get(key) ?? 0) + 1
+      counts.set(key, n)
+      if (failed && n === 2) return { hint: "Hai già fatto questa chiamata identica e non ha funzionato: cambia approccio (parametri diversi, un altro strumento, oppure chiedi all'utente)." }
+      if ((failed && n >= 3) || n >= 4) {
+        onStallo?.(name)
+        return { hint: `Stai ripetendo ${name} con gli stessi parametri (${n} volte): fermati e spiega all'utente cosa non funziona.` }
+      }
+      return {}
+    },
+  }
+}
+
 /** Trasforma la definizione in uno strumento dell'AI SDK con le regole del guscio. */
-export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?: Trace): Tool {
+export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?: Trace, guard?: RepeatGuard): Tool {
   const approval = def.needsApproval ?? def.risk === 'destructive'
   return tool({
     description: def.description,
@@ -74,18 +102,23 @@ export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?:
     execute: async (input: z.infer<S>) => {
       const t0 = Date.now()
       let ok = true
+      const withHint = (out: unknown) => {
+        const { hint } = guard?.after(def.name, input, !ok) ?? {}
+        if (!hint) return out
+        return out && typeof out === 'object' && !Array.isArray(out) ? { ...(out as object), avviso: hint } : { risultato: out, avviso: hint }
+      }
       try {
         const problems = (await def.verify?.(input)) ?? []
         if (problems.length) {
           ok = false
-          return { success: false, error: `Richiesta da correggere prima di eseguire:\n- ${problems.join('\n- ')}` }
+          return withHint({ success: false, error: `Richiesta da correggere prima di eseguire:\n- ${problems.join('\n- ')}` })
         }
         const out = await def.execute(input)
         if (out && typeof out === 'object' && (out as { success?: boolean }).success === false) ok = false
-        return capResult(out, def.maxChars ?? DEFAULT_MAX)
+        return withHint(capResult(out, def.maxChars ?? DEFAULT_MAX))
       } catch (e) {
         ok = false
-        return { success: false, error: `${def.name} non riuscito: ${errorText(e)}` }
+        return withHint({ success: false, error: `${def.name} non riuscito: ${errorText(e)}` })
       } finally {
         trace?.tool(def.name, Date.now() - t0, ok)
       }
@@ -94,9 +127,9 @@ export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?:
 }
 
 /** Registro: definizioni → ToolSet dell'AI SDK, più la mappa dei rischi per la guida e i test. */
-export function buildToolSet(defs: AgentToolDef<z.ZodTypeAny>[], trace?: Trace) {
+export function buildToolSet(defs: AgentToolDef<z.ZodTypeAny>[], trace?: Trace, guard?: RepeatGuard) {
   const tools: Record<string, Tool> = {}
-  for (const d of defs) tools[d.name] = defineTool(d, trace)
+  for (const d of defs) tools[d.name] = defineTool(d, trace, guard)
   return tools
 }
 

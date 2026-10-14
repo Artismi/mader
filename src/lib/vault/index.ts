@@ -11,8 +11,8 @@ import { randomUUID } from 'crypto'
 import { db } from '@/lib/db/client'
 import { config } from '@/lib/db'
 import { google } from '@/lib/ai/google'
-import { anthropic } from '@ai-sdk/anthropic'
-import { embed, generateText } from 'ai'
+import { embed } from 'ai'
+import { candidatesFor, generateTextWith } from '@/lib/ai/model-registry'
 
 const SUPPORTED_EXTS = new Set(['.md', '.txt', '.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'])
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
@@ -149,21 +149,21 @@ async function extractDocx(filePath: string): Promise<string> {
 }
 
 async function describeImage(filePath: string): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) return ''
   const ext = path.extname(filePath).slice(1).toLowerCase()
   const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }
   const mime = mimeMap[ext] || 'image/png'
   const imageData = fs.readFileSync(filePath).toString('base64')
-  const { text } = await generateText({
-    model: anthropic('claude-haiku-4-5-20251001'),
+  // file personali del vault: riservato (niente tier gratuiti di Google); serve un modello con la visione
+  if (!candidatesFor({ task: 'general', vision: true }, { riservato: true }).length) return ''
+  const { text } = await generateTextWith({ task: 'general', vision: true, preferisci: 'leggero' }, {
     messages: [{
       role: 'user',
       content: [
-        { type: 'image', image: imageData },
+        { type: 'image', image: imageData, mediaType: mime },
         { type: 'text', text: 'Descrivi questa immagine in modo dettagliato per l\'indicizzazione AI: colori, soggetti, testo visibile, stile, uso probabile. Rispondi solo con la descrizione, senza preamboli.' }
       ]
     }]
-  })
+  }, { riservato: true })
   return text
 }
 

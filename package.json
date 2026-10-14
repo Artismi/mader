@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "designer:vetrina": "node scripts/designer/vetrina.mjs",
-    "test:agente": "node --import ./scripts/agent/register.mjs --test scripts/agent/guscio.test.mts",
+    "test:agente": "node --import ./scripts/agent/register.mjs --test scripts/agent/guscio.test.mts scripts/agent/registro.test.mts",
     "postinstall": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {

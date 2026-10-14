@@ -1,5 +1,4 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText } from 'ai';
+import { generateTextWith } from '@/lib/ai/model-registry';
 import { tasks as dbTasks, clients as dbClients } from '@/lib/db';
 
 export const maxDuration = 30;
@@ -39,35 +38,18 @@ ${taskList || 'Nessun task aperto.'}
 
 RICHIESTA UTENTE: ${prompt || 'Analizza la mia settimana e dimmi su cosa concentrarmi oggi e nei prossimi giorni. Raggruppa per priorità e cliente.'}`;
 
-    const google = createGoogleGenerativeAI({
-        apiKey: process.env.GEMINI_API_KEY!,
-    });
-
-    const genArgs = {
-        system: systemPrompt,
-        prompt: contextPrompt,
-    };
-
     let text: string;
     try {
-        const result = await generateText({ model: google('gemini-2.5-flash'), ...genArgs });
-        text = result.text;
+        // il registro sceglie il modello (scelta dell'utente, poi gli altri fornitori, saltando chi ha finito la quota)
+        ({ text } = await generateTextWith({ task: 'general' }, { system: systemPrompt, prompt: contextPrompt }));
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        const isQuota = msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('exceeded')
-        if (process.env.ANTHROPIC_API_KEY) {
-            console.warn('[Planner] Gemini fallito, uso Claude:', msg)
-            const { anthropic } = await import('@ai-sdk/anthropic')
-            const result = await generateText({ model: anthropic('claude-sonnet-5-5'), ...genArgs });
-            text = result.text;
-        } else {
-            console.error("AI Planner Error:", err);
-            return new Response(JSON.stringify({
-                error: isQuota
-                    ? 'Quota Gemini esaurita. Configura ANTHROPIC_API_KEY come fallback.'
-                    : "Errore durante l'analisi. Riprova tra poco."
-            }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-        }
+        console.error("AI Planner Error:", err);
+        return new Response(JSON.stringify({
+            error: /quota|RESOURCE_EXHAUSTED|429|exceeded/i.test(msg)
+                ? 'Quota esaurita su tutti i modelli disponibili. Aggiungi una chiave o collega OpenRouter nelle Impostazioni.'
+                : "Errore durante l'analisi. Riprova tra poco."
+        }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
     return new Response(text!, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
