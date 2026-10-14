@@ -18,6 +18,10 @@ import {
 import { fit, lineWidth, type Fit } from '../../text'
 import { wobblyPath, starPath, scribbleEllipse } from '../forme'
 import { type Riga, righe, conVoci, valoreProtagonista, elencoRiuscito } from './voci'
+import {
+  carta as foglioCarta, cartaPer, nastro, nastroPer, timbro, codice, contatore, largoContatore, barra, sceglie, dettaglio, stratoGenerativo,
+  type Codice, type Avanzamento, type Contatore,
+} from '../materia'
 
 type Sistema = (g: G) => Scene | null
 type Box = { x: number; y: number; w: number; h: number }
@@ -36,7 +40,7 @@ const accSu = (g: G, bg: string, min = 3.4) => readable(bg, [g.P.acc, g.P.acc2, 
 const scuro = (g: G) => darker(g.P.fg, g.P.bg)
 const acc2 = (g: G) => (g.P.acc2 === g.P.bg ? g.P.fg : g.P.acc2)
 /** Scale da provare, dalla più generosa: si tiene la prima con cui l'elenco entra. */
-const SCALE = [1.75, 1.55, 1.38, 1.22, 1.1, 1]
+const SCALE = [1.75, 1.55, 1.38, 1.22, 1.1, 1, 0.9]
 /** Distanza tra due testi di gruppi diversi (sopra la soglia del controllo). */
 const STACCO = 12
 
@@ -69,18 +73,6 @@ function numeroDa(v?: string) {
   const it = /\.\d{3}(\D|$)/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(',', '.')
   return parseFloat(it)
 }
-/** Timbro a inchiostro ruotato, in sovrastampa (decorativo). */
-function timbro(g: G, text: string, cx: number, cy: number, deg: number, color: string, size: number) {
-  const f = g.s.label
-  const t = text.toUpperCase()
-  const tw = lineWidth(t, f, size, 0.16), pad = size * 0.5
-  const w = tw + 2 * pad, h = size * 1.13 + 2 * pad * 0.8
-  const a = (deg * Math.PI) / 180
-  const x = cx - (w / 2) * Math.cos(a) + (h / 2) * Math.sin(a), y = cy - (w / 2) * Math.sin(a) - (h / 2) * Math.cos(a)
-  put(g, { kind: 'rect', name: 'timbro', x, y, w, h, fill: 'transparent', stroke: color, sw: size * 0.12, angle: deg, blend: 'multiply', opacity: 0.85 })
-  const ox = pad, oy = pad * 0.8
-  txt(g, { name: 'timbro_testo', lines: [t], font: f, size, x: x + ox * Math.cos(a) - oy * Math.sin(a), y: y + ox * Math.sin(a) + oy * Math.cos(a), color, tracking: 0.16, angle: deg, deco: true, blend: 'multiply', opacity: 0.85 })
-}
 
 /* ═══ Scontrino ═════════════════════════════════════════════════════════ */
 /**
@@ -93,7 +85,7 @@ function timbro(g: G, text: string, cx: number, cy: number, deg: number, color: 
 export function scontrino(g: G): Scene | null {
   const v = variante(g, 3) === 1 && !g.photo ? 0 : variante(g, 3)
   const sc = scontrinoCon(g, v)
-  if (sc || v === 2 || g.portrait) return sc
+  if (sc || v === 2) return sc
   // nei formati bassi lo scontrino con il titolo dentro spesso non entra: il titolo esce
   g.els = []; g.letture = []
   return scontrinoCon(g, 2)
@@ -191,11 +183,11 @@ function scontrinoCon(g: G, v: number): Scene | null {
     }
     const cta2 = c.numero && c.cta ? riga1(g, ctaText(c), font, inner, 22 * f, 16) : null
     if (cta2) parti.push(centro(cta2, 'invito', segno))
-    const bcH = U(g, 60 * Math.min(f, 1.3))
+    const tipoCodice = sceglie<Codice>(g, 'codice', ['barre', 'ean', 'qr'])
+    const bcH = U(g, (tipoCodice === 'qr' ? 120 : tipoCodice === 'ean' ? 74 : 60) * Math.min(f, 1.3))
     parti.push({ h: bcH, draw: (F, y) => {
-      let d = '', x = pad + inner * 0.12, n = k.seme
-      while (x < pad + inner * 0.88) { n = (n * 1103515245 + 12345) & 0x7fffffff; const w = U(g, 2 + ((n >> 9) % 4) * 1.6); d += poly([F.P(x, y), F.P(x + w, y), F.P(x + w, y + bcH), F.P(x, y + bcH)]) + ' '; x += w + U(g, 3 + ((n >> 13) % 3) * 2) }
-      put(g, { kind: 'path', name: 'codice_barre', d, fill: inch })
+      const w = tipoCodice === 'qr' ? bcH : inner * 0.76
+      codice(g, { P: F.P, deg: F.deg, b: { x: 0, y: 0, w: pw, h: F.h }, corners: F.corners }, { x: pad + (inner - w) / 2, y, w, h: bcH }, tipoCodice, inch)
     } })
     const saluto = riga1(g, 'grazie e arrivederci', font, inner, 16 * f, 12, { tracking: 0.14 })
     if (saluto) parti.push(centro(saluto, 'saluto', inch, true))
@@ -237,10 +229,9 @@ function scontrinoCon(g: G, v: number): Scene | null {
     return out
   }
   const shape = [...teeth(0, 1), ...teeth(ph, -1).reverse()]
-  put(g, { kind: 'path', name: 'ombra', d: poly(shape.map(([x, y]) => [x + U(g, 12), y + U(g, 16)] as Pt)), fill: alpha('#000000', 0.22) })
-  put(g, { kind: 'path', name: 'carta', d: poly(shape), fill: carta })
-  const [ix, iy] = F.P(0, dente)
-  put(g, { kind: 'rect', name: 'carta_piena', x: ix, y: iy, w: pw, h: ph - 2 * dente, fill: carta, angle: F.ang })
+  const sotto = g.els.length
+  const scelte = cartaPer(g, 'scontrino')
+  foglioCarta(g, { x: cx - pw / 2, y: cy - ph / 2, w: pw, h: ph }, deg, carta, { name: 'carta', sagoma: poly(shape), rientro: dente, ombra: scelte.ombra === 'netta' ? 'piatta' : scelte.ombra, trama: scelte.trama, piega: scelte.piega === 'diagonale' ? 'orizzontale' : scelte.piega })
   let y = dente + pad
   for (const p of parti) { p.draw(F, y); y += p.h + gap }
   // a penna: il valore più importante cerchiato (o l'occhiello)
@@ -254,6 +245,7 @@ function scontrinoCon(g: G, v: number): Scene | null {
     const [sx, sy] = F.P(pw * 0.78, ph - dente - pad - U(g, 40))
     timbro(g, g.c.tipo === 'menu' ? 'pagato' : g.c.tipo === 'dati' ? 'verificato' : 'originale', sx, sy, -12 - 10 * k.energia, readable(carta, [P.acc, acc2(g), '#c0392b'], 3), U(g, 26))
   }
+  stratoGenerativo(g, [], { at: sotto })
   if (tFuori) {
     const ty = side ? T + (B - T - tFuori.h) * (0.3 + 0.3 * k.energia) : T
     putDisplay(g, 'titolo', tFuori, m, ty, inkSu(g, P.bg, 3), 'left', tFuori.w, { caps: true })
@@ -327,11 +319,13 @@ export function lavagna(g: G): Scene | null {
     put(g, { kind: 'path', name: 'gambe', d: poly([[L.x + L.w * 0.12, y0], [L.x + L.w * 0.12 + leg, y0], [L.x + L.w * 0.06 + leg, yb], [L.x + L.w * 0.06, yb]]) + ' ' + poly([[L.x + L.w * 0.88 - leg, y0], [L.x + L.w * 0.88, y0], [L.x + L.w * 0.94, yb], [L.x + L.w * 0.94 - leg, yb]]), fill: mix(legno, '#000000', 0.25) })
   }
   put(g, { kind: 'rect', name: 'ombra', x: L.x + U(g, 10), y: L.y + U(g, 14), w: L.w, h: L.h, fill: alpha('#000000', 0.3) })
-  put(g, { kind: 'rect', name: 'cornice', ...L, fill: legno, r: U(g, 6) })
+  put(g, { kind: 'rect', name: 'cornice', ...L, fill: legno, r: U(g, 6), fx: dettaglio(g) ? [{ id: 'textureOverlay', variant: 'tela', p: { opacity: 45 } }] : undefined })
   let dv = ''
   for (let i = 0; i < 4; i++) { const yy = L.y + fr * (0.25 + i * 0.17); dv += `M ${f1(L.x + U(g, 10))} ${f1(yy)} L ${f1(L.x + L.w - U(g, 10))} ${f1(yy + (i % 2 ? 2 : -2))} ` }
   put(g, { kind: 'path', name: 'venature', d: dv, fill: 'transparent', stroke: alpha('#000000', 0.18), sw: Math.max(1, U(g, 2)) })
   put(g, { kind: 'rect', name: 'ardesia', ...I, fill: ardesia })
+  // la polvere di gesso: una trama in fusione (fuori dal controllo di leggibilità)
+  if (dettaglio(g)) put(g, { kind: 'rect', name: 'polvere_gesso', ...I, fill: ardesia, blend: 'screen', opacity: 0.8, fx: [{ id: 'textureOverlay', variant: sceglie(g, 'ardesia', ['graffi', 'cemento', 'grana']), p: { opacity: 50 } }] })
   // contenuti: lo spazio che avanza va per metà tra le righe e per metà al disegno in fondo
   const libero = I.h - 2 * pad - total
   const disegno = (g.photo && v !== 1 && libero > I.h * 0.2) ? libero - U(g, 30) : 0
@@ -376,6 +370,7 @@ export function lavagna(g: G): Scene | null {
       photo(g, 'foto', { x: x + (iw - dw) / 2, y: I.y + I.h - pad - dh, w: dw, h: dh }, { fx: [{ id: 'dither', p: { dark: ardesia, light: gesso, size: 3, levels4: 0, pattern: 1 } }], look: undefined, adjust: undefined })
     }
   }
+  stratoGenerativo(g, [I], { at: g.els.findIndex(e => e.name === 'ardesia') + 1, probabilita: disegno ? 0 : 0.6 })
   if (v === 2 && g.photo && g.landscape) {
     const px = L.x + L.w + U(g, 50), pwid = W - m - px
     if (pwid > W * 0.18) {
@@ -462,6 +457,7 @@ export function tabellone(g: G): Scene | null {
     for (const xx of [Q.x + Q.w * 0.2, Q.x + Q.w * 0.8]) put(g, { kind: 'line', name: 'tirante', x1: xx, y1: 0, x2: xx, y2: Q.y, color: mix(scuro(g), '#000000', 0.2), width: U(g, 6) })
   }
   put(g, { kind: 'rect', name: 'quadro', ...Q, fill: quadro, r: v === 1 ? U(g, 10) : 0 })
+  const sottoT = g.els.length
   // la fascia d'intestazione (al vivo sul tabellone a tutta tavola)
   put(g, { kind: 'rect', name: 'fascia', x: Q.x, y: fY, w: Q.w, h: fH, fill: fascia })
   if (head) scrivi(g, 'occhiello', head, font, x0, fY + fPad, suFascia)
@@ -511,13 +507,16 @@ export function tabellone(g: G): Scene | null {
   const resto = bottom - y - U(g, 20)
   const bs = Math.min(resto * 0.95, U(g, 420))
   if (bs > U(g, 140)) {
-    const n = String(1 + (k.seme % 9))
-    const bw = lineWidth(n, g.s.impact, bs, 0)
-    put(g, { kind: 'rect', name: 'binario', x: x1 - bw - U(g, 40), y: bottom - bs * 1.05, w: bw + U(g, 40), h: bs * 1.05, fill: fascia, blend: P.dark || v !== 2 ? 'screen' : 'multiply', opacity: 0.55 })
-    txt(g, { name: 'binario_numero', lines: [n], font: g.s.impact, size: bs, x: x1 - bw - U(g, 20), y: bottom - bs * 1.08, color: quadro, leading: 1, deco: true })
+    // il binario: un contatore (rullo, palette o tacche) nello spazio libero in basso a destra
+    const tipoC = sceglie<Contatore>(g, 'binario', ['rullo', 'palette', 'tacche'])
+    const n = String(tipoC === 'tacche' ? 3 + (k.seme % 9) : 1 + (k.seme % 19))
+    const ch = Math.min(bs * 0.7, U(g, 200))
+    const bw = tipoC === 'tacche' ? ch * 1.6 : largoContatore(g, n, ch, g.s.impact)
+    contatore(g, 'numero_binario', n, x1 - bw, bottom - ch, ch, tipoC, { cella: paletta, cifra: cifre, font: g.s.impact })
     const lb = riga1(g, 'binario', font, x1 - bw - U(g, 70) - x0, 20, 14, { tracking: 0.16 })
-    if (lb) scrivi(g, 'binario_etichetta', lb, font, x1 - bw - U(g, 60) - lb.w, bottom - lb.h, etich, { deco: true })
+    if (lb) scrivi(g, 'binario_etichetta', lb, font, x1 - bw - U(g, 30) - lb.w, bottom - lb.h, etich, { deco: true })
   }
+  if (v !== 1) stratoGenerativo(g, [{ x: Q.x, y, w: Q.w, h: Math.max(0, bottom - y) }], { at: sottoT, probabilita: 0.3 })
   return finish(g, 'tabellone', 'Tabellone', { specchio: false })
 }
 
@@ -578,7 +577,7 @@ function fogliettiCon(g: G, side: boolean): Scene | null {
       const tf = r.testo ? para(g, r.testo, iw, 3, 22) : null
       const top = pad + U(g, 14) + (val ? val.h + U(g, STACCO) : nf && !largo ? nf.size * 1.13 + U(g, STACCO) : 0)
       const h = top + (nome?.h ?? 0) + U(g, STACCO) + (lato ? lato.h + U(g, STACCO) : 0) + (tf?.h ?? 0) + pad * 0.6
-      return { nf, val, nome, lato, tf, ok: !!nome && h <= ch && (!r.valore || !valoreProtagonista(g) || !!val), largo }
+      return { nf, val, nome, lato, tf, alto: h, ok: !!nome && h <= ch && (!r.valore || !valoreProtagonista(g) || !!val), largo }
     })
   }
   for (const cols of opzioni) {
@@ -594,6 +593,7 @@ function fogliettiCon(g: G, side: boolean): Scene | null {
   // una macchia di colore in sovrastampa, al vivo nell'angolo dietro i foglietti
   const R = Math.min(W, H) * (0.36 + 0.12 * k.densita)
   put(g, { kind: 'circle', name: 'macchia', cx: side ? W - R * 0.35 : W * (g.r.chance(0.5) ? 0.08 : 0.92), cy: H - R * 0.3, r: R, fill: readable(P.bg, [P.acc, acc2(g)], 1.3), blend: P.dark ? 'screen' : 'multiply', opacity: 0.5 })
+  const sottoF = g.els.length
   // bacheca: trama di puntini
   let dp = ''
   const st = U(g, 22)
@@ -616,12 +616,17 @@ function fogliettiCon(g: G, side: boolean): Scene | null {
     const by = A.y + row * (ch + gap) + (v === 1 && col % 2 ? U(g, 24) : 0)
     const ang = angoli[i]
     const fill = fogli[i % fogli.length]
-    put(g, { kind: 'rect', name: 'ombra', x: bx + U(g, 8), y: by + U(g, 12), w: cw, h: ch, fill: alpha('#000000', 0.18), angle: ang })
-    put(g, { kind: 'rect', name: 'foglietto', x: bx, y: by, w: cw, h: ch, fill, angle: ang })
-    const a = (ang * Math.PI) / 180
-    const at = (lx: number, ly: number): Pt => [bx + lx * Math.cos(a) - ly * Math.sin(a), by + lx * Math.sin(a) + ly * Math.cos(a)]
-    if (s.forma !== 'morbido') { const [nx0, ny0] = at(cw / 2 - U(g, 50), -U(g, 16)); put(g, { kind: 'rect', name: 'nastro', x: nx0, y: ny0, w: U(g, 100), h: U(g, 32), fill: alpha('#efe4c4', 0.75), angle: ang }) }
-    else { const [px, py] = at(cw / 2, U(g, 16)); put(g, { kind: 'circle', name: 'puntina', cx: px, cy: py, r: U(g, 11), fill: readable(fill, [P.acc, acc2(g), ink], 2.4) }) }
+    // il foglietto: ombra, trama e angolo sollevato secondo il dettaglio (l'angolo solo se resta libero)
+    const sc0 = cartaPer(g, `foglietto${i}`)
+    const piega = Math.min(Math.min(cw, ch) * 0.16, U(g, 70))
+    const { T: TT } = foglioCarta(g, { x: bx, y: by, w: cw, h: ch }, ang, fill, { name: 'foglietto', ombra: sc0.ombra, trama: sc0.trama, angolo: x.alto + piega * 1.3 < ch ? sc0.angolo : 'nessuno' })
+    const at = (lx: number, ly: number): Pt => TT.P(lx, ly)
+    // fissaggio: nastro (di tipo diverso per tavola), due nastri agli angoli, o la puntina
+    const fiss = s.forma === 'morbido' ? 'puntina' : sceglie(g, 'fissaggio', ['nastro', 'nastro', 'angoli'])
+    const tipoN = nastroPer(g, 'nastro')
+    if (fiss === 'puntina') { const [px, py] = at(cw / 2, U(g, 16)); put(g, { kind: 'circle', name: 'puntina', cx: px, cy: py, r: U(g, 11), fill: readable(fill, [P.acc, acc2(g), ink], 2.4) }); put(g, { kind: 'circle', name: 'puntina_luce', cx: px - U(g, 3), cy: py - U(g, 3), r: U(g, 4), fill: alpha('#ffffff', 0.6) }) }
+    else if (fiss === 'angoli') { for (const [lx, d0] of [[0, -40], [cw, 40]] as const) { const [px, py] = at(lx, 0); nastro(g, px, py, U(g, 90), ang + d0, tipoN) } }
+    else { const [px, py] = at(cw / 2, 0); nastro(g, px, py, U(g, 110), ang + (i % 2 ? 4 : -5), tipoN) }
     let ly = pad + U(g, 14)
     let lx = pad
     if (x.val) {
@@ -653,6 +658,7 @@ function fogliettiCon(g: G, side: boolean): Scene | null {
     const ph = Math.min(B - py, tW * 0.8)
     if (ph > U(g, 180)) photo(g, 'foto', { x: m, y: py, w: Math.min(tW, ph * 1.3), h: ph })
   }
+  stratoGenerativo(g, [], { at: sottoF, probabilita: 0.2 })
   return finish(g, 'foglietti', 'Foglietti', { specchio: false })
 }
 
@@ -688,6 +694,7 @@ export function infografica(g: G): Scene | null {
   const A: Box = side ? { x: fasciaB.w + U(g, 40), y: T, w: W - m - fasciaB.w - U(g, 40), h: B - T } : { x: m, y: fasciaB.h + U(g, 50), w: W - 2 * m, h: B - fasciaB.h - U(g, 50) - (cta ? cta.h + U(g, 40) : 0) }
   if (A.h < (B - T) * 0.35) return no(g, 'poco spazio per il grafico')
   put(g, { kind: 'rect', name: 'fascia', ...fasciaB, fill: fasciaC })
+  const sottoI = g.els.length
   let y = side ? T + Math.max(0, (B - T - headH - (cta ? cta.h + U(g, 40) : 0)) * 0.45) : T
   if (br) { putLab(g, 'brand', br, m, y, suF); y += br.h + U(g, 18) }
   if (kick) { putLab(g, 'occhiello', kick, m, y, accSu(g, fasciaC, 3.6)); y += kick.h + U(g, 12) }
@@ -742,6 +749,7 @@ export function infografica(g: G): Scene | null {
     const n = rs.length
     const step = A.h / n
     const vw = A.w * 0.58
+    const tipoB = sceglie<Avanzamento>(g, 'barre', ['liscia', 'blocchi', 'righe'])
     rs.forEach((r, i) => {
       const y0 = A.y + i * step
       const vf = display(g, r.valore!, vw, step * 0.62, 260, 40, 1)
@@ -752,8 +760,7 @@ export function infografica(g: G): Scene | null {
       // barra: lunga quanto il valore (scala logaritmica se i numeri sono sbilanciati)
       const q = sbilanciati ? Math.log10(1 + nums[i]) / Math.log10(1 + max) : nums[i] / max
       const by = y0 + vf.h + U(g, 14)
-      put(g, { kind: 'rect', name: 'binario', x: A.x, y: by, w: A.w, h: U(g, 6), fill: alpha(fg, 0.15) })
-      put(g, { kind: 'rect', name: 'barra', x: A.x, y: by - U(g, 3), w: Math.max(U(g, 12), A.w * q), h: U(g, 12), fill: i % 2 ? a2 : ac })
+      barra(g, 'barra', { x: A.x, y: by, w: A.w, h: U(g, tipoB === 'liscia' ? 14 : 18) }, q, tipoB, i % 2 ? a2 : ac, mix(P.bg, fg, 0.12))
       messe++
     })
     nota(g, sbilanciati ? 'barre in scala logaritmica' : 'barre in proporzione', A.x, A.y + A.h - U(g, 16), A.w, fg)
@@ -843,6 +850,7 @@ export function infografica(g: G): Scene | null {
     }
   }
   if (!elencoRiuscito(g, rs, messe, testi)) return null
+  if (!g.els.some(e => e.name === 'macchia')) stratoGenerativo(g, [A], { at: sottoI })
   return finish(g, 'infografica', 'Infografica', { specchio: false })
 }
 

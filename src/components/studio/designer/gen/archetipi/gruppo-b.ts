@@ -21,6 +21,7 @@ import { lineWidth } from '../../text'
 import { blobPath, wobblyPath, scribbleEllipse, starPath } from '../forme'
 import { toOklch } from '../../core/colore'
 import type { Rng } from '../knobs'
+import { acquerello, biglietto, etichetta, fumetto } from './gruppo-b2'
 
 type Sistema = (g: G) => Scene | null
 type Pt = [number, number]
@@ -1052,15 +1053,14 @@ function mosaico(g: G): Scene | null {
   return finish(g, 'mosaico', 'Mosaico pop', { specchio: v === 0 })
 }
 
-const notImpl: Sistema = () => null
 
 export const SYSTEMS_B: Record<'collage' | 'polaroid' | 'zine' | 'mosaico' | 'acquerello' | 'biglietto' | 'etichetta' | 'fumetto', Sistema> = {
   collage,
   polaroid,
   zine,
   mosaico,
-  acquerello: notImpl,
-  biglietto: notImpl,
-  etichetta: notImpl,
-  fumetto: notImpl,
+  acquerello,
+  biglietto,
+  etichetta,
+  fumetto,
 }

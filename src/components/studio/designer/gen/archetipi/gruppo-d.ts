@@ -25,6 +25,7 @@ import {
 import { over } from '../systems'
 import { blobPath, starPath, wobblyPath } from '../forme'
 import { lineWidth } from '../../text'
+import { brutale, acido, aero, pixel, manga, agenzia } from './gruppo-d2'
 import type { Fit } from '../../text'
 
 type Sistema = (g: G) => Scene | null
@@ -677,12 +678,12 @@ export const SYSTEMS_D: Record<'interfaccia' | 'sorveglianza' | 'terminale' | 'b
   interfaccia,
   sorveglianza,
   terminale,
-  brutale: () => null,
-  acido: () => null,
-  aero: () => null,
-  pixel: () => null,
-  manga: () => null,
-  agenzia: () => null,
+  brutale,
+  acido,
+  aero,
+  pixel,
+  manga,
+  agenzia,
 }
 
 /** Riferimenti per gli archetipi successivi (evitano gli avvisi di import inutilizzati). */
