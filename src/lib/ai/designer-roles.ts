@@ -170,7 +170,7 @@ export const direzioniSchema = z.object({
 export type Direzioni = z.infer<typeof direzioniSchema>
 
 const MENU = () => [
-  'SISTEMI (composizione):', ...SISTEMI.filter(s => !s.slide && !s.tipo).map(s => { const a = ARCHETIPI.find(x => x.id === s.id); return `- ${s.id}: ${s.idea}${a ? ` (ispirazione: ${a.ricetta}; registri ${a.registri.join(', ')})` : ''}${s.foto === 'serve' ? ' [serve una foto]' : ''}` }),
+  'SISTEMI (composizione):', ...SISTEMI.filter(s => !s.slide && !s.tipo).map(s => { const a = ARCHETIPI.find(x => x.id === s.id); return `- ${s.id}: ${s.idea}${a ? ` (${'ricetta' in a ? `ispirazione: ${a.ricetta}; ` : ''}registri ${a.registri.join(', ')})` : ''}${s.foto === 'serve' ? ' [serve una foto]' : ''}` }),
   '', 'STILI (palette e caratteri):', ...STYLES.map(s => `- ${s.id}: ${s.name}, ${s.dark ? 'scuro' : 'chiaro'}; adatto a ${s.keywords.slice(0, 8).join(', ')}`),
   '', `TRATTAMENTI della foto: ${TRATTAMENTI.map(t => `${t.id} (${t.nome})`).join(', ')}`,
   '', 'REGOLATORI (intervalli 0-1): scala (quanto è grande il titolo), energia (diagonali, sfalsamenti), densita (quanti elementi), sovrastampa (inchiostri fuori registro), grana (trama di stampa).',

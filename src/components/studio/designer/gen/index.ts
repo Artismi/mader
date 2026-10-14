@@ -21,14 +21,18 @@ import { SYSTEMS_A } from './archetipi/gruppo-a'
 import { SYSTEMS_B } from './archetipi/gruppo-b'
 import { SYSTEMS_C } from './archetipi/gruppo-c'
 import { SYSTEMS_D } from './archetipi/gruppo-d'
+import { SYSTEMS_E } from './archetipi/gruppo-e'
+import { TIPI_ELENCO } from './archetipi/voci'
+import { curiosita, mostrato, ricorda } from './memoria'
 import type { Scene as SceneT } from '../types'
 import type { G } from './tools'
 import type { RegistroId } from '../styles'
 import { loadPix } from '../core/foto'
 
 export * from './knobs'
+export { dimentica as dimenticaMemoria } from './memoria'
 
-export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D }
+export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D, ...SYSTEMS_E }
 
 /** Sistemi che parlano ciascun registro, dal più tipico. */
 const SISTEMI_A_MANO: Record<RegistroId, SistemaId[]> = {
@@ -97,7 +101,13 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   const r = rng(hashText(allText(c)) ^ (opts.seme ?? 0))
   const registro = opts.styleId ? styleById(opts.styleId).registro : inferRegistro(allText(c))
   const tipo = c.tipo && c.tipo !== 'copertina' ? c.tipo : undefined
-  const ok = (id: SistemaId) => { const info = SISTEMI.find(s => s.id === id); return !info?.slide && !info?.tipo && id !== 'composto' && (opts.hasPhoto || info?.foto !== 'serve') }
+  // con un tipo con voci entrano anche gli archetipi che sanno impaginare elenchi (scontrino, lavagna…)
+  const elenco = !!tipo && TIPI_ELENCO.includes(tipo)
+  const sannoElenchi = new Set<string>(ARCHETIPI.filter(a => 'voci' in a && a.voci).map(a => a.id))
+  const ok = (id: SistemaId) => {
+    const info = SISTEMI.find(s => s.id === id)
+    return !info?.slide && !info?.tipo && id !== 'composto' && (opts.hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sannoElenchi.has(id)))
+  }
   // il sistema dedicato al tipo di contenuto (o la slide equivalente), se c'è
   const dedicato = tipo ? (SISTEMI.find(s => s.tipo === tipo)?.id ?? (tipo === 'citazione' ? 'citazione' : undefined)) : undefined
   const tratt: Knobs['trattamento'][] = ['pellicola', 'duotone', 'retino', 'riso', 'serigrafia', 'bn', 'poster']
@@ -124,15 +134,17 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   const out: Knobs[] = []
   const usati = new Set<SistemaId>()
   for (const id of identita) {
-    // l'ordine dei sistemi preferiti cambia con il seme: nel vivaio entrano tutti, non sempre i primi
-    const pref = SISTEMI_DEL_REGISTRO[id.registro].filter(ok).sort(() => r.next() - 0.5)
-    const tutti = [...pref, ...SISTEMI.map(s => s.id).filter(x => ok(x) && !pref.includes(x))]
+    // l'ordine dei sistemi preferiti cambia con il seme e con la curiosità: prima quelli
+    // che il motore ha mostrato meno, così le impaginazioni nuove entrano nel vivaio
+    const curioso = (l: SistemaId[]) => l.map(x => ({ x, key: mostrato(x) + r.next() * 0.9 })).sort((a, b) => a.key - b.key).map(o => o.x)
+    const pref = curioso(SISTEMI_DEL_REGISTRO[id.registro].filter(ok))
+    const tutti = [...pref, ...curioso(SISTEMI.map(s => s.id).filter(x => ok(x) && !pref.includes(x)))]
     // sistemi non ancora usati prima: le identità non si ripetono la stessa composizione.
     // Il compositore (ogni seme un'ossatura nuova) c'è in ogni identità; con un tipo di
     // contenuto (elenco, programma…) le proposte sono il sistema dedicato e il compositore.
     const mano = [...tutti.filter(x => !usati.has(x)), ...tutti]
     const scelti = opts.sistemi ?? (tipo
-      ? [...(dedicato ? [dedicato, dedicato] : []), ...Array(id.n).fill('composto')] as SistemaId[]
+      ? [...(dedicato ? [dedicato] : []), 'composto', ...mano.slice(0, Math.max(0, id.n - (dedicato ? 2 : 1))), ...Array(id.n).fill('composto')] as SistemaId[]
       : opts.ampio
       ? ['composto', ...mano.slice(0, id.n - 2), 'composto'] as SistemaId[]
       : ['composto', ...mano.slice(0, id.n - 1), ...(id.n > 3 ? ['composto'] : [])] as SistemaId[])
@@ -181,12 +193,24 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
   }
   const promosse = scegli(tutte, n, true)
   const scene = promosse.length >= n ? promosse : [...promosse, ...scegli(tutte.filter(x => !promosse.includes(x)), n - promosse.length, false)]
+  ricorda(scene.map(sc => ({ sistema: (sc.knobs as Knobs | undefined)?.sistema ?? sc.layout, firma: sc.esame?.firma })))
   return { scene, candidate, promosse: tutte.filter(x => x.esame?.promossa).length, giri: Math.min(giro + 1, maxGiri) }
 }
 
-/** Selezione: per voto, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità. */
+/**
+ * Punteggio per l'ordine delle proposte: il voto del critico più la curiosità
+ * (sistemi e ossature che il motore non ha ancora mostrato). La curiosità pesa
+ * per intero solo sulle tavole eccellenti: tra quelle appena promosse decide poco.
+ */
+const punteggio = (sc: Scene) => {
+  const v = sc.esame?.voto ?? 0
+  const cur = curiosita((sc.knobs as Knobs | undefined)?.sistema ?? sc.layout, sc.esame?.firma)
+  return v + (v >= ECCELLENTE ? cur : cur * 0.4)
+}
+
+/** Selezione: per punteggio, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità. */
 function scegli(tutte: Scene[], n: number, soloPromosse: boolean, maxLivello = 3): Scene[] {
-  const cand = tutte.filter(x => !soloPromosse || x.esame?.promossa).sort((a, b) => (b.esame?.voto ?? 0) - (a.esame?.voto ?? 0))
+  const cand = tutte.filter(x => !soloPromosse || x.esame?.promossa).map(x => ({ x, p: punteggio(x) })).sort((a, b) => b.p - a.p).map(o => o.x)
   // prima un solo esemplare per sistema (niente coppie quasi uguali), poi si allarga se non bastano
   for (const [perSistema, perStile] of ([[1, 3], [2, 4], [3, 6]] as const).slice(0, maxLivello)) {
     const out: Scene[] = []

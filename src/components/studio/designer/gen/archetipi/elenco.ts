@@ -16,7 +16,9 @@ export interface ArchetipoInfo {
   ricetta?: string
   /** registri in cui l'archetipo è di casa */
   registri: RegistroId[]
-  gruppo: 'a' | 'b' | 'c' | 'd'
+  gruppo: 'a' | 'b' | 'c' | 'd' | 'e'
+  /** sa impaginare le voci dei tipi di contenuto (consigli, menu, dati, programma…) */
+  voci?: boolean
 }
 
 export const ARCHETIPI = [
@@ -59,7 +61,14 @@ export const ARCHETIPI = [
   { id: 'aero', gruppo: 'd', nome: 'Aero', foto: 'meglio', ricetta: 'frutiger-aero-01', registri: ['tech', 'pop', 'infantile'], idea: 'bolle lucide e riflessi, gradienti di cielo e acqua, pannelli di vetro arrotondati, sans pulito, ottimismo luminoso' },
   { id: 'pixel', gruppo: 'd', nome: 'Pixel', foto: 'meglio', ricetta: 'pixel-retro-01', registri: ['retro', 'tech', 'infantile', 'pop'], idea: 'griglia di pixel visibile, titolo costruito a blocchi, foto ridotta a pixel grandi, cornice da videogioco, punteggio e vite' },
   { id: 'manga', gruppo: 'd', nome: 'Manga', foto: 'meglio', ricetta: 'manga-01', registri: ['pop', 'sportivo', 'notte', 'infantile'], idea: 'linee di velocità radiali dal soggetto, retino a punti, onomatopea enorme inclinata, vignetta diagonale, titolo in verticale' },
-  { id: 'agenzia', gruppo: 'd', nome: 'Studio', foto: 'meglio', ricetta: 'agency-black-orange-01', registri: ['tech', 'svizzero', 'notte', 'editoriale'], idea: 'nero e un colore acceso, numeri e indici grandi, griglia da sito di studio, didascalie tecniche, foto rettangolare con etichetta' },
+  { id: 'agenzia', gruppo: 'd', voci: true, nome: 'Studio', foto: 'meglio', ricetta: 'agency-black-orange-01', registri: ['tech', 'svizzero', 'notte', 'editoriale'], idea: 'nero e un colore acceso, numeri e indici grandi, griglia da sito di studio, didascalie tecniche, foto rettangolare con etichetta' },
+
+  /* ── E · elenchi e oggetti (le voci nella loro materia; nelle copertine i dettagli) ── */
+  { id: 'scontrino', gruppo: 'e', voci: true, nome: 'Scontrino', foto: 'meglio', registri: ['pop', 'retro', 'artigianale', 'tech', 'notte'], idea: 'scontrino di cassa a dente di sega, righe in caratteri di sistema con puntini guida e valori a destra, totale in negativo, codice a barre' },
+  { id: 'lavagna', gruppo: 'e', voci: true, nome: 'Lavagna', foto: 'meglio', registri: ['artigianale', 'retro', 'infantile', 'pop'], idea: 'lavagna d\'ardesia con cornice di legno, titolo e voci in gesso, sottolineature a mano, numeri cerchiati, prezzi in gesso colorato' },
+  { id: 'tabellone', gruppo: 'e', voci: true, nome: 'Tabellone', foto: 'meglio', registri: ['tech', 'notte', 'svizzero', 'retro', 'sportivo'], idea: 'tabellone delle partenze a palette con la riga di taglio, il titolo una parola per paletta, ore o valori in giallo, voci in colonna' },
+  { id: 'foglietti', gruppo: 'e', voci: true, nome: 'Foglietti', foto: 'meglio', registri: ['infantile', 'pop', 'artigianale', 'editoriale'], idea: 'foglietti adesivi su una bacheca, uno per voce, ruotati appena con nastro o puntina, numero grande e spiegazione' },
+  { id: 'infografica', gruppo: 'e', voci: true, nome: 'Infografica', foto: 'meglio', registri: ['svizzero', 'tech', 'editoriale', 'sportivo'], idea: 'le voci come forme che dicono il dato: bolle proporzionali, percorso a nodi numerati, diagramma radiale con la foto al centro e i fili di richiamo' },
 ] as const satisfies readonly ArchetipoInfo[]
 
 export type ArchetipoId = (typeof ARCHETIPI)[number]['id']
