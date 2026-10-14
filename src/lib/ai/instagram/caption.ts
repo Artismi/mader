@@ -88,13 +88,13 @@ const LINK_RE = /https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+\.(?:com|co|io|net|org|ai
 const LINK_RE_IT = /https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+\.(?:com|co|io|net|org|ai|app|it|eu)\/\S*/gi;
 const EMOJI_RE = new RegExp('[\\u{1F300}-\\u{1FAFF}\\u2600-\\u27BF\\u2190-\\u21FF\\uFE0F]', 'gu');
 const CONCRETE_RE = new RegExp('\\$\\s?\\d|\\b\\d[\\d,.]*\\b|(?<!^)\\b[A-Z][a-z]{2,}\\b', 'gm');
-// Italiano: maiuscole accentate (es. "Città"), € e numeri in lettere ("sei" e "uno" esclusi: ambigui).
+// Italiano: maiuscole accentate (es. "Città"), € (come $ nell'originale) e numeri in lettere ("sei" e "uno" esclusi: ambigui).
 const CONCRETE_RE_IT = new RegExp(
   '\\$\\s?\\d|\\b\\d[\\d,.]*\\b|(?<!^)(?<![\\p{L}\\p{N}_])[A-ZÀ-Ý][a-zà-ÿ]{2,}(?![\\p{L}\\p{N}_])',
   'gmu',
 );
 const CONCRETE_RE_IT_EXTRA =
-  /€\s?\d|\d\s?€|\b(?:due|tre|quattro|cinque|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|duecento|mille|mila|milioni?|miliardi?)\b/gi;
+  /€\s?\d|\b(?:due|tre|quattro|cinque|sette|otto|nove|dieci|undici|dodici|quindici|venti|trenta|quaranta|cinquanta|cento|duecento|mille|mila|milioni?|miliardi?)\b/gi;
 
 interface AskRule {
   name: string;
