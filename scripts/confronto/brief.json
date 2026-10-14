@@ -1,0 +1,150 @@
+{
+  "nota": "Banco di confronto (fase Q0 di docs/salto-di-qualita.md). Ogni brief si dà identico a tutti: il testo di 'brief', i fatti, il formato e la foto se c'è. 'contenuto' è la chiave dei contenuti di prova del motore (scripts/designer/fixtures/contenuti.json); 'c' sono contenuti scritti qui quando lì non esistono.",
+  "brief": [
+    {
+      "id": "01-caffe", "famiglia": "prodotto", "formato": "4:5",
+      "cliente": { "nome": "Tostatura Nera", "settore": "torrefazione di specialità, Bologna" },
+      "brief": "Post Instagram per il lancio del nuovo blend Notte Etiope di Tostatura Nera, torrefazione di Bologna. Vogliamo un'aria notturna e calda, da caffè di specialità, non da bar.",
+      "fatti": ["Nuovo blend: Notte Etiope", "Etiopia Guji, tostatura media", "Note di cacao, spezie e frutti rossi", "Tostato a Bologna in piccoli lotti", "Confezione da 250 g", "Invito: scopri il blend"],
+      "foto": "caffe.jpg", "contenuto": "caffe"
+    },
+    {
+      "id": "02-ceramica", "famiglia": "prodotto", "formato": "1:1",
+      "cliente": { "nome": "Terra Mossa", "settore": "laboratorio di ceramica artigianale" },
+      "brief": "Grafica per presentare la collezione autunno di Terra Mossa: tazze in gres smaltate a mano. Il tono è artigianale e tranquillo, deve far venire voglia di toccarle.",
+      "fatti": ["Collezione autunno", "Tazze in gres smaltate a mano", "Argilla toscana, smalti naturali, cottura a 1240 gradi", "Ogni pezzo è diverso", "Vanno in lavastoviglie", "Invito: vedi la collezione"],
+      "foto": "ceramica.jpg", "contenuto": "ceramica"
+    },
+    {
+      "id": "03-techno", "famiglia": "evento", "formato": "9:16",
+      "cliente": { "nome": "Cassero Club", "settore": "club di musica elettronica" },
+      "brief": "Storia Instagram per la serata Notte Industriale al Cassero Club. Deve sembrare un flyer techno vero, scuro e duro, con la data ben visibile.",
+      "fatti": ["Notte Industriale", "Sabato 14 novembre, dalle 23", "Sei ore di techno, tre live set", "Luci di Studio Lumen", "Bologna", "Ingresso 15 €", "Biglietti online"],
+      "foto": "club.jpg", "contenuto": "techno"
+    },
+    {
+      "id": "04-app", "famiglia": "prodotto", "formato": "4:5",
+      "cliente": { "nome": "Salvadana", "settore": "app di risparmio" },
+      "brief": "Post per il lancio dell'app Salvadana: arrotonda ogni spesa e mette da parte la differenza. Pubblico giovane, tono semplice e rassicurante, niente aria da banca.",
+      "fatti": ["Nuova app: Salvadana", "Arrotonda ogni spesa e risparmia la differenza, in automatico", "Gratis", "iOS e Android", "Invito: scarica l'app"],
+      "foto": null, "contenuto": "app"
+    },
+    {
+      "id": "05-beauty", "famiglia": "prodotto", "formato": "4:5",
+      "cliente": { "nome": "Maison Lune", "settore": "cosmetica" },
+      "brief": "Grafica per il nuovo siero notte di Maison Lune. Elegante, pulita, da marchio di cosmetica di fascia alta.",
+      "fatti": ["Nuovo siero: La pelle, di notte", "Niacinamide e peptidi", "Pelle più uniforme al risveglio", "30 ml, vegano, senza profumo", "Invito: provalo ora"],
+      "foto": "ritratto.jpg", "contenuto": "beauty"
+    },
+    {
+      "id": "06-conferenza", "famiglia": "evento", "formato": "1:1",
+      "cliente": { "nome": "Forma Festival", "settore": "festival di design" },
+      "brief": "Annuncio dell'edizione 2026 di Forma Festival, tema Progettare il vuoto. Deve parlare ad architetti e designer: tipografico, rigoroso, contemporaneo.",
+      "fatti": ["Forma Festival 2026", "Tema: Progettare il vuoto", "Design e città", "21-23 maggio, Milano, Ex Ansaldo", "Tre giorni di talk e laboratori sullo spazio pubblico", "24 ospiti da 9 paesi", "Invito: registrati"],
+      "foto": null, "contenuto": "conferenza"
+    },
+    {
+      "id": "07-ristorante", "famiglia": "servizio", "formato": "4:5",
+      "cliente": { "nome": "Osteria Fiume", "settore": "ristorante" },
+      "brief": "Post per il menu d'autunno di Osteria Fiume: l'orto entra in cucina. Caldo, stagionale, invitante, senza sembrare una catena.",
+      "fatti": ["Menu d'autunno", "Zucca, radicchio, funghi e cipolle di Tropea", "Il menu cambia con le stagioni", "A cena, dal martedì al sabato", "Invito: prenota un tavolo"],
+      "foto": "verdure.jpg", "contenuto": "ristorante"
+    },
+    {
+      "id": "08-mostra", "famiglia": "evento", "formato": "9:16",
+      "cliente": { "nome": "Museo del Mare", "settore": "museo" },
+      "brief": "Storia per la mostra Creature della luce al Museo del Mare di Genova. Deve incuriosire famiglie e appassionati: misteriosa, luminosa, scientifica ma non fredda.",
+      "fatti": ["Mostra: Creature della luce", "Meduse, sifonofori e pesci abissali", "La bioluminescenza raccontata da vicino", "Fino al 6 gennaio", "Genova, da martedì a domenica", "Invito: acquista il biglietto"],
+      "foto": "medusa.jpg", "contenuto": "mostra"
+    },
+    {
+      "id": "09-saldi-mercato", "famiglia": "promozione", "formato": "1:1",
+      "cliente": { "nome": "Mercato Albinelli", "settore": "mercato coperto" },
+      "brief": "Promozione del weekend al Mercato Albinelli: fragole di Romagna scontate del 20%. Deve fermare il pollice: lo sconto si deve vedere subito.",
+      "fatti": ["Fragole di Romagna", "-20% questo weekend", "Raccolte all'alba da tre aziende agricole della provincia", "Sabato e domenica, fino a esaurimento", "Invito: passa al banco 14"],
+      "foto": "fragole.jpg", "contenuto": "mercato"
+    },
+    {
+      "id": "10-citazione", "famiglia": "contenuto", "formato": "1:1",
+      "cliente": { "nome": "Studio Artismi", "settore": "studio grafico" },
+      "brief": "Citazione per il profilo dello studio, rubrica Appunti di progetto. Solo tipografia, molto spazio bianco.",
+      "fatti": ["Rubrica: Appunti di progetto", "Citazione: Il bianco non è vuoto: è respiro", "Ogni pagina ha bisogno di spazio per farsi leggere"],
+      "foto": null, "contenuto": "citazione"
+    },
+    {
+      "id": "11-consigli", "famiglia": "contenuto", "formato": "4:5",
+      "cliente": { "nome": "Tostatura Nera", "settore": "torrefazione di specialità, Bologna" },
+      "brief": "Grafica di consigli in una sola tavola: come conservare il caffè a casa, quattro consigli brevi. Deve essere utile e da salvare.",
+      "fatti": ["Guida: Come conservare il caffè a casa", "Barattolo ermetico: l'aria è il primo nemico", "Lontano dalla luce: in dispensa, mai vicino ai fornelli", "Niente frigorifero: l'umidità rovina gli aromi", "Macina al momento: in grani resta fresco tre volte più a lungo", "Invito: scopri le miscele"],
+      "foto": "caffe.jpg", "contenuto": "t_consigli"
+    },
+    {
+      "id": "12-lancio-gioielli", "famiglia": "prodotto", "formato": "9:16",
+      "cliente": { "nome": "Aurea", "settore": "gioielleria artigianale" },
+      "brief": "Storia per il lancio della Collezione Sole di Aurea: orecchini e anelli in oro riciclato fatti a mano. Lusso discreto, caldo, niente effetti dorati finti.",
+      "fatti": ["Collezione Sole", "Luce da indossare", "Orecchini e anelli in oro riciclato 18 kt", "Lavorati a mano nell'atelier di Vicenza", "Pezzi numerati", "Invito: prenota una visita"],
+      "foto": "ritratto.jpg", "contenuto": "gioielli"
+    },
+    {
+      "id": "13-dischi", "famiglia": "evento", "formato": "4:5",
+      "cliente": { "nome": "Lato B", "settore": "negozio di dischi" },
+      "brief": "Post per il mercato del disco di domenica da Lato B. Pubblico di appassionati: deve avere l'aria di una locandina da negozio di dischi, non di un supermercato.",
+      "fatti": ["Mercato del disco", "Vinili usati, storie nuove", "Tremila dischi selezionati", "Giradischi revisionati e una sala d'ascolto", "Domenica, Via Mascarella 12", "Ingresso libero"],
+      "foto": "vinile.jpg", "contenuto": "dischi"
+    },
+    {
+      "id": "14-viaggio", "famiglia": "servizio", "formato": "9:16",
+      "cliente": { "nome": "Altrove", "settore": "viaggi di gruppo" },
+      "brief": "Storia per l'itinerario Sette giorni sul lago di Altrove, viaggi lenti per piccoli gruppi. Deve trasmettere calma e avventura insieme.",
+      "fatti": ["Itinerari lenti", "Sette giorni sul lago", "Canoa all'alba, rifugi senza segnale, cene in baita", "Gruppi di otto persone", "Da giugno, tutto incluso", "Invito: scopri l'itinerario"],
+      "foto": "lago.jpg", "contenuto": "viaggio"
+    },
+    {
+      "id": "15-bambini", "famiglia": "evento", "formato": "1:1",
+      "cliente": { "nome": "Ludoteca Girotondo", "settore": "ludoteca" },
+      "brief": "Post per il laboratorio del sabato alla Ludoteca Girotondo, Il bosco degli orsetti. Si rivolge ai genitori: allegro ma non infantile, chiaro sull'età e sull'orario.",
+      "fatti": ["Sabato in famiglia", "Il bosco degli orsetti", "Laboratorio creativo con storie, pupazzi e merenda", "Bambini dai 3 agli 8 anni", "Sabato ore 16, ingresso libero", "Invito: prenota un posto"],
+      "foto": "orso.jpg", "contenuto": "bambini"
+    },
+    {
+      "id": "16-opening", "famiglia": "evento", "formato": "4:5",
+      "cliente": { "nome": "Spazio Varco", "settore": "galleria d'arte contemporanea" },
+      "brief": "Post per l'opening di Corpi che emettono luce a Spazio Varco. Pubblico dell'arte contemporanea: sperimentale, sofisticato.",
+      "fatti": ["Opening 21 novembre, ore 19", "Corpi che emettono luce", "Installazione sonora e video di tre artisti tra biologia e performance", "Milano, fino al 20.12", "Ingresso libero"],
+      "foto": "medusa.jpg", "contenuto": "arte"
+    },
+    {
+      "id": "17-palestra", "famiglia": "servizio", "formato": "9:16",
+      "cliente": { "nome": "Forge Gym", "settore": "palestra" },
+      "brief": "Storia per il nuovo corso mattutino di Forge Gym, allenamento funzionale di gruppo. Energica, decisa; l'orario delle 6:30 è il punto forte.",
+      "fatti": ["Nuovo corso: Allenati come una squadra", "Allenamento funzionale di gruppo con coach dedicato", "Dal lunedì al giovedì, ore 6:30", "Prova gratuita", "Invito: prenota la prova"],
+      "foto": null, "contenuto": "palestra"
+    },
+    {
+      "id": "18-menu", "famiglia": "contenuto", "formato": "4:5",
+      "cliente": { "nome": "Osteria del Ponte", "settore": "ristorante" },
+      "brief": "Il menu del pranzo d'autunno di Osteria del Ponte in una grafica da pubblicare: quattro piatti con i prezzi, leggibile e appetitosa.",
+      "fatti": ["Menu di stagione: Pranzo d'autunno", "Vellutata di zucca con semi tostati e olio al rosmarino, 9 €", "Tortelli burro e salvia, 14 €", "Guancia brasata con polenta morbida, 18 €", "Torta di mele, 6 €"],
+      "foto": "verdure.jpg", "contenuto": "t_menu"
+    },
+    {
+      "id": "19-numeri", "famiglia": "contenuto", "formato": "1:1",
+      "cliente": { "nome": "Festival Lungolago", "settore": "festival musicale" },
+      "brief": "Grafica con i numeri dell'edizione 2025 di Festival Lungolago, da pubblicare per ringraziare il pubblico. I numeri sono i protagonisti.",
+      "fatti": ["Edizione 2025: com'è andata", "12.400 visitatori", "38 concerti", "3 giorni", "160 volontari"],
+      "foto": null, "contenuto": "t_numeri"
+    },
+    {
+      "id": "20-saldi-moda", "famiglia": "promozione", "formato": "9:16",
+      "cliente": { "nome": "Filo Rosso", "settore": "boutique di abbigliamento" },
+      "brief": "Storia per i saldi d'inverno della boutique Filo Rosso: fino al 40% su tutto. Deve sembrare un negozio curato, non un discount, ma lo sconto si deve leggere da lontano.",
+      "fatti": ["Saldi d'inverno", "Fino al 40% su tutto", "Maglieria, cappotti e accessori della collezione autunno-inverno", "Dal 7 gennaio, in negozio e online", "Invito: scopri i saldi"],
+      "foto": null,
+      "c": {
+        "brand": "Filo Rosso", "kicker": "Saldi d'inverno", "title": "Fino al 40% su tutto", "numero": "-40%",
+        "body": "Maglieria, cappotti e accessori della collezione autunno-inverno.",
+        "details": ["Dal 7 gennaio", "Negozio e online"], "cta": "Scopri i saldi"
+      }
+    }
+  ]
+}

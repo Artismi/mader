@@ -57,3 +57,10 @@ ts-error.txt
 /scripts/designer/node_modules
 /scripts/designer/out
 /scripts/designer/out-*
+
+# banco di confronto (scripts/confronto): tavole, giudizi e rapporti restano in locale
+/scripts/confronto/out/*
+/scripts/confronto/giudizi.jsonl
+/scripts/confronto/giuria.jsonl
+/scripts/confronto/rapporto.md
+/scripts/confronto/rapporto.json

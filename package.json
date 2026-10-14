@@ -11,6 +11,12 @@
     "start": "next start",
     "lint": "eslint",
     "designer:vetrina": "node scripts/designer/vetrina.mjs",
+    "confronto:genera": "node scripts/confronto/genera.mjs",
+    "confronto:concorrenti": "node scripts/confronto/concorrenti.mjs",
+    "confronto:giuria": "node scripts/confronto/giuria.mjs",
+    "confronto:giudica": "node scripts/confronto/giudica.mjs",
+    "confronto:rapporto": "node scripts/confronto/rapporto.mjs",
+    "confronto:test": "node --test scripts/confronto/lib.test.mjs",
     "postinstall": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
