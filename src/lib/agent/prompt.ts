@@ -12,6 +12,7 @@
 import type { ModelMessage, SystemModelMessage } from 'ai'
 import type { Skill } from '@/lib/db'
 import type { OperativeContext } from '@/lib/ai/context'
+import { hitsTrigger } from '@/lib/ai/skill-router'
 
 /** Come lavora l'assistente dentro Creative OS: le regole del guscio dette al modello. */
 export const MODO_DI_LAVORARE = `## Come lavori
@@ -30,7 +31,7 @@ Sei l'assistente operativo di Creative OS: usi gli strumenti per leggere e cambi
 export const GUIDA_GRAFICHE = `## Grafiche
 Per creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Se vuoi testi e direzioni scelti con cura prima di comporre, chiama directDesign: la regia dello Studio (analista, copywriter, direttore creativo, con i controlli della maestra) ti restituisce testi verificati e tre direzioni visive da passare a composeDesign. Usa createDesignBoards solo per posizionamenti manuali puntuali. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo e consegna anche l'adattamento in formato storia quando ha senso.`
 
-/** Skill che restano sempre nel prompt stabile: tutte tranne le famiglie a richiesta. */
+/** Famiglie di skill nate "a richiesta" (prima erano le uniche fuori dal prompt; ora lo sono tutte). */
 export function isOnDemandSkill(s: Skill): boolean {
   return s.slug.startsWith('ig-') || s.slug.startsWith('design-') || s.slug.startsWith('dic-skill-') || s.slug === 'dic-tribunale'
 }
@@ -38,35 +39,67 @@ export function isOnDemandSkill(s: Skill): boolean {
 export interface StableParts {
   architecture: string
   toolGuide: string
-  graphicLibrary: string
-  coreSkills: Skill[]
-  onDemandSkills: Skill[]
+  /** libreria grafica: solo per chi impagina a coordinate (createDesignBoards) */
+  graphicLibrary?: string
+  /** tutte le skill attive: nel prompt stabile va solo l'indice (una riga ciascuna) */
+  skills: Skill[]
+  /** skill da tenere intere nel prompt stabile (di norma nessuna: si caricano con loadSkill) */
+  pinned?: Skill[]
   /** nota aggiuntiva per i modelli che possono usare solo composeDesign */
   modelNote?: string
 }
 
-function catalog(skills: Skill[]): string {
-  if (!skills.length) return ''
+function skillIndex(skills: Skill[], pinned: Set<string>): string {
+  const list = skills.filter(s => !pinned.has(s.slug))
+  if (!list.length) return ''
   return [
-    '## Skill a richiesta (catalogo)',
-    'Queste competenze non sono nel prompt per intero. Se la richiesta ne tocca una, anche senza nominarla, chiama `loadSkill` con lo slug prima di rispondere e seguine le istruzioni. Quelle già attive per questa richiesta sono nel <promemoria>.',
-    ...skills.map(s => `- \`${s.slug}\` — ${s.description ?? s.name}`),
+    '## Skill (indice)',
+    "Le competenze dello studio non sono nel prompt per intero. Se la richiesta ne tocca una, anche senza nominarla, chiama `loadSkill` con lo slug prima di rispondere e seguine le istruzioni; puoi caricarne più d'una. Quelle già attive per questa richiesta sono nel <promemoria>.",
+    ...list.map(s => `- \`${s.slug}\` — ${(s.description ?? s.name).replace(/\s+/g, ' ').slice(0, 140)}`),
   ].join('\n')
 }
 
-/** Testo del prompt stabile (deterministico: stesso ingresso, stessi byte). */
+/**
+ * Testo del prompt stabile (deterministico: stesso ingresso, stessi byte).
+ * Dieta (docs/guscio-agente.md): identità, modo di lavorare, guida agli
+ * strumenti e indice delle skill; il resto arriva con loadSkill o nel promemoria.
+ */
 export function stableSystemText(p: StableParts): string {
+  const pinned = p.pinned ?? []
   return [
     p.architecture.trim(),
     MODO_DI_LAVORARE,
     `## Strumenti disponibili\n${p.toolGuide}`,
     GUIDA_GRAFICHE,
-    p.graphicLibrary,
-    p.coreSkills.length ? '## Skill operative' : '',
-    p.coreSkills.map(s => s.content).filter(Boolean).join('\n\n---\n\n'),
-    catalog(p.onDemandSkills),
+    p.graphicLibrary ?? '',
+    pinned.length ? `## Skill sempre attive\n${pinned.map(s => s.content).filter(Boolean).join('\n\n---\n\n')}` : '',
+    skillIndex(p.skills, new Set(pinned.map(s => s.slug))),
     p.modelNote ?? '',
   ].filter(Boolean).join('\n\n')
+}
+
+/** Trigger a parola intera ("dm" non scatta su "admin"), senza distinguere maiuscole. */
+export function hitsWord(text: string, trigger: string): boolean {
+  return hitsTrigger(text.toLowerCase(), trigger)
+}
+
+/**
+ * Skill da mettere intere nel promemoria di questa richiesta: prima quelle
+ * scelte dal router (ig-*), poi quelle con un trigger a parola intera nella
+ * domanda, fino a un tetto di caratteri. Le altre pertinenti restano nominate,
+ * da caricare con loadSkill.
+ */
+export function selectActiveSkills(o: { skills: Skill[]; query: string; routed?: Set<string>; maxChars?: number }): { active: Skill[]; altre: string[] } {
+  const max = o.maxChars ?? 14_000
+  const routed = o.skills.filter(s => o.routed?.has(s.slug))
+  const byTrigger = o.skills.filter(s => !o.routed?.has(s.slug) && (s.triggers ?? []).some(t => t.trim().length > 2 && hitsWord(o.query, t)))
+  const active: Skill[] = [], altre: string[] = []
+  let used = 0
+  for (const s of [...routed, ...byTrigger]) {
+    const n = (s.content ?? '').length
+    if (used + n <= max || (!active.length && n <= max * 1.5)) { active.push(s); used += n } else altre.push(s.slug)
+  }
+  return { active, altre }
 }
 
 /** Il prompt stabile come messaggio di sistema con il punto di cache (Anthropic diretto e via OpenRouter). */
@@ -93,6 +126,8 @@ export interface ReminderParts {
   ctx: OperativeContext
   canvasSnapshot?: string
   activeSkills: Skill[]
+  /** skill pertinenti rimaste fuori per il tetto: il modello le carica se servono */
+  otherSkills?: string[]
 }
 
 /** Il promemoria della richiesta: solo le sezioni che hanno contenuto. */
@@ -110,6 +145,7 @@ export function reminderText(r: ReminderParts): string {
     r.ctx.ragChunks.length ? `## Dal vault (riferimenti rilevanti)\n${r.ctx.ragChunks.join('\n\n---\n')}` : '',
     r.ctx.memories.length ? `## Ricordo (fatti persistenti)\n${r.ctx.memories.map(m => `- ${m.content}`).join('\n')}` : '',
     r.activeSkills.length ? `## Skill attive per questa richiesta\n${r.activeSkills.map(s => s.content).filter(Boolean).join('\n\n---\n\n')}` : '',
+    r.otherSkills?.length ? `Pertinenti ma non caricate (usa loadSkill se servono): ${r.otherSkills.join(', ')}` : '',
     r.canvasSnapshot
       ? `## Canvas aperto\n${r.canvasSnapshot}\n\nUsa gli ID esatti in updateCanvasElements ed editDesign. Per modifiche chirurgiche non usare clearBoard.`
       : '',

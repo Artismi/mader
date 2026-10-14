@@ -190,6 +190,27 @@ I controlli sono riusabili e stanno in `src/lib/agent/checks.ts`. Ogni strumento
 - **Il modello vede l'esito**: gli errori tornano al modello come frasi da correggere. I problemi trovati dopo la scrittura arrivano in `controlli` nel risultato.
 - **Test**: `maestra.test.mts`, 8 test.
 
+## 5c. Dieta del prompt (fatta, 14 ottobre 2026)
+
+**Diagnosi.** I circa 90k token per passo misurati nella prima prova non venivano dalla parte stabile, che pesava circa 12,6k (architettura delle Impostazioni circa 2k, 21 skill fisse circa 8k, libreria grafica circa 0,7k). Venivano dal promemoria: bastava la parola "post" perché la domanda risultasse "creativa", e il router aggiungeva **tutti** gli handbook design/dic.
+
+**Cosa cambia:**
+- **Parte stabile**: architettura, modo di lavorare, guida agli strumenti, guida grafiche e **indice** di tutte le skill (una riga ciascuna). Le skill intere si caricano con `loadSkill`; `pinned` resta disponibile ma è vuoto.
+- **Libreria grafica**: solo per i modelli forti, che impaginano a coordinate.
+- **Promemoria** (`selectActiveSkills`): entrano le skill scelte dal router (ig-*) e quelle con un trigger a parola intera nella domanda, fino a circa 14k caratteri. Le altre pertinenti vengono solo nominate ("Pertinenti ma non caricate…").
+- **Parole chiave creative**: decidono solo il modello.
+
+**Misure:**
+
+| | Prima | Dopo |
+|---|---|---|
+| Parte stabile (dati veri, `scripts/agent/misura-prompt.mts`) | ~12,6k token | **~4,4k** (5,1k con la libreria) |
+| Skill nel promemoria, domanda "post" | tutti gli handbook | ~1,1k (segretario, caption, ig-plan) |
+| Dal vivo, "Che post ho dal 20 al 26 ottobre?" (Gemini, database vuoto) | ~90k per passo (180.855 in 2 passi, cache 49%) | **~20,6k per passo** (82.384 in 4 passi, cache 67%) |
+| Dal vivo, "Quali incarichi scadono entro il 30?" | ~28k per passo (cache 46%) | ~19k per passo (cache 89%) |
+
+**Cosa resta:** gli **schemi degli strumenti**, circa 12k per passo: canvas e composeDesign (la sola descrizione circa 3,7k), più circa 2,9k degli strumenti di sistema. Il prossimo taglio è caricare gli schemi del canvas solo con il canvas aperto o dopo `loadSkill`, oppure accorciare la descrizione di `composeDesign`.
+
 ## 5b. Tutti i modelli, tutti gli strumenti (fasi G7–G8, 14 ottobre 2026)
 
 Richiesta dell'utente: Claude, Gemini, OpenRouter e qualunque modello con una chiave devono poter usare il guscio, e anche i singoli strumenti dello Studio devono poter fare tutto nel sistema.

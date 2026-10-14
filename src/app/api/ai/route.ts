@@ -7,7 +7,7 @@ import { messageText, routeOnDemandSkills } from '@/lib/ai/skill-router'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@/lib/agent/tools'
 import { toolsForContext } from '@/lib/agent/run'
 import { createTrace } from '@/lib/agent/trace'
-import { isOnDemandSkill, reminderText, stableSystem, withReminder } from '@/lib/agent/prompt'
+import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
 import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
 import { SYSTEM_TOOLS } from '@/lib/agent/system-tools'
 import { CORE_TOOLS } from '@/lib/agent/core-tools'
@@ -692,17 +692,12 @@ export async function POST(req: Request) {
     const creativeKeywords = ['post', 'design', 'canvas', 'poster', 'slide', 'immagine', 'grafica', 'logo', 'layout', 'brand'];
     const isCreativeQuery = creativeKeywords.some(k => userQuery.toLowerCase().includes(k));
 
-    // Skill a richiesta: il router sceglie le ig-* attive (trigger recenti, pagina, tool usati);
-    // gli handbook design/dic entrano con le richieste creative o con un loro trigger.
-    // Le attive vanno nel promemoria; il catalogo stabile le elenca tutte per `loadSkill`.
+    // Dieta del prompt: tutte le skill stanno nell'indice stabile e si caricano con loadSkill.
+    // Nel promemoria entrano intere solo quelle scelte dal router (ig-*: trigger recenti, pagina,
+    // strumenti usati) e quelle con un trigger a parola intera nella domanda, entro un tetto.
     const onDemand = routeOnDemandSkills({ skills: allActiveSkills, messages, pathname })
     const injectedOnDemand = new Set(onDemand.inject.map(s => s.slug))
-    const onDemandSkills = allActiveSkills.filter(isOnDemandSkill)
-    const activeSkills = onDemandSkills.filter(s => {
-      if (s.slug.startsWith('ig-')) return injectedOnDemand.has(s.slug)
-      if (isCreativeQuery) return true
-      return (s.triggers || []).some(t => userQuery.toLowerCase().includes(t.toLowerCase()))
-    })
+    const { active: activeSkills, altre: otherSkills } = selectActiveSkills({ skills: allActiveSkills, query: userQuery, routed: injectedOnDemand })
 
     // Le richieste grafiche (o fatte con il canvas aperto) vanno al modello forte,
     // il resto a quello economico
@@ -727,7 +722,7 @@ export async function POST(req: Request) {
           execute: async ({ slug }) => {
             const skill = allActiveSkills.find(s => s.slug === slug)
             if (!skill?.content) {
-              return { success: false, message: `Skill "${slug}" non trovata. Disponibili: ${onDemandSkills.map(s => s.slug).join(', ')}` }
+              return { success: false, message: `Skill "${slug}" non trovata. Disponibili: ${allActiveSkills.map(s => s.slug).join(', ')}` }
             }
             // ig-human è il filtro finale di ogni nodo ig-*: lo consegno insieme
             const human = slug.startsWith('ig-') && slug !== 'ig-human' && !injectedOnDemand.has('ig-human')
@@ -903,12 +898,12 @@ QUANTITÀ BOARD:
     const system = stableSystem({
       architecture,
       toolGuide: toolGuide(defs),
-      graphicLibrary: graphicLibraryPrompt(),
-      coreSkills: allActiveSkills.filter(s => !isOnDemandSkill(s)),
-      onDemandSkills,
+      // la libreria di forme serve solo a chi impagina a coordinate
+      graphicLibrary: lowLevelDesign ? graphicLibraryPrompt() : undefined,
+      skills: allActiveSkills,
       modelNote: lowLevelDesign ? undefined : COMPOSE_ONLY_NOTE.trim(),
     })
-    const reminder = reminderText({ now: new Date(), pathname, ctx, canvasSnapshot, activeSkills })
+    const reminder = reminderText({ now: new Date(), pathname, ctx, canvasSnapshot, activeSkills, otherSkills })
 
     // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
     const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {

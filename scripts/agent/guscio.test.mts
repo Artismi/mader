@@ -13,7 +13,7 @@ process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gus
 
 const { capResult, defineTool, toolGuide } = await import('../../src/lib/agent/tools')
 const { clearOldToolOutputs, compactHistory, estimateTokens } = await import('../../src/lib/agent/compact')
-const { stableSystemText, reminderText, withReminder, dayBand } = await import('../../src/lib/agent/prompt')
+const { stableSystemText, reminderText, withReminder, dayBand, selectActiveSkills } = await import('../../src/lib/agent/prompt')
 const sys = await import('../../src/lib/agent/system-tools')
 const { z } = await import('zod')
 
@@ -125,13 +125,26 @@ test('compactHistory riassume quando lo svuotamento non basta, e ricorda il rias
 
 const skill = (slug: string, content: string) => ({ slug, name: slug, description: `desc ${slug}`, content, triggers: [] }) as never
 
-test('il prompt stabile è identico tra due richieste', () => {
-  const parts = { architecture: 'ARCH', toolGuide: '- x', graphicLibrary: 'LIB', coreSkills: [skill('core', 'CORE')], onDemandSkills: [skill('ig-reel', 'REEL')] }
+test("il prompt stabile è identico tra due richieste e contiene solo l'indice delle skill", () => {
+  const parts = { architecture: 'ARCH', toolGuide: '- x', skills: [skill('core', 'CORE'), skill('ig-reel', 'REEL')] }
   const a = stableSystemText(parts), b = stableSystemText({ ...parts })
   assert.equal(a, b)
   assert.match(a, /`ig-reel` — desc ig-reel/)
-  assert.ok(!a.includes('REEL'), 'il contenuto delle skill a richiesta non entra nel prompt stabile')
+  assert.match(a, /`core` — desc core/)
+  assert.ok(!a.includes('REEL') && !a.includes('CORE'), 'il contenuto delle skill non entra nel prompt stabile')
   assert.ok(!a.includes('Contesto:') && !a.includes('</promemoria>'), 'niente parti variabili nel prompt stabile')
+  const pinned = stableSystemText({ ...parts, pinned: [skill('core', 'CORE')] })
+  assert.match(pinned, /CORE/)
+  assert.ok(!/`core` —/.test(pinned), "una skill fissata non compare anche nell'indice")
+})
+
+test('selectActiveSkills: router, trigger a parola intera, tetto', () => {
+  const sk = (slug: string, triggers: string[], n: number) => ({ slug, name: slug, description: slug, content: 'x'.repeat(n), triggers }) as never
+  const all = [sk('ig-reel', ['reel'], 3000), sk('design-poster', ['poster'], 9000), sk('design-logo', ['logo'], 9000), sk('dic-admin', ['dm'], 100)]
+  const r = selectActiveSkills({ skills: all, query: 'Fammi un poster e un logo, poi un reel', routed: new Set(['ig-reel']), maxChars: 14000 })
+  assert.deepEqual(r.active.map((s: { slug: string }) => s.slug), ['ig-reel', 'design-poster'])
+  assert.deepEqual(r.altre, ['design-logo'])
+  assert.equal(selectActiveSkills({ skills: all, query: "scrivi all'admin" }).active.length, 0, '"dm" non scatta su "admin"')
 })
 
 test('il promemoria contiene data, situazione, skill attive e canvas', () => {
