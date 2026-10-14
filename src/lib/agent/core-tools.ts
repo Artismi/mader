@@ -1,215 +1,31 @@
 /**
  * Strumenti di sistema eseguiti sul server, condivisi tra la chat
- * (src/app/api/ai/route.ts) e runAgent (il guscio come servizio): incarichi,
- * idee, clienti, memoria, Instagram, preventivi e fatture, immagini.
+ * (src/app/api/ai/route.ts) e runAgent (il guscio come servizio).
+ * Incarichi, idee, clienti e post sono le azioni del nucleo (src/lib/kernel,
+ * K1): la stessa implementazione dei pulsanti e di Ctrl+K. Qui restano gli
+ * strumenti non ancora migrati: memoria, Instagram, preventivi e fatture, immagini.
  * Gli strumenti del canvas restano nella route: li esegue il widget per nome.
  */
 import { z } from 'zod'
-import { clients, editorialPosts, ideas, quotes, tasks } from '@/lib/db'
-import { instagramScores, labInputSchema, runLab } from '@/lib/ai/instagram'
+import { quotes } from '@/lib/db'
+import { labInputSchema, runLab } from '@/lib/ai/instagram'
 import { saveMemory } from '@/lib/vault'
 import type { AgentToolDef } from './tools'
-import { avvisiSocial, budget, clienteEsiste, dataIso, testoSocial, tutti } from './checks'
-import { findClient } from './system-tools'
-
-const taskSchema = z.object({
-  title: z.string().describe("Il nome dell'incarico"),
-  clientId: z.string().optional().describe('ID cliente se menzionato'),
-  category: z.enum(['design', 'dev', 'bando', 'social', 'finanze', 'general']),
-  deadlinePattern: z.string().describe('Data YYYY-MM-DD'),
-})
-
-const DAY_MAP: Record<string, number> = {
-  lunedi: 1, lun: 1, monday: 1, martedi: 2, mar: 2, tuesday: 2,
-  mercoledi: 3, mer: 3, wednesday: 3, giovedi: 4, gio: 4, thursday: 4,
-  venerdi: 5, ven: 5, friday: 5, sabato: 6, sab: 6, saturday: 6,
-  domenica: 0, dom: 0, sunday: 0,
-}
-
-const recurringSchema = z.object({
-  title: z.string(),
-  days: z.array(z.string()),
-  startHour: z.number().int().min(0).max(23),
-  endHour: z.number().int().min(1).max(24),
-  startDate: z.string(),
-  endDate: z.string(),
-})
+import { budget, clienteEsiste, tutti } from './checks'
+import { actionTool, clientCreate, clientSearch, clientUpdate, findClient, ideaCreate, ideaDelete, ideaUpdate, postSaveInstagram, taskCreate, taskCreateRecurring, taskDelete, taskList, taskSetStatus, taskUpdate } from '@/lib/kernel'
 
 const d = <S extends z.ZodTypeAny>(def: AgentToolDef<S>) => def as unknown as AgentToolDef<z.ZodTypeAny>
 
+/** Azioni del nucleo come strumenti dell'agente (stessi nomi di prima: createTask, readTasks…). */
+export const KERNEL_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
+  taskCreate, taskCreateRecurring, taskList, taskSetStatus, taskUpdate, taskDelete,
+  ideaCreate, ideaUpdate, ideaDelete,
+  clientSearch, clientCreate, clientUpdate,
+  postSaveInstagram,
+].map(a => d(actionTool(a as never)))
+
 export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
-        d({ name: 'createTask', group: 'lavoro', risk: 'write',
-          verify: ({ title, deadlinePattern, clientId }) => tutti(
-            budget('title', title, 120, 3),
-            dataIso('deadlinePattern', deadlinePattern, { futura: true, obbligatoria: true }),
-            clienteEsiste('clientId', clientId),
-          ),
-          after: ({ title }, out) => {
-            const id = (out as { id?: string }).id
-            return id && tasks.getById(id)?.title === title ? [] : [`l'incarico "${title}" non risulta salvato: rileggi con readTasks prima di dire che è fatto.`]
-          },
-          description: 'Crea un nuovo incarico nel sistema.',
-          inputSchema: taskSchema,
-          execute: async ({ title, category, deadlinePattern, clientId }: z.infer<typeof taskSchema>) => {
-            let parsedDate = new Date()
-            parsedDate.setDate(parsedDate.getDate() + 1)
-            try {
-              const d = new Date(deadlinePattern)
-              if (!isNaN(d.getTime())) parsedDate = d
-            } catch { /* usa default */ }
-
-            // il modello può passare il nome o l'ID corto: nel database va l'ID completo
-            const client = clientId ? findClient(clientId) : undefined
-            const t = tasks.create({
-              client_id: client && !('error' in client) ? client.id : undefined,
-              title,
-              type: category,
-              category: 'task',
-              status: 'todo',
-              deadline: parsedDate.toISOString(),
-            })
-
-            return {
-              success: true,
-              message: `Incarico "${title}" creato per il ${parsedDate.toLocaleDateString('it-IT')}.`,
-              id: t?.id,
-            }
-          },
-        }),
-
-        d({ name: 'createRecurringEngagement', group: 'lavoro', risk: 'write',
-          verify: ({ title, days, startHour, endHour, startDate, endDate }) => tutti(
-            budget('title', title, 120, 3),
-            dataIso('startDate', startDate, { futura: true, obbligatoria: true }),
-            dataIso('endDate', endDate, { futura: true, obbligatoria: true }),
-            endDate < startDate ? ['endDate: viene prima di startDate.'] : [],
-            endHour <= startHour ? ['endHour: deve essere dopo startHour.'] : [],
-            (new Date(endDate).getTime() - new Date(startDate).getTime()) / 864e5 > 366 ? ["periodo: più di un anno di slot, chiedi conferma all'utente o accorcia."] : [],
-            days.length ? [] : ['days: indica almeno un giorno della settimana.'],
-          ),
-          description: 'Crea slot ricorrenti per impegni fissi settimanali.',
-          inputSchema: recurringSchema,
-          execute: async ({ title, days, startHour, endHour, startDate, endDate }: z.infer<typeof recurringSchema>) => {
-            const targetDays = days
-              .map(d => DAY_MAP[d.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')])
-              .filter((d): d is number => d !== undefined)
-
-            if (targetDays.length === 0) return { success: false, message: 'Giorni non riconosciuti' }
-
-            const durationMinutes = (endHour - startHour) * 60
-            const start = new Date(startDate)
-            const end = new Date(endDate)
-            let count = 0
-
-            for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-              if (targetDays.includes(d.getDay())) {
-                const deadline = new Date(d)
-                deadline.setHours(startHour, 0, 0, 0)
-                tasks.create({
-                  title,
-                  type: 'general',
-                  category: 'engagement',
-                  status: 'todo',
-                  deadline: deadline.toISOString(),
-                  duration_minutes: durationMinutes,
-                })
-                count++
-              }
-            }
-
-            return {
-              success: true,
-              message: `Creati ${count} slot "${title}" (${startHour}:00–${endHour}:00) dal ${startDate} al ${endDate}.`,
-            }
-          },
-        }),
-
-        d({ name: 'readTasks', group: 'lavoro', risk: 'read',
-          description: 'Legge gli incarichi dal sistema con filtri opzionali.',
-          inputSchema: z.object({
-            status: z.enum(['todo', 'in_progress', 'done', 'all']).optional(),
-            category: z.string().optional(),
-            clientId: z.string().optional(),
-            limit: z.number().int().min(1).max(20).optional(),
-          }),
-          execute: async ({ status, category, clientId, limit }) => {
-            // il filtro per cliente prima veniva ignorato: si legge più largo e si filtra qui
-            const allTasks = tasks.getAll({
-              status: status === 'all' ? undefined : status,
-              category,
-              limit: clientId ? 200 : limit || 10,
-            }).filter(t => !clientId || (t.client_id ?? '').startsWith(clientId)).slice(0, limit || 10)
-            if (allTasks.length === 0) return { success: true, message: 'Nessun task trovato.' }
-            const formatted = allTasks.map(t => {
-              const d = t.deadline ? new Date(t.deadline).toLocaleDateString('it-IT') : 'senza scadenza'
-              return `[${t.id.slice(0, 8)}] ${t.title} — ${t.client_name || '—'} → ${d} [${t.status}]`
-            }).join('\n')
-            return { success: true, tasks: formatted }
-          },
-        }),
-
-        d({ name: 'updateTaskStatus', group: 'lavoro', risk: 'write',
-          verify: ({ taskId }) => taskId.length < 8 ? ['taskId: servono almeno gli 8 caratteri mostrati da readTasks.'] : tasks.getAll({ limit: 500 }).some(t => t.id.startsWith(taskId)) ? [] : [`taskId: l'incarico ${taskId} non esiste. Leggi gli ID con readTasks.`],
-          after: ({ taskId, newStatus }) => {
-            const t = tasks.getAll({ limit: 500 }).find(x => x.id.startsWith(taskId))
-            return t?.status === newStatus ? [] : [`lo stato dell'incarico ${taskId} risulta "${t?.status}", non "${newStatus}".`]
-          },
-          description: 'Aggiorna lo stato di un incarico esistente.',
-          inputSchema: z.object({
-            taskId: z.string().describe('ID parziale del task (almeno 8 caratteri)'),
-            newStatus: z.enum(['todo', 'in_progress', 'done']),
-          }),
-          execute: async ({ taskId, newStatus }) => {
-            const allTasks = tasks.getAll({ limit: 100 })
-            const match = allTasks.find(t => t.id.startsWith(taskId))
-            if (!match) return { success: false, message: `Task ${taskId} non trovato.` }
-            tasks.update(match.id, { status: newStatus })
-            return { success: true, message: `Task "${match.title}" aggiornato a ${newStatus}.` }
-          },
-        }),
-
-        d({ name: 'createIdea', group: 'idee', risk: 'write',
-          verify: ({ text, title, clientId }) => tutti(budget('text', text, 2000, 5), budget('title', title, 120), clienteEsiste('clientId', clientId)),
-          after: (_i, out) => {
-            const id = (out as { id?: string }).id
-            return id && ideas.getAll().some(i => i.id === id) ? [] : ["l'idea non risulta salvata: rileggi con listIdeas."]
-          },
-          description: 'Cattura una nuova idea creativa nel sistema.',
-          inputSchema: z.object({
-            text: z.string().describe("Il contenuto dell'idea"),
-            title: z.string().optional(),
-            clientId: z.string().optional(),
-            platforms: z.array(z.string()).optional(),
-          }),
-          execute: async ({ text, title, clientId, platforms }) => {
-            // nome, ID corto o completo: nel database va l'ID completo
-            const cli = clientId ? findClient(clientId) : undefined
-            const idea = ideas.create({
-              client_id: cli && !('error' in cli) ? cli.id : undefined,
-              text,
-              title,
-              platforms: platforms || [],
-              idea_status: 'nuova',
-              assigned: false,
-              output_links: []
-            })
-            return { success: true, message: `Idea "${title || text.slice(0, 20)}" salvata con successo.`, id: idea.id }
-          }
-        }),
-
-        d({ name: 'searchClient', group: 'clienti', risk: 'read',
-          description: 'Cerca un cliente nel vault per recuperare dettagli brand o progetto.',
-          inputSchema: z.object({ name: z.string() }),
-          execute: async ({ name }) => {
-            const allClients = clients.getAll()
-            const matches = allClients.filter(c => c.name.toLowerCase().includes(name.toLowerCase()))
-            if (matches.length === 0) return { success: false, message: `Nessun cliente trovato per "${name}"` }
-            return {
-              success: true,
-              clients: matches.map(c => `[${c.id.slice(0, 8)}] ${c.name} (${c.sector || 'settore non specificato'})`).join('\n')
-            }
-          }
-        }),
+  ...KERNEL_TOOLS,
 
         d({ name: 'instagramLab', group: 'social', risk: 'read',
           description: 'Strumenti del circuito Instagram (skill ig-*), calcolati davvero e in locale: scoreHooks (classifica hook, 5 controlli), beatSheet (copione → beat temporizzati), lintCaption (finestra feed 125 car., hashtag, CTA, termini di ricerca), humanize (pulizia impronte AI + flag strutturali), detect (human score 5 controlli, con compareTo mostra il delta), swipe (multiplo outlier sulla mediana per account), scoreProfile (rubrica /100), polish (humanize → detect → lintCaption in un colpo). Usalo invece di stimare a occhio.',
@@ -217,58 +33,6 @@ export const CORE_TOOLS: AgentToolDef<z.ZodTypeAny>[] = [
           execute: async (input: z.infer<typeof labInputSchema>) => {
             const out = runLab(input)
             return out.ok ? { success: true, report: out.report } : { success: false, message: out.error }
-          },
-        }),
-
-        d({ name: 'saveInstagramDraft', group: 'social', risk: 'write',
-          verify: ({ client, title, content, format, scheduledAt, caption }) => tutti(
-            clienteEsiste('client', client, { obbligatorio: true }),
-            budget('title', title, 80, 3),
-            budget('content', content, 5000, 10),
-            dataIso('scheduledAt', scheduledAt, { futura: true }),
-            // la caption (o il contenuto di un post singolo) deve essere pronta: lint e testo non generato
-            testoSocial(caption ? 'caption' : 'content', caption ?? (format === 'post' ? content : undefined)),
-            budget('caption', caption, 2200),
-          ),
-          after: ({ caption, content, format }, out) => {
-            const id = (out as { postId?: string }).postId
-            const salvato = id && editorialPosts.getById(id) ? [] : ['il post non risulta nel piano editoriale: rileggi con readEditorialPlan.']
-            return [...salvato, ...avvisiSocial(caption ?? (format === 'post' ? content : undefined)).map(a => `da rivedere: ${a}`)]
-          },
-          description: 'Salva un contenuto Instagram approvato dall\'utente nel piano editoriale (board Editoriale) con formato, formula hook e punteggi. Usalo SOLO dopo il "sì" dell\'utente. Non pubblica nulla.',
-          inputSchema: z.object({
-            client: z.string().describe('ID cliente (anche i primi 8 caratteri) o nome'),
-            title: z.string().describe('Titolo breve / prima riga'),
-            content: z.string().describe('Copione, slide o caption finali, già umanizzati'),
-            format: z.enum(['reel', 'carousel', 'story', 'post']),
-            status: z.enum(['idea', 'bozza']).default('bozza'),
-            scheduledAt: z.string().optional().describe('Data/ora prevista ISO, se pianificata'),
-            hookFormula: z.string().optional().describe('Es. "#3 Nessuno ti dice"'),
-            caption: z.string().optional().describe('Caption separata dal copione, se presente'),
-          }),
-          execute: async ({ client, title, content, format, status, scheduledAt, hookFormula, caption }) => {
-            const key = client.toLowerCase()
-            const all = clients.getAll()
-            const match = all.find(c => c.id === client)
-              ?? all.find(c => c.id.startsWith(client))
-              ?? all.find(c => c.name.toLowerCase().includes(key))
-            if (!match) return { success: false, message: `Cliente "${client}" non trovato: usa searchClient.` }
-
-            const scores = instagramScores(caption ?? content)
-            const post = editorialPosts.create({
-              client_id: match.id,
-              title,
-              content: caption ? `${content}\n\n--- CAPTION ---\n${caption}` : content,
-              channels: ['instagram'],
-              editorial_status: status,
-              scheduled_at: scheduledAt,
-              metadata: { circuit: 'instagram', format, hookFormula, ...scores },
-            })
-            return {
-              success: true,
-              message: `Salvato nel piano editoriale di ${match.name} come "${status}" (${format}). Linter caption: ${scores.captionVerdict}, human score ${scores.humanScore} ${scores.humanVerdict}.`,
-              postId: post?.id,
-            }
           },
         }),
 

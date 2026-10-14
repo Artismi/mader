@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { generateTextWith } from '@/lib/ai/model-registry'
-import { editorialPosts, messages, quotes, tasks } from '@/lib/db'
+import { messages, quotes } from '@/lib/db'
+import { runAction } from '@/lib/kernel'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 import { googleStatus } from '@/lib/google/auth'
 import { sendMail } from '@/lib/google/gmail'
@@ -94,25 +95,25 @@ export async function POST(req: Request) {
     const title = String(body.title ?? '').trim()
     if (!title) return NextResponse.json({ error: 'Dai un nome al task' }, { status: 400 })
     const client = body.fromRef ? clientOfRef(body.fromRef) : undefined
-    const t = tasks.create({ client_id: client?.id, title, type: 'general', category: 'task', deadline: body.deadline ?? undefined, status: 'todo' })
-    if (body.fromRef) linkOrigin(body.fromRef, 'task', t.id)
-    return NextResponse.json({ ref: `task:${t.id}` })
+    // stessa azione del pulsante e dell'assistente (nucleo, K1)
+    const r = await runAction<{ id: string }>('task.create', { title, clientId: client?.id, category: 'general', deadlinePattern: body.deadline ?? undefined }, { actor: 'user', origin: body.fromRef })
+    if (!r.ok) return NextResponse.json({ error: r.errors.join(' ') }, { status: 400 })
+    if (body.fromRef) linkOrigin(body.fromRef, 'task', r.output.id)
+    return NextResponse.json({ ref: `task:${r.output.id}` })
   }
 
   if (body.action === 'done') {
-    const id = String(body.ref ?? '').replace(/^task:/, '')
-    if (!tasks.getById(id)) return NextResponse.json({ error: 'Task non trovato' }, { status: 404 })
-    tasks.update(id, { status: 'done' })
+    const r = await runAction('task.set_status', { taskId: String(body.ref ?? ''), newStatus: 'done' }, { actor: 'user' })
+    if (!r.ok) return NextResponse.json({ error: 'Task non trovato' }, { status: 404 })
     return NextResponse.json({ ok: true })
   }
 
   // Un contenuto social avanza di un passo (idea → bozza → approvato → programmato → pubblicato)
   if (body.action === 'post-status') {
-    const id = String(body.ref ?? '').replace(/^post:/, '')
     const allowed = ['bozza', 'approvato', 'programmato', 'pubblicato']
     if (!allowed.includes(body.status)) return NextResponse.json({ error: 'Stato non valido' }, { status: 400 })
-    if (!editorialPosts.getAll().some(p => p.id === id)) return NextResponse.json({ error: 'Contenuto non trovato' }, { status: 404 })
-    editorialPosts.updateStatus(id, body.status, body.status === 'pubblicato' ? { published_at: new Date().toISOString() } : undefined)
+    const r = await runAction('post.set_status', { ref: String(body.ref ?? ''), status: body.status }, { actor: 'user' })
+    if (!r.ok) return NextResponse.json({ error: 'Contenuto non trovato' }, { status: 404 })
     return NextResponse.json({ ok: true })
   }
 

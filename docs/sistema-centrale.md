@@ -180,6 +180,11 @@ L'Assistente delega con un'azione `agent.delegate(profilo, compito)`. Il profilo
 
 Le fasi K1–K3 sono le fondamenta. K4–K7 possono procedere in parallelo una volta che K1 è fatta, purché sessioni diverse non tocchino gli stessi file.
 
+### Stato delle fasi
+- **K0**: registro, `runAgent`, dieta (prompt stabile ~4,4k token), G5 e G6 fatti; il banco gira su un solo modello (gemini-flash-lite-latest, 15/19 eseguiti). Manca il secondo modello: Claude è a pagamento e va chiesto all'utente.
+- **K1 fatto**: `src/lib/kernel/actions.ts` (`defineAction`, `runAction`, `actionTool`, `listActions`, `onActionDone`) e i domini `task`, `idea`, `post`, `client` in `src/lib/kernel/domains/`. La chat (core-tools, system-tools), le Server Action di `src/app/actions.ts`, il guscio /os (`api/os`) e Ctrl+K (`Ask.tsx`, via `GET /api/kernel/actions`) chiamano le stesse azioni. Le regole dipendono da chi agisce: l'IA non scrive date passate, l'utente sì. Test: `scripts/agent/kernel.test.mts`.
+  - Provato: test automatici su database temporaneo (stesse descrizioni, stessa scrittura da strumento e Server Action, conferma per `external`). Non provato nell'app: i pulsanti delle pagine e Ctrl+K a mano in Electron.
+
 ---
 
 ## 5. Regole del nucleo

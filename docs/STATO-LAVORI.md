@@ -10,7 +10,12 @@ File breve da leggere per primo in una sessione nuova, invece di rileggere conve
 
 ## Fatto
 - 59439cb: la chat gira nel guscio agente (prompt stabile, promemoria, 7 strumenti nuovi, conferme, compattazione, traccia, 20 test).
-- Modifiche **non committate** nel worktree brave-bohr: registro dei modelli e runAgent, a metà. Prima di continuare, controllarle con `git diff`.
+- 485baae: registro dei modelli (profili, ordine di scelta, quote) e `runAgent` headless.
+- fa3f2bf: id dei modelli ritirati (catalogo dei fornitori, alias, `checkModelIds`).
+- 74c85a5: dieta del prompt: stabile da ~12,6k a ~4,4k token, dal vivo da ~90k a ~20,6k per passo.
+- 960eb08: G5, la maestra sulle scritture (controlli in `verify`/`after`).
+- 13a764d: G6, banco di 20 compiti (gemini-flash-lite-latest 15/19 eseguiti).
+- K1 (commit "feat(kernel): K1 azioni uniche"): `src/lib/kernel`, domini task/idea/post/client usati da chat, Server Action, /os e Ctrl+K.
 
 ## In coda, una cosa alla volta
 1. **Guscio** (worktree brave-bohr): completare il registro dei modelli e `runAgent`; poi gli id dei modelli ritirati; dieta del prompt (da ~90k a meno di 15k token); G5; G6; poi K1–K3. Fermarsi dopo K3.
