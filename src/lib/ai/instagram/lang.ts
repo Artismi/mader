@@ -153,8 +153,9 @@ export function numberToItalian(n: number): string {
   const rest = n % 1e3;
   if (bil) parts.push(bil === 1 ? 'un miliardo' : below1000(bil) + ' miliardi');
   if (mil) parts.push(mil === 1 ? 'un milione' : below1000(mil) + ' milioni');
-  if (th) parts.push(th === 1 ? 'mille' : below1000(th) + 'mila');
-  if (rest) parts.push(below1000(rest));
+  // Migliaia e unità si scrivono attaccate ("duemilaventisei"), milioni e miliardi staccati.
+  const low = (th ? (th === 1 ? 'mille' : below1000(th) + 'mila') : '') + (rest ? below1000(rest) : '');
+  if (low) parts.push(low);
   return parts.join(' ');
 }
 

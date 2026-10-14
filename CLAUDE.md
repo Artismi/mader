@@ -126,6 +126,15 @@ La sezione canvas è composta da:
 
 Componente custom in `creative-studio.tsx` che implementa il pattern: icona singola → hover → flyout a destra con le opzioni → si richiude dopo 180ms dall'uscita del cursore. La stessa logica è usata nel `TextBar` per i preset paragrafo (¶).
 
+### Circuito Instagram (skill `ig-*`)
+
+13 skill (da [instagram-agent-skill](https://github.com/Jakeschincariol/instagram-agent-skill), MIT, riscritte in italiano) che vanno dalla ricerca alla pubblicazione:
+- Skill: `src/lib/ai/skills/instagram.ts` (incluse in `DEFAULT_SKILLS`). In `/api/ai` entrano nel prompt **solo a trigger** (match a parola intera); `ig-human` entra sempre insieme alle altre.
+- Strumenti (porting TS dei tool Python, con supporto italiano): `src/lib/ai/instagram/` — `hookscore`, `beats`, `caption`, `humanize`, `detect`, `swipe`, `profile`; dispatcher unico `runLab()` in `index.ts`.
+- Chat: tool `instagramLab` (esegue gli strumenti) e `saveInstagramDraft` (salva in `editorial_posts` con `metadata` JSON: formato, formula hook, punteggi). Le memorie usano i prefissi `[IG-VOCE]`, `[IG-SWIPE]`, `[IG-AUDIT]`.
+- UI: `POST /api/instagram/lab`; pannello "Analizza" nella Finestra di Pubblicazione; `/api/social/publish` blocca le caption Instagram con FAIL al linter.
+- Nessuna skill pubblica, commenta o manda DM da sola: l'utente conferma sempre.
+
 ### Connettori esterni
 
 Integrati tramite MCP in produzione, ma le chiamate avvengono via API route server-side:

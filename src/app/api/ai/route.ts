@@ -5,7 +5,8 @@ import { convertToModelMessages, stepCountIs } from 'ai'
 import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
-import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
+import { skills, config, tasks, clients, ideas, quotes, editorialPosts } from '@/lib/db'
+import { labInputSchema, runLab, lintCaption, detect } from '@/lib/ai/instagram'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { buildContext } from '@/lib/ai/context'
@@ -755,7 +756,7 @@ export async function POST(req: Request) {
       model,
       system: SYSTEM_PROMPT,
       messages: modelMessages,
-      maxSteps: 10, // Permette loop multipli Thought -> Tool -> Thought
+      stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought (AI SDK v6)
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
       experimental_telemetry: {
         isEnabled: true,
@@ -903,6 +904,62 @@ export async function POST(req: Request) {
               clients: matches.map(c => `[${c.id.slice(0, 8)}] ${c.name} (${c.sector || 'settore non specificato'})`).join('\n')
             }
           }
+        }),
+
+        instagramLab: tool({
+          description: 'Strumenti del circuito Instagram (skill ig-*), calcolati davvero e in locale: scoreHooks (classifica hook, 5 controlli), beatSheet (copione → beat temporizzati), lintCaption (finestra feed 125 car., hashtag, CTA, termini di ricerca), humanize (pulizia impronte AI + flag strutturali), detect (human score 5 controlli, con compareTo mostra il delta), swipe (multiplo outlier sulla mediana per account), scoreProfile (rubrica /100), polish (humanize → detect → lintCaption in un colpo). Usalo invece di stimare a occhio.',
+          inputSchema: labInputSchema,
+          execute: async (input: z.infer<typeof labInputSchema>) => {
+            const out = runLab(input)
+            return out.ok ? { success: true, report: out.report } : { success: false, message: out.error }
+          },
+        }),
+
+        saveInstagramDraft: tool({
+          description: 'Salva un contenuto Instagram approvato dall\'utente nel piano editoriale (board Editoriale) con formato, formula hook e punteggi. Usalo SOLO dopo il "sì" dell\'utente. Non pubblica nulla.',
+          inputSchema: z.object({
+            client: z.string().describe('ID cliente (anche i primi 8 caratteri) o nome'),
+            title: z.string().describe('Titolo breve / prima riga'),
+            content: z.string().describe('Copione, slide o caption finali, già umanizzati'),
+            format: z.enum(['reel', 'carousel', 'story', 'post']),
+            status: z.enum(['idea', 'bozza']).default('bozza'),
+            scheduledAt: z.string().optional().describe('Data/ora prevista ISO, se pianificata'),
+            hookFormula: z.string().optional().describe('Es. "#3 Nessuno ti dice"'),
+            caption: z.string().optional().describe('Caption separata dal copione, se presente'),
+          }),
+          execute: async ({ client, title, content, format, status, scheduledAt, hookFormula, caption }) => {
+            const key = client.toLowerCase()
+            const all = clients.getAll()
+            const match = all.find(c => c.id === client)
+              ?? all.find(c => c.id.startsWith(client))
+              ?? all.find(c => c.name.toLowerCase().includes(key))
+            if (!match) return { success: false, message: `Cliente "${client}" non trovato: usa searchClient.` }
+
+            const text = caption ?? content
+            const lint = lintCaption(text)
+            const human = detect(content)
+            const post = editorialPosts.create({
+              client_id: match.id,
+              title,
+              content: caption ? `${content}\n\n--- CAPTION ---\n${caption}` : content,
+              channels: ['instagram'],
+              editorial_status: status,
+              scheduled_at: scheduledAt,
+              metadata: {
+                circuit: 'instagram',
+                format,
+                hookFormula,
+                captionVerdict: lint.verdict,
+                humanScore: Math.round(human.humanScore * 10) / 10,
+                humanVerdict: human.verdict,
+              },
+            })
+            return {
+              success: true,
+              message: `Salvato nel piano editoriale di ${match.name} come "${status}" (${format}). Linter caption: ${lint.verdict}, human score ${human.humanScore.toFixed(1)} ${human.verdict}.`,
+              postId: post?.id,
+            }
+          },
         }),
 
         remember: tool({
