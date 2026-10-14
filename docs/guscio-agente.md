@@ -212,6 +212,16 @@ Richiesta dell'utente: Claude, Gemini, OpenRouter e qualunque modello con una ch
 - **Rilevatore di ripetizioni** (`createRepeatGuard`): alla seconda chiamata identica fallita suggerisce un altro approccio. Alla terza, in `runAgent` il modello viene sostituito.
 - **Chiamate scritte come testo** (`<default_api:…>`, `<tool_call>`): `runAgent` passa al modello successivo.
 
+### Modelli ritirati (`src/lib/ai/model-catalog.ts`)
+
+- **Niente ID scritti a mano fuori dal registro.** Un test (`catalogo.test.mts`) cerca nel codice le chiamate `google('…')`, `anthropic('…')` e `openai('…')` e fallisce se ne trova.
+- **Alias prima delle versioni.** Per Gemini si mettono prima gli alias `-latest`, che il fornitore aggiorna e non ritira. Gli ID con versione restano solo come ripiego.
+- **Catalogo dei fornitori.** Gli elenchi dei modelli (Gemini, Anthropic, OpenRouter) si scaricano in sottofondo al massimo una volta al giorno e si salvano nel database.
+  - Il registro salta gli ID che non compaiono nell'elenco.
+  - Un ID senza data conta come disponibile se nell'elenco c'è la sua versione datata.
+  - Senza elenco (offline o chiave assente) l'ID risulta "sconosciuto" e si prova lo stesso.
+- **Errori da ID ritirato.** Un errore "no longer available" o 404 segna l'ID come ritirato. `GET /api/ai/models` lo elenca in `ritirati`; con `?aggiorna=1` riscarica subito gli elenchi.
+
 ### G8: il guscio come servizio (`src/lib/agent/run.ts`, `POST /api/ai/agent`)
 
 - `runAgent({ compito, contesto?, gruppi?, strumenti?, modello?, maxPassi? })`, senza streaming:

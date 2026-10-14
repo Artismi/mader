@@ -17,6 +17,7 @@ import type { z } from 'zod'
 import { google } from '@/lib/ai/google'
 import { config } from '@/lib/db'
 import { getOpenRouterKey, getOpenRouterModels, type AiTask } from '@/lib/ai/model-provider'
+import { idState, markRetired, refreshStaleCatalogs, type IdState } from '@/lib/ai/model-catalog'
 
 export type Provider = 'openrouter' | 'anthropic' | 'google'
 export type Strength = 'forte' | 'medio' | 'debole'
@@ -85,9 +86,11 @@ export function keyState(env: NodeJS.ProcessEnv = process.env): KeyState {
 
 /** Modelli per fornitore e livello: il primo è il preferito, gli altri ripieghi nello stesso fornitore. */
 const DIRECT: Record<Exclude<Provider, 'openrouter'>, Record<AiTask, string[]>> = {
+  // alias senza data: Anthropic li sposta sull'ultima versione della famiglia
   anthropic: { design: ['claude-sonnet-5-5', 'claude-haiku-5-5'], general: ['claude-haiku-5-5', 'claude-sonnet-5-5'] },
-  // Gemma: gratuita e generosa, ma senza strumenti nativi: va bene per i ruoli a JSON, non per la chat con strumenti
-  google: { design: ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemma-4-31b-it'], general: ['gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemma-4-31b-it', 'gemma-4-26b-a4b-it'] },
+  // prima gli alias "-latest" (non vengono ritirati); gli ID con versione restano come ripiego e il catalogo
+  // li scarta quando il fornitore li ritira. Gemma: gratuita, senza strumenti nativi: solo ruoli a JSON
+  google: { design: ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-flash-lite-latest', 'gemma-4-31b-it'], general: ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemma-4-31b-it', 'gemma-4-26b-a4b-it'] },
 }
 
 const PREF_KEY = 'ai.fornitore'
@@ -139,7 +142,13 @@ export function noteFailure(c: { id: string }, e: unknown): 'quota' | 'salta' | 
   const kind = classifyError(e)
   if (kind === 'quota') markExhausted(c.id, /per.?day|daily/i.test(String((e as Error)?.message)) ? 3 * 3600_000 : 65_000)
   // modello inesistente: un giorno; servizio giù o richiesta rifiutata: dieci minuti
-  if (kind === 'salta') markExhausted(c.id, (e as { statusCode?: number })?.statusCode === 404 ? 24 * 3600_000 : 10 * 60_000)
+  const retired = (e as { statusCode?: number })?.statusCode === 404 || /no longer available|not found for api version|does not exist|deprecated/i.test(`${(e as Error)?.message ?? ''} ${(e as { responseBody?: string })?.responseBody ?? ''}`)
+  if (kind === 'salta') markExhausted(c.id, retired ? 24 * 3600_000 : 10 * 60_000)
+  // ID ritirato: lo ricorda il catalogo, e checkModelIds lo segnala nelle Impostazioni
+  if (kind === 'salta' && retired) {
+    const [provider, ...rest] = c.id.split(':')
+    if (provider === 'google' || provider === 'anthropic' || provider === 'openrouter') markRetired(provider, rest.join(':'))
+  }
   return kind
 }
 
@@ -184,7 +193,9 @@ export function candidatesFor(need: Need, opts: PickOptions = {}): ModelCandidat
   const keys = opts.keys ?? keyState()
   const first = choiceToProvider(opts.choice) ?? preferredProvider()
   const out: ModelCandidate[] = []
-  for (const provider of providerOrder(keys, first)) {
+  const providers = providerOrder(keys, first)
+  if (!opts.keys) refreshStaleCatalogs(providers)
+  for (const provider of providers) {
     // Google gratuito usa i contenuti per migliorare i prodotti: escluso per i lavori riservati
     if (opts.riservato && provider === 'google') continue
     for (const modelId of modelsFor(provider, need.task)) {
@@ -193,6 +204,8 @@ export function candidatesFor(need: Need, opts: PickOptions = {}): ModelCandidat
       if (need.vision && !profile.vision) continue
       if (need.structured && !profile.structured) continue
       const id = `${provider}:${modelId}`
+      // ritirato secondo l'elenco del fornitore: non si prova nemmeno
+      if (idState(provider, modelId) === 'ritirato') continue
       if (!opts.includeExhausted && isExhausted(id)) continue
       out.push({ id, provider, modelId, label: provider === 'openrouter' ? `openrouter:${modelId}` : modelId, profile, model: instantiate(provider, modelId) })
     }
@@ -266,4 +279,15 @@ export async function generateObjectWith<S extends z.ZodTypeAny>(
 ): Promise<{ object: z.infer<S>; label: string }> {
   const r = await withModels({ ...need, structured: true }, c => generateObject({ model: c.model, schema: args.schema, system: args.system, prompt: args.prompt, temperature: args.temperature, maxRetries: 0 }), opts)
   return { object: r.value.object as z.infer<S>, label: r.model.label }
+}
+
+/** Stato di ogni ID usato dal portale (registro + modelli OpenRouter scelti): per le Impostazioni e i test. */
+export function checkModelIds(): { fornitore: Provider; id: string; stato: IdState }[] {
+  const out: { fornitore: Provider; id: string; stato: IdState }[] = []
+  const seen = new Set<string>()
+  const add = (p: Provider, id: string) => { if (!seen.has(`${p}:${id}`)) { seen.add(`${p}:${id}`); out.push({ fornitore: p, id, stato: idState(p, id) }) } }
+  for (const p of ['anthropic', 'google'] as const) for (const t of ['design', 'general'] as AiTask[]) DIRECT[p][t].forEach(id => add(p, id))
+  const or = getOpenRouterModels()
+  add('openrouter', or.design); add('openrouter', or.general)
+  return out
 }
