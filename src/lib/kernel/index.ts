@@ -7,3 +7,8 @@ export * from './domains/client'
 export * from './domains/task'
 export * from './domains/idea'
 export * from './domains/post'
+export * from './events'
+
+import { wireEvents } from './events'
+// ogni azione che cambia qualcosa lascia un evento e, se nasce da un nodo, il link di provenienza
+wireEvents()

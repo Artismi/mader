@@ -215,3 +215,10 @@
 .os .loading { padding: 80px 0; text-align: center; font: 12px var(--mono); color: var(--t3); }
 
 @media (prefers-reduced-motion: reduce) { .os *, .os *::before, .os *::after { animation: none !important; transition: none !important; } }
+
+/* linea del tempo del nodo (K2) */
+.os .storia { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.os .storia li { display: grid; grid-template-columns: 7.5em 5.5em 1fr; gap: 10px; align-items: baseline; }
+.os .storia .t { color: var(--t3); font-variant-numeric: tabular-nums; }
+.os .storia .w { color: var(--t3); }
+.os .storia button { text-align: left; color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); }

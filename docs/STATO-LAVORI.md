@@ -16,6 +16,7 @@ File breve da leggere per primo in una sessione nuova, invece di rileggere conve
 - 960eb08: G5, la maestra sulle scritture (controlli in `verify`/`after`).
 - 13a764d: G6, banco di 20 compiti (gemini-flash-lite-latest 15/19 eseguiti).
 - K1 (commit "feat(kernel): K1 azioni uniche"): `src/lib/kernel`, domini task/idea/post/client usati da chat, Server Action, /os e Ctrl+K.
+- K2 (commit "feat(kernel): K2 eventi e provenienza"): tabella `events`, storia sul nodo, "Cambiato da ieri" in Oggi, link `origin` unico.
 
 ## In coda, una cosa alla volta
 1. **Guscio** (worktree brave-bohr): completare il registro dei modelli e `runAgent`; poi gli id dei modelli ritirati; dieta del prompt (da ~90k a meno di 15k token); G5; G6; poi K1–K3. Fermarsi dopo K3.

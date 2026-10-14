@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { generateTextWith } from '@/lib/ai/model-registry'
 import { messages, quotes } from '@/lib/db'
-import { runAction } from '@/lib/kernel'
+import { actorLabel, describe, runAction, timeline } from '@/lib/kernel'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 import { googleStatus } from '@/lib/google/auth'
 import { sendMail } from '@/lib/google/gmail'
@@ -29,7 +29,10 @@ export async function GET(req: Request) {
     }
     if (u.searchParams.has('ref')) {
       const n = await getNode(u.searchParams.get('ref')!)
-      return n ? NextResponse.json(n) : NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+      if (!n) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+      // linea del tempo (K2): azioni dell'utente e dell'IA sul nodo, sui nodi nati da lui e, per un cliente, a suo nome
+      const storia = timeline(n.ref, { limit: 12 }).map(e => ({ at: e.at, who: actorLabel(e.actor), what: describe(e), ref: e.ref !== n.ref ? e.ref ?? undefined : undefined }))
+      return NextResponse.json({ ...n, storia })
     }
     if (u.searchParams.has('q')) return NextResponse.json(search(u.searchParams.get('q')!))
     if (u.searchParams.has('google')) return NextResponse.json(googleStatus())
@@ -98,7 +101,6 @@ export async function POST(req: Request) {
     // stessa azione del pulsante e dell'assistente (nucleo, K1)
     const r = await runAction<{ id: string }>('task.create', { title, clientId: client?.id, category: 'general', deadlinePattern: body.deadline ?? undefined }, { actor: 'user', origin: body.fromRef })
     if (!r.ok) return NextResponse.json({ error: r.errors.join(' ') }, { status: 400 })
-    if (body.fromRef) linkOrigin(body.fromRef, 'task', r.output.id)
     return NextResponse.json({ ref: `task:${r.output.id}` })
   }
 

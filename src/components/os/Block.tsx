@@ -36,7 +36,7 @@ export function Block() {
           <div className="col">
             {err ? <p className="loading">non riesco a caricarlo · {err}</p>
               : !node ? <p className="loading">un attimo…</p>
-              : <View node={node} mode={step.mode} />}
+              : <><View node={node} mode={step.mode} />{step.mode === 'view' && <Storia node={node} />}</>}
           </div>
         </div>
         {node && <Petals node={node} />}
@@ -376,6 +376,26 @@ function Reply({ node }: { node: NodeDetail }) {
 }
 
 /* Petali: i rami possibili si aprono a ventaglio dal + ; il resto si attenua */
+/** Linea del tempo del nodo (K2): chi ha fatto cosa, utente o IA, dal più recente. */
+function Storia({ node }: { node: NodeDetail }) {
+  const go = useOs(s => s.go)
+  if (!node.storia?.length) return null
+  return (
+    <>
+      <h2>Storia</h2>
+      <ol className="storia">
+        {node.storia.map((e, i) => (
+          <li key={i}>
+            <span className="t">{new Date(e.at).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="w">{e.who}</span>
+            {e.ref ? <button onClick={() => go(e.ref!)}>{e.what}</button> : <span>{e.what}</span>}
+          </li>
+        ))}
+      </ol>
+    </>
+  )
+}
+
 function Petals({ node }: { node: NodeDetail }) {
   const open = useOs(s => s.petals)
   const setPetals = useOs(s => s.setPetals)
