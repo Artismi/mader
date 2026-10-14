@@ -53,6 +53,11 @@ function initDb(): DatabaseSync {
     db.exec("ALTER TABLE clients ADD COLUMN meta_ig_account_id TEXT")
   } catch (e) { /* Already exists */ }
 
+  // Metadati di produzione (circuito Instagram: formato, formula hook, punteggi)
+  try {
+    db.exec("ALTER TABLE editorial_posts ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
+  } catch (e) { /* Already exists */ }
+
     db.exec(`CREATE TABLE IF NOT EXISTS design_projects (
       id           TEXT PRIMARY KEY,
       client_id    TEXT REFERENCES clients(id) ON DELETE SET NULL,
@@ -75,24 +80,33 @@ function initDb(): DatabaseSync {
 }
 
 function seedDefaults(db: DatabaseSync) {
-  const row = db.prepare('SELECT COUNT(*) as c FROM skills').get() as { c: number }
-  if (row.c === 0) {
-    const insert = db.prepare(`
-      INSERT INTO skills (id, name, slug, description, content, triggers, active, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    for (const skill of DEFAULT_SKILLS) {
-      insert.run(
-        randomUUID(),
-        skill.name,
-        skill.slug,
-        skill.description,
-        skill.content,
-        JSON.stringify(skill.triggers),
-        skill.active ? 1 : 0,
-        skill.sort_order
-      )
-    }
+  // DEFAULT_SKILLS contiene slug duplicati (vince l'ultima definizione, come
+  // nel vecchio ciclo di update): li deduplico per non violare UNIQUE(slug).
+  const bySlug = new Map<string, (typeof DEFAULT_SKILLS)[number]>()
+  for (const skill of DEFAULT_SKILLS) bySlug.set(skill.slug, skill)
+
+  // Inserisce le skill nuove anche su DB esistenti (es. circuito ig-*) e
+  // aggiorna contenuto/descrizione/trigger di quelle già presenti, senza
+  // toccare active/sort_order scelti dall'utente.
+  const upsert = db.prepare(`
+    INSERT INTO skills (id, name, slug, description, content, triggers, active, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(slug) DO UPDATE SET
+      content = excluded.content,
+      description = excluded.description,
+      triggers = excluded.triggers
+  `)
+  for (const skill of bySlug.values()) {
+    upsert.run(
+      randomUUID(),
+      skill.name,
+      skill.slug,
+      skill.description,
+      skill.content,
+      JSON.stringify(skill.triggers),
+      skill.active ? 1 : 0,
+      skill.sort_order
+    )
   }
 
   // Sincronizza sempre architecture dai defaults (routing Progettista, regole prompt)
@@ -101,12 +115,6 @@ function seedDefaults(db: DatabaseSync) {
     db.prepare("UPDATE system_config SET value = ? WHERE key = 'architecture'").run(DEFAULT_ARCHITECTURE)
   } else {
     db.prepare("INSERT INTO system_config (key, value) VALUES ('architecture', ?)").run(DEFAULT_ARCHITECTURE)
-  }
-
-  // Aggiorna contenuto, descrizione e triggers delle skill esistenti se il codice è cambiato
-  const update = db.prepare('UPDATE skills SET content = ?, description = ?, triggers = ? WHERE slug = ?')
-  for (const skill of DEFAULT_SKILLS) {
-    update.run(skill.content, skill.description, JSON.stringify(skill.triggers), skill.slug)
   }
 }
 

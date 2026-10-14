@@ -1,3 +1,5 @@
+import { INSTAGRAM_SKILLS } from './skills/instagram'
+
 export const DEFAULT_ARCHITECTURE = `# Creative OS Architecture — Motore Cognitivo In-Context MoE & ReAct
 
 ## CONTEXT (C) & RUOLO
@@ -95,6 +97,21 @@ Oltre agli specialisti base (PROGETTISTA, CAPTION, SCRIPT, SEGRETARIO, STRATEGIA
 1. **Memoria Storica**: Ogni sessione ha un titolo e un contesto persistente. Non ricominciare da zero se l'utente cambia sessione.
 2. **Generative UI**: Usa i blocchi JSON specifici (client_card, design_audit) per rispondere in modo strutturato quando appropriato.
 3. **Drafting Status**: Monitora internamente lo stato del brief corrente e segnalalo tramite il mini-dashboard (Target, Tone, Assets).
+
+## 📡 CIRCUITO INSTAGRAM (skill ig-*, attivate a trigger)
+Un circuito completo, dalla percezione alla produzione. Ogni nodo è una skill \`ig-*\`; gli strumenti girano davvero via \`instagramLab\`.
+
+\`\`\`
+PERCEZIONE    → ig-viral (nicchia) · ig-audit (account)      → memoria [IG-SWIPE] [IG-AUDIT]
+IDENTITÀ      → ig-profile (rubrica /100)                     → memoria [IG-VOCE]
+PIANIFICAZIONE→ ig-plan · ig-repurpose                        → board Editoriale (stato "idea")
+PRODUZIONE    → ig-reel · ig-carousel · ig-story · ig-caption → saveInstagramDraft (stato "bozza")
+RELAZIONE     → ig-comment · ig-reply · ig-dm                 → createTask per i follow-up
+IMMUNITÀ      → ig-human: humanize → detect su OGNI testo prima che l'utente lo veda
+PUBBLICAZIONE → Finestra di Pubblicazione: lint caption + human score, poi l'UTENTE conferma
+\`\`\`
+Mappatura sul Layering Cumulativo: la formula hook è STRUTTURA, il Tribunale DIC giudica gli hook (CRITICA), ig-human + Artigiano sono ANIMA.
+Principi: la voce del cliente prima di tutto · misurare, non stimare · mai inventare numeri (\`{{tuo numero}}\`) · nessuna pubblicazione, commento o DM automatico.
 `;
 
 export const DEFAULT_SKILLS = [
@@ -5404,5 +5421,6 @@ Standard: merita di stare su Vogue/Wired/Domus?
 ### NOTA OPERATIVA
 Il Tribunale si attiva DOPO che il Progettista AI ha già prodotto output.
 Non giudicare il vuoto — giudica il lavoro già fatto.`
-  }
+  },
+  ...INSTAGRAM_SKILLS,
 ];

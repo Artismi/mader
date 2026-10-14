@@ -694,7 +694,19 @@ export async function POST(req: Request) {
     const creativeKeywords = ['post', 'design', 'canvas', 'poster', 'slide', 'immagine', 'grafica', 'logo', 'layout', 'brand'];
     const isCreativeQuery = creativeKeywords.some(k => userQuery.toLowerCase().includes(k));
 
+    // Circuito Instagram: le skill ig-* entrano solo a trigger (match a parola intera,
+    // così "dm" non scatta su "admin"); ig-human entra con qualunque altro nodo ig-*.
+    const q = userQuery.toLowerCase()
+    const hitsTrigger = (t: string) =>
+      new RegExp(`(^|[^\\p{L}\\p{N}])${t.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}\\p{N}])`, 'u').test(q)
+    const igActive = new Set(
+      allActiveSkills.filter(s => s.slug.startsWith('ig-') && (s.triggers || []).some(hitsTrigger)).map(s => s.slug)
+    )
+    if (igActive.size > 0) igActive.add('ig-human')
+
     const filteredSkills = allActiveSkills.filter(s => {
+      if (s.slug.startsWith('ig-')) return igActive.has(s.slug)
+
       // Le skill core (non handbook, non DIC operativi) sono sempre incluse
       if (!s.slug.startsWith('design-') && !s.slug.startsWith('dic-skill-') && s.slug !== 'dic-tribunale') return true;
       
