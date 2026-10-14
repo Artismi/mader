@@ -2396,6 +2396,26 @@ function tint(src: HTMLCanvasElement, color: string) {
   return k.c
 }
 
+/**
+ * Rimappa un pezzo sui colori della tavola: la luminosità di ogni pixel sceglie
+ * il colore lungo una scala (scuri → medi → chiari). Rilievo, lucido, usura e
+ * trama restano; cambia solo la tavolozza, che diventa quella della pagina.
+ */
+function gradientMap(src: HTMLCanvasElement, stops: string[]) {
+  const k = makeCanvas(src.width, src.height)
+  k.ctx.drawImage(src, 0, 0)
+  const d = k.ctx.getImageData(0, 0, src.width, src.height), p = d.data
+  const cols = stops.map(hexRgb), n = cols.length - 1
+  for (let i = 0; i < p.length; i += 4) {
+    if (!p[i + 3]) continue
+    const l = (p[i] * 0.299 + p[i + 1] * 0.587 + p[i + 2] * 0.114) / 255
+    const f = Math.min(n - 1e-6, l * n), j = Math.floor(f), u = f - j, a = cols[j], b = cols[j + 1]
+    p[i] = a[0] + (b[0] - a[0]) * u; p[i + 1] = a[1] + (b[1] - a[1]) * u; p[i + 2] = a[2] + (b[2] - a[2]) * u
+  }
+  k.ctx.putImageData(d, 0, 0)
+  return k.c
+}
+
 /** disegna un pezzo dentro un riquadro, centrato, senza deformarlo */
 function placeIn(ctx: Ctx, src: HTMLCanvasElement, x: number, y: number, w: number, h: number, align: 'center' | 'bottom' = 'center') {
   const k = Math.min(w / src.width, h / src.height), dw = src.width * k, dh = src.height * k
@@ -2433,7 +2453,7 @@ const locandina: Recipe = {
     P.sel('layout', 'Impaginazione', ['Protagonista', 'Tipo dietro, elemento davanti', 'Copertina', 'Lockup e timbro']),
     P.sel('hero', 'Elemento', HEROES.map(x => x.label)), P.sel('heroMat', 'Materia elemento', HERO_MATS.map(x => x.label)),
     P.sel('stampKind', 'Nell\'angolo', STAMPS.map(x => x.label), 1), { key: 'stamp', label: 'Scritta del timbro', type: 'text', def: 'Ingresso libero' },
-    P.sel('corner', 'Angolo', ['Dove c\'è spazio', 'Basso a destra', 'Alto a destra', 'Basso a sinistra', 'Alto a sinistra']),
+    P.tog('harmony', 'Timbro nei colori della pagina', true), P.sel('corner', 'Angolo', ['Dove c\'è spazio', 'Basso a destra', 'Alto a destra', 'Basso a sinistra', 'Alto a sinistra']),
     P.sel('pair', 'Caratteri', PAIRS.map(x => x.label)), P.sel('pal', 'Colori', DESIGN_PALS.map(x => x.label)), P.range('grain', 'Grana', 0, 30, 8)],
   render: o => {
     const t = dTone(o), S = SS(o), W = o.W, H = o.H
@@ -2517,7 +2537,12 @@ const locandina: Recipe = {
     const st = STAMPS[num(o, 'stampKind')] ?? STAMPS[0]
     if (num(o, 'stampKind') > 0) {
       const r = rng(o.seed ^ 0x5a17)
-      const src = piece(st.rc(), o, S * 0.7, st.over(o))
+      let src = piece(st.rc(), o, S * 0.7, st.over(o))
+      if (on(o, 'harmony')) {
+        // scala della pagina: su carta chiara inchiostro → accento → carta; su fondo scuro fondo → accento → inchiostro chiaro
+        const paper = t.dark ? t.ink : '#fffaf1'
+        src = gradientMap(src, t.dark ? [darken(t.bg, 0.3), t.acc, paper] : [t.ink, t.acc, paper])
+      }
       const size = S * 0.27, corner = num(o, 'corner')
       // posti possibili: i quattro angoli a cavallo del margine e qualche punto lungo i bordi
       const L = m + size * 0.42, R = W - m - size * 0.42, T = m + size * 0.55, B = H - m - size * 0.62
