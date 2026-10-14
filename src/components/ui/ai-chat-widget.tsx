@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, getToolName, isTextUIPart, isToolUIPart, type UIMessage } from 'ai';
+import { DefaultChatTransport, getToolName, isTextUIPart, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses, type UIMessage } from 'ai';
 import { Input } from "@/components/ui/input";
 import { Send, Bot, Sparkles, Trash2, ChevronDown, User, FolderOpen, X, Plus, FileText, Loader2, History, MessageSquare, ExternalLink, Settings2, CheckCircle2, Circle, Search, Library, PenTool, AlertCircle, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -298,6 +298,65 @@ function GenerativeUI({ data }: { data: any }) {
     return <p className="text-xs italic text-white/40">Componente UI non supportato</p>
 }
 
+// ── Guscio agente: conferme e piano di lavoro (docs/guscio-agente.md) ─────────
+
+type ToolPart = Parameters<typeof getToolName>[0];
+
+/** Cosa sta per succedere, detto in italiano, per gli strumenti che chiedono conferma. */
+function approvalLabel(name: string, input: Record<string, unknown> | undefined): string {
+    if (name === 'clearBoard') return input?.boardName ? `Svuotare la tavola "${String(input.boardName)}"` : 'Svuotare tutte le tavole del canvas';
+    if (name === 'deleteElements') return `Eliminare ${(input?.ids as unknown[] | undefined)?.length ?? 0} elementi dal canvas`;
+    if (name === 'createFinancialDocument') return `Emettere la fattura "${String(input?.title ?? '')}"`;
+    return `Eseguire ${name}`;
+}
+
+function ApprovalCard({ part, onAnswer }: { part: ToolPart; onAnswer: (id: string, approved: boolean) => void }) {
+    const id = (part as { approval?: { id: string } }).approval?.id;
+    if (!id) return null;
+    return (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 space-y-2">
+            <p className="text-[11px] font-bold text-amber-200/90 flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5" /> Serve la tua conferma
+            </p>
+            <p className="text-[12px] text-white/85">{approvalLabel(getToolName(part), part.input as Record<string, unknown> | undefined)}</p>
+            <div className="flex gap-2">
+                <button onClick={() => onAnswer(id, true)} className="px-3 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-100 text-[10px] font-black uppercase tracking-widest">Consenti</button>
+                <button onClick={() => onAnswer(id, false)} className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black uppercase tracking-widest">Rifiuta</button>
+            </div>
+        </div>
+    );
+}
+
+type PlanStep = { testo: string; stato: 'da_fare' | 'in_corso' | 'fatto' };
+
+/** L'ultimo piano scritto dal modello con updatePlan, come checklist. */
+function PlanCard({ steps }: { steps: PlanStep[] }) {
+    return (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 space-y-1.5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-white/40">Piano di lavoro · {steps.filter(s => s.stato === 'fatto').length}/{steps.length}</p>
+            {steps.map((s, i) => (
+                <div key={i} className="flex items-start gap-2 text-[12px]">
+                    {s.stato === 'fatto' ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-accent shrink-0" />
+                        : s.stato === 'in_corso' ? <Loader2 className="w-3.5 h-3.5 mt-0.5 animate-spin text-white/70 shrink-0" />
+                        : <Circle className="w-3.5 h-3.5 mt-0.5 text-white/25 shrink-0" />}
+                    <span className={cn(s.stato === 'fatto' ? 'text-white/40 line-through' : 'text-white/85')}>{s.testo}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function latestPlan(m: UIMessage): PlanStep[] | null {
+    for (let i = m.parts.length - 1; i >= 0; i--) {
+        const p = m.parts[i];
+        if (isToolUIPart(p) && getToolName(p) === 'updatePlan') {
+            const passi = (p.input as { passi?: PlanStep[] } | undefined)?.passi;
+            if (Array.isArray(passi) && passi.length) return passi;
+        }
+    }
+    return null;
+}
+
 // Canvas tools are client-side (no execute on the server). Their UI state is
 // 'input-available' (not 'output-available') so they need a dedicated check.
 const CANVAS_TOOLS = new Set(['composeDesign', 'createDesignBoards', 'updateCanvasElements', 'editDesign', 'clearBoard', 'deleteElements', 'getCanvasState', 'generateConceptualSchema']);
@@ -495,6 +554,8 @@ export function AIChatWidget() {
         return clientSetting.name                               // esplicito: nome cliente
     }, [clientSetting])
 
+    const executedToolCalls = useRef(new Set<string>());
+
     const onFinish = useCallback(
         ({ message }: { message: UIMessage }) => {
             // Salva nel ChatStore locale
@@ -510,6 +571,9 @@ export function AIChatWidget() {
                 const toolName = getToolName(part);
 
                 if (CANVAS_TOOLS.has(toolName) && (part.state === 'input-available' || part.state === 'output-available')) {
+                    // con le conferme lo stesso messaggio continua: ogni chiamata si esegue una volta sola
+                    if (executedToolCalls.current.has(part.toolCallId)) continue;
+                    executedToolCalls.current.add(part.toolCallId);
                     pushAiCommand({
                         toolName,
                         result: undefined,
@@ -525,11 +589,16 @@ export function AIChatWidget() {
         [router, pushAiCommand, activeSessionId, addMessage],
     );
 
-    const { messages, status, sendMessage, setMessages, error, stop, regenerate } = useChat({
+    const { messages, status, sendMessage, setMessages, error, stop, regenerate, addToolApprovalResponse } = useChat({
         transport,
         messages: initialMessages,
         onFinish,
+        // dopo Consenti/Rifiuta la conversazione riparte da sola
+        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     });
+    const answerApproval = useCallback((id: string, approved: boolean) => {
+        addToolApprovalResponse({ id, approved, reason: approved ? undefined : "L'utente ha rifiutato." });
+    }, [addToolApprovalResponse]);
 
     // Sincronizza messaggi AI con lo store quando cambiano
     useEffect(() => {
@@ -894,8 +963,10 @@ export function AIChatWidget() {
                     </div>
                 ) : (
                     messages.map(m => {
-                        const rawText = m.role === 'user' ? userMessageDisplayText(m) : assistantMessageDisplayText(m);
-                        if (!rawText) return null;
+                        const rawText = (m.role === 'user' ? userMessageDisplayText(m) : assistantMessageDisplayText(m)) ?? '';
+                        const approvals = m.role === 'assistant' ? m.parts.filter(isToolUIPart).filter(p => p.state === 'approval-requested') : [];
+                        const plan = m.role === 'assistant' ? latestPlan(m) : null;
+                        if (!rawText && approvals.length === 0 && !plan) return null;
 
                         // Parsing per separare i ragionalmenti degli agenti dall'output finale
                         let reasoningContent = '';
@@ -941,6 +1012,8 @@ export function AIChatWidget() {
                                     {/* Assistant - Multi-Layered Forge UI */}
                                     {m.role === 'assistant' && (
                                         <div className="w-full space-y-3">
+                                            {plan && <PlanCard steps={plan} />}
+                                            {approvals.map(p => <ApprovalCard key={p.toolCallId} part={p} onAnswer={answerApproval} />)}
                                             {reasoningContent && (
                                                 <ForensicTimeline content={reasoningContent} isStreaming={isStreaming && (rawText.includes('<agent_step>') && !rawText.includes('</agent_step>'))} />
                                             )}

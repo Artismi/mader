@@ -46,12 +46,13 @@ export function capResult(out: unknown, max = DEFAULT_MAX): unknown {
   const note = `Risultato tagliato (${json.length} caratteri, massimo ${max}): restringi la richiesta con filtri o un limite più basso.`
   if (out && typeof out === 'object' && !Array.isArray(out)) {
     const o = { ...(out as Record<string, unknown>) }
-    const strings = Object.entries(o).filter(([, v]) => typeof v === 'string').sort((a, b) => (b[1] as string).length - (a[1] as string).length)
+    const ELLIPSIS = ' […]'
+    const strings = Object.entries(o).filter(([, v]) => typeof v === 'string' && v.length > 200).sort((a, b) => (b[1] as string).length - (a[1] as string).length)
     for (const [k, v] of strings) {
       const over = JSON.stringify(o).length - max + note.length + 40
       if (over <= 0) break
       const s = v as string
-      o[k] = s.slice(0, Math.max(200, s.length - over)) + ' […]'
+      o[k] = s.slice(0, Math.max(200, s.length - over - ELLIPSIS.length)) + ELLIPSIS
     }
     if (JSON.stringify(o).length <= max + note.length + 40) return { ...o, truncated: true, note }
   }

@@ -1,11 +1,15 @@
 import * as aiSdk from 'ai'
 import { convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type UIMessageStreamWriter } from 'ai'
-import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { skills, config, tasks, clients, ideas, quotes, editorialPosts } from '@/lib/db'
 import { labInputSchema, runLab, instagramScores } from '@/lib/ai/instagram'
-import { messageText, routeOnDemandSkills, formatSkillCatalog } from '@/lib/ai/skill-router'
+import { messageText, routeOnDemandSkills } from '@/lib/ai/skill-router'
+import { buildToolSet, toolGuide, type AgentToolDef } from '@/lib/agent/tools'
+import { createTrace } from '@/lib/agent/trace'
+import { isOnDemandSkill, reminderText, stableSystem, withReminder } from '@/lib/agent/prompt'
+import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
+import { SYSTEM_TOOLS } from '@/lib/agent/system-tools'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
@@ -18,7 +22,7 @@ import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
 
-export const maxDuration = 30
+export const maxDuration = 120 // lavori in più passi e regia dello Studio
 
 // Inizializza vault watcher se non già attivo
 initVaultWatcher()
@@ -702,64 +706,26 @@ export async function POST(req: Request) {
     }
     // ── END CREW DISPATCHER ──────────────────────────────────────────────────
 
-    // 2. SYSTEM PROMPT (CO-STAR Framework)
+    // 2. GUSCIO AGENTE (docs/guscio-agente.md): prompt stabile + promemoria, strumenti con rischio
     const architecture = config.get('architecture') || DEFAULT_ARCHITECTURE
     const allActiveSkills = skills.getActive()
-    
-    // Trigger-Based Injection: filtriamo gli Handbook di design per evitare Instruction Fatigue.
-    // Ma se la query è creativa, forziamo l'inclusione degli Handbook DIC per garantire la qualità.
+
+    // Le parole chiave scelgono solo il modello (forte per la grafica, economico per il resto);
+    // istruzioni e strumenti non cambiano più con la domanda.
     const creativeKeywords = ['post', 'design', 'canvas', 'poster', 'slide', 'immagine', 'grafica', 'logo', 'layout', 'brand'];
     const isCreativeQuery = creativeKeywords.some(k => userQuery.toLowerCase().includes(k));
 
-    // Skill a richiesta (ig-*): il router inietta quelle attivate da trigger recenti,
-    // pagina corrente o tool già usati; le altre vanno nel catalogo per `loadSkill`.
+    // Skill a richiesta: il router sceglie le ig-* attive (trigger recenti, pagina, tool usati);
+    // gli handbook design/dic entrano con le richieste creative o con un loro trigger.
+    // Le attive vanno nel promemoria; il catalogo stabile le elenca tutte per `loadSkill`.
     const onDemand = routeOnDemandSkills({ skills: allActiveSkills, messages, pathname })
     const injectedOnDemand = new Set(onDemand.inject.map(s => s.slug))
-
-    const filteredSkills = allActiveSkills.filter(s => {
+    const onDemandSkills = allActiveSkills.filter(isOnDemandSkill)
+    const activeSkills = onDemandSkills.filter(s => {
       if (s.slug.startsWith('ig-')) return injectedOnDemand.has(s.slug)
-
-      // Le skill core (non handbook, non DIC operativi) sono sempre incluse
-      if (!s.slug.startsWith('design-') && !s.slug.startsWith('dic-skill-') && s.slug !== 'dic-tribunale') return true;
-      
-      // Se è una query creativa, gli Handbook DIC sono fondamentali
-      if (isCreativeQuery) return true;
-
-      // Altrimenti seguiamo i trigger specifici
-      const triggers = s.triggers || [];
-      const hasTrigger = triggers.some(t => userQuery.toLowerCase().includes(t.toLowerCase()));
-      return hasTrigger;
+      if (isCreativeQuery) return true
+      return (s.triggers || []).some(t => userQuery.toLowerCase().includes(t.toLowerCase()))
     })
-
-    const skillsBlock = filteredSkills.map(s => s.content).filter(Boolean).join('\n\n---\n\n')
-
-    const SYSTEM_PROMPT = [
-      architecture,
-      ctx.snapshot,
-      canvasSnapshot
-        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements (testi, colori, posizioni) ed editDesign (allinea, distribuisci, pathfinder, offset/sticker, ripetizioni, fusioni, testo curvo, maschere, ricolora, palette, livelli, esporta). Per modifiche chirurgiche NON usare clearBoard.\n---`
-        : '',
-      isCreativeQuery
-        ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
-        : '',
-      graphicLibraryPrompt(),
-      '## Skill disponibili — istruzioni operative',
-      skillsBlock,
-      formatSkillCatalog(onDemand.catalog),
-      ctx.clientVaults.length > 0
-        ? `\n\n---\n${ctx.clientVaults.join('\n\n---\n')}\n---`
-        : '',
-      ctx.activatedFiles.length > 0
-        ? `\n\n---\n${ctx.activatedFiles.join('\n\n---\n')}\n---`
-        : '',
-      ctx.ragChunks.length > 0
-        ? `\n\n---\n## Dal vault (Riferimenti rilevanti)\n${ctx.ragChunks.join('\n\n---\n')}\n---`
-        : '',
-      ctx.memories.length > 0
-        ? `\n\n---\n## Ricordo (Fatti persistenti)\n${ctx.memories.map(m => m.content).join('\n')}\n---`
-        : '',
-    ].filter(Boolean).join('\n\n')
-    const modelMessages = await convertToModelMessages(messages)
 
     // Le richieste grafiche (o fatte con il canvas aperto) vanno al modello forte,
     // il resto a quello economico
@@ -770,25 +736,10 @@ export async function POST(req: Request) {
     const lowLevelDesign = isStrongDesignModel(modelLabel)
     console.log(`[ai] richiesta ${task} → ${modelLabel}${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
-    // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
-    const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
-
-    const result = tracedStreamText({
-      model,
-      system: lowLevelDesign ? SYSTEM_PROMPT : SYSTEM_PROMPT + COMPOSE_ONLY_NOTE,
-      messages: modelMessages,
-      stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought (AI SDK v6)
-      // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: 'canvas-ai-agent',
-        metadata: {
-          modelId: modelLabel,
-          hasCanvas: !!canvasSnapshot,
-        },
-      },
-      tools: {
-        createTask: tool({
+    const trace = createTrace(modelLabel)
+    const d = <S extends z.ZodTypeAny>(def: AgentToolDef<S>) => def as unknown as AgentToolDef<z.ZodTypeAny>
+    const defs: AgentToolDef<z.ZodTypeAny>[] = [
+        d({ name: 'createTask', group: 'lavoro', risk: 'write',
           description: 'Crea un nuovo incarico nel sistema.',
           inputSchema: taskSchema,
           execute: async ({ title, category, deadlinePattern, clientId }: z.infer<typeof taskSchema>) => {
@@ -815,7 +766,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        createRecurringEngagement: tool({
+        d({ name: 'createRecurringEngagement', group: 'lavoro', risk: 'write',
           description: 'Crea slot ricorrenti per impegni fissi settimanali.',
           inputSchema: recurringSchema,
           execute: async ({ title, days, startHour, endHour, startDate, endDate }: z.infer<typeof recurringSchema>) => {
@@ -853,7 +804,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        readTasks: tool({
+        d({ name: 'readTasks', group: 'lavoro', risk: 'read',
           description: 'Legge gli incarichi dal sistema con filtri opzionali.',
           inputSchema: z.object({
             status: z.enum(['todo', 'in_progress', 'done', 'all']).optional(),
@@ -862,11 +813,12 @@ export async function POST(req: Request) {
             limit: z.number().int().min(1).max(20).optional(),
           }),
           execute: async ({ status, category, clientId, limit }) => {
+            // il filtro per cliente prima veniva ignorato: si legge più largo e si filtra qui
             const allTasks = tasks.getAll({
               status: status === 'all' ? undefined : status,
               category,
-              limit: limit || 10,
-            })
+              limit: clientId ? 200 : limit || 10,
+            }).filter(t => !clientId || (t.client_id ?? '').startsWith(clientId)).slice(0, limit || 10)
             if (allTasks.length === 0) return { success: true, message: 'Nessun task trovato.' }
             const formatted = allTasks.map(t => {
               const d = t.deadline ? new Date(t.deadline).toLocaleDateString('it-IT') : 'senza scadenza'
@@ -876,7 +828,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        updateTaskStatus: tool({
+        d({ name: 'updateTaskStatus', group: 'lavoro', risk: 'write',
           description: 'Aggiorna lo stato di un incarico esistente.',
           inputSchema: z.object({
             taskId: z.string().describe('ID parziale del task (almeno 8 caratteri)'),
@@ -891,7 +843,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        createIdea: tool({
+        d({ name: 'createIdea', group: 'idee', risk: 'write',
           description: 'Cattura una nuova idea creativa nel sistema.',
           inputSchema: z.object({
             text: z.string().describe("Il contenuto dell'idea"),
@@ -913,7 +865,7 @@ export async function POST(req: Request) {
           }
         }),
 
-        searchClient: tool({
+        d({ name: 'searchClient', group: 'clienti', risk: 'read',
           description: 'Cerca un cliente nel vault per recuperare dettagli brand o progetto.',
           inputSchema: z.object({ name: z.string() }),
           execute: async ({ name }) => {
@@ -927,13 +879,13 @@ export async function POST(req: Request) {
           }
         }),
 
-        loadSkill: tool({
+        d({ name: 'loadSkill', group: 'piano', risk: 'read',
           description: 'Carica le istruzioni complete di una skill del catalogo "Skill a richiesta". Chiamalo appena la richiesta tocca quella competenza, poi segui le istruzioni restituite.',
           inputSchema: z.object({ slug: z.string().describe('Slug esatto dal catalogo, es. "ig-reel"') }),
           execute: async ({ slug }) => {
             const skill = allActiveSkills.find(s => s.slug === slug)
             if (!skill?.content) {
-              return { success: false, message: `Skill "${slug}" non trovata. Disponibili: ${onDemand.catalog.map(s => s.slug).join(', ')}` }
+              return { success: false, message: `Skill "${slug}" non trovata. Disponibili: ${onDemandSkills.map(s => s.slug).join(', ')}` }
             }
             // ig-human è il filtro finale di ogni nodo ig-*: lo consegno insieme
             const human = slug.startsWith('ig-') && slug !== 'ig-human' && !injectedOnDemand.has('ig-human')
@@ -943,7 +895,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        instagramLab: tool({
+        d({ name: 'instagramLab', group: 'social', risk: 'read',
           description: 'Strumenti del circuito Instagram (skill ig-*), calcolati davvero e in locale: scoreHooks (classifica hook, 5 controlli), beatSheet (copione → beat temporizzati), lintCaption (finestra feed 125 car., hashtag, CTA, termini di ricerca), humanize (pulizia impronte AI + flag strutturali), detect (human score 5 controlli, con compareTo mostra il delta), swipe (multiplo outlier sulla mediana per account), scoreProfile (rubrica /100), polish (humanize → detect → lintCaption in un colpo). Usalo invece di stimare a occhio.',
           inputSchema: labInputSchema,
           execute: async (input: z.infer<typeof labInputSchema>) => {
@@ -952,7 +904,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        saveInstagramDraft: tool({
+        d({ name: 'saveInstagramDraft', group: 'social', risk: 'write',
           description: 'Salva un contenuto Instagram approvato dall\'utente nel piano editoriale (board Editoriale) con formato, formula hook e punteggi. Usalo SOLO dopo il "sì" dell\'utente. Non pubblica nulla.',
           inputSchema: z.object({
             client: z.string().describe('ID cliente (anche i primi 8 caratteri) o nome'),
@@ -990,7 +942,7 @@ export async function POST(req: Request) {
           },
         }),
 
-        remember: tool({
+        d({ name: 'remember', group: 'memoria', risk: 'write',
           description: 'Memorizza un fatto persistente o una preferenza del cliente nel sistema (Memory).',
           inputSchema: z.object({
             content: z.string().describe('Il fatto da ricordare'),
@@ -1003,7 +955,9 @@ export async function POST(req: Request) {
           },
         }),
 
-        createFinancialDocument: tool({
+        d({ name: 'createFinancialDocument', group: 'finanze', risk: 'write',
+          // la fattura ha valore fiscale: conferma dell'utente; il preventivo resta una bozza libera
+          needsApproval: (i: { type: string }) => i.type === 'fattura',
           description: 'Crea un preventivo o una fattura nel sistema basandosi sui dettagli forniti dal cliente o discussi.',
           inputSchema: z.object({
             type: z.enum(['preventivo', 'fattura']),
@@ -1041,7 +995,7 @@ export async function POST(req: Request) {
           }
         }),
 
-        generateAIImage: tool({
+        d({ name: 'generateAIImage', group: 'studio', risk: 'read',
           description: 'Genera un\'immagine tramite prompt testuale fotografico o illustrazione. Restituisce un URL da usare nel tool createDesignBoards o updateCanvasElements.',
           inputSchema: z.object({
             prompt: z.string().describe('Il prompt in inglese dettagliato per l\'immagine (soggetto + stile + illuminazione + mood).')
@@ -1059,13 +1013,13 @@ export async function POST(req: Request) {
         // Canvas tools: hanno execute stub per permettere il chaining multi-step
         // (stopWhen: stepCountIs). L'esecuzione reale avviene client-side via handleAICommand;
         // il server ritorna solo una conferma immediata.
-        composeDesign: tool({
+        d({ name: 'composeDesign', group: 'studio', risk: 'write',
           description: composeToolDescription(),
           inputSchema: z.object({ boards: z.array(composeBoardSchema).min(1) }),
           execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
         }),
 
-        ...(lowLevelDesign ? { createDesignBoards: tool({
+        ...(lowLevelDesign ? [d({ name: 'createDesignBoards', group: 'studio', risk: 'write',
           description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
 Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
@@ -1111,9 +1065,9 @@ QUANTITÀ BOARD:
             success: true,
             rendered: boards?.length ?? 0,
           }),
-        }) } : {}),
+        })] : []),
 
-        updateCanvasElements: tool({
+        d({ name: 'updateCanvasElements', group: 'studio', risk: 'write',
           description: 'Modifica coordinate, testi, font, colori ecc. in elementi esistenti del canvas.',
           inputSchema: z.object({
             updates: z.array(canvasUpdateSchema).describe(
@@ -1126,13 +1080,13 @@ QUANTITÀ BOARD:
           }),
         }),
 
-        editDesign: tool({
+        d({ name: 'editDesign', group: 'studio', risk: 'write',
           description: designOpsToolDescription,
           inputSchema: z.object({ ops: z.array(designOpSchema).min(1) }),
           execute: async ({ ops }) => ({ success: true, ops: ops.length }),
         }),
 
-        clearBoard: tool({
+        d({ name: 'clearBoard', group: 'studio', risk: 'destructive',
           description: 'Elimina tutti gli elementi e svuota le tavole (o l\'intera area visiva).',
           inputSchema: z.object({
             boardName: z.string().optional()
@@ -1140,7 +1094,7 @@ QUANTITÀ BOARD:
           execute: async () => ({ success: true }),
         }),
 
-        deleteElements: tool({
+        d({ name: 'deleteElements', group: 'studio', risk: 'destructive',
           description: 'Elimina solo gli elementi specificati dal canvas (usando i loro ID).',
           inputSchema: z.object({
             ids: z.array(z.string())
@@ -1148,7 +1102,7 @@ QUANTITÀ BOARD:
           execute: async ({ ids }) => ({ success: true, deleted: ids?.length ?? 0 }),
         }),
 
-        getCanvasState: tool({
+        d({ name: 'getCanvasState', group: 'studio', risk: 'read',
           description: 'Legge lo stato attuale del canvas con tutti gli elementi (ID, tipo, posizione, testo, colore). Usa questo tool per vedere cosa c\'è sul canvas prima di fare modifiche.',
           inputSchema: z.object({}),
           execute: async () => ({
@@ -1157,7 +1111,7 @@ QUANTITÀ BOARD:
           }),
         }),
 
-        generateConceptualSchema: tool({
+        d({ name: 'generateConceptualSchema', group: 'documenti', risk: 'write',
           description: 'Genera uno schema concettuale visivo strutturato (nodi, connessioni, gruppi, etichette) a partire da una descrizione testuale, e lo carica nel canvas come SVG editabile con layer nominati.',
           inputSchema: z.object({
             prompt: z.string().describe('Descrizione dello schema da generare. Può essere un concetto, un sistema, un processo, una mappa mentale, un flusso.'),
@@ -1185,7 +1139,7 @@ QUANTITÀ BOARD:
           },
         }),
 
-        generateOfficeDocument: tool({
+        d({ name: 'generateOfficeDocument', group: 'documenti', risk: 'write',
           description: [
             'Genera un file Office SCARICABILE (Excel .xlsx, Word .docx o PowerPoint .pptx).',
             'USA QUESTO TOOL SOLO quando l\'utente chiede ESPLICITAMENTE un file da scaricare:',
@@ -1216,6 +1170,53 @@ QUANTITÀ BOARD:
             }
           },
         }),
+      ...SYSTEM_TOOLS,
+    ]
+
+    const system = stableSystem({
+      architecture,
+      toolGuide: toolGuide(defs),
+      graphicLibrary: graphicLibraryPrompt(),
+      coreSkills: allActiveSkills.filter(s => !isOnDemandSkill(s)),
+      onDemandSkills,
+      modelNote: lowLevelDesign ? undefined : COMPOSE_ONLY_NOTE.trim(),
+    })
+    const reminder = reminderText({ now: new Date(), pathname, ctx, canvasSnapshot, activeSkills })
+
+    // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
+    const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {
+      const { model: cheap } = resolveModel(modelId, 'general')
+      const { text: summary } = await aiSdk.generateText({ model: cheap, system: SUMMARY_PROMPT, prompt: text, maxRetries: 1 })
+      return summary
+    })
+    const modelMessages = withReminder(compacted.messages, reminder)
+
+    // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
+    const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
+
+    const result = tracedStreamText({
+      model,
+      system,
+      messages: modelMessages,
+      stopWhen: stepCountIs(24), // lavori in più fasi: piano, letture, scritture, verifica
+      // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: 'canvas-ai-agent',
+        metadata: {
+          modelId: modelLabel,
+          hasCanvas: !!canvasSnapshot,
+        },
+      },
+      tools: buildToolSet(defs, trace),
+      onFinish: ({ steps, totalUsage }) => {
+        trace.finish({
+          steps: steps.length,
+          inputTokens: totalUsage.inputTokens,
+          cachedInputTokens: totalUsage.cachedInputTokens,
+          outputTokens: totalUsage.outputTokens,
+          compacted: compacted.note,
+        })
       },
     })
 

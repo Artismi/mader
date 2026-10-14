@@ -143,7 +143,32 @@ In grassetto gli strumenti nuovi di questa fase.
 | **G5 Maestra ovunque** | controlli di uscita per strumento (testi social con instagramScores, date nel futuro, cliente esistente) | gli errori tipici tornano al modello prima di arrivare all'utente |
 | **G6 Valutazione** | 20 compiti reali con verifica (incarichi, piano, grafiche), lettura delle tracce | tasso di riuscita misurato per modello |
 
-Questa sessione realizza G1–G4 e prepara G5. G6 richiede compiti reali scelti con l'utente.
+### Stato (14 ottobre 2026)
+
+- **G1–G4 fatte** e collegate in `src/app/api/ai/route.ts`:
+  - i 21 strumenti della chat sono definizioni del guscio (stessi nomi, quindi il widget li esegue come prima);
+  - prompt stabile + promemoria;
+  - strumenti nuovi;
+  - conferme in chat per `clearBoard`, `deleteElements` e fattura;
+  - 24 passi, compattazione, traccia `[agente]` nel log del server;
+  - nel widget, la card di conferma e il piano come checklist.
+- **Corretto per strada**: `readTasks` ignorava il filtro per cliente.
+- **Test**: `npm run test:agente` (Node puro, database temporaneo) copre:
+  - taglio dei risultati, errori come risultati, maestra in ingresso, conferme;
+  - svuotamento e riassunto;
+  - prompt stabile deterministico e promemoria;
+  - piano editoriale (giorni liberi nel fuso locale), aggiornamento dei post, scheda cliente, piano di lavoro.
+- **Prova nell'app** (server di sviluppo, database vuoto di prova, `gemini-flash-latest`):
+  - la domanda "che post ho dal 20 al 26 ottobre?" ha prodotto una chiamata a `readEditorialPlan` con le date giuste e una risposta corretta, in 2 passi;
+  - traccia: 180.855 token in ingresso (cache 49%), 898 in uscita, 15 s;
+  - la prova della conferma su `clearBoard` si è fermata per la quota esaurita di Gemini e resta da fare nell'app.
+- **Misura da affrontare**: ogni chiamata manda circa 90k token di prompt stabile, soprattutto per l'architettura di `defaults.ts` e le skill fisse. Con la cache costa poco, ma rallenta e diluisce l'attenzione. Il prossimo passo di contesto è portare le skill fisse nel catalogo (`loadSkill`) e accorciare l'architettura.
+- **Da fare**:
+  - **G5**, cioè i controlli di uscita per strumento: per esempio i testi social passati da `instagramScores` prima di `saveInstagramDraft`, e le date nel passato;
+  - **G6**, cioè i compiti reali con verifica, da scegliere con l'utente;
+  - misurare la quota in cache con un modello vero, leggendo la riga `[agente]`.
+
+G6 richiede compiti reali scelti con l'utente.
 
 ---
 

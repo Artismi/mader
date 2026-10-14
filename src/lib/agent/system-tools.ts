@@ -32,6 +32,9 @@ function findPost(ref: string): EditorialPost | undefined {
   return editorialPosts.getById(ref) ?? editorialPosts.getAll().find(p => p.id.startsWith(ref))
 }
 
+/** Giorno nel fuso locale (AAAA-MM-GG): toISOString() sposterebbe le date di un giorno attorno alla mezzanotte. */
+const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 const STATI = ['idea', 'bozza', 'approvato', 'programmato', 'pubblicato'] as const
 
@@ -112,10 +115,10 @@ export const readEditorialPlan: AgentToolDef<typeof readPlanSchema> = {
     // giorni liberi nel periodo (solo se il periodo è dato e non supera i 62 giorni)
     let liberi: string[] | undefined
     if (from && to && (to.getTime() - from.getTime()) / 864e5 <= 62) {
-      const pieni = new Set(filtered.map(p => p.scheduled_at?.slice(0, 10)))
+      const pieni = new Set(filtered.map(p => localDay(new Date(p.scheduled_at!))))
       liberi = []
       for (const d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
-        const k = d.toISOString().slice(0, 10)
+        const k = localDay(d)
         if (!pieni.has(k)) liberi.push(k)
       }
     }
@@ -266,4 +269,4 @@ export const directDesign: AgentToolDef<typeof directDesignSchema> = {
   },
 }
 
-export const SYSTEM_TOOLS = [updatePlan, readEditorialPlan, updateEditorialPost, listIdeas, getClient, searchMemory, directDesign]
+export const SYSTEM_TOOLS = [updatePlan, readEditorialPlan, updateEditorialPost, listIdeas, getClient, searchMemory, directDesign] as unknown as AgentToolDef<z.ZodTypeAny>[]

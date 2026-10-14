@@ -95,6 +95,22 @@ Pattern fisso: `src/app/api/ai/[action]/route.ts`
 - Le chiavi MCP e Anthropic non vanno mai esposte lato client
 - Directory: `src/app/api/ai/` contiene `route.ts` (chat), `context/`, `memories/`, `planner/`, `architecture/`
 
+### Guscio agente (`src/lib/agent/`)
+
+L'assistente in chat (`src/app/api/ai/route.ts`) gira dentro un guscio ispirato a Claude Code. Progetto e fasi: `docs/guscio-agente.md`.
+- `tools.ts`: `AgentToolDef` (gruppo, rischio `read|write|destructive`, schema, `verify`, `maxChars`). `buildToolSet` avvolge ogni strumento:
+  - le eccezioni tornano al modello come `{ success: false, error }`;
+  - i risultati lunghi vengono tagliati;
+  - i distruttivi chiedono conferma con l'approvazione dell'AI SDK v6 (card Consenti/Rifiuta nel widget).
+- `prompt.ts`:
+  - **prompt stabile**: architettura, modo di lavorare, guida agli strumenti, skill fisse, catalogo delle skill a richiesta. Resta in cache;
+  - **promemoria**: data, situazione, pagina, canvas, cliente, RAG, memorie, skill attive. Viene attaccato all'ultimo messaggio dell'utente. Non mettere dati variabili nel prompt stabile.
+- `compact.ts`: oltre circa 60k token stimati svuota i vecchi risultati degli strumenti, poi riassume i turni vecchi.
+- `system-tools.ts`: `updatePlan`, `readEditorialPlan`, `updateEditorialPost`, `listIdeas`, `getClient`, `searchMemory`, `directDesign` (la regia dello Studio).
+- `trace.ts`: una riga `[agente]` per richiesta nel log del server (passi, token, quota in cache, strumenti).
+- Nuovo strumento: aggiungi una definizione con il rischio giusto, una descrizione scritta per il modello (quando usarlo e quando no) ed errori che dicono come correggere. I nomi degli strumenti del canvas non vanno cambiati: il widget li esegue per nome.
+- Test: `npm run test:agente`.
+
 ### Server Actions
 
 `src/app/actions.ts` — tutte le mutazioni dati (addTask, addClient, upsertDesignProject, ecc.) come Server Actions Next.js. Le pagine le importano direttamente.
