@@ -18,6 +18,7 @@ File breve da leggere per primo in una sessione nuova, invece di rileggere conve
 - 65b62dc: K1: `src/lib/kernel`, domini task/idea/post/client usati da chat, Server Action, /os e Ctrl+K.
 - 3333e02: K2: tabella `events`, storia sul nodo, "Cambiato da ieri" in Oggi, link `origin` unico.
 - K3 (commit "feat(kernel): K3 grafo e grounding"): indice dei nodi, `graphSearch`/`graphRelated`/`clientContext`, focus nel contesto dell'agente. **Fermo dopo K3**: K4–K8 da decidere con l'utente; K0 attende il permesso per un secondo modello (Claude, a pagamento).
+- A1–A3 di `docs/cosa-manca.md` (eb98aef, 6da0422, 34a64d5): riparazione delle chiamate (`repair.ts`; si cambia modello dopo 2 riparazioni fallite), regia per passo (`steer.ts`: `required` al primo passo delle azioni, fase nel promemoria), chiusura con prove (`evidence.ts`: contratto da `updatePlan`, promesse senza azione, successo per oggetto, 3 riprese). In chat A3 solo in traccia (lo streaming non riprende il giro). Banco flash-lite 15/10: 11/11 eseguiti (prima 9/11 sugli stessi; ora passano piano-liberi e cli-preventivo), 9 fermati dalla quota. **Da correggere**: `graphRelated.profondità` (union di letterali numerici) fa rifiutare a Gemini tutti gli strumenti; il banco è stato misurato con la correzione solo locale.
 
 ## In coda, una cosa alla volta
 1. **Guscio e nucleo** (worktree brave-bohr): fatti fino a K3 (vedi sopra). Prossimo: decidere K4–K8 con l'utente; seconda misura del banco con un altro modello.
