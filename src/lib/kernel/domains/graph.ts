@@ -35,7 +35,7 @@ export const graphRelated = defineAction({
   description: 'I nodi collegati a un riferimento (es. client:abc, post:xyz): il cliente, il lavoro dello stesso cliente, da cosa è nato e cosa ha generato. Per un cliente restituisce anche cosa manca nel suo contesto.',
   input: z.object({
     ref: z.string().regex(/^[a-z]+:.+/, 'usa un riferimento come client:abc o post:xyz'),
-    profondità: z.union([z.literal(1), z.literal(2)]).optional(),
+    profondità: z.number().int().min(1).max(2).optional().describe('1 = vicini diretti, 2 = anche i vicini dei vicini'),
   }),
   run: ({ ref, profondità }) => {
     const vicini = related(ref, { depth: profondità ?? 1, limit: 30 })

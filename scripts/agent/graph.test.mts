@@ -17,6 +17,8 @@ const k = await import('../../src/lib/kernel/index')
 const reg = await import('../../src/lib/ai/model-registry')
 const { runAgent } = await import('../../src/lib/agent/run')
 const { SYSTEM_TOOLS } = await import('../../src/lib/agent/system-tools')
+const { CORE_TOOLS } = await import('../../src/lib/agent/core-tools')
+const { zodSchema } = await import('ai')
 const { MockLanguageModelV3 } = await import('ai/test')
 const { clients } = await import('../../src/lib/db/index')
 
@@ -75,6 +77,22 @@ test('focusText: nodo, vicini e lacune in poche righe', () => {
 
 test('strumenti per l\'agente: graphSearch, graphRelated, clientContext', () => {
   for (const n of ['graphSearch', 'graphRelated', 'clientContext']) assert.ok(SYSTEM_TOOLS.some(t => t.name === n), n)
+})
+
+// Gemini accetta solo enum di stringhe: un enum numerico (es. z.union di z.literal(1|2))
+// fa rifiutare l'intera richiesta con tutti gli strumenti.
+test('schemi degli strumenti: nessun enum o const non stringa (Gemini li rifiuta)', async () => {
+  const errati: string[] = []
+  const visita = (s: unknown, dove: string) => {
+    if (Array.isArray(s)) return s.forEach((x, i) => visita(x, `${dove}[${i}]`))
+    if (!s || typeof s !== 'object') return
+    const o = s as Record<string, unknown>
+    if (Array.isArray(o.enum) && o.enum.some(v => typeof v !== 'string')) errati.push(`${dove}.enum`)
+    if ('const' in o && typeof o.const !== 'string') errati.push(`${dove}.const`)
+    for (const [k, v] of Object.entries(o)) if (k !== 'enum' && k !== 'const') visita(v, `${dove}.${k}`)
+  }
+  for (const t of [...CORE_TOOLS, ...SYSTEM_TOOLS]) visita(await zodSchema(t.inputSchema).jsonSchema, t.name)
+  assert.deepEqual(errati, [])
 })
 
 const usage = { inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 5, text: 5, reasoning: 0 } }
