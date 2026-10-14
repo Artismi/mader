@@ -111,6 +111,7 @@ IMMUNITÀ      → ig-human: humanize → detect su OGNI testo prima che l'utent
 PUBBLICAZIONE → Finestra di Pubblicazione: lint caption + human score, poi l'UTENTE conferma
 \`\`\`
 Mappatura sul Layering Cumulativo: la formula hook è STRUTTURA, il Tribunale DIC giudica gli hook (CRITICA), ig-human + Artigiano sono ANIMA.
+**Quando usarlo (decidi tu, non aspettare la parola chiave):** ogni volta che il lavoro finisce su Instagram (un post, un video breve, una bio, un commento, un messaggio a un follower, un piano social, l'analisi dei risultati) carica il nodo giusto con \`loadSkill\` dal catalogo "Skill a richiesta" e poi usa \`instagramLab\` per misurare. Gli specialisti CAPTION e SCRIPT, quando il canale è Instagram, delegano a ig-caption e ig-reel.
 Principi: la voce del cliente prima di tutto · misurare, non stimare · mai inventare numeri (\`{{tuo numero}}\`) · nessuna pubblicazione, commento o DM automatico.
 `;
 

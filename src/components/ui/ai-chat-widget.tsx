@@ -5,7 +5,7 @@ import { DefaultChatTransport, getToolName, isTextUIPart, isToolUIPart, type UIM
 import { Input } from "@/components/ui/input";
 import { Send, Bot, Sparkles, Trash2, ChevronDown, User, FolderOpen, X, Plus, FileText, Loader2, History, MessageSquare, ExternalLink, Settings2, CheckCircle2, Circle, Search, Library, PenTool, AlertCircle, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
 import { useSidebar } from '@/components/layout/SidebarContext';
@@ -348,6 +348,8 @@ function QuickActions({ lastMessage, onAction, disabled, inputRef }: {
 
 export function AIChatWidget() {
     const router = useRouter();
+    // La pagina corrente orienta il router delle skill lato server (es. /pubblica → ig-caption)
+    const pathname = usePathname();
     const { pushAiCommand, canvasSnapshot } = useSidebar();
     const { clients, selectedClientId } = useApp();
     const { sessions, activeSessionId, createSession, addMessage, setActiveSession, deleteSession } = useChatStore();
@@ -447,10 +449,11 @@ export function AIChatWidget() {
                 api: '/api/ai',
                 body: { 
                     modelId: selectedModel,
-                    sessionId: activeSessionId 
+                    sessionId: activeSessionId,
+                    pathname,
                 },
             }),
-        [selectedModel, activeSessionId],
+        [selectedModel, activeSessionId, pathname],
     );
 
     // Calcola clientOverride da mandare al server
@@ -552,7 +555,8 @@ export function AIChatWidget() {
                     canvasSnapshot: canvasSnapshot ?? undefined,
                     clientOverride: clientOverrideValue,
                     extraVaultFiles: extraFiles.map(f => ({ path: f.path, note: f.note || undefined })),
-                    sessionId: activeSessionId
+                    sessionId: activeSessionId,
+                    pathname,
                 }
             }
         );

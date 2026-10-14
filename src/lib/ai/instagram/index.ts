@@ -68,6 +68,17 @@ export function polishCaption(text: string, opts: { keywords?: string[]; lang?: 
   return { human, score, caption }
 }
 
+/** Punteggi sintetici salvati nei metadati dei post Instagram del piano editoriale. */
+export function instagramScores(text: string) {
+  const lint = lintCaption(text)
+  const human = detect(text)
+  return {
+    captionVerdict: lint.verdict,
+    humanScore: Math.round(human.humanScore * 10) / 10,
+    humanVerdict: human.verdict,
+  }
+}
+
 export function runLab(input: LabInput): LabOutput {
   const fail = (error: string): LabOutput => ({ ok: false, report: error, error })
   const opts = { lang: input.lang }

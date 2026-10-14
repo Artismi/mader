@@ -771,6 +771,11 @@ export const editorialPosts = {
       ORDER BY ep.created_at DESC
     `).all() as Record<string, unknown>[]).map(parseEditorialPost),
 
+  getById: (id: string): EditorialPost | undefined => {
+    const r = db.prepare('SELECT * FROM editorial_posts WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    return r ? parseEditorialPost(r) : undefined
+  },
+
   create: (data: Omit<EditorialPost, 'id' | 'created_at' | 'client_name'>): EditorialPost => {
     const id = randomUUID()
     db.prepare(`

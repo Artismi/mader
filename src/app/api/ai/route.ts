@@ -6,7 +6,8 @@ import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
 import { skills, config, tasks, clients, ideas, quotes, editorialPosts } from '@/lib/db'
-import { labInputSchema, runLab, lintCaption, detect } from '@/lib/ai/instagram'
+import { labInputSchema, runLab, instagramScores } from '@/lib/ai/instagram'
+import { messageText, routeOnDemandSkills, formatSkillCatalog } from '@/lib/ai/skill-router'
 import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { buildContext } from '@/lib/ai/context'
@@ -588,7 +589,7 @@ function buildCrewStreamResponse(
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action } = body
+    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action, pathname } = body
 
     // ── RESUME ACTION ────────────────────────────────────────────────────────
     if (action === 'resume') {
@@ -613,9 +614,8 @@ export async function POST(req: Request) {
 
     // 1. ASSEMBLE CONTEXT (Cervello Logic)
     const lastUserMsg = [...messages].reverse().find((m: { role: string }) => m.role === 'user')
-    const userQuery = typeof lastUserMsg?.content === 'string'
-      ? lastUserMsg.content
-      : (lastUserMsg?.content as { text?: string }[])?.[0]?.text || ''
+    // UIMessage v6 porta il testo in `parts`, non in `content`
+    const userQuery = messageText(lastUserMsg)
 
     const ctx = await buildContext(userQuery, {
       clientOverride: clientOverride ?? undefined,
@@ -695,18 +695,13 @@ export async function POST(req: Request) {
     const creativeKeywords = ['post', 'design', 'canvas', 'poster', 'slide', 'immagine', 'grafica', 'logo', 'layout', 'brand'];
     const isCreativeQuery = creativeKeywords.some(k => userQuery.toLowerCase().includes(k));
 
-    // Circuito Instagram: le skill ig-* entrano solo a trigger (match a parola intera,
-    // così "dm" non scatta su "admin"); ig-human entra con qualunque altro nodo ig-*.
-    const q = userQuery.toLowerCase()
-    const hitsTrigger = (t: string) =>
-      new RegExp(`(^|[^\\p{L}\\p{N}])${t.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}\\p{N}])`, 'u').test(q)
-    const igActive = new Set(
-      allActiveSkills.filter(s => s.slug.startsWith('ig-') && (s.triggers || []).some(hitsTrigger)).map(s => s.slug)
-    )
-    if (igActive.size > 0) igActive.add('ig-human')
+    // Skill a richiesta (ig-*): il router inietta quelle attivate da trigger recenti,
+    // pagina corrente o tool già usati; le altre vanno nel catalogo per `loadSkill`.
+    const onDemand = routeOnDemandSkills({ skills: allActiveSkills, messages, pathname })
+    const injectedOnDemand = new Set(onDemand.inject.map(s => s.slug))
 
     const filteredSkills = allActiveSkills.filter(s => {
-      if (s.slug.startsWith('ig-')) return igActive.has(s.slug)
+      if (s.slug.startsWith('ig-')) return injectedOnDemand.has(s.slug)
 
       // Le skill core (non handbook, non DIC operativi) sono sempre incluse
       if (!s.slug.startsWith('design-') && !s.slug.startsWith('dic-skill-') && s.slug !== 'dic-tribunale') return true;
@@ -730,6 +725,7 @@ export async function POST(req: Request) {
         : '',
       '## Skill disponibili — istruzioni operative',
       skillsBlock,
+      formatSkillCatalog(onDemand.catalog),
       ctx.clientVaults.length > 0
         ? `\n\n---\n${ctx.clientVaults.join('\n\n---\n')}\n---`
         : '',
@@ -906,6 +902,22 @@ export async function POST(req: Request) {
           }
         }),
 
+        loadSkill: tool({
+          description: 'Carica le istruzioni complete di una skill del catalogo "Skill a richiesta". Chiamalo appena la richiesta tocca quella competenza, poi segui le istruzioni restituite.',
+          inputSchema: z.object({ slug: z.string().describe('Slug esatto dal catalogo, es. "ig-reel"') }),
+          execute: async ({ slug }) => {
+            const skill = allActiveSkills.find(s => s.slug === slug)
+            if (!skill?.content) {
+              return { success: false, message: `Skill "${slug}" non trovata. Disponibili: ${onDemand.catalog.map(s => s.slug).join(', ')}` }
+            }
+            // ig-human è il filtro finale di ogni nodo ig-*: lo consegno insieme
+            const human = slug.startsWith('ig-') && slug !== 'ig-human' && !injectedOnDemand.has('ig-human')
+              ? allActiveSkills.find(s => s.slug === 'ig-human')?.content
+              : undefined
+            return { success: true, instructions: human ? `${skill.content}\n\n---\n\n${human}` : skill.content }
+          },
+        }),
+
         instagramLab: tool({
           description: 'Strumenti del circuito Instagram (skill ig-*), calcolati davvero e in locale: scoreHooks (classifica hook, 5 controlli), beatSheet (copione → beat temporizzati), lintCaption (finestra feed 125 car., hashtag, CTA, termini di ricerca), humanize (pulizia impronte AI + flag strutturali), detect (human score 5 controlli, con compareTo mostra il delta), swipe (multiplo outlier sulla mediana per account), scoreProfile (rubrica /100), polish (humanize → detect → lintCaption in un colpo). Usalo invece di stimare a occhio.',
           inputSchema: labInputSchema,
@@ -935,9 +947,7 @@ export async function POST(req: Request) {
               ?? all.find(c => c.name.toLowerCase().includes(key))
             if (!match) return { success: false, message: `Cliente "${client}" non trovato: usa searchClient.` }
 
-            const text = caption ?? content
-            const lint = lintCaption(text)
-            const human = detect(content)
+            const scores = instagramScores(caption ?? content)
             const post = editorialPosts.create({
               client_id: match.id,
               title,
@@ -945,18 +955,11 @@ export async function POST(req: Request) {
               channels: ['instagram'],
               editorial_status: status,
               scheduled_at: scheduledAt,
-              metadata: {
-                circuit: 'instagram',
-                format,
-                hookFormula,
-                captionVerdict: lint.verdict,
-                humanScore: Math.round(human.humanScore * 10) / 10,
-                humanVerdict: human.verdict,
-              },
+              metadata: { circuit: 'instagram', format, hookFormula, ...scores },
             })
             return {
               success: true,
-              message: `Salvato nel piano editoriale di ${match.name} come "${status}" (${format}). Linter caption: ${lint.verdict}, human score ${human.humanScore.toFixed(1)} ${human.verdict}.`,
+              message: `Salvato nel piano editoriale di ${match.name} come "${status}" (${format}). Linter caption: ${scores.captionVerdict}, human score ${scores.humanScore} ${scores.humanVerdict}.`,
               postId: post?.id,
             }
           },

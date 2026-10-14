@@ -129,9 +129,12 @@ Componente custom in `creative-studio.tsx` che implementa il pattern: icona sing
 ### Circuito Instagram (skill `ig-*`)
 
 13 skill (da [instagram-agent-skill](https://github.com/Jakeschincariol/instagram-agent-skill), MIT, riscritte in italiano) che vanno dalla ricerca alla pubblicazione:
-- Skill: `src/lib/ai/skills/instagram.ts` (incluse in `DEFAULT_SKILLS`). In `/api/ai` entrano nel prompt **solo a trigger** (match a parola intera); `ig-human` entra sempre insieme alle altre.
+- Skill: `src/lib/ai/skills/instagram.ts` (incluse in `DEFAULT_SKILLS`).
+- Router: `src/lib/ai/skill-router.ts`. Una skill `ig-*` entra intera nel prompt se un trigger compare negli ultimi 3 messaggi utente (match a parola intera), se la pagina corrente la richiede (`/pubblica` → ig-caption, `/editoriale` → ig-plan) o, nel caso di `ig-human`, se nella conversazione sono già stati usati tool IG. Tutte le altre restano nel catalogo "Skill a richiesta" del system prompt: è il **modello dell'app** che decide di caricarle con il tool `loadSkill`.
+- I messaggi arrivano come UIMessage v6 (`parts`): per leggere il testo usare `messageText()` del router, non `content`.
 - Strumenti (porting TS dei tool Python, con supporto italiano): `src/lib/ai/instagram/` — `hookscore`, `beats`, `caption`, `humanize`, `detect`, `swipe`, `profile`; dispatcher unico `runLab()` in `index.ts`.
 - Chat: tool `instagramLab` (esegue gli strumenti) e `saveInstagramDraft` (salva in `editorial_posts` con `metadata` JSON: formato, formula hook, punteggi). Le memorie usano i prefissi `[IG-VOCE]`, `[IG-SWIPE]`, `[IG-AUDIT]`.
+- Editoriale: `/api/editoriale` calcola in automatico linter + human score nei `metadata` di ogni post con canale instagram.
 - UI: `POST /api/instagram/lab`; pannello "Analizza" nella Finestra di Pubblicazione; `/api/social/publish` blocca le caption Instagram con FAIL al linter.
 - Nessuna skill pubblica, commenta o manda DM da sola: l'utente conferma sempre.
 
