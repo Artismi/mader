@@ -15,7 +15,7 @@ import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
 import { capOf, eyelet, fitText, laurel, perforated, rope, sunburst, thornBraid, twine } from './wreaths'
 import { INK, SUBJECTS, banner, bannerCurve, inkFlash, tattooItems } from './tattoo'
 import { arrowNE, asterisk, baseText, capH, inkCanvas, inkOf, inkText, rule, sizeForWidth, up, wrap } from './design'
-import { GRADES, POST_FX, heroFx, postFx, grainIn, backGlow, backdrop, beams, cinemaFinish, dust, fadeFoot, reflection, rgba } from './cinema'
+import { GRADES, POST_FX, postFx, backGlow, backdrop, beams, cinemaFinish, dust, fadeFoot, reflection, rgba } from './cinema'
 import { WARPS, band as distBand, extrude, extrudeStriped, glints, shine, fittedWord, grow, invert, puffy, softShadow } from './typo'
 import { arcText, barcode, burst, castShadow, star, dieCut, embroidery, inkPress, patchShape, stampPlate, stickerCanvas, tapeStrip, ticketMasks, waxSeal, type Finish } from './stamps'
 import { drawWing, gridPaper, mapWing, organism, penLine, growWing, wingBox, wingGeom, wingOverlap, wingTree, type Hand, type Space, type WingGeom } from './notebook'
@@ -2548,8 +2548,8 @@ const scena: Recipe = {
     { key: 'info', label: 'Informazioni', type: 'text', def: 'Sabato 12.10|Via Po 3, Torino|Dalle 23:00' },
     P.sel('hero', 'Elemento', SCENE_HEROES.map(x => x.label)), P.sel('mat', 'Materia', SCENE_MATS.map(x => x.label)),
     P.sel('shot', 'Inquadratura', ['Centrale', 'Dal basso', 'Laterale']), P.sel('grade', 'Luce e viraggio', GRADES.map(x => x.label)),
-    P.sel('tstyle', 'Titolo', ['Monumentale', 'Corsivo', 'Cromato', 'Spaziato']), P.sel('back', 'Titolo dietro', ['Pieno tenue', 'Contorno', 'Nessuno'], 2),
-    P.range('emit', 'Emissione elemento', 0, 100, 60), P.range('beams', 'Fasci di luce', 0, 100, 55), P.range('fog', 'Nebbia', 0, 100, 55), P.range('bloom', 'Bagliore', 0, 100, 45),
+    P.sel('back', 'Titolo dietro', ['Pieno tenue', 'Contorno', 'Nessuno']),
+    P.range('beams', 'Fasci di luce', 0, 100, 55), P.range('fog', 'Nebbia', 0, 100, 55), P.range('bloom', 'Bagliore', 0, 100, 45),
     P.range('aberr', 'Aberrazione', 0, 100, 35), P.range('grain', 'Grana pellicola', 0, 100, 40)],
   render: o => {
     const g = GRADES[num(o, 'grade')] ?? GRADES[0], S = SS(o), W = o.W, H = o.H
@@ -2557,12 +2557,7 @@ const scena: Recipe = {
     const t: Tone = { id: 'cine', label: g.label, bg: g.bg, ink: g.ink, acc: g.glow, dark: g.dark }
     const { c, ctx } = stage({ ...o, transparent: false }, t)
     const m = Math.round(S * 0.06)
-    // il titolo comanda: prima si misura il suo blocco, poi l'orizzonte gli si appoggia
-    const tstyle = num(o, 'tstyle'), word = title.join(' ')
-    const creditsTop = H - m - S * 0.062
-    const titleH = tstyle === 0 ? H * 0.16 : tstyle === 3 ? S * 0.06 : H * 0.13
-    const titleTop = creditsTop - S * 0.04 - titleH
-    const horizon = tstyle === 3 ? H * (shot === 1 ? 0.8 : 0.7) : Math.min(H * 0.78, titleTop + titleH * (shot === 1 ? 0.55 : 0.3))
+    const horizon = H * (shot === 1 ? 0.8 : 0.7)
     const spotX = shot === 2 ? W * 0.66 : W / 2
     backdrop(ctx, W, H, g, horizon, { x: spotX, y: H * 0.02, r: H * 0.8 })
     beams(ctx, W, H, g, spotX, -H * 0.04, 7, o.seed, num(o, 'beams') / 100)
@@ -2593,7 +2588,6 @@ const scena: Recipe = {
     const mat = SCENE_MATS[num(o, 'mat')]?.v ?? 1
     let src = piece(hero.rc(), o, S * 1.1, { ...(hero.over?.(o) ?? {}), mat, tone: g.dark ? 0 : 1, glow: false, caps: false })
     src = fadeFoot(src, 0.86, 1)
-    src = heroFx(src, g.glow, o.seed, num(o, 'emit') / 100)
     const box = shot === 0 ? { x: W * 0.1, y: H * 0.13, w: W * 0.8, h: horizon - H * 0.13 + S * 0.02 }
       : shot === 1 ? { x: -W * 0.02, y: H * 0.08, w: W * 1.04, h: horizon - H * 0.08 + S * 0.05 }
       : { x: W * 0.3, y: H * 0.12, w: W * 0.64, h: horizon - H * 0.12 + S * 0.02 }
@@ -2623,37 +2617,15 @@ const scena: Recipe = {
     // ── tipografia in primo piano ──
     const ms = S * 0.0145
     baseText(ctx, MICRO, 'Artismi Design Studio presenta', ms, W / 2, m + ms, g.ink, 'center', 0.2)
-    let tb = { x: 0, y: titleTop, w: 0, h: titleH }
-    const lead = shot === 2 ? m : W / 2, al: 'left' | 'center' = shot === 2 ? 'left' : 'center'
-    if (tstyle === 3) {
-      const tf: Face = { ...FACES.grotesk, track: 0.32 }
-      const tsz = Math.min(sizeForWidth(tf, word, shot === 2 ? W * 0.5 : W * 0.74), S * 0.075)
-      ctx.save(); ctx.shadowColor = g.glow; ctx.shadowBlur = S * 0.02
-      tb = inkText(ctx, tf, word, tsz, lead, titleTop + titleH - capH(tf, tsz), g.ink, al)
-      ctx.restore()
-    } else {
-      // il titolo come oggetto di luce: sfumato dall'alto, alone del colore della scena, grana
-      let src2: HTMLCanvasElement
-      const tw = shot === 2 ? W * 0.6 : W - 2 * m
-      if (tstyle === 2) src2 = piece(cromo, o, S * 1.3, { text: word, mat: SCENE_MATS[num(o, 'mat')]?.v ?? 1, warp: 1, amount: 25, sparks: false, tone: 0, glow: false, caps: false })
-      else if (tstyle === 0) src2 = stretchLine(FACES.condensato, word, tw, titleH, '#ffffff')
-      else src2 = inkCanvas(FACES.bodoni, word, Math.min(sizeForWidth(FACES.bodoni, word, tw), 900), '#ffffff')
-      if (tstyle !== 2) {
-        const gk = src2.getContext('2d')!
-        const gr = gk.createLinearGradient(0, 0, 0, src2.height)
-        gr.addColorStop(0, g.dark ? g.high : g.ink); gr.addColorStop(0.55, g.ink); gr.addColorStop(1, g.dark ? rgba(g.glow, 1) : g.ink)
-        gk.globalCompositeOperation = 'source-in'; gk.fillStyle = gr; gk.fillRect(0, 0, src2.width, src2.height)
-        grainIn(src2, 0.45, o.seed + 3)
-      }
-      const k = Math.min(tw / src2.width, titleH / src2.height)
-      const dw = tstyle === 0 ? tw : src2.width * k, dh = tstyle === 0 ? titleH : src2.height * k
-      const x = al === 'center' ? (W - dw) / 2 : m, y = titleTop + titleH - dh
-      backGlow(ctx, src2, x, y, dw, dh, g.glow, S * 0.03, g.dark ? 0.7 : 0.25, g.dark ? 'screen' : 'multiply')
-      ctx.drawImage(src2, x, y, dw, dh)
-      tb = { x, y, w: dw, h: dh }
-    }
-    // la frase passa spesso sopra l'elemento: un'ombra morbida la stacca
-    if (sub) { ctx.save(); ctx.shadowColor = g.dark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.8)'; ctx.shadowBlur = S * 0.012; baseText(ctx, FACES.corsivo, sub, S * 0.03, lead, tb.y - S * 0.024, g.ink, al); ctx.restore() }
+    const tf: Face = { ...FACES.grotesk, track: 0.32 }
+    const word = title.join(' ')
+    const tw = shot === 2 ? W * 0.5 : W * 0.74
+    const tsz = Math.min(sizeForWidth(tf, word, tw), S * 0.075)
+    const titleY = H * (shot === 1 ? 0.835 : 0.775)
+    ctx.save(); ctx.shadowColor = g.glow; ctx.shadowBlur = S * 0.02
+    const tb = inkText(ctx, tf, word, tsz, shot === 2 ? m : W / 2, titleY, g.ink, shot === 2 ? 'left' : 'center')
+    ctx.restore()
+    if (sub) baseText(ctx, FACES.corsivo, sub, S * 0.026, shot === 2 ? m : W / 2, tb.y - S * 0.022, g.ink, shot === 2 ? 'left' : 'center')
     // blocco crediti: condensato stretto e alto, come in fondo ai manifesti
     const credits = ['Artismi Design Studio presenta', word, ...info, 'Torino MMXXVI'].join('   ·   ').toUpperCase()
     const cf = FACES.condensato
@@ -2685,7 +2657,7 @@ const BASE: Recipe[] = [
  */
 const withPost = (rc: Recipe): Recipe => ({
   ...rc,
-  params: [...rc.params, P.sel('post', 'Finitura', [...POST_FX], rc.id === 'scena' ? 0 : 1), P.range('postAmt', 'Intensità finitura', 0, 100, 45)],
+  params: [...rc.params, P.sel('post', 'Finitura', [...POST_FX], 0), P.range('postAmt', 'Intensità finitura', 0, 100, 45)],
   render: o => {
     const c = rc.render(o)
     const out = postFx(c, num(o, 'post'), num(o, 'postAmt') / 100, o.seed, o.transparent)
