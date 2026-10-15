@@ -7,6 +7,7 @@
  *   npm run designer:vetrina                         tutto
  *   npm run designer:vetrina -- --contenuti caffe,mostra --formati storia
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
+ *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
  *
  * Prima volta: cd scripts/designer && npm install
  * Browser: DESIGNER_CHROME=/percorso/chrome, altrimenti Chrome installato.
@@ -80,7 +81,54 @@ await page.route('http://designer.local/**', async route => {
 await page.goto('http://designer.local/')
 
 /* ── giro ──────────────────────────────────────────────────────────────── */
+// --progetto auto: ogni contenuto riceve la specifica di ripiego (motivi dalle parole del brief)
+const MOTIVI_APP = args.progetto ? await page.evaluate(() => window.designer.motivi()) : null
 const RATIO = { quadrato: 1, verticale: 1.25, storia: 16 / 9, orizzontale: 9 / 16 }
+/* ── specializzazione: stessa composizione senza e con la specifica del brief ── */
+/** Tracciato di un'icona Iconify dai set in locale (game-icons, ph): tutti i `d` uniti. */
+function tracciatoIcona(id) {
+  const [set, nome] = id.split(':')
+  const dirs = [path.join(repo, 'node_modules'), path.resolve(repo, '../../../node_modules')]
+  const file = dirs.map(d => path.join(d, '@iconify-json', set, 'icons.json')).find(f => fs.existsSync(f))
+  if (!file) return undefined
+  const json = (tracciatoIcona.cache ??= {})[set] ??= JSON.parse(fs.readFileSync(file, 'utf8'))
+  const body = json.icons[nome]?.body
+  return body ? [...body.matchAll(/ d="([^"]+)"/g)].map(m => m[1]).join(' ') : undefined
+}
+/** Le icone della specifica (anche quelle dei motivi) con il tracciato risolto. */
+function risolvi(sp, motivi) {
+  const ids = [...(sp.icone ?? []).map(i => i.id), ...(sp.motivi ?? []).flatMap(m => motivi[m]?.icone ?? [])]
+  return { ...sp, icone: [...new Set(ids)].map(id => ({ id, d: tracciatoIcona(id) })).filter(i => i.d) }
+}
+
+if (args.specializza) {
+  const PROGETTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/progetti.json'), 'utf8'))
+  const motivi = await page.evaluate(() => window.designer.motivi())
+  const nomi = args.contenuti ? contenuti : Object.keys(PROGETTI)
+  const lista = sistemi ?? ['composto', 'centrato', 'manifesto', 'supertipo', 'colonne', 'iniziale', 'bauhaus', 'memphis']
+  for (const format of (args.formati ?? 'quadrato').split(',')) {
+    const colonne = []
+    for (const nome of nomi) {
+      const fx = CONTENUTI[nome], sp = risolvi(PROGETTI[nome], motivi)
+      const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+      const job = { format, photo, over, sistemi: lista, thumb, seme: Number(args.seme ?? 0), primo: true }
+      const senza = await page.evaluate(j => window.designer.run(j), { ...job, content: fx.c })
+      const con = await page.evaluate(j => window.designer.run(j), { ...job, content: { ...fx.c, progetto: sp } })
+      colonne.push({ nome, senza, con })
+    }
+    const items = []
+    for (let i = 0; i < lista.length; i++) for (const col of colonne) for (const [v, r] of [['senza', col.senza[i]], ['con', col.con[i]]]) {
+      items.push({ url: r?.url, label: `${col.nome} · ${r?.sistema ?? '?'} · ${v}${r?.esame ? `  ${r.esame.voto}` : ''}`, sub: r?.ok ? (r.esame?.difetti[0] ?? r.stile ?? '') : (r?.reasons[0] ?? 'scartata') })
+    }
+    const sheet = await page.evaluate(o => window.designer.sheet(o), { title: `Specializzazione · ${nomi.join(' / ')} · ${format}: senza e con la specifica del brief`, items, cols: 2 * colonne.length, cellW: Number(args.cella ?? (format === 'orizzontale' ? 360 : 280)), ratio: RATIO[format] })
+    fs.writeFileSync(path.join(out, `specializza-${format}.jpg`), Buffer.from(sheet.split(',')[1], 'base64'))
+    const scartate = items.filter(x => !x.url)
+    console.log(`specializza ${format}: ${items.length - scartate.length}/${items.length} riuscite${scartate.length ? '  scartate: ' + scartate.map(x => `${x.label} (${x.sub})`).join('; ') : ''}`)
+  }
+  await browser.close()
+  process.exit(0)
+}
+
 const report = []
 for (const nome of contenuti) {
   const fx = CONTENUTI[nome]
@@ -88,6 +136,11 @@ for (const nome of contenuti) {
   for (const format of formati) {
     const t0 = Date.now()
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+    if (MOTIVI_APP && !fx.c.progetto) {
+      const testo = [fx.c.brand, fx.c.kicker, fx.c.title, fx.c.body, ...(fx.c.details ?? [])].join(' ')
+      fx.c = { ...fx.c, progetto: risolvi(await page.evaluate(t => window.designer.ripiego(t), testo), MOTIVI_APP) }
+      console.log(`  ${nome}: motivi ${fx.c.progetto.motivi?.join(', ') || '(nessuno)'}`)
+    }
     // --vecchio: le proposte di prima (una per sistema); altrimenti come nello Studio: vivaio, critico, le migliori diverse
     let res, info = ''
     if (args.vecchio || sistemi) res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })

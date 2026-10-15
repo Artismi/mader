@@ -6,6 +6,7 @@
  */
 
 import type { Esame } from './gen/critico'
+import type { Specifica } from './progetto/specifica'
 
 export type DesignKind = 'lancio' | 'evento' | 'citazione' | 'annuncio'
 
@@ -31,6 +32,8 @@ export interface DesignContent {
   /** cosa mostra la foto (per la ricerca): "chicchi di caffè su pietra scura" */
   imageQuery?: string
   imageUrl?: string
+  /** specifica di progetto per questo brief (regia o persona): motivi, icone, effetti, look, segni */
+  progetto?: Specifica
 }
 
 export type TipoContenuto = 'copertina' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'citazione' | 'faq' | 'prodotto' | 'timeline'

@@ -197,7 +197,8 @@ export function esamina(g: G): Esame {
   else if (!espressivo && deco.length > 18) { decoro = 6; difetti.push('troppi segni per un registro sobrio') }
   else if (deco.length > 40) { decoro = 6; difetti.push('decorazione rumorosa') }
   // segni isolati: ornamenti in una zona a sé, che non toccano testi né foto (riempitivi da catalogo)
-  const isolati = g.els.filter(e => (e.kind === 'ornament' || e.kind === 'glyph' || (e.kind === 'path' && /^(segno|blob|righe|ornamento|glifo)$/.test(e.name))) && (() => {
+  // le icone della specifica (emblema, fregio) sono ancorate ai testi per costruzione: non sono riempitivi
+  const isolati = g.els.filter(e => (e.kind === 'ornament' || (e.kind === 'glyph' && !/^(icona|fregio)$/.test(e.name)) || (e.kind === 'path' && /^(segno|blob|righe|ornamento|glifo)$/.test(e.name))) && (() => {
     const b = boxOf(e); if (!b) return false
     return !g.els.some(x => (isText(x) || x.kind === 'image') && (() => { const y = isText(x) ? textBox(x) : boxOf(x)!; return y.x < b.x + b.w && y.x + y.w > b.x && y.y < b.y + b.h && y.y + y.h > b.y })())
   })()).length

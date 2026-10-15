@@ -27,7 +27,8 @@ const fxMaker = (id: string, variant?: string, p: Record<string, number | string
 
 /** Glifo vettoriale centrato in (cx, cy) con lato `size`. */
 function glyphObj(nameOrPath: string, cx: number, cy: number, size: number, fill: string, angle = 0, opacity = 1) {
-  const d = GLYPHS[nameOrPath] ?? GLYPHS.Sparkle
+  // un nome del catalogo, oppure il tracciato di un'icona (specifica di progetto)
+  const d = GLYPHS[nameOrPath] ?? (/^ *[Mm]/.test(nameOrPath) ? nameOrPath : GLYPHS.Sparkle)
   const p = new fabric.Path(d, { fill, strokeWidth: 0, opacity })
   const k = size / Math.max(p.width || 1, p.height || 1)
   p.set({ scaleX: k, scaleY: k, angle })
