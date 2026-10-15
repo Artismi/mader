@@ -1,0 +1,12 @@
+[
+  { "nome": "conferenza-q", "contenuto": "conferenza", "formato": "quadrato", "seme": 1 },
+  { "nome": "citazione-v", "contenuto": "citazione", "formato": "verticale", "seme": 2 },
+  { "nome": "app-q", "contenuto": "app", "formato": "quadrato", "seme": 3 },
+  { "nome": "palestra-s", "contenuto": "palestra", "formato": "storia", "seme": 4 },
+  { "nome": "barbiere-v", "contenuto": "barbiere", "formato": "verticale", "seme": 5 },
+  { "nome": "caffe-q", "contenuto": "caffe", "formato": "quadrato", "seme": 6 },
+  { "nome": "techno-v", "contenuto": "techno", "formato": "verticale", "seme": 7 },
+  { "nome": "mostra-o", "contenuto": "mostra", "formato": "orizzontale", "seme": 8 },
+  { "nome": "ristorante-q", "contenuto": "ristorante", "formato": "quadrato", "seme": 9 },
+  { "nome": "dati-v", "contenuto": "t_dati", "formato": "verticale", "seme": 10 }
+]

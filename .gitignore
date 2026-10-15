@@ -64,3 +64,4 @@ ts-error.txt
 /scripts/confronto/giuria.jsonl
 /scripts/confronto/rapporto.md
 /scripts/confronto/rapporto.json
+/scripts/decompila/out
