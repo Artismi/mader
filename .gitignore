@@ -57,3 +57,4 @@ ts-error.txt
 /scripts/designer/node_modules
 /scripts/designer/out
 /scripts/designer/out-*
+/scripts/decompila/out
