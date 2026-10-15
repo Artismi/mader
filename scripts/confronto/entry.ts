@@ -46,7 +46,7 @@ async function migliore(job: Job) {
   const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, knobs: ks.length ? ks : undefined, seme: job.seme ?? 0 })
   const sc = p.scene[0]
   if (!sc) return null
-  const k = sc.knobs as Knobs
+  const k = sc.knobs as unknown as Knobs
   return {
     url: await png({ ...sc, knobs: { ...sc.knobs, enfasi: job.enfasi ?? k.enfasi } }),
     sistema: k.sistema, stile: styleById(k.stile).name, voto: sc.esame?.voto ?? null, promossa: sc.esame?.promossa ?? null,
