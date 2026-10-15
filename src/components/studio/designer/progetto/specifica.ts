@@ -77,9 +77,10 @@ const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
  * tre, dal più citato). Serve quando la regia non risponde e come base del banco.
  */
 export function ripiego(testo: string): Specifica {
-  const t = ` ${norm(testo)} `
+  // parole intere: "app" non deve scattare dentro "appuntamento"
+  const t = ` ${norm(testo).replace(/[^a-z0-9]+/g, ' ')} `
   const punti = Object.entries(MOTIVI)
-    .map(([id, m]) => [id, m.parole.filter(p => t.includes(norm(p))).length] as const)
+    .map(([id, m]) => [id, m.parole.filter(p => t.includes(` ${norm(p).replace(/[^a-z0-9]+/g, ' ').trim()} `) || (p.length > 5 && t.includes(` ${norm(p)}`))).length] as const)
     .filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])
   return { motivi: punti.slice(0, 3).map(([id]) => id) }
 }

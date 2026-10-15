@@ -54,4 +54,5 @@ test('il ripiego trova i motivi dal brief', () => {
   assert.equal(ripiego('Bottega Baffo, barba e rasatura col panno caldo').motivi[0], 'barbiere')
   assert.ok(ripiego('Notte Etiope, nuovo blend di caffè tostato a Bologna').motivi.includes('caffe'))
   assert.deepEqual(ripiego('niente di riconoscibile qui').motivi, [])
+  assert.ok(!ripiego('Su appuntamento, taglio classico').motivi.includes('risparmio'), 'parole intere, non pezzi')
 })
