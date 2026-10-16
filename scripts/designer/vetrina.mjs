@@ -39,6 +39,7 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true'])
   return acc
 }, []))
+import { famiglia, distanzaPalette, neutriChiari } from './varieta.mjs'
 const CONTENUTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/contenuti.json'), 'utf8'))
 const contenuti = args.contenuti ? args.contenuti.split(',') : Object.keys(CONTENUTI)
 const formati = (args.formati ?? 'quadrato,verticale,storia,orizzontale').split(',')
@@ -214,6 +215,8 @@ if (args.specializza) {
 const report = []
 const tutteCoppie = []
 const diversita = []
+const varieta = []
+
 for (const nome of contenuti) {
   const fx = CONTENUTI[nome]
   if (!fx) { console.warn('contenuto sconosciuto:', nome); continue }
@@ -255,6 +258,11 @@ for (const nome of contenuti) {
       const dv = await page.evaluate(o => window.designer.diversita(o), { urls: prime.map(r => r.url), mattoni: prime.map(r => r.mattoni ?? [r.sistema]) })
       diversita.push(dv)
       info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)})`
+      // varietà delle risorse nelle prime 12: palette, effetti, generatori, foto, trattamenti
+      const rs = prime.map(r => r.risorse).filter(Boolean), conta = f => new Set(rs.flatMap(f)).size
+      const v = { palette: conta(r => [famiglia(r.palette)]), effetti: conta(r => r.fx), generatori: conta(r => r.gen), foto: conta(r => r.foto), trattamenti: conta(r => r.trattamento ? [r.trattamento] : []), distanza: +distanzaPalette(rs.map(r => r.palette)).toFixed(3), neutri: neutriChiari(rs.map(r => r.palette)) }
+      varieta.push({ contenuto: nome, formato: format, ...v, dettaglio: rs })
+      info += ` · palette ${v.palette} effetti ${v.effetti} generatori ${v.generatori} foto ${v.foto} trattamenti ${v.trattamenti}`
     }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
     if (args.ibridi) {
@@ -303,6 +311,11 @@ if (diversita.length) {
   const m = k => diversita.reduce((a, d) => a + d[k], 0) / diversita.length
   console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)}`)
   fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), tavole: diversita }, null, 2))
+}
+if (varieta.length) {
+  const m = k => (varieta.reduce((a, d) => a + d[k], 0) / varieta.length).toFixed(1)
+  console.log(`Varietà (prime 12, media per tavola): palette ${m('palette')} · effetti ${m('effetti')} · generatori ${m('generatori')} · foto ${m('foto')} · trattamenti ${m('trattamenti')} · distanza palette ${(varieta.reduce((a, d) => a + d.distanza, 0) / varieta.length).toFixed(3)} · fondi chiari neutri ${m('neutri')}`)
+  fs.writeFileSync(path.join(out, 'varieta.json'), JSON.stringify(varieta, null, 2))
 }
 console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)
 

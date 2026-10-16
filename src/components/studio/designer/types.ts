@@ -111,7 +111,7 @@ export type SceneEl =
   /** sigillo: anello con testo che gira e un glifo al centro */
   | { kind: 'seal'; name: string; cx: number; cy: number; r: number; text: string; color: string; font: FontSpec; glyph?: string; bg?: string; angle?: number }
 
-export interface Palette { bg: string; ink: string; accent: string; muted: string; surface: string }
+export interface Palette { bg: string; ink: string; accent: string; muted: string; surface: string; /** sorgente della palette (V5): identità, foto, marchio, armonia */ da?: string }
 
 export interface Scene {
   w: number

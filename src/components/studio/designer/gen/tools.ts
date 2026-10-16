@@ -11,6 +11,7 @@ import { type Knobs, type Rng, rng, hashText } from './knobs'
 import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { spazi, intrecci } from './spazi'
+import { conPalette, sorgentePalette } from './risorse/palette'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
 import { conSpecifica, specializza } from './specializza'
@@ -66,7 +67,8 @@ function palette(s: Style, inverti: boolean): Pal {
 export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, photo?: string, pix?: Pix, seq?: Seq): G {
   const [W, H] = FORMAT_SIZE[format]
   // la specifica di progetto del brief orienta decori, foto ed enfasi
-  const { s, k } = conSpecifica(s0, k0, c)
+  // palette generativa (V5) al posto di quella dell'identità, poi la specifica del brief
+  const { s, k } = conSpecifica(conPalette(s0, k0, c, pix), { ...k0, paletteDa: sorgentePalette(k0, c, pix) }, c)
   const ms = misure(format)
   return {
     W, H, u: ms.u, m: ms.m.l, g: ms.gut, T: ms.safe.y, B: ms.safe.y + ms.safe.h, ms, sc: scala(ms, rapportoDa(k.scala), format),
@@ -613,7 +615,7 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   const d = g.s.decor
   return {
     w: g.W, h: g.H, bg: g.P.bg, els: g.els, layout, style: g.s.id, label,
-    palette: { bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf },
+    palette: { bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf, da: g.k.paletteDa },
     finish: { ids: d.finishes, seed: `${g.c.title}|${layout}|${g.k.seme}`, fallback: g.k.grana > 0.05 ? (d.fallback ?? 'grana') : undefined, amount: 20 + g.k.grana * 40 },
     knobs: { ...g.k },
   }

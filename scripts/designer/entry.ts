@@ -13,7 +13,23 @@ import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[] }
+export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
+
+/** Risorse usate dalla scena (per contare la varietà nelle prime 12): palette, effetti, generatori, foto, trattamenti. */
+export interface Risorse { palette: string; fx: string[]; gen: string[]; foto: string[]; trattamento?: string; paletteDa?: string }
+function risorse(sc: Scene): Risorse {
+  const fx = new Set<string>(), gen = new Set<string>(), foto = new Set<string>()
+  for (const el of sc.els) {
+    for (const f of ('fx' in el && el.fx) || []) (/^(gen|proc|campo|trama)/i.test(f.id) ? gen : fx).add(f.variant ? `${f.id}:${f.variant}` : f.id)
+    if (el.kind === 'ornament') gen.add(el.id)
+    if (el.kind === 'image') { if (el.url) foto.add(el.url.split('/').pop()!.split('?')[0]); if (el.look) fx.add('look:' + el.look) }
+    const g = (el as { gen?: string }).gen
+    if (g) gen.add(g)
+  }
+  if (sc.finish?.fallback) fx.add('trama:' + sc.finish.fallback)
+  const p = sc.palette
+  return { palette: p ? [p.bg, p.ink, p.accent].join('|') : sc.bg, fx: [...fx], gen: [...gen], foto: [...foto], trattamento: (sc.knobs as Knobs | undefined)?.trattamento, paletteDa: sc.palette?.da }
+}
 
 async function draw(sc: Scene, thumb: number) {
   const el = document.createElement('canvas')
@@ -58,7 +74,7 @@ async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; c
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema] })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc) })
   }
   return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri }
 }
