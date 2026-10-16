@@ -708,7 +708,8 @@ function strilli(g: G): Scene | null {
       y += h + U(g, 18)
     }
     const kk = lab(g, g.c.brand ? g.c.kicker : '', W * 0.4)
-    if (kk) putLab(g, 'occhiello', kk, W - bw - U(g, 20) - kk.w, topH + U(g, 20) - kk.h - U(g, 30) > 0 ? topH - kk.h - U(g, 12) : topH + U(g, 20), onF.fg)
+    // l'occhiello sta nella fascia di testa o non c'è: sotto finiva sulla foto e sugli strilli
+    if (kk && topH - kk.h - U(g, 12) > T) putLab(g, 'occhiello', kk, W - bw - U(g, 20) - kk.w, topH - kk.h - U(g, 12), onF.fg)
     const R = Math.min(W, H) * 0.1
     if (bandY - (y + U(g, 20)) > R * 2.6 || side) bollino(pb.x + pb.w - R * 1.25, (side ? pb.y + R * 1.5 : bandY - R * 1.4), R)
   } else {
@@ -721,7 +722,7 @@ function strilli(g: G): Scene | null {
     photo(g, 'foto', pb)
     printMarks(g, alpha(P.fg, 0.7))
     const kk = lab(g, g.c.brand ? g.c.kicker : '', W * 0.6)
-    if (kk) putLab(g, 'occhiello', kk, m, top - kk.h - U(g, 14) > T + mh.h + U(g, 8) ? top - kk.h - U(g, 14) : top, col.acc)
+    if (kk && top - kk.h - U(g, 14) > T + mh.h + U(g, 8)) putLab(g, 'occhiello', kk, m, top - kk.h - U(g, 14), col.acc)
     // titolo in un riquadro pieno inclinato, a cavallo del bordo della foto
     const t = display(g, g.c.title, (side ? W * 0.42 : W * 0.66), H * 0.22, 140 + 60 * k.scala, 48, 3)
     if (!t) return null
