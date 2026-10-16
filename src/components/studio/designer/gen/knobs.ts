@@ -8,7 +8,7 @@ import type { TipoContenuto } from '../types'
 import { ARCHETIPI, type ArchetipoId } from './archetipi/elenco'
 
 export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista' | 'tesi' | 'dato' | 'citazione' | 'elenco' | 'chiusura'
-  | 'composto' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'faq' | 'prodotto' | 'timeline'
+  | 'composto' | 'ibrido' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'faq' | 'prodotto' | 'timeline'
   | ArchetipoId
 export type Trattamento = 'pellicola' | 'duotone' | 'retino' | 'riso' | 'serigrafia' | 'bn' | 'poster'
 
@@ -34,6 +34,8 @@ export interface Knobs {
   enfasi?: string
   /** 0 caratteri sobri e classici → 1 display, stencil e caratteri d'autore (entra nell'identità) */
   sperimentazione?: number
+  /** sistema "ibrido": i mattoni da comporre (gen/mattoni) */
+  genoma?: import('./mattoni/tipi').Genoma
 }
 
 export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean; /** sistema dedicato a un tipo di contenuto (elenco, programma…) */ tipo?: TipoContenuto }
@@ -56,6 +58,7 @@ export const SISTEMI: SistemaInfo[] = [
   { id: 'chiusura', nome: 'Chiusura', idea: 'l\'invito protagonista e il brand grande', foto: 'no', slide: true },
   { id: 'ritaglio', nome: 'Foto nelle lettere', idea: 'la parola chiave enorme con la foto dentro le lettere, contorno fuori registro dietro, titolo completo sotto', foto: 'serve' },
   { id: 'composto', nome: 'Composto', idea: 'ossatura generata: la tavola tagliata in celle (terzi, sezione aurea, metà), ogni cella con un ruolo (titolo, foto, campo di colore, numero, segno, contenuto); ogni seme è un\'impaginazione diversa', foto: 'meglio' },
+  { id: 'ibrido', nome: 'Ibrido', idea: 'mattoni di ricette diverse incrociati: l’ossatura di una, il titolo di un’altra, i dispositivi di una terza, con i parametri mutati; li sceglie il critico', foto: 'meglio' },
   { id: 'consigli', nome: 'Consigli', idea: 'titolo e voci numerate in elenco o in card', foto: 'no', tipo: 'consigli' },
   { id: 'passi', nome: 'Passo dopo passo', idea: 'passi numerati collegati da un filo', foto: 'no', tipo: 'passi' },
   { id: 'dati', nome: 'Dati', idea: 'numeri grandi o barre proporzionali', foto: 'no', tipo: 'dati' },

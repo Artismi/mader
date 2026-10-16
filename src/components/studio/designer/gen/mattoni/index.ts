@@ -44,8 +44,10 @@ export function ricetta(g: G, id: RicettaId): Scene | null {
 
 /** Sigla del genoma (per i doppioni e per la selezione): ossatura+titolo+foto. */
 export const sigla = (gen: Genoma) => [gen.ossatura.id, gen.titolo.id, gen.foto?.id ?? '-'].join('+')
-/** Le ricette da cui viene: un ibrido vero ne mescola almeno due. */
-export const origini = (gen: Genoma) => new Set([gen.ossatura, gen.titolo, ...(gen.foto ? [gen.foto] : []), ...gen.dispositivi].map(x => MATTONI[x.id]?.ricetta).filter(Boolean))
+/** Le ricette dei mattoni principali (ossatura, titolo, foto): un ibrido vero ne mescola almeno due. */
+export const origini = (gen: Genoma) => new Set([gen.ossatura, gen.titolo, ...(gen.foto ? [gen.foto] : [])].map(x => MATTONI[x.id]?.ricetta).filter(Boolean))
+/** La ricetta dell'ossatura: nella selezione un ibrido occupa il posto dell'archetipo con lo stesso scheletro. */
+export const scheletro = (gen: Genoma) => MATTONI[gen.ossatura.id]?.ricetta ?? gen.ossatura.id
 
 /** Vincoli statici: il titolo e la foto stanno nell'ossatura, i segni hanno quello che serve. */
 export function compatibile(gen: Genoma, o: { voci?: boolean } = {}) {

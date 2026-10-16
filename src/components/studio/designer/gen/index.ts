@@ -17,6 +17,8 @@ import { SYSTEMS_REGISTRI } from './systems2'
 import { SYSTEMS_SLIDE } from './slides'
 import { SYSTEMS_TIPI } from './tipi'
 import { composto } from './compositore'
+import { ibrido, scheletro } from './mattoni'
+import { incrocia } from './incrocio'
 import { ARCHETIPI } from './archetipi/elenco'
 import { affinita } from './affinita'
 import { SYSTEMS_A } from './archetipi/gruppo-a'
@@ -34,7 +36,7 @@ import { loadPix } from '../core/foto'
 export * from './knobs'
 export { dimentica as dimenticaMemoria } from './memoria'
 
-export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D, ...SYSTEMS_E }
+export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ibrido, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D, ...SYSTEMS_E }
 
 /** Sistemi che parlano ciascun registro, dal più tipico. */
 const SISTEMI_A_MANO: Record<RegistroId, SistemaId[]> = {
@@ -149,7 +151,7 @@ export function ammesso(c: DesignContent, id: SistemaId, hasPhoto: boolean) {
   const elenco = !!tipo && TIPI_ELENCO.includes(tipo)
   const info = SISTEMI.find(s => s.id === id)
   const sa = ARCHETIPI.some(a => a.id === id && 'voci' in a && a.voci)
-  return !info?.slide && !info?.tipo && id !== 'composto' && affinita(c, id) !== 'esclusa' && (hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sa))
+  return !info?.slide && !info?.tipo && id !== 'composto' && id !== 'ibrido' && affinita(c, id) !== 'esclusa' && (hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sa))
 }
 
 /** Composizioni per identità nel vivaio ampio. */
@@ -225,7 +227,7 @@ export interface Proposte { scene: Scene[]; candidate: number; promosse: number;
  * altro giro con semi nuovi (al massimo `giri`); in ultimo si completa con le
  * bocciate migliori, segnate come tali.
  */
-export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
+export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
   const n = o.n ?? 12
   // si genera quattro volte quello che si mostra: il critico sceglie su un vivaio ampio
   const vivaio = o.vivaio ?? n * 4
@@ -243,6 +245,8 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
       o.onProgress?.(i + 1, pool.length)
       if (sc) tutte.push(sc)
     }
+    // gli incroci dei mattoni (V1): le identità del vivaio, poche generazioni, restano gli ibridi promossi
+    if (giro === 0 && o.ibridi !== false) tutte.push(...await incrocia(c, format, { base: pool, seme: o.seme, valuta: k => generateSystem(c, format, k, o.photo, { tentativi: 2 }) }))
     // un altro giro prima di accettare doppioni: si ferma solo quando le 12 sono tutte di sistemi diversi
     if (scegli(tutte, n, true, 1).length >= n) break
   }
@@ -263,19 +267,26 @@ const punteggio = (sc: Scene) => {
   return v + (v >= ECCELLENTE ? cur : cur * 0.4)
 }
 
-/** Selezione: per punteggio, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità. */
+/** Il sistema per la selezione: un ibrido vale come l'archetipo del suo scheletro (stessa ossatura, stessa idea di pagina). */
+const sistemaDi = (sc: Scene) => { const k = sc.knobs as Knobs | undefined; return k?.sistema === 'ibrido' && k.genoma ? scheletro(k.genoma) : k?.sistema ?? sc.layout }
+
+/** Selezione: per punteggio, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità (gli ibridi al più un terzo). */
 function scegli(tutte: Scene[], n: number, soloPromosse: boolean, maxLivello = 3): Scene[] {
   const cand = tutte.filter(x => !soloPromosse || x.esame?.promossa).map(x => ({ x, p: punteggio(x) })).sort((a, b) => b.p - a.p).map(o => o.x)
   // prima un solo esemplare per sistema (niente coppie quasi uguali), poi si allarga se non bastano
   for (const [perSistema, perStile] of ([[1, 3], [2, 4], [3, 6]] as const).slice(0, maxLivello)) {
     const out: Scene[] = []
     const firme = new Set<string>(), sist = new Map<string, number>(), stili = new Map<string, number>()
+    let ibridi = 0
     for (const sc of cand) {
       const k = sc.knobs as Knobs | undefined
-      const sis = k?.sistema ?? sc.layout, st = k?.stile ?? sc.style
+      const sis = sistemaDi(sc), st = k?.stile ?? sc.style
+      const ib = k?.sistema === 'ibrido'
+      if (ib && ibridi >= Math.ceil(n / 3)) continue
       const firma = `${sis}|${sc.esame?.firma ?? ''}`
       const tetto = sis === 'composto' ? perSistema + 2 : perSistema
       if (firme.has(firma) || (sist.get(sis) ?? 0) >= tetto || (stili.get(st) ?? 0) >= perStile) continue
+      if (ib) ibridi++
       out.push(sc); firme.add(firma); sist.set(sis, (sist.get(sis) ?? 0) + 1); stili.set(st, (stili.get(st) ?? 0) + 1)
       if (out.length >= n) return out
     }
