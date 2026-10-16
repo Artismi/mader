@@ -19,6 +19,17 @@ export function lineWidth(text: string, font: FontSpec, size: number, tracking =
   return c.measureText(text).width + Math.max(0, text.length - 1) * tracking * size
 }
 
+/**
+ * Inchiostro vero di una riga (misura del canvas, gli stessi caratteri del render):
+ * quanto sporge a sinistra dell'origine, fin dove arriva a destra, sopra e sotto la linea di base.
+ */
+export function inkLine(text: string, font: FontSpec, size: number, tracking = 0) {
+  const c = c2d()
+  c.font = cssFont(font, size)
+  const m = c.measureText(text), extra = Math.max(0, text.length - 1) * tracking * size
+  return { l: m.actualBoundingBoxLeft, r: m.actualBoundingBoxRight + extra, a: m.actualBoundingBoxAscent, d: m.actualBoundingBoxDescent, w: m.width + extra }
+}
+
 /** Altezza di un blocco come la disegna Fabric (prima riga 1.13 em, poi l'interlinea). */
 export const blockHeight = (size: number, lines: number, leading: number) =>
   lines <= 0 ? 0 : size * 1.13 + (lines - 1) * size * leading

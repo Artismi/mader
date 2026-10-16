@@ -10,6 +10,7 @@ import { fit, lineWidth, blockHeight, type Fit, type FitOpts } from '../text'
 import { type Knobs, type Rng, rng, hashText } from './knobs'
 import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
+import { spazi } from './spazi'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
 import { conSpecifica, specializza } from './specializza'
@@ -91,7 +92,7 @@ export function sizeForWidth(text: string, font: FontSpec, w: number, tracking =
 export interface TextOpts {
   name: string; lines: string[]; font: FontSpec; size: number; x: number; y: number; color: string
   align?: 'left' | 'center' | 'right'; w?: number; leading?: number; tracking?: number; angle?: number
-  hollow?: boolean; stroke?: string; sw?: number; deco?: boolean
+  hollow?: boolean; stroke?: string; sw?: number; deco?: boolean; sovrapponibile?: boolean
   blend?: GlobalCompositeOperation; opacity?: number; fx?: FxSpec[]
   chars?: Extract<SceneEl, { kind: 'text' }>['chars']
 }
@@ -103,7 +104,7 @@ export function txt(g: G, o: TextOpts) {
   return put(g, {
     kind: 'text', name: o.name, x: o.x, y: o.y, w: o.w ?? tw, h: blockHeight(o.size, o.lines.length, leading), tw,
     lines: o.lines, font: o.font, size: o.size, color: o.color, align: o.align ?? 'left', lineHeight: leading, tracking,
-    angle: o.angle, hollow: o.hollow, stroke: o.stroke ?? (o.hollow ? o.color : undefined), sw: o.sw, deco: o.deco,
+    angle: o.angle, hollow: o.hollow, stroke: o.stroke ?? (o.hollow ? o.color : undefined), sw: o.sw, deco: o.deco, sovrapponibile: o.sovrapponibile,
     blend: o.blend, opacity: o.opacity, fx: o.fx, chars: o.chars,
   })
 }
@@ -595,6 +596,9 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   // i testi veri e i sigilli stanno sopra la grana: nitidi, come li comporrebbe un tipografo
   const front = g.els.filter(e => (e.kind === 'text' && !e.deco) || e.kind === 'seal' || e.kind === 'arcText')
   g.els = [...g.els.filter(e => !front.includes(e)), ...front]
+  // misure vere riga per riga: margini, contatti e aria tra i testi, corretti dove si può
+  const sp = spazi(g)
+  if (sp) { discard(g, sp); return null }
   if (!check(g)) return null
   const d = g.s.decor
   return {

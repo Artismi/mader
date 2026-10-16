@@ -78,6 +78,8 @@ export type SceneEl =
       stroke?: string; sw?: number; hollow?: boolean
       /** testo decorativo (ripetizioni, scritte che escono dalla tavola): fuori dai controlli */
       deco?: boolean
+      /** sovrapposizione voluta dall'archetipo: il controllo degli spazi non la corregge */
+      sovrapponibile?: boolean
       /** stili per lettera, riga per riga: colore, spostamento verticale (in em), corsivo */
       chars?: ({ c?: string; dy?: number; it?: boolean } | null)[][]
     } & Look)
