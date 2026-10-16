@@ -717,18 +717,20 @@ export function infografica(g: G): Scene | null {
     }
     const colW = A.w / 2 - R - U(g, 70)
     if (colW < U(g, 150)) return no(g, 'colonne strette')
+    // senza voci le righe sono i dettagli: note brevi, al corpo delle note (le voci vere al corpo di lettura)
+    const dett = !conVoci(g), minR = dett ? g.sc.minNota : g.sc.minLettura
     for (const dx of [-1, 1]) {
       const grp = rs.map((r, i) => ({ r, i })).filter(x => (x.i % 2 ? 1 : -1) === dx)
       grp.forEach((x, j) => {
         const fy = A.y + (A.h * (j + 0.5)) / grp.length
-        const lf = fit({ text: x.r.nome, font: g.s.label, maxW: colW, maxSize: Math.max(26 * g.u, g.sc.minLettura), minSize: g.sc.minLettura, maxLines: 3, leading: 1.25, tracking: 0.1, upper: true })
+        const lf = fit({ text: x.r.nome, font: g.s.label, maxW: colW, maxSize: Math.max(26 * g.u, minR), minSize: minR, maxLines: 3, leading: 1.25, tracking: 0.1, upper: true })
         if (!lf) return
         const tf = x.r.testo ? para(g, x.r.testo, colW, 2, 22) : null
         const hh = lf.h + (tf ? tf.h + U(g, STACCO) : 0)
         const tx = dx < 0 ? A.x : A.x + A.w - colW
         const ty = clamp(fy - hh / 2, A.y, A.y + A.h - hh)
         const al = dx < 0 ? 'right' : 'left'
-        txt(g, { name: `voce_${x.i}`, lines: lf.lines, font: g.s.label, size: lf.size, x: tx, y: ty, color: fg, align: al, w: colW, leading: 1.25, tracking: 0.1 })
+        txt(g, { name: `${dett ? 'dettaglio' : 'voce'}_${x.i}`, lines: lf.lines, font: g.s.label, size: lf.size, x: tx, y: ty, color: fg, align: al, w: colW, leading: 1.25, tracking: 0.1 })
         if (tf) { txt(g, { name: `testo_${x.i}`, lines: tf.lines, font: s.text, size: tf.size, x: tx, y: ty + lf.h + U(g, STACCO), color: fg, align: al, w: colW, leading: tf.leading ?? 1.35 }); testi++ }
         const ex = dx < 0 ? tx + colW + U(g, 16) : tx - U(g, 16), ey = ty + lf.size * 0.6
         const ang = Math.atan2(ey - cy, ex - cx)
