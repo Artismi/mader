@@ -119,4 +119,6 @@ export interface Scene {
   knobs?: Record<string, unknown>
   /** esame del critico: voto, difetti, gesti, correzioni fatte */
   esame?: Esame
+  /** attribuzioni richieste dalle licenze degli asset usati (catalogo) */
+  crediti?: string[]
 }

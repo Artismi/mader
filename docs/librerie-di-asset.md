@@ -65,6 +65,13 @@ Ne ricava genere ed epoca: grotesco, neo-grotesco, geometrico, umanista, didone,
 - **Foto:** API di Unsplash e Pexels (licenze gratuite per uso commerciale, con le loro condizioni d'uso dell'API) e Openverse, filtrata sulle licenze commerciali.
 - **Motivi:** generati (V3 di `varieta-e-affinamento.md`), più Hero Patterns (CC BY 4.0) con attribuzione.
 
+## Come è fatto (AS1)
+
+- Schema e regole: `designer/asset/catalogo.ts` (`Asset`, `LICENZE`, `ammesso`, `crediti`). Metadati in git: `asset/caratteri.json` (i caratteri, letti dal motore) e `asset/altri.json` (gli asset di `public/assets`, con tag dal percorso e colori dominanti); sono i due pezzi di `asset-catalogo.json`, divisi perché il motore non si porti dietro le texture.
+- Cache locale fuori da git: `public/asset-cache/` (servita come `/asset-cache/…`) e `.asset-cache/` (zip e metadati grezzi).
+- Ammessi nelle tavole: OFL, Apache, UFL, MIT, ISC, CC0, CC BY (con attribuzione). Fuori: CC BY-SA, solo uso personale, licenza non verificata. Ogni tavola porta `scene.crediti` con le attribuzioni dovute.
+- `npm run asset:catalogo` reimporta i 57 caratteri del motore (licenza dal repo google/fonts), i 32 Velvetyne di `public/fonts/libere` e i 222 asset di `public/assets`. Restano fuori dalle tavole i 3 caratteri di `public/fonts/pack` e i pack `ds-*` (licenza non verificata); le texture ambientCG sono CC0.
+
 ## Fasi
 
 - **AS1. Catalogo e licenze**: lo schema del catalogo, la cache locale e le regole di licenza e attribuzione. Si importano i 57 font attuali e gli asset di `public/` per non perdere niente.

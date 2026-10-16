@@ -1,0 +1,3510 @@
+[
+ {
+  "id": "carattere:anthony",
+  "tipo": "carattere",
+  "nome": "Anthony",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "display"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/anthony/Anthony.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.8
+   },
+   "osa": 0.8,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:anton",
+  "tipo": "carattere",
+  "nome": "Anton",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Anton",
+  "autore": "Vernon Adams",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 1
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:antonio",
+  "tipo": "carattere",
+  "nome": "Antonio",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Antonio",
+  "autore": "Vernon Adams",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 0.7,
+    "elegante": 0.3
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:archivo",
+  "tipo": "carattere",
+  "nome": "Archivo",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Archivo",
+  "autore": "Omnibus-Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.6,
+    "forte": 0.6
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:archivo-black",
+  "tipo": "carattere",
+  "nome": "Archivo Black",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Archivo+Black",
+  "autore": "Omnibus-Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 1,
+    "sperimentale": 0.3
+   },
+   "osa": 0.3,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:backout",
+  "tipo": "carattere",
+  "nome": "BackOut",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "display"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/backout/BackOut.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.8
+   },
+   "osa": 0.8,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:baloo-2",
+  "tipo": "carattere",
+  "nome": "Baloo 2",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Baloo+2",
+  "autore": "Ek Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Display"
+   ],
+   "umore": [
+    "giocoso",
+    "morbido",
+    "caldo"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "giocoso": 1,
+    "morbido": 1,
+    "caldo": 0.5
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:barlow",
+  "tipo": "carattere",
+  "nome": "Barlow",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Barlow",
+  "autore": "Jeremy Tribby",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.5,
+    "forte": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:barlow-condensed",
+  "tipo": "carattere",
+  "nome": "Barlow Condensed",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Barlow+Condensed",
+  "autore": "Jeremy Tribby",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte",
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "etichetta"
+   ],
+   "p": {
+    "forte": 0.6,
+    "tecnico": 0.5
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:basteleur",
+  "tipo": "carattere",
+  "nome": "Basteleur",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/basteleur/Basteleur-Moonlight.woff2",
+    "peso": 400,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/basteleur/Basteleur-Bold.woff2",
+    "peso": 700,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400,
+    700
+   ]
+  }
+ },
+ {
+  "id": "carattere:bebas-neue",
+  "tipo": "carattere",
+  "nome": "Bebas Neue",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Bebas+Neue",
+  "autore": "Ryoichi Tsunekawa",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 0.9,
+    "tecnico": 0.3
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:big-shoulders-display",
+  "tipo": "carattere",
+  "nome": "Big Shoulders Display",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Big+Shoulders+Display",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 1,
+    "tecnico": 0.4
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:bodoni-moda",
+  "tipo": "carattere",
+  "nome": "Bodoni Moda",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Bodoni+Moda",
+  "autore": "Owen Earl",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "elegante": 1,
+    "forte": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:bowlby-one",
+  "tipo": "carattere",
+  "nome": "Bowlby One",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Bowlby+One",
+  "autore": "Vernon Adams",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Display"
+   ],
+   "umore": [
+    "forte",
+    "giocoso",
+    "caldo"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 0.8,
+    "giocoso": 0.6,
+    "caldo": 0.5
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:bricolage-grotesque",
+  "tipo": "carattere",
+  "nome": "Bricolage Grotesque",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Bricolage+Grotesque",
+  "autore": "Mathieu Triay",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "giocoso",
+    "sperimentale",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "giocoso": 0.7,
+    "sperimentale": 0.5,
+    "caldo": 0.4,
+    "forte": 0.5
+   },
+   "osa": 0.5,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:cantique",
+  "tipo": "carattere",
+  "nome": "Cantique",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "editoriali"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/cantique/Cantique-Normal.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.5
+   },
+   "osa": 0.5,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:caveat",
+  "tipo": "carattere",
+  "nome": "Caveat",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Caveat",
+  "autore": "Impallari Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Handwriting"
+   ],
+   "umore": [
+    "caldo",
+    "giocoso",
+    "morbido"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "caldo": 0.8,
+    "giocoso": 0.6,
+    "morbido": 0.5
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:chewy",
+  "tipo": "carattere",
+  "nome": "Chewy",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Chewy",
+  "autore": "Sideshow",
+  "licenza": "Apache-2.0",
+  "tag": {
+   "genere": [
+    "Display"
+   ],
+   "umore": [
+    "giocoso",
+    "morbido"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "giocoso": 1,
+    "morbido": 0.7
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:chivo",
+  "tipo": "carattere",
+  "nome": "Chivo",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Chivo",
+  "autore": "Omnibus-Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte",
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "forte": 0.6,
+    "tecnico": 0.5
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:compagnon",
+  "tipo": "carattere",
+  "nome": "Compagnon",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "mono"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/compagnon/Compagnon-Light.woff2",
+    "peso": 300,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/compagnon/Compagnon-Medium.woff2",
+    "peso": 500,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/compagnon/Compagnon-Bold.woff2",
+    "peso": 700,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "etichetta"
+   ],
+   "p": {
+    "sperimentale": 0.5
+   },
+   "osa": 0.5,
+   "pesi": [
+    300,
+    500,
+    700
+   ]
+  }
+ },
+ {
+  "id": "carattere:cormorant-garamond",
+  "tipo": "carattere",
+  "nome": "Cormorant Garamond",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Cormorant+Garamond",
+  "autore": "Christian Thalmann",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "elegante": 0.95,
+    "caldo": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:darker-grotesque",
+  "tipo": "carattere",
+  "nome": "Darker Grotesque",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Darker+Grotesque",
+  "autore": "Gabriel Lam, ViệtAnh Nguyễn",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "sperimentale"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.7,
+    "elegante": 0.4
+   },
+   "osa": 0.7,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:dm-mono",
+  "tipo": "carattere",
+  "nome": "DM Mono",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/DM+Mono",
+  "autore": "Colophon Foundry",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Monospace"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.7,
+    "morbido": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": true,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:dm-sans",
+  "tipo": "carattere",
+  "nome": "DM Sans",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/DM+Sans",
+  "autore": "Colophon Foundry",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": []
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "morbido": 0.4,
+    "tecnico": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:dm-serif-display",
+  "tipo": "carattere",
+  "nome": "DM Serif Display",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/DM+Serif+Display",
+  "autore": "Colophon Foundry",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "elegante": 0.7,
+    "forte": 0.5,
+    "caldo": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:epilogue",
+  "tipo": "carattere",
+  "nome": "Epilogue",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Epilogue",
+  "autore": "Tyler Finck, ETC",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "forte": 0.6,
+    "sperimentale": 0.4
+   },
+   "osa": 0.4,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:facade-est",
+  "tipo": "carattere",
+  "nome": "Facade Est",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Facade-font/Facade-Est.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:facade-ouest",
+  "tipo": "carattere",
+  "nome": "Facade Ouest",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Facade-font/Facade-Ouest.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:facade-sud-ouest",
+  "tipo": "carattere",
+  "nome": "Facade Sud-Ouest",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Facade-font/Facade-Sud-Ouest.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:familjen-grotesk",
+  "tipo": "carattere",
+  "nome": "Familjen Grotesk",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Familjen+Grotesk",
+  "autore": "Familjen STHLM AB",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "tecnico": 0.5,
+    "caldo": 0.4,
+    "sperimentale": 0.3
+   },
+   "osa": 0.3,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:feroniapi",
+  "tipo": "carattere",
+  "nome": "Feroniapi",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "editoriali"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/feroniapi/Feroniapi-MediumItalic.woff2",
+    "peso": 500,
+    "stile": "italic"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.5
+   },
+   "osa": 0.5,
+   "pesi": [
+    500
+   ]
+  }
+ },
+ {
+  "id": "carattere:figtree",
+  "tipo": "carattere",
+  "nome": "Figtree",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Figtree",
+  "autore": "Erik Kennedy",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "morbido"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "morbido": 0.5,
+    "giocoso": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:flor-de-ruina",
+  "tipo": "carattere",
+  "nome": "Flor de Ruina",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "gotici"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/flor-des-ruina/FlorDeRuina-Flor.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.9
+   },
+   "osa": 0.9,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:flor-de-ruina-fractura",
+  "tipo": "carattere",
+  "nome": "Flor de Ruina Fractura",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "gotici"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/flor-des-ruina/FlorDeRuina-Fractura.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.9
+   },
+   "osa": 0.9,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:flor-de-ruina-germen",
+  "tipo": "carattere",
+  "nome": "Flor de Ruina Germen",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "gotici"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/flor-des-ruina/FlorDeRuina-Germen.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.9
+   },
+   "osa": 0.9,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:format-1452",
+  "tipo": "carattere",
+  "nome": "Format 1452",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "stencil"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/format-1452/Format_1452.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.85
+   },
+   "osa": 0.85,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:fraunces",
+  "tipo": "carattere",
+  "nome": "Fraunces",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Fraunces",
+  "autore": "Undercase Type, Phaedra Charles, Flavia Zimbardi",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "caldo",
+    "morbido",
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "caldo": 0.9,
+    "morbido": 0.6,
+    "elegante": 0.5,
+    "giocoso": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:fredoka",
+  "tipo": "carattere",
+  "nome": "Fredoka",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Fredoka",
+  "autore": "Milena Brandão, Hafontia",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "giocoso",
+    "morbido"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "giocoso": 0.9,
+    "morbido": 1
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:gloock",
+  "tipo": "carattere",
+  "nome": "Gloock",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Gloock",
+  "autore": "Duarte Pinto",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "elegante": 0.6,
+    "forte": 0.6,
+    "sperimentale": 0.3
+   },
+   "osa": 0.3,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:gulax",
+  "tipo": "carattere",
+  "nome": "Gulax",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Gulax/Gulax-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:hanken-grotesk",
+  "tipo": "carattere",
+  "nome": "Hanken Grotesk",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Hanken+Grotesk",
+  "autore": "Alfredo Marco Pradil, Hanken Design Co.",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.5,
+    "morbido": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:happy-times",
+  "tipo": "carattere",
+  "nome": "Happy Times",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "editoriali"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Happy-Times-at-the-IKOB/happy-times-NG_regular_master_web.woff2",
+    "peso": 400,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/Happy-Times-at-the-IKOB/happy-times-NG_bold_master_web.woff2",
+    "peso": 700,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/Happy-Times-at-the-IKOB/happy-times-NG_italic_master_web.woff2",
+    "peso": 400,
+    "stile": "italic"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.5
+   },
+   "osa": 0.5,
+   "pesi": [
+    400,
+    700,
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:ibm-plex-mono",
+  "tipo": "carattere",
+  "nome": "IBM Plex Mono",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/IBM+Plex+Mono",
+  "autore": "Mike Abbink, Bold Monday",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Monospace"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 1
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": true,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:imago-mundi-mei",
+  "tipo": "carattere",
+  "nome": "Imago Mundi Mei",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/imago-mundi-mei/ImagoMundiMei-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:instrument-sans",
+  "tipo": "carattere",
+  "nome": "Instrument Sans",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Instrument+Sans",
+  "autore": "Rodrigo Fuenzalida, Jordan Egstad",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.5,
+    "elegante": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:instrument-serif",
+  "tipo": "carattere",
+  "nome": "Instrument Serif",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Instrument+Serif",
+  "autore": "Rodrigo Fuenzalida, Jordan Egstad",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "elegante": 0.9,
+    "caldo": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:inter",
+  "tipo": "carattere",
+  "nome": "Inter",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Inter",
+  "autore": "Rasmus Andersson",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.8,
+    "forte": 0.4
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:interlope",
+  "tipo": "carattere",
+  "nome": "Interlope",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "calligrafici"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/interlope/Interlope-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.8
+   },
+   "osa": 0.8,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:jetbrains-mono",
+  "tipo": "carattere",
+  "nome": "JetBrains Mono",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/JetBrains+Mono",
+  "autore": "JetBrains, Philipp Nurullin, Konstantin Bulenkov",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Monospace"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.9
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": true,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:jgs-5",
+  "tipo": "carattere",
+  "nome": "Jgs 5",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "pixel"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/jgs/jgs5.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.9
+   },
+   "osa": 0.9,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:jgs-9",
+  "tipo": "carattere",
+  "nome": "Jgs 9",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "pixel"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/jgs/jgs9.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.9
+   },
+   "osa": 0.9,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:jost",
+  "tipo": "carattere",
+  "nome": "Jost",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Jost",
+  "autore": "Owen Earl",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "elegante": 0.6,
+    "tecnico": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:kaeru-kaeru",
+  "tipo": "carattere",
+  "nome": "Kaeru Kaeru",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/kaerukaeru/kaerukaeru-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:karla",
+  "tipo": "carattere",
+  "nome": "Karla",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Karla",
+  "autore": "Jonny Pinhorn",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": []
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "caldo": 0.4,
+    "sperimentale": 0.2
+   },
+   "osa": 0.2,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:kilo",
+  "tipo": "carattere",
+  "nome": "Kilo",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {},
+  "file": [
+   {
+    "url": "/fonts/pack/Kilo.otf",
+    "peso": 400
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.7
+   },
+   "osa": 0.7
+  }
+ },
+ {
+  "id": "carattere:le-murmure",
+  "tipo": "carattere",
+  "nome": "Le Murmure",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "display"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/murmure/LeMurmure-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.8
+   },
+   "osa": 0.8,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:letters-lavish",
+  "tipo": "carattere",
+  "nome": "Letters Lavish",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/letters/Letters-Lavish.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:letters-torn",
+  "tipo": "carattere",
+  "nome": "Letters Torn",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/letters/Letters-Torn.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:lexend",
+  "tipo": "carattere",
+  "nome": "Lexend",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Lexend",
+  "autore": "Bonnie Shaver-Troup, Thomas Jockin, Santiago Orozco, Héctor Gómez, Superunion",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "morbido",
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "morbido": 0.5,
+    "tecnico": 0.5
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:lineal",
+  "tipo": "carattere",
+  "nome": "Lineal",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "display"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/lineal/Lineal-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/lineal/Lineal-Bold.woff2",
+    "peso": 700,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/lineal/Lineal-Black.woff2",
+    "peso": 900,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.8
+   },
+   "osa": 0.8,
+   "pesi": [
+    400,
+    700,
+    900
+   ]
+  }
+ },
+ {
+  "id": "carattere:literata",
+  "tipo": "carattere",
+  "nome": "Literata",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Literata",
+  "autore": "TypeTogether",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "caldo"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo"
+   ],
+   "p": {
+    "caldo": 0.7
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:manrope",
+  "tipo": "carattere",
+  "nome": "Manrope",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Manrope",
+  "autore": "Mikhail Sharanda",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.5,
+    "morbido": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:mess",
+  "tipo": "carattere",
+  "nome": "Mess",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Mess/Mess-Light_web.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:mourier",
+  "tipo": "carattere",
+  "nome": "Mourier",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/mourier/Mourier-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:newsreader",
+  "tipo": "carattere",
+  "nome": "Newsreader",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Newsreader",
+  "autore": "Production Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante",
+    "caldo"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "elegante": 0.6,
+    "caldo": 0.6
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:nunito",
+  "tipo": "carattere",
+  "nome": "Nunito",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Nunito",
+  "autore": "Vernon Adams, Cyreal, Jacques Le Bailly",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "morbido",
+    "giocoso"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "morbido": 0.8,
+    "giocoso": 0.5,
+    "caldo": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:oswald",
+  "tipo": "carattere",
+  "nome": "Oswald",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Oswald",
+  "autore": "Vernon Adams, Kalapi Gajjar, Cyreal",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 0.8
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:ouroboros",
+  "tipo": "carattere",
+  "nome": "Ouroboros",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/ouroboros/Ouroboros-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:outfit",
+  "tipo": "carattere",
+  "nome": "Outfit",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Outfit",
+  "autore": "Smartsheet Inc, Rodrigo Fuenzalida",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "morbido",
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "morbido": 0.6,
+    "tecnico": 0.5,
+    "giocoso": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:playfair-display",
+  "tipo": "carattere",
+  "nome": "Playfair Display",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Playfair+Display",
+  "autore": "Claus Eggers Sørensen",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "elegante": 0.8,
+    "caldo": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:quicksand",
+  "tipo": "carattere",
+  "nome": "Quicksand",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Quicksand",
+  "autore": "Andrew Paglinawan",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "morbido"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "morbido": 0.8,
+    "elegante": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:rammetto-one",
+  "tipo": "carattere",
+  "nome": "Rammetto One",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Rammetto+One",
+  "autore": "Vernon Adams",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Display"
+   ],
+   "umore": [
+    "giocoso",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "giocoso": 0.8,
+    "forte": 0.7
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:roadam",
+  "tipo": "carattere",
+  "nome": "Roadam",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {},
+  "file": [
+   {
+    "url": "/fonts/pack/Roadam.otf",
+    "peso": 400
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.7
+   },
+   "osa": 0.7
+  }
+ },
+ {
+  "id": "carattere:rozha-one",
+  "tipo": "carattere",
+  "nome": "Rozha One",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Rozha+One",
+  "autore": "Indian Type Foundry",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "forte",
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "forte": 0.8,
+    "elegante": 0.5
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:rubik",
+  "tipo": "carattere",
+  "nome": "Rubik",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Rubik",
+  "autore": "Hubert and Fischer, Meir Sadan, Cyreal, Daniel Grumer, Omaima Dajani",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "morbido",
+    "giocoso"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "morbido": 0.7,
+    "giocoso": 0.5
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:schibsted-grotesk",
+  "tipo": "carattere",
+  "nome": "Schibsted Grotesk",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Schibsted+Grotesk",
+  "autore": "Bakken & Bæck, Henrik Kongsvoll",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "forte",
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "forte": 0.6,
+    "tecnico": 0.5
+   },
+   "osa": 0,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:shrikhand",
+  "tipo": "carattere",
+  "nome": "Shrikhand",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Shrikhand",
+  "autore": "Jonny Pinhorn",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Display"
+   ],
+   "umore": [
+    "giocoso",
+    "caldo"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "giocoso": 0.8,
+    "caldo": 0.8
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:sligoil",
+  "tipo": "carattere",
+  "nome": "Sligoil",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "mono"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/sligoil/Sligoil-Micro.woff2",
+    "peso": 400,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/sligoil/Sligoil-MicroMedium.woff2",
+    "peso": 500,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/sligoil/Sligoil-MicroBold.woff2",
+    "peso": 700,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "etichetta"
+   ],
+   "p": {
+    "sperimentale": 0.5
+   },
+   "osa": 0.5,
+   "pesi": [
+    400,
+    500,
+    700
+   ]
+  }
+ },
+ {
+  "id": "carattere:sora",
+  "tipo": "carattere",
+  "nome": "Sora",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Sora",
+  "autore": "Jonathan Barnbrook, Julián Moncada",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "tecnico": 0.7,
+    "morbido": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:source-serif-4",
+  "tipo": "carattere",
+  "nome": "Source Serif 4",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Source+Serif+4",
+  "autore": "Frank Grießhammer",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": []
+  },
+  "carattere": {
+   "ruoli": [
+    "testo"
+   ],
+   "p": {
+    "elegante": 0.4,
+    "tecnico": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:space-grotesk",
+  "tipo": "carattere",
+  "nome": "Space Grotesk",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Space+Grotesk",
+  "autore": "Florian Karsten",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "tecnico"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo",
+    "testo"
+   ],
+   "p": {
+    "tecnico": 0.9,
+    "sperimentale": 0.4
+   },
+   "osa": 0.4,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    300,
+    400,
+    500,
+    600,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:space-mono",
+  "tipo": "carattere",
+  "nome": "Space Mono",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Space+Mono",
+  "autore": "Colophon Foundry",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Monospace"
+   ],
+   "umore": [
+    "tecnico",
+    "sperimentale"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.8,
+    "sperimentale": 0.7
+   },
+   "osa": 0.7,
+   "google": true,
+   "pesi": [
+    400,
+    700
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": true,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:spectral",
+  "tipo": "carattere",
+  "nome": "Spectral",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Spectral",
+  "autore": "Production Type",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "elegante"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "testo"
+   ],
+   "p": {
+    "elegante": 0.6,
+    "caldo": 0.4
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": true,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:sporting-grotesque",
+  "tipo": "carattere",
+  "nome": "Sporting Grotesque",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "grotesk"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Sporting-Grotesque/SportingGrotesque-Regular.otf",
+    "peso": 400,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/Sporting-Grotesque/SportingGrotesque-Bold.otf",
+    "peso": 700,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.4
+   },
+   "osa": 0.4,
+   "pesi": [
+    400,
+    700
+   ]
+  }
+ },
+ {
+  "id": "carattere:syne",
+  "tipo": "carattere",
+  "nome": "Syne",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Syne",
+  "autore": "Bonjour Monde, Lucas Descroix, George Triantafyllakos",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "sperimentale",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 1,
+    "forte": 0.5
+   },
+   "osa": 1,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    400,
+    500,
+    600,
+    700,
+    800
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:trickster",
+  "tipo": "carattere",
+  "nome": "Trickster",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "avanguardia"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/Trickster/Trickster-Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.95
+   },
+   "osa": 0.95,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:unbounded",
+  "tipo": "carattere",
+  "nome": "Unbounded",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Unbounded",
+  "autore": "NaN",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": [
+    "sperimentale",
+    "forte"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.8,
+    "forte": 0.7,
+    "giocoso": 0.3
+   },
+   "osa": 0.8,
+   "maiuscolo": true,
+   "google": true,
+   "pesi": [
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:vanosky",
+  "tipo": "carattere",
+  "nome": "Vanosky",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {},
+  "file": [
+   {
+    "url": "/fonts/pack/Vanosky.otf",
+    "peso": 400
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.7
+   },
+   "osa": 0.7
+  }
+ },
+ {
+  "id": "carattere:velvetyne-grotesk",
+  "tipo": "carattere",
+  "nome": "Velvetyne Grotesk",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "grotesk"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/grotesk/Grotesk-01Extrafin.woff2",
+    "peso": 200,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/grotesk/Grotesk-02Mince.woff2",
+    "peso": 300,
+    "stile": "normal"
+   },
+   {
+    "url": "/fonts/libere/grotesk/Grotesk-03Regular.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.4
+   },
+   "osa": 0.4,
+   "pesi": [
+    200,
+    300,
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:vg5000",
+  "tipo": "carattere",
+  "nome": "VG5000",
+  "fonte": "velvetyne",
+  "url": "https://velvetyne.fr",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "pixel"
+   ]
+  },
+  "file": [
+   {
+    "url": "/fonts/libere/vg5000/VG5000-Regular_web.woff2",
+    "peso": 400,
+    "stile": "normal"
+   }
+  ],
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "sperimentale": 0.9
+   },
+   "osa": 0.9,
+   "pesi": [
+    400
+   ]
+  }
+ },
+ {
+  "id": "carattere:work-sans",
+  "tipo": "carattere",
+  "nome": "Work Sans",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Work+Sans",
+  "autore": "Wei Huang",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Sans Serif"
+   ],
+   "umore": []
+  },
+  "carattere": {
+   "ruoli": [
+    "testo",
+    "etichetta"
+   ],
+   "p": {
+    "tecnico": 0.4,
+    "caldo": 0.3
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    100,
+    200,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900
+   ],
+   "corsivo": false,
+   "sans": true,
+   "mono": false,
+   "curato": true
+  }
+ },
+ {
+  "id": "carattere:young-serif",
+  "tipo": "carattere",
+  "nome": "Young Serif",
+  "fonte": "google",
+  "url": "https://fonts.google.com/specimen/Young+Serif",
+  "autore": "Bastien Sozeau",
+  "licenza": "OFL-1.1",
+  "tag": {
+   "genere": [
+    "Serif"
+   ],
+   "umore": [
+    "caldo",
+    "morbido"
+   ]
+  },
+  "carattere": {
+   "ruoli": [
+    "titolo"
+   ],
+   "p": {
+    "caldo": 0.8,
+    "giocoso": 0.4,
+    "morbido": 0.5
+   },
+   "osa": 0,
+   "google": true,
+   "pesi": [
+    400
+   ],
+   "corsivo": false,
+   "sans": false,
+   "mono": false,
+   "curato": true
+  }
+ }
+]

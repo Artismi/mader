@@ -6,6 +6,7 @@
 import type { DesignContent, Format, Scene } from '../types'
 import { styleById, fontsOf, inferRegistro } from '../styles'
 import { idIdentita, VICINI } from '../identita'
+import { creditiCaratteri } from '../asset/catalogo'
 import { tintaDominante } from '../core/colore'
 import { loadFonts } from '../fonts'
 import { type Knobs, type SistemaId, SISTEMI, hashText, rng } from './knobs'
@@ -72,7 +73,7 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
       const sc = SYSTEMS[k.sistema](g)
       if (!sc) { falliti++; continue }
       const esame = esamina(g)
-      const scena: Scene = { ...sc, els: g.els, knobs: { ...kk }, esame }
+      const scena: Scene = { ...sc, els: g.els, knobs: { ...kk }, esame, crediti: creditiCaratteri([style.display.family, style.text.family, style.label.family, style.impact.family]) }
       if (!best || esame.voto > (best.esame?.voto ?? 0)) best = scena
       if (esame.voto >= ECCELLENTE) break
     } catch (e) {

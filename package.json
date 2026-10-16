@@ -10,6 +10,8 @@
     "build:electron": "next build && electron-builder",
     "start": "next start",
     "lint": "eslint",
+    "asset:catalogo": "node scripts/asset/catalogo.mjs",
+    "asset:caratteri": "node scripts/asset/caratteri.mjs",
     "designer:vetrina": "node scripts/designer/vetrina.mjs",
     "designer:test": "node --test scripts/designer/progetto.test.mjs scripts/designer/occhio.test.mjs",
     "confronto:genera": "node scripts/confronto/genera.mjs",
