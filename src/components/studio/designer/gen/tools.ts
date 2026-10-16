@@ -11,6 +11,7 @@ import { type Knobs, type Rng, rng, hashText } from './knobs'
 import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { spazi, intrecci } from './spazi'
+import { gesto } from './gesto'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
 import { conSpecifica, specializza } from './specializza'
@@ -34,6 +35,8 @@ export interface G {
   pix?: Pix
   /** posizione nella sequenza (carosello): paginazione, ponte con la slide accanto, freccia in copertina */
   seq?: Seq
+  /** gesti e intrecci applicati dagli strati generici (gesto.ts): finiscono tra i mattoni della scena */
+  segni?: string[]
   /** misure di lettura raccolte dal controllo (per il critico): punti buoni e contrasto medio di ogni testo */
   letture?: { name: string; ok: number; contrasto: number; big: boolean }[]
 }
@@ -590,6 +593,8 @@ function seqMarks(g: G) {
 }
 
 export function finish(g: G, layout: string, label: string, o: { specchio?: boolean } = {}): Scene | null {
+  // il gesto dell'idea (C2) su qualunque archetipo, prima dello specchio e dei controlli
+  gesto(g)
   // una composizione su due-tre si specchia (stesso seme, stessa scelta); mai gli elenchi
   // numerati e le griglie di voci, dove lo specchio invertirebbe l'ordine di lettura
   if (o.specchio !== false && (g.seq?.specchio ?? (hashText(`${g.k.seme}|specchio`) % 10 < 4))) mirror(g)
@@ -616,5 +621,6 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
     palette: { bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf },
     finish: { ids: d.finishes, seed: `${g.c.title}|${layout}|${g.k.seme}`, fallback: g.k.grana > 0.05 ? (d.fallback ?? 'grana') : undefined, amount: 20 + g.k.grana * 40 },
     knobs: { ...g.k },
+    ...(g.segni?.length ? { mattoni: [g.k.sistema, ...g.segni] } : {}),
   }
 }

@@ -13,7 +13,7 @@ type Box = { x: number; y: number; w: number; h: number }
 type Text = Extract<SceneEl, { kind: 'text' }>
 
 /** Ornamenti riconosciuti dal nome; `motivo` = l'idea che li giustifica (vedi concetto.ts). */
-const ORNAMENTI: [RegExp, string][] = [
+export const ORNAMENTI: [RegExp, string][] = [
   [/^nastro/, 'ripetizione'], [/^timbro/, 'documento'], [/^(stella|glifo|ornamento)/, 'decoro'], [/^puntini$/, 'ritmo'],
   [/^tassello/, 'ritmo'], [/^(crocino|registro)/, 'stampa'], [/^(cerchiato|freccia|segno|scarabocchio)/, 'mano'],
   [/^barra_sottile/, 'ritmo'], [/^alone/, 'stampa'], [/^(trama|strato)/, 'materia'],

@@ -141,6 +141,6 @@ export function componi(g: G, gen: Genoma, catalogo: Record<string, Mattone>, o:
   segni(gen.finiture, false)
   segni(gen.intreccio ?? [], false)
   const sc = finish(g, o.layout, o.label, { specchio: o.specchio })
-  if (sc) sc.mattoni = usati
+  if (sc) sc.mattoni = [...usati, ...(g.segni ?? [])]
   return sc
 }

@@ -246,7 +246,9 @@ export function esamina(g: G): Esame {
   if (g.els.some(e => e.kind === 'text' && e.deco)) gesti.push('tipografia decorativa')
   if (g.els.some(e => e.kind === 'ornament' || e.kind === 'seal' || e.kind === 'arcText')) gesti.push('ornamento')
   if (sconfina(g, texts)) gesti.push('sconfinamento')
-  const attesi = 2.5 + 4 * g.k.energia
+  // un'idea (C2) è un gesto dominante: conta come gesto, e di gesti ne bastano pochi
+  if (g.k.idea) gesti.push(`idea: ${g.k.idea.gesto}`)
+  const attesi = g.k.idea ? 1.5 : 2.5 + 4 * g.k.energia
   let sperimentazione = gesti.length === 0 ? 2 : clamp(10 * Math.min(1, gesti.length / attesi))
   if (gesti.length < attesi * 0.5) difetti.push(`pochi gesti (${gesti.length}): composizione ordinata ma senza idea`)
   sperimentazione = clamp(sperimentazione)
@@ -339,7 +341,9 @@ function spazioMorto(g: G): number[] {
   const pieno = Array.from({ length: N * N }, () => false)
   for (const e of g.els) {
     let b: Box | null = null
-    if (isText(e)) b = textBox(e)
+    // la tipografia decorativa grande (parola gigante, eco, ripetizioni) è una massa progettata, non vuoto
+    if (e.kind === 'text' && e.deco) { if (e.size >= 100 * g.u && (e.opacity ?? 1) >= 0.25) b = textBox(e) }
+    else if (isText(e)) b = textBox(e)
     else if (e.kind === 'image' || e.kind === 'ornament' || e.kind === 'glyph' || e.kind === 'seal' || e.kind === 'arcText' || e.kind === 'line') b = e.kind === 'line' ? { x: Math.min(e.x1, e.x2), y: Math.min(e.y1, e.y2), w: Math.abs(e.x2 - e.x1) + 1, h: Math.abs(e.y2 - e.y1) + 1 } : e.kind === 'arcText' ? { x: e.cx - e.r, y: e.cy - e.r, w: 2 * e.r, h: 2 * e.r } : boxOf(e)
     else if ((e.kind === 'rect' || e.kind === 'circle' || e.kind === 'path') && !/grana|fondo|carta/.test(e.name)) {
       const x = boxOf(e)

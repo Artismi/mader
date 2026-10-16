@@ -252,6 +252,7 @@ for (const nome of contenuti) {
       }
       const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'], idee })
       if (p.idee?.length) console.log(`  ${nome}: idee ${p.idee.join(' | ')} · concetto ${p.concetto.chiamate} chiamata, ~${p.concetto.token} token`)
+      if (args.motivi && p.traccia?.length) console.log(p.traccia.map(x => '    ' + x).join('\n'))
       res = p.items
       info = ` · ${p.promosse} promosse su ${p.candidate} candidate in ${p.giri} giri`
       if (occhio) {

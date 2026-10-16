@@ -68,6 +68,9 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
   const style = styleById(conSperimentazione(k.stile, k.sperimentazione))
   const [, pix] = await Promise.all([loadFonts(fontsOf(style)), loadPix(photo ?? c.imageUrl)])
   const tentativi = o.tentativi ?? (k.sistema === 'composto' ? 14 : 6)
+  // l'idea toglie dal messaggio quello che distrae dal gesto (i dettagli; il testo solo nel vuoto)
+  if (k.idea?.togli.includes('dettagli') && c.details?.length) c = { ...c, details: [] }
+  if (k.idea?.gesto === 'vuoto' && k.idea.togli.includes('testo') && c.body) c = { ...c, body: undefined }
   let best: Scene | null = null, falliti = 0, nonCiSta = false
   for (let attempt = 0; attempt < tentativi; attempt++) {
     const kk = attempt ? { ...k, seme: k.seme + attempt * 7919, scala: Math.max(0, k.scala - falliti * 0.06) } : k
@@ -253,6 +256,7 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
       const sc = await generateSystem(c, format, k, o.photo, { tentativi: 3 })
       candidate++
       if (sc) tutte.push(sc)
+      ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`idea ${k.sistema}: ${k.idea!.gesto} → ${sc ? `${sc.esame?.voto}${sc.esame?.promossa ? '' : ' bocciata'} car ${sc.esame?.carattere?.carattere} — ${sc.esame?.difetti.slice(0, 3).join('; ')}` : 'scartata'}`)
     }
     // gli incroci dei mattoni (V1): le identità del vivaio, poche generazioni, restano gli ibridi promossi
     if (giro === 0 && o.ibridi !== false) tutte.push(...await incrocia(c, format, { base: pool, seme: o.seme, valuta: k => generateSystem(c, format, k, o.photo, { tentativi: 2 }) }))
@@ -278,6 +282,18 @@ const punteggio = (sc: Scene) => {
   return v + (v >= ECCELLENTE ? cur : cur * 0.4) + (car - 50) * 0.3
 }
 
+/** Gli archetipi che sanno eseguire ogni gesto (oltre alla ricetta a mattoni dell'idea). */
+const ESECUTORI: Record<Idea['gesto'], SistemaId[]> = {
+  'parola-immagine': ['eco', 'ritaglio', 'supertipo'],
+  scala: ['costruttivo', 'supertipo', 'decostruito'],
+  taglio: ['costruttivo', 'ritaglio', 'rivista', 'modulare'],
+  ripetizione: ['eco', 'orbita', 'modulare'],
+  vuoto: ['scontrino', 'rivista', 'orbita'],
+  spezzato: ['eco', 'decostruito', 'supertipo'],
+}
+/** Con le voci (menu, programma…): gli archetipi che impaginano elenchi. */
+const ESECUTORI_VOCI: SistemaId[] = ['scontrino', 'lavagna', 'tabellone', 'foglietti', 'agenzia', 'brutale']
+
 /**
  * I regolatori di un'idea: la sua ricetta (con le voci solo lo scontrino), i poli
  * dell'idea spinti all'estremo, la grana solo se l'idea vuole la materia.
@@ -287,10 +303,13 @@ export function knobsDelleIdee(c: DesignContent, idee: Idea[], pool: Knobs[], ha
   const stili = [...new Map(pool.map(k => [k.stile, k])).values()].slice(0, 2)
   const r = rng(hashText(`${c.title}|idee`))
   const polo = (v: 0 | 1) => (v ? 0.86 + r.range(0, 0.12) : 0.02 + r.range(0, 0.12))
-  return idee.flatMap(idea => {
-    const sistema = elenco ? 'scontrino' : idea.ricetta
-    if (!ammesso(c, sistema, hasPhoto) && !(elenco && sistema === 'scontrino')) return []
-    return stili.map(b => ({ ...b, sistema, idea, scala: polo(idea.scala), energia: polo(idea.energia), densita: polo(idea.densita), grana: idea.motivi.includes('materia') ? b.grana : 0, seme: r.int(1, 99999) }) as Knobs)
+  return idee.flatMap((idea, i) => {
+    // più modi di eseguire la stessa idea: la ricetta a mattoni e gli altri archetipi adatti al gesto
+    const lista = elenco ? ESECUTORI_VOCI : [idea.ricetta, ...ESECUTORI[idea.gesto].filter(x => x !== idea.ricetta)]
+    const ok = lista.filter(x => ammesso(c, x, hasPhoto))
+    if (!ok.length) return []
+    const scelti = [ok[(i * 2) % ok.length], ok[(i * 2 + 1) % ok.length]]
+    return stili.map((b, j) => ({ ...b, sistema: scelti[j % scelti.length], idea, scala: polo(idea.scala), energia: polo(idea.energia), densita: polo(idea.densita), grana: idea.motivi.includes('materia') ? b.grana : 0, seme: r.int(1, 99999) }) as Knobs)
   })
 }
 
