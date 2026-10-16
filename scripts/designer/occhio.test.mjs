@@ -151,3 +151,11 @@ test('lo stile segue il soggetto: niente manga per un caffè di pregio, niente o
   assert.equal(affinita({ title: 'Caffè di pregio e manga' }, 'manga'), 'ok', 'chiamato per nome')
   assert.equal(giapponeseAmmesso(caffe), false)
 })
+
+test('corpo minimo per il telefono, per formato', async () => {
+  const { corpoMinimo, pesoDifetti } = await carica('critico.ts')
+  assert.equal(Math.round(corpoMinimo('testo', 'quadrato', 1080)), 28)
+  assert.ok(corpoMinimo('dettaglio', 'quadrato', 1080) < corpoMinimo('testo', 'quadrato', 1080))
+  assert.ok(corpoMinimo('testo', 'storia', 1080) < corpoMinimo('testo', 'quadrato', 1080))
+  assert.ok(pesoDifetti(['3 testi troppo piccolo per il telefono (16px, minimo 22px)']) >= 6)
+})

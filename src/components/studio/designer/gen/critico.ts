@@ -242,6 +242,14 @@ export function esamina(g: G): Esame {
   if (gesti.length < attesi * 0.5) difetti.push(`pochi gesti (${gesti.length}): composizione ordinata ma senza idea`)
   sperimentazione = clamp(sperimentazione)
 
+  /* ── corpo minimo: su telefono la tavola si vede larga circa 390 punti; descrizioni e note restano leggibili ── */
+  const piccoli = texts.filter(t => !t.name.startsWith('titolo')).map(t => ({ t, min: corpoMinimo(t.name, g.format, W) })).filter(x => x.t.size < x.min)
+  const sottoCorpo = piccoli.reduce((a, x) => a + Math.min(8, 12 * (1 - x.t.size / x.min)), 0)
+  if (piccoli.length) {
+    const p0 = piccoli.sort((a, b) => a.t.size / a.min - b.t.size / b.min)[0]
+    difetti.push(`${piccoli.length === 1 ? p0.t.name : `${piccoli.length} testi`} troppo piccolo per il telefono (${Math.round(p0.t.size)}px, minimo ${Math.round(p0.min)}px)`)
+  }
+
   /* ── stile e soggetto: un archetipo fuori luogo per il settore pesa forte (affinita.ts) ── */
   const aff = affinita(g.c, g.k.sistema)
   if (aff !== 'ok') difetti.push(aff === 'esclusa' ? `stile estraneo al soggetto (${g.k.sistema})` : `stile lontano dal soggetto (${g.k.sistema})`)
@@ -251,7 +259,7 @@ export function esamina(g: G): Esame {
   // ogni difetto toglie punti, un criterio debole mette un tetto
   const media = (Object.keys(PESI) as Criterio[]).reduce((a, k) => a + PESI[k] * criteri[k], 0)
   // ogni difetto toglie punti secondo la gravità (GRAVITA); i vuoti in proporzione alla loro ampiezza
-  let voto = 100 * (media / 10) ** 2.4 - pesoDifetti(difetti) - vuoti.reduce((a, z) => a + 4 + 40 * Math.max(0, z - 0.1), 0)
+  let voto = 100 * (media / 10) ** 2.4 - pesoDifetti(difetti) - sottoCorpo - vuoti.reduce((a, z) => a + 4 + 40 * Math.max(0, z - 0.1), 0)
   const tetti: [boolean, number][] = [
     [contenuto < 8, 50], [leggibilita < 6, 50], [Math.min(...Object.values(criteri)) < 4, 58],
     [sperimentazione < 6, 66], [gerarchia < 5.5, 64], [Math.min(...Object.values(criteri)) < 6, 70],
@@ -264,6 +272,17 @@ export function esamina(g: G): Esame {
   const promossa = voto >= SOGLIA
   const misure: Misure = { ...misureLibere(g, texts), densita: 1 - zone.reduce((a, z) => a + z, 0), armonia: armonia(vivi), contrastoMin: lett.length ? Math.min(...lett.map(l => l.contrasto)) : 21 }
   return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g), misure }
+}
+
+/**
+ * Corpo minimo leggibile su telefono, in px della tavola: frazione della larghezza
+ * (la tavola si vede larga quanto lo schermo). Testi di lettura più grandi delle note;
+ * la storia si guarda a tutto schermo e da vicino, regge un filo meno.
+ */
+export function corpoMinimo(nome: string, format: string, W: number) {
+  const lettura = /^(testo|corpo|voce|risposta|domanda|punto|descrizione)/.test(nome)
+  const f = format === 'storia' ? (lettura ? 0.024 : 0.019) : (lettura ? 0.026 : 0.02)
+  return f * W
 }
 
 /** Quanto pesa ogni nota del critico sul voto (punti su 100). La prima regola che combacia vale. */
