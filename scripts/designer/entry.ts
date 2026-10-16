@@ -11,6 +11,7 @@ import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
+import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/campi'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
 export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
@@ -126,6 +127,19 @@ async function diversita(o: { urls: string[]; mattoni: string[][] }) {
   return { visiva: n ? vis / n : 0, mattoni: n ? mat / n : 0 }
 }
 
+/** Tutti i generatori su una tavola piccola, con il backend che li ha disegnati (foglio --campi). */
+async function campi() {
+  const ids = [...GENERATORI_CAMPO.map(g => `campo:${g}`), 'proc:halftone', 'proc:dot_grid', 'proc:wave_lines', 'proc:zigzag_fill', 'proc:stripe_diagonal', 'proc:crosshatch', 'proc:honeycomb', 'proc:organic_noise', 'proc:perspective_grid', 'proc:circuit_board', 'proc:memphis_mix', 'proc:star_scatter']
+  const out: { url: string; label: string; sub: string }[] = []
+  for (const [i, id] of ids.entries()) {
+    backendCampi.ultimo = id.startsWith('proc:') ? 'fabric' : undefined
+    const pal = { bg: '#f3efe6', ink: '#1d2b4f', accent: '#e4572e', muted: '#8a8a8a', surface: '#e9e2d3' }
+    const sc: Scene = { w: 540, h: 540, bg: pal.bg, palette: pal, els: [{ kind: 'ornament', name: 'campo', id, x: 0, y: 0, w: 540, h: 540, seed: 11 + i * 7, opacity: 0.9, pal }], layout: 'campi', style: '', label: id }
+    out.push({ url: await draw(sc, 1), label: id, sub: backendCampi.ultimo ?? '' })
+  }
+  return out
+}
+
 /** Foglio contatti composto nella pagina: niente dipendenze esterne per le immagini. */
 async function sheet(o: { title: string; items: { url?: string; label: string; sub: string }[]; cols: number; cellW: number; ratio: number }) {
   const pad = 24, labelH = 46, cellH = Math.round(o.cellW * o.ratio)
@@ -151,4 +165,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }

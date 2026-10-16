@@ -5,9 +5,13 @@
  * e toglie le forme senza motivo. Deterministico dal seme della tavola.
  */
 import type { SceneEl, FxSpec } from '../../types'
-import { textBox, lum, type G } from '../tools'
+import { textBox, lum, mix, type G } from '../tools'
 import { rng, hashText, type Rng } from '../knobs'
 import { scegliFx, looksPer } from './effetti'
+import type { Palette } from '../../types'
+
+/** La palette della tavola nella forma degli ornamenti. */
+const pal = (g: G): Palette => ({ bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf })
 
 type Box = { x: number; y: number; w: number; h: number }
 type Testo = Extract<SceneEl, { kind: 'text' }>
@@ -67,7 +71,59 @@ function effetti(g: G) {
   }
 }
 
+/* ── 2. generatori procedurali: mattoni "campo" e "trama" ──────────────── */
+/** Il generatore viene dal contenuto (cosa racconta) e, in mancanza, dal registro. */
+const DAL_CONTENUTO: [RegExp, string[]][] = [
+  [/music|suon|concert|club|dj|vinil|radio|festival|disco/i, ['campo:moire', 'campo:chladni']],
+  [/caff|t[eè]|vapor|cucin|forno|pane|menu|ristor|cena|pranzo/i, ['campo:flusso', 'campo:nebbia', 'campo:isoipse']],
+  [/montagn|lago|mare|viagg|mappa|sentier|trek|natura|parco/i, ['campo:isoipse', 'campo:liquido']],
+  [/mostra|arte|museo|galleri|design|architett|ceramic/i, ['campo:voronoi', 'campo:truchet', 'campo:mezzatinta']],
+  [/palestr|sport|corsa|allenament|fitness|gara|bici|yoga/i, ['campo:flusso', 'proc:zigzag_fill', 'proc:wave_lines']],
+  [/tech|app|software|digital|codice|dati|ai|startup/i, ['proc:circuit_board', 'proc:dot_grid', 'campo:mezzatinta']],
+]
+const DAL_REGISTRO: Record<string, string[]> = {
+  infantile: ['proc:dot_grid', 'proc:wave_lines', 'campo:truchet'], pop: ['campo:mezzatinta', 'proc:halftone', 'campo:truchet'],
+  editoriale: ['campo:isoipse', 'proc:crosshatch', 'campo:voronoi'], svizzero: ['proc:dot_grid', 'campo:moire', 'proc:perspective_grid'],
+  avanguardia: ['campo:moire', 'campo:voronoi', 'campo:chladni'], lusso: ['campo:liquido', 'proc:crosshatch', 'campo:isoipse'],
+  artigianale: ['proc:crosshatch', 'campo:flusso', 'proc:organic_noise'], notte: ['campo:chladni', 'campo:moire', 'campo:nebbia'],
+  tech: ['proc:circuit_board', 'campo:mezzatinta', 'proc:perspective_grid'], retro: ['proc:halftone', 'proc:star_scatter', 'campo:truchet'],
+  sportivo: ['proc:zigzag_fill', 'campo:flusso', 'proc:wave_lines'],
+}
+export function generatorePer(g: G, r: Rng): string {
+  const testo = [g.c.title, g.c.kicker, g.c.body, g.c.brand, g.c.imageQuery, ...(g.c.details ?? [])].filter(Boolean).join(' ')
+  const dal = DAL_CONTENUTO.find(([re]) => re.test(testo))?.[1]
+  return r.pick(dal && r.chance(0.75) ? dal : DAL_REGISTRO[g.s.registro] ?? ['campo:flusso'])
+}
+
+function generatori(g: G) {
+  const r = rngRisorse(g, 'gen')
+  if (g.els.some(e => e.kind === 'ornament')) return
+  const id = generatorePer(g, r)
+  const scuro = lum(g.P.bg) < 0.2
+  // trama: dentro una superficie piena (pannello, fascia) che non è il fondo; inchiostro vicino al pieno
+  const sup = g.els.filter(e => e.kind === 'rect' && typeof e.fill === 'string' && e.fill !== g.P.bg && !e.fx?.length && area(boxOf(e)!) > g.W * g.H * 0.06) as Extract<SceneEl, { kind: 'rect' }>[]
+  if (sup.length && r.chance(0.45)) {
+    const p = sup.reduce((a, b) => (area(b) > area(a) ? b : a))
+    const sotto = coperturaTesti(g, p) > 0.02
+    const ink = mix(p.fill as string, lum(p.fill as string) < 0.25 ? '#ffffff' : '#000000', 0.35)
+    const at = g.els.indexOf(p) + 1
+    g.els.splice(at, 0, { kind: 'ornament', name: 'trama', id: id.replace(/^campo:/, 'trama:'), x: p.x, y: p.y, w: p.w, h: p.h, r: p.r, seed: g.k.seme, opacity: sotto ? 0.22 : 0.5, under: sotto, pal: { ...pal(g), ink } })
+    return
+  }
+  if (!r.chance(0.45)) return
+  // campo: nella zona più libera della tavola; sotto i testi solo velato (la lettura conta più del campo)
+  const zone: Box[] = [{ x: 0, y: g.H * 0.55, w: g.W, h: g.H * 0.45 }, { x: 0, y: 0, w: g.W, h: g.H * 0.45 }, { x: g.W * 0.5, y: 0, w: g.W * 0.5, h: g.H }, { x: 0, y: 0, w: g.W * 0.5, h: g.H }, { x: 0, y: 0, w: g.W, h: g.H }]
+  const occupata = (b: Box) => g.els.filter(e => e.kind === 'image' || (e.kind === 'rect' && area(boxOf(e)!) > g.W * g.H * 0.04)).reduce((a, e) => a + inter(b, boxOf(e)!), 0) / area(b)
+  const c = zone.map(b => ({ b, t: coperturaTesti(g, b), o: occupata(b) })).filter(z => z.o < 0.3).sort((a, b) => a.t - b.t)[0]
+  if (!c) return
+  const libera = c.t < 0.01
+  const ink = libera ? g.P.acc : mix(g.P.fg, g.P.bg, 0.55)
+  const at = Math.max(0, g.els.findIndex(e => e.kind === 'text' && !e.deco))
+  g.els.splice(at, 0, { kind: 'ornament', name: 'campo', id, x: c.b.x, y: c.b.y, w: c.b.w, h: c.b.h, seed: g.k.seme, opacity: libera ? (scuro ? 0.7 : 0.55) : 0.2, under: !libera, pal: { ...pal(g), ink } })
+}
+
 /** Il passaggio delle risorse dello Studio (chiamato da `finish`). */
 export function arricchisci(g: G) {
+  generatori(g)
   effetti(g)
 }

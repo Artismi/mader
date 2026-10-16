@@ -184,6 +184,16 @@ if (args.schede) {
   process.exit(0)
 }
 
+// --campi: un foglio con tutti i generatori (campi, trame, pattern della libreria) e il backend usato
+if (args.campi) {
+  const items = await page.evaluate(() => window.designer.campi())
+  const sh = await page.evaluate(o => window.designer.sheet(o), { title: 'generatori procedurali · campo e trama', items, cols: 6, cellW: 300, ratio: 1 })
+  fs.writeFileSync(path.join(out, 'campi.jpg'), Buffer.from(sh.split(',')[1], 'base64'))
+  console.log(items.map(i => `${i.label} (${i.sub})`).join(' · '), `foglio in ${path.relative(process.cwd(), path.join(out, 'campi.jpg'))}`)
+  await browser.close()
+  process.exit(0)
+}
+
 if (args.specializza) {
   const PROGETTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/progetti.json'), 'utf8'))
   const motivi = await page.evaluate(() => window.designer.motivi())
@@ -296,6 +306,8 @@ for (const nome of contenuti) {
     console.log(`${nome.padEnd(12)} ${format.padEnd(12)}${info} ${ok}/${res.length} voti ${voti.join(' ')}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
   }
 }
+const bc = await page.evaluate(() => window.designer.backendCampi())
+if (Object.keys(bc.conta).length) console.log(`Campi generativi: ${Object.entries(bc.conta).map(([b, n]) => `${b} ${n}`).join(', ')} (navigator.gpu ${bc.webgpu ? 'presente' : 'assente: nodi del Lab sul ripiego WebGL2 di three'})`)
 await browser.close()
 if (occhio) {
   const { prima, dopo } = occhio, x = (prima.tokenImmagine + prima.tokenTesto) / Math.max(1, dopo.tokenImmagine + dopo.tokenTesto)

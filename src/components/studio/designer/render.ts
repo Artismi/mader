@@ -10,6 +10,8 @@ import { fxDef, newFx, type FxEntry, type FxId } from '../fx/catalog'
 import { CELESTIAL_LIBRARY } from '../libraries/celestial-library'
 import { SHAPE_LIBRARY } from '../libraries/shape-library'
 import { applyFinish } from '../ai/finish'
+import { generateProceduralPattern, type ProceduralType } from '../libraries/procedural-generators'
+import { disegnaCampo } from './campi'
 
 type Obj = fabric.FabricObject & { parentBoard?: string; fx?: FxEntry[]; look?: { id: string; amount: number }; adjust?: Record<string, number> }
 
@@ -92,6 +94,28 @@ function withFx(o: Obj, fx?: FxSpec[]) {
   if (!list.length) return
   o.fx = [...(o.fx ?? []), ...list]
   try { applyFx(o) } catch (e) { console.warn('[designer] fx', e) }
+}
+
+/** Campo o trama di un generatore (campi.ts) o pattern della libreria procedurale, nella sua zona. */
+async function campoObj(el: Extract<SceneEl, { kind: 'ornament' }>, k: number, OX: number, OY: number, sc: Scene): Promise<Obj | null> {
+  const [tipo, gen] = el.id.split(':')
+  const zx = el.x * k + OX, zy = el.y * k + OY, zw = el.w * k, zh = el.h * k
+  const pal = el.pal ?? sc.palette ?? { bg: sc.bg, ink: '#111111', accent: '#cc3300', muted: '#888888', surface: sc.bg }
+  const clip = () => new fabric.Rect({ left: zx, top: zy, width: zw, height: zh, rx: (el.r ?? 0) * k, ry: (el.r ?? 0) * k, originX: 'left', originY: 'top', absolutePositioned: true })
+  try {
+    let o: Obj
+    if (tipo === 'proc') {
+      const scala = Math.min(sc.w, sc.h) * k / 1080
+      o = generateProceduralPattern(gen as ProceduralType, { width: zw, height: zh, color: pal.ink, density: 0.5, radius: 6 * scala, spacing: 34 * scala, weight: 2.5 * scala, amplitude: 14 * scala }) as unknown as Obj
+      o.set({ originX: 'left', originY: 'top', left: zx, top: zy })
+    } else {
+      const cv = await disegnaCampo(gen, zw, zh, pal, el.seed)
+      o = new fabric.FabricImage(cv, { left: zx, top: zy, originX: 'left', originY: 'top' }) as Obj
+    }
+    o.set({ opacity: el.opacity })
+    o.clipPath = clip()
+    return o
+  } catch (e) { console.warn('[designer] campo', el.id, e); return null }
 }
 
 /** Sovrastampa e trasparenza comuni. */
@@ -187,6 +211,14 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       g.setCoords(); canvas.add(g); added.push(g as Obj)
       continue
     } else if (el.kind === 'ornament') {
+      // generatori procedurali (campo, trama) e pattern della libreria: un'immagine ritagliata nella zona
+      if (/^(campo|trama|proc):/.test(el.id)) {
+        const o = await campoObj(el, k, OX, OY, sc)
+        if (!o) continue
+        o.set('name', name(el.name)); o.parentBoard = boardName
+        o.setCoords(); canvas.add(o); added.push(o)
+        continue
+      }
       // ornamento generativo del laboratorio, ritagliato nella sua zona
       const make = ORNAMENTS[el.id]?.make
       if (!make) continue
