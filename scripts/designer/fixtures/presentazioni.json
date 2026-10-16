@@ -1,0 +1,53 @@
+{
+  "bilancio": {
+    "brand": "Cooperativa Il Ponte",
+    "slides": [
+      { "ruolo": "copertina", "kicker": "Bilancio sociale 2025", "title": "Un anno di lavoro insieme", "body": "Persone, numeri e scelte della cooperativa." },
+      { "ruolo": "sezione", "kicker": "01", "title": "Chi siamo" },
+      { "ruolo": "testo", "title": "La nostra storia", "body": "Il Ponte nasce nel 1998 da un gruppo di educatori e genitori che volevano un luogo di lavoro per ragazzi con disabilità. Oggi gestiamo un laboratorio di falegnameria, una mensa aziendale e un servizio di manutenzione del verde. Ogni attività è pensata per far crescere le competenze di chi ci lavora, con tempi e affiancamenti su misura. Abbiamo scelto di restare piccoli per restare vicini: nessuna sede ha più di trenta persone." },
+      { "ruolo": "dati", "title": "Persone al lavoro", "numero": "142", "body": "soci e lavoratori, di cui 61 con percorsi di inserimento." },
+      { "ruolo": "dati", "title": "Il 2025 in cifre", "voci": [ { "valore": "3,2 mln", "titolo": "fatturato" }, { "valore": "+12%", "titolo": "rispetto al 2024" }, { "valore": "18.400", "titolo": "pasti serviti" }, { "valore": "96%", "titolo": "contratti stabili" } ] },
+      { "ruolo": "citazione", "title": "Qui ho imparato un mestiere e ho trovato amici che mi aspettano ogni mattina.", "kicker": "Luca, falegname dal 2019" },
+      { "ruolo": "sezione", "kicker": "02", "title": "Cosa abbiamo fatto" },
+      { "ruolo": "elenco", "title": "Sei progetti dell'anno", "voci": [ { "titolo": "Nuovo forno", "testo": "per la mensa di via Larga" }, { "titolo": "Orto didattico", "testo": "con tre scuole del quartiere" }, { "titolo": "Corso di saldatura", "testo": "dodici allievi certificati" }, { "titolo": "Furgone elettrico", "testo": "per il servizio verde" }, { "titolo": "Sportello lavoro", "testo": "aperto due giorni a settimana" }, { "titolo": "Festa d'estate", "testo": "seicento persone in cortile" } ] },
+      { "ruolo": "testo", "title": "Le difficoltà", "body": "Il costo dell'energia è cresciuto del 30% e due commesse pubbliche sono slittate al 2026." },
+      { "ruolo": "elenco", "title": "Per il 2026", "details": ["Aprire la seconda mensa", "Formare dieci nuovi tutor", "Ridurre i consumi del 15%"] },
+      { "ruolo": "citazione", "title": "Il lavoro è la nostra cura.", "kicker": "Anna Ricci, presidente" },
+      { "ruolo": "chiusura", "title": "Grazie a chi c'era", "cta": "Leggi il bilancio completo", "details": ["ilponte.coop", "Via Larga 12, Bologna"] }
+    ]
+  },
+  "pitch": {
+    "brand": "Fermento",
+    "foto": "verdure.jpg",
+    "slides": [
+      { "ruolo": "copertina", "title": "Fermento", "kicker": "Seed round · 2026", "body": "Il compost di quartiere in abbonamento." },
+      { "ruolo": "sezione", "title": "Il problema" },
+      { "ruolo": "dati", "title": "dell'umido finisce ancora nell'indifferenziato", "numero": "38%" },
+      { "ruolo": "testo", "title": "La soluzione", "body": "Un bidone sensorizzato per condominio, ritiro ogni settimana in cargo bike, compost restituito agli orti urbani." },
+      { "ruolo": "dati", "title": "Trazione", "voci": [ { "valore": "47", "titolo": "condomini" }, { "valore": "2.100", "titolo": "famiglie" }, { "valore": "61 t", "titolo": "di umido recuperato" } ] },
+      { "ruolo": "elenco", "title": "Perché ora", "voci": [ { "titolo": "Obbligo UE" }, { "titolo": "Tariffa puntuale" } ] },
+      { "ruolo": "citazione", "title": "Finalmente il bidone non puzza più.", "kicker": "Marta, via Mascarella" },
+      { "ruolo": "sezione", "title": "La squadra e la richiesta" },
+      { "ruolo": "chiusura", "title": "Cerchiamo 600 mila euro", "cta": "Scrivici", "details": ["ciao@fermento.it"] }
+    ]
+  },
+  "corso": {
+    "brand": "Laboratorio Terra Cruda di Faenza",
+    "slides": [
+      { "ruolo": "copertina", "kicker": "Corso serale di ceramica per adulti, livello principianti, da ottobre a marzo", "title": "Mani nella terra" },
+      { "ruolo": "testo", "title": "Il corso", "body": "Ventiquattro incontri il martedì sera, dalle 19 alle 22, nel laboratorio di via Cavour. Si parte dall'impasto e dalla lavorazione a colombino, poi lastre, tornio e decorazione con ingobbi. Ogni partecipante ha il suo posto al banco, gli attrezzi e l'argilla compresi. Le cotture si fanno nel nostro forno a gas e i pezzi restano vostri. Non serve esperienza: serve pazienza, e la voglia di sporcarsi." },
+      { "ruolo": "sezione", "kicker": "Parte prima", "title": "Costruire a mano" },
+      { "ruolo": "elenco", "title": "Il programma", "tipo": "passi", "voci": [ { "titolo": "L'argilla", "testo": "impasti e preparazione" }, { "titolo": "Pizzicato", "testo": "la prima ciotola" }, { "titolo": "Colombino", "testo": "forme alte" }, { "titolo": "Lastre", "testo": "scatole e piatti" }, { "titolo": "Unioni", "testo": "manici e becchi" }, { "titolo": "Essiccazione", "testo": "tempi e difetti" }, { "titolo": "Tornio 1", "testo": "centrare la terra" }, { "titolo": "Tornio 2", "testo": "cilindri" }, { "titolo": "Rifinitura", "testo": "piede e bordo" }, { "titolo": "Ingobbi", "testo": "colore sulla terra cruda" }, { "titolo": "Biscotto", "testo": "prima cottura" }, { "titolo": "Smalti", "testo": "seconda cottura e mostra" } ] },
+      { "ruolo": "citazione", "title": "La terra ti dice subito se hai fretta.", "kicker": "Giovanna Bassi, insegnante" },
+      { "ruolo": "dati", "title": "Posti per corso", "numero": "12" },
+      { "ruolo": "sezione", "kicker": "Parte seconda", "title": "Il tornio e il fuoco" },
+      { "ruolo": "testo", "title": "Cosa portare", "body": "Grembiule e scarpe chiuse." },
+      { "ruolo": "dati", "title": "Costi", "voci": [ { "valore": "480 €", "titolo": "corso intero" }, { "valore": "90 €", "titolo": "materiali e cotture" }, { "valore": "-10%", "titolo": "under 25" } ] },
+      { "ruolo": "elenco", "title": "Domande frequenti", "details": ["Posso recuperare una lezione?", "Le cotture sono incluse?", "Si può pagare a rate?", "Serve un'assicurazione?"] },
+      { "ruolo": "citazione", "title": "Ho fatto la mia prima tazza a cinquantotto anni e la uso ogni mattina per il caffè, storta com'è, perché è mia e dentro c'è tutto l'inverno del corso.", "kicker": "Paolo, allievo 2024" },
+      { "ruolo": "testo", "title": "Dopo il corso", "body": "Chi vuole continuare può affittare un posto al banco il giovedì e il sabato, con accesso al forno una volta al mese." },
+      { "ruolo": "sezione", "title": "Iscrizioni" },
+      { "ruolo": "chiusura", "title": "Ti aspettiamo al banco", "cta": "Iscriviti entro il 30 settembre", "details": ["terracruda.it", "Via Cavour 44, Faenza", "Martedì 19–22"] }
+    ]
+  }
+}

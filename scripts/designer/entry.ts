@@ -18,6 +18,7 @@ import { TEXTURE_PROCEDURALI, TEXTURE_LIBRERIA } from '@/components/studio/desig
 import { loadPix } from '@/components/studio/designer/core/foto'
 import { sfondoPixel } from '@/components/studio/designer/preview'
 import { lettureVere, sottoSoglia } from '@/components/studio/designer/gen/pixel'
+import { presentazione, type RuoloSlide } from '@/components/studio/designer/gen/sequenza'
 import { zoneVuote, vuotiNonProgettati, sovrapposizioni, testoMancante } from '@/components/studio/designer/gen/difetti'
 
 /** Difetti misurati sulla tavola consegnata (blocco A): sovrapposizioni, contrasto sui pixel veri, vuoti, testo tagliato o saltato. */
@@ -110,6 +111,21 @@ async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ 
     items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
   }
   return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ')) }
+}
+
+/** Una presentazione (blocco A): le slide composte in sequenza, con i difetti misurati di ciascuna. */
+async function sequenza(job: { pres: { brand?: string; slides: ({ ruolo: RuoloSlide } & DesignContent)[] }; format: Format; photo?: string; thumb: number; seme?: number }) {
+  const sink: string[] = []
+  ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
+  await texturePronte
+  const slides = job.pres.slides.map(({ ruolo, ...c }) => ({ ruolo, c: { brand: job.pres.brand, ...c } as DesignContent }))
+  const r = await presentazione(slides, job.format, { photo: job.photo, seme: job.seme })
+  const items = []
+  for (const [i, s] of r.slide.entries()) {
+    if (!s.scena) { items.push({ ruolo: s.ruolo, ok: false, provati: s.provati }); continue }
+    items.push({ ruolo: s.ruolo, ok: true, sistema: s.sistema, provati: s.provati, layout: s.scena.label, url: await draw(s.scena, job.thumb), esame: s.scena.esame, difetti: await difettiScena(s.scena, slides[i].c) })
+  }
+  return { items, stile: styleById(r.stile).name, motivi: classiScarto(sink) }
 }
 
 /** I tentativi scartati dal codice, per classe (le correzioni, le bocciature e le tracce non contano). */
@@ -214,4 +230,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
 // superfici CC0 della cache locale (npm run designer:texture), se ci sono
 const texturePronte = registraTextureCC0('http://designer.local/asset-cache/texture/')
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, sequenza, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }

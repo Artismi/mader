@@ -10,7 +10,7 @@ import { creditiCaratteri } from '../asset/catalogo'
 import { tintaDominante } from '../core/colore'
 import { loadFonts } from '../fonts'
 import { type Knobs, type SistemaId, SISTEMI, hashText, rng } from './knobs'
-import { makeG, scarti } from './tools'
+import { makeG, scarti, palette, type Seq } from './tools'
 import { esamina, ECCELLENTE, SOGLIA } from './critico'
 import { SYSTEMS_BASE } from './systems'
 import { SYSTEMS_REGISTRI } from './systems2'
@@ -64,7 +64,7 @@ export const SISTEMI_DEL_REGISTRO = Object.fromEntries(Object.entries(SISTEMI_A_
  * (ossature diverse) e tiene la tavola col voto più alto; si ferma prima se ne
  * trova una eccellente. Se nessuna regge, riprova con il titolo più piccolo.
  */
-export async function generateSystem(c: DesignContent, format: Format, k: Knobs, photo?: string, o: { tentativi?: number } = {}): Promise<Scene | null> {
+export async function generateSystem(c: DesignContent, format: Format, k: Knobs, photo?: string, o: { tentativi?: number; seq?: Omit<Seq, 'colore'> & { colore?: string } } = {}): Promise<Scene | null> {
   const style = styleById(conSperimentazione(k.stile, k.sperimentazione))
   const [, pix] = await Promise.all([loadFonts(fontsOf(style)), loadPix(photo ?? c.imageUrl)])
   const tentativi = o.tentativi ?? (k.sistema === 'composto' ? 14 : 6)
@@ -75,7 +75,7 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
   for (let attempt = 0; attempt < tentativi; attempt++) {
     const kk = attempt ? { ...k, seme: k.seme + attempt * 7919, scala: Math.max(0, k.scala - falliti * 0.06) } : k
     try {
-      const g = makeG(format, style, kk, c, photo, pix)
+      const g = makeG(format, style, kk, c, photo, pix, conColore(o.seq, style, kk))
       scarti.ultimo = ''
       const sc = SYSTEMS[k.sistema](g)
       if (!sc) { falliti++; nonCiSta ||= NON_CI_STA.test(scarti.ultimo); continue }
@@ -95,7 +95,7 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
     for (let attempt = 0; attempt < 2 && !best; attempt++) {
       const kk = { ...k, seme: k.seme + (livello * 2 + attempt + 1) * 104729 }
       try {
-        const g = makeG(format, style, kk, cc, photo, pix)
+        const g = makeG(format, style, kk, cc, photo, pix, conColore(o.seq, style, kk))
         const sc = SYSTEMS[k.sistema](g)
         if (!sc) continue
         const esame = esamina(g)
@@ -118,6 +118,10 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
  * dettagli in coda, poi tutti, poi il testo alla prima frase, le spiegazioni delle voci,
  * le voci oltre la quarta, l'occhiello. Titolo, brand, invito e numero non si toccano mai.
  */
+/** La posizione nella sequenza con il colore dei ponti: l'accento della palette, se non è dato. */
+const conColore = (q: (Omit<Seq, 'colore'> & { colore?: string }) | undefined, style: ReturnType<typeof styleById>, k: Knobs): Seq | undefined =>
+  q ? { ...q, colore: q.colore ?? palette(style, k.inverti).acc } : undefined
+
 /** Scarti che vogliono dire "il testo non ci sta": si riprova con meno righe. */
 const NON_CI_STA = /non entr|troppo|fuori|spazi|sovrappost|stretto|incomplet|lung|pien/
 

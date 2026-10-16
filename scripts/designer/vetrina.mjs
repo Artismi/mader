@@ -16,6 +16,7 @@
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
  *   npm run designer:vetrina -- --sforzo            prova sotto sforzo dei testi (fixtures/sforzo.json) nei 4 formati: difetti e scarti per caso
+ *   npm run designer:vetrina -- --sequenza          presentazioni da 8–15 slide (fixtures/presentazioni.json): foglio della sequenza e difetti per slide
  *   npm run designer:vetrina -- --difetti --contenuti caffe,mostra --formati quadrato   la stessa scheda dei difetti su altri contenuti
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
  *
@@ -60,7 +61,7 @@ if (args.stile) over.stile = args.stile
 // valori sconosciuti: errore chiaro con l'elenco dei validi, non una vetrina vuota
 const FORMATI = ['quadrato', 'verticale', 'storia', 'orizzontale']
 const ignoti = (l, validi, cosa) => { const x = l.filter(v => !validi.includes(v)); if (x.length) { console.error(`${cosa} sconosciut${x.length > 1 ? 'i' : 'o'}: ${x.join(', ')}. Validi: ${validi.join(', ')}`); process.exit(1) } }
-ignoti(contenuti, Object.keys(TUTTI), 'contenuto')
+if (!args.sequenza) ignoti(contenuti, Object.keys(TUTTI), 'contenuto')
 ignoti(formati, FORMATI, 'formato')
 const out = path.resolve(args.out ?? path.join(here, 'out'))
 const thumb = Number(args.thumb ?? (args.occhio ? 0.5 : 0.36))
@@ -207,10 +208,39 @@ if (args.schede) {
   process.exit(0)
 }
 
+/** I difetti misurati di una tavola in una riga (sotto la miniatura nei fogli). */
+const breve = d => [d.sovrapposizioni.length && `sovr ${d.sovrapposizioni[0]}`, d.contrasto.length && `contr ${d.contrasto[0]}`, d.vuoti.length && `vuoto ${d.vuoti.map(v => Math.round(v * 100) + '%').join('+')}`, d.tagliati.length && `taglio ${d.tagliati[0]}`, d.saltati.length && `manca ${d.saltati.join(',')}`].filter(Boolean).join(' · ')
+const CLASSI_A = ['sovrapposizioni', 'contrasto', 'vuoti', 'tagliati', 'saltati']
+
+/* ── presentazioni (blocco A): --sequenza, una sequenza per presentazione e formato ── */
+if (args.sequenza) {
+  const PRES = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/presentazioni.json'), 'utf8'))
+  const nomi = args.contenuti ? args.contenuti.split(',') : Object.keys(PRES)
+  ignoti(nomi, Object.keys(PRES), 'presentazione')
+  const fmts = (args.formati ?? 'orizzontale,quadrato').split(',')
+  const tutte = []
+  for (const nome of nomi) for (const format of fmts) {
+    const t0 = Date.now(), pr = PRES[nome]
+    const photo = pr.foto ? `http://designer.local/fixtures/${pr.foto}` : undefined
+    const r = await page.evaluate(job => window.designer.sequenza(job), { pres: pr, format, photo, thumb: Number(args.thumb ?? 0.3), seme: Number(args.seme ?? 0) })
+    const ok = r.items.filter(x => x.ok), sis = ok.map(x => x.sistema)
+    const conta = Object.fromEntries(CLASSI_A.map(k => [k, ok.filter(x => x.difetti?.[k]?.length).length]))
+    const doppi = r.items.filter((x, i) => i && x.ok && x.sistema === r.items[i - 1].sistema).length
+    const riga = { presentazione: nome, formato: format, stile: r.stile, slide: r.items.length, rette: ok.length, sistemi: new Set(sis).size, consecutiviUguali: doppi, voto: Math.round(ok.reduce((a, x) => a + (x.esame?.voto ?? 0), 0) / Math.max(1, ok.length)), ...conta, motivi: r.motivi, dettaglio: r.items.map(x => ({ ruolo: x.ruolo, sistema: x.sistema, provati: x.provati, voto: x.esame?.voto, difetti: x.difetti })) }
+    tutte.push(riga)
+    const items = r.items.map((x, i) => ({ url: x.url, label: `${i + 1}. ${x.ruolo} · ${x.sistema ?? 'non regge'}  ${x.esame?.voto ?? ''}`, sub: x.ok ? (breve(x.difetti) || 'nessun difetto misurato') : `provati: ${x.provati.join(', ')}` }))
+    const sh = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format} · ${r.stile} · ${ok.length}/${r.items.length} slide rette, ${riga.sistemi} sistemi · ${CLASSI_A.map(k => `${k} ${conta[k]}`).join(' · ')}`, items, cols: format === 'orizzontale' ? 4 : 5, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
+    fs.writeFileSync(path.join(out, `sequenza-${nome}-${format}.jpg`), Buffer.from(sh.split(',')[1], 'base64'))
+    console.log(`${nome.padEnd(10)} ${format.padEnd(12)} ${ok.length}/${r.items.length} rette · ${riga.sistemi} sistemi (${sis.join(' ')}) · consecutivi uguali ${doppi} · voto ${riga.voto} · ${CLASSI_A.map(k => `${k} ${conta[k]}`).join(' · ')}  ${((Date.now() - t0) / 1000).toFixed(0)} s`)
+  }
+  await browser.close()
+  fs.writeFileSync(path.join(out, 'sequenza.json'), JSON.stringify(tutte, null, 2))
+  process.exit(0)
+}
+
 /* ── scheda dei difetti (blocco A): --sforzo (i casi di fixtures/sforzo.json, 4 formati) o --difetti (contenuti scelti) ── */
 if (args.sforzo || args.difetti) {
   const fmts = args.formati ? formati : FORMATI
-  const CLASSI_A = ['sovrapposizioni', 'contrasto', 'vuoti', 'tagliati', 'saltati']
   const righe = []
   const t0 = Date.now()
   for (const nome of contenuti) for (const format of fmts) {
@@ -221,7 +251,6 @@ if (args.sforzo || args.difetti) {
     const conta = Object.fromEntries(CLASSI_A.map(k => [k, its.filter(r => r.difetti?.[k]?.length).length]))
     const voti = its.map(r => r.esame?.voto ?? 0)
     righe.push({ caso: nome, formato: format, candidate: p.candidate, scartate: p.scartate, motivi: p.motivi, consegnate: its.length, promosse: its.filter(r => r.esame?.promossa).length, sane: its.filter(r => CLASSI_A.every(k => !r.difetti?.[k]?.length)).length, voto: Math.round(voti.reduce((a, b) => a + b, 0) / Math.max(1, voti.length)), ...conta, dettaglio: its.map(r => ({ sistema: r.sistema, voto: r.esame?.voto, difetti: r.difetti })) })
-    const breve = d => [d.sovrapposizioni.length && `sovr ${d.sovrapposizioni[0]}`, d.contrasto.length && `contr ${d.contrasto[0]}`, d.vuoti.length && `vuoto ${d.vuoti.map(v => Math.round(v * 100) + '%').join('+')}`, d.tagliati.length && `taglio ${d.tagliati[0]}`, d.saltati.length && `manca ${d.saltati.join(',')}`].filter(Boolean).join(' · ')
     const items = its.map(r => ({ url: r.url, label: `${r.sistema}  ${r.esame?.voto ?? ''}`, sub: (r.difetti && breve(r.difetti)) || 'nessun difetto misurato' }))
     if (items.length) {
       const sh = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format} · ${its.length} consegnate, ${p.scartate}/${p.candidate} candidate scartate · ${CLASSI_A.map(k => `${k} ${conta[k]}`).join(' · ')}`, items, cols: format === 'orizzontale' ? 3 : 4, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })

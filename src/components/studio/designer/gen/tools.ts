@@ -61,7 +61,7 @@ export const readable = (bg: string, list: string[], min = 4.5) => list.find(c =
 export const darker = (a: string, b: string) => (lum(a) < lum(b) ? a : b)
 export const lighter = (a: string, b: string) => (lum(a) < lum(b) ? b : a)
 
-function palette(s: Style, inverti: boolean): Pal {
+export function palette(s: Style, inverti: boolean): Pal {
   if (!inverti) return { bg: s.bg, fg: s.ink, acc: s.accent, acc2: s.accent2, sec: s.muted, srf: s.surface, dark: s.dark }
   const bg = s.accent
   const fg = readable(bg, [s.onAccent, s.ink, s.bg, '#111111', '#ffffff'])
