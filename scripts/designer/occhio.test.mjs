@@ -89,3 +89,14 @@ test('la classifica del modello si legge anche sporca, e senza risposta resta l\
   assert.deepEqual(occhio.leggiClassifica('ecco: {"ordine":[2,9,2],"scarta":[1]}', 3), { ordine: [2, 1, 3], scarta: [1] })
   assert.equal(occhio.leggiClassifica('non so', 3), null)
 })
+
+test('al modello vanno miniature di circa 512 px, configurabili', async () => {
+  const t = await tavola(10, 20, 30)
+  const m = await miniatura(t)
+  assert.equal(Math.max(m.w, m.h), 512)
+  assert.equal(m.mime, 'image/jpeg')
+  assert.equal(Math.max((await miniatura(t, 384)).h), 384)
+  const piccola = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#fff' } }).png().toBuffer()
+  assert.equal((await miniatura(piccola)).w, 200, 'mai ingrandita')
+  assert.ok(occhio.tokenImmagine(m.w, m.h) * 5 < occhio.tokenImmagine(1080, 1350), 'la miniatura costa almeno 5 volte meno')
+})

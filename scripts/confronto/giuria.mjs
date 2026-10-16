@@ -13,11 +13,12 @@
  * poi i modelli con visione gratuiti di OpenRouter e altri Gemini. Ogni candidato si prova con
  * una chiamata minima e si tengono i primi tre che rispondono, di famiglie diverse se si può.
  * Si riprende da dove si era rimasti: le risposte già in giuria.jsonl non si richiedono.
+ * Ai giurati vanno miniature (lato lungo 512 px; --lato o OCCHIO_LATO per cambiarlo), non le tavole intere.
  */
-import fs from 'node:fs'
 import path from 'node:path'
 import { GIURIA, NOSTRO, DOMANDE, caricaBrief, coppie, chiave, leggiJsonl, aggiungiJsonl } from './lib.mjs'
 import { chiavi } from './chiavi.mjs'
+import { miniatura, LATO } from '../occhio/index.mjs'
 import { chiediGemini, chiediOpenRouter, visioneGemini, visioneOpenRouter, modelliOpenRouter, modelliGemini } from './ia.mjs'
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
@@ -89,8 +90,8 @@ function prompt(b) {
   ].join('\n')
 }
 
-const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
-const immagine = f => ({ mime: MIME[path.extname(f).toLowerCase()] ?? 'image/png', dati: fs.readFileSync(f) })
+const lato = Number(args.lato ?? LATO)
+const immagine = f => miniatura(f, lato)
 
 /** Dalla risposta del modello alle scelte per domanda: 1 → chi era primo, 2 → chi era secondo, 0 → null. */
 function leggi(testo, primo, secondo) {
@@ -123,7 +124,7 @@ const fatte = new Set(leggiJsonl(GIURIA).map(r => `${chiave(r.brief, r.concorren
 let nuove = 0
 for (const c of lista) {
   const b = perId[c.brief]
-  const nostro = immagine(c.nostro), loro = immagine(c.loro)
+  const [nostro, loro] = await Promise.all([immagine(c.nostro), immagine(c.loro)])
   for (const g of giurati) {
     for (const ordine of ['nostro-primo', 'nostro-secondo']) {
       if (fatte.has(`${chiave(c.brief, c.concorrente)}|${g}|${ordine}`)) continue
