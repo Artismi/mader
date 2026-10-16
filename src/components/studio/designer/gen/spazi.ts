@@ -12,7 +12,7 @@
  * testo, o si toglie un secondario facoltativo); se non basta la tavola si scarta.
  * Gli allineamenti mancati di poco li ripara già il critico (`ripara`).
  */
-import type { SceneEl } from '../types'
+import type { SceneEl, Intreccio, Look } from '../types'
 import { inkLine } from '../text'
 import { baseline } from '../core/metriche'
 import { corpoMinimo } from '../core/scala'
@@ -125,6 +125,61 @@ export function spazi(g: G): string | null {
     if (FACOLTATIVO.test(b.name)) { g.els = g.els.filter(e => e !== b); annota(g, `tolto ${b.name}`); continue }
     // 4. niente da fare: la tavola si scarta
     return `spazi: ${trovato.a.name} e ${b.name} troppo vicini`
+  }
+  return null
+}
+
+/** Quota coperta di ogni riga del testo (campioni sui riquadri d'inchiostro) da una zona. */
+export function copertura(t: Text, dentro: (x: number, y: number) => boolean) {
+  return righeVere(t).map(r => {
+    let n = 0, c = 0
+    for (let fx = 0.05; fx < 1; fx += 0.075) for (const fy of [0.2, 0.5, 0.8]) { n++; if (dentro(r.x0 + (r.x1 - r.x0) * fx, r.y0 + (r.y1 - r.y0) * fy)) c++ }
+    return c / n
+  })
+}
+/** Il punto sta nel mezzo disco (n = verso della metà; n nullo = disco intero). */
+export const nelMezzoDisco = (a: NonNullable<Intreccio['area']>, x: number, y: number) =>
+  Math.hypot(x - a.cx, y - a.cy) <= a.r && (x - a.cx) * a.nx + (y - a.cy) * a.ny >= 0
+
+/** Più di un quarto di una riga coperto: le lettere non si riconoscono più. */
+const MAX_COPERTO = 0.25
+
+/**
+ * Intrecci voluti (V1): elementi che stanno sopra i testi per scelta (il titolo che
+ * passa dietro la foto, la foto nelle lettere). La regola di leggibilità: la parte da
+ * leggere resta sopra o in contrasto. Il testo dichiarato (`copre`) può perdere al
+ * massimo un quarto di ogni riga; gli altri testi del messaggio niente. Un intreccio
+ * che rompe la regola è una sovrapposizione sbagliata: si toglie (la tavola resta,
+ * senza il gesto); un elemento sopra i testi senza intreccio dichiarato fa scartare.
+ */
+export function intrecci(g: G): string | null {
+  const testi = g.els.filter((e): e is Text => e.kind === 'text' && !e.deco && (e.opacity ?? 1) > 0.05)
+  const primo = g.els.findIndex(e => e.kind === 'text' && !e.deco)
+  if (primo < 0) return null
+  const via = new Set<Intreccio>()
+  for (const e of g.els.slice(primo + 1)) {
+    if (e.kind === 'text' || e.kind === 'seal' || e.kind === 'arcText') continue
+    const ii = (e as Look).intreccio
+    if (!ii?.sopra) return `spazi: ${e.name} sopra i testi senza intreccio dichiarato`
+    const bersaglio = testi.find(t => t.name === ii.copre)
+    if (!bersaglio) { via.add(ii); continue }
+    if (ii.tipo === 'foto-lettere') {
+      // la foto sta solo dentro le lettere del titolo: serve un corpo da manifesto
+      if (bersaglio.size < 90 * g.u || bersaglio.angle) via.add(ii)
+      continue
+    }
+    if (!ii.area) { via.add(ii); continue }
+    const area = ii.area
+    for (const t of testi) {
+      if (t.angle) continue
+      const cop = copertura(t, (x, y) => nelMezzoDisco(area, x, y))
+      const max = gruppo(t.name) === gruppo(bersaglio.name) ? MAX_COPERTO : 0.02
+      if (Math.max(0, ...cop) > max) { via.add(ii); break }
+    }
+  }
+  if (via.size) {
+    g.els = g.els.filter(e => !via.has((e as Look).intreccio as Intreccio))
+    for (const ii of via) annota(g, `intreccio annullato ${ii.tipo}`)
   }
   return null
 }

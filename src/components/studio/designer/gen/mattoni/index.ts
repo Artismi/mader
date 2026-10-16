@@ -50,11 +50,12 @@ export const origini = (gen: Genoma) => new Set([gen.ossatura, gen.titolo, ...(g
 export const scheletro = (gen: Genoma) => MATTONI[gen.ossatura.id]?.ricetta ?? gen.ossatura.id
 
 /** Vincoli statici: il titolo e la foto stanno nell'ossatura, i segni hanno quello che serve. */
-export function compatibile(gen: Genoma, o: { voci?: boolean } = {}) {
+export interface Vincoli { voci?: boolean; orizzontale?: boolean }
+export function compatibile(gen: Genoma, o: Vincoli = {}) {
   const O = MATTONI[gen.ossatura.id] as Ossatura | undefined, T = MATTONI[gen.titolo.id] as MTitolo | undefined
   if (!O || O.cat !== 'ossatura' || !T || T.cat !== 'titolo') return false
   if (o.voci && !O.voci) return false
-  const offre = new Set([...(O.offre ?? []), ...(O.id === 'banco' ? ['campo', 'riga'] : [])])
+  const offre = new Set([...(O.offre ?? []), ...(O.id === 'banco' ? [o.orizzontale ? 'campo' : 'riga'] : [])])
   if ((T.serve ?? []).some(x => !offre.has(x))) return false
   if (T.forme.length && !T.forme.some(f => offre.has(f))) return false
   if (!T.forme.length && O.id !== 'banco') return false
@@ -72,7 +73,7 @@ function parametri(r: Rng, m: Mattone, quota = 0.5): Param | undefined {
 const gene = (r: Rng, m: Mattone, quota?: number): Gene => ({ id: m.id, p: parametri(r, m, quota) })
 
 /** Un genoma a caso che rispetta i vincoli. */
-export function genomaCasuale(r: Rng, o: { voci?: boolean } = {}): Genoma {
+export function genomaCasuale(r: Rng, o: Vincoli = {}): Genoma {
   for (let i = 0; i < 40; i++) {
     const os = perCategoria('ossatura').filter(x => !o.voci || (x as Ossatura).voci)
     const gen: Genoma = {
@@ -87,7 +88,7 @@ export function genomaCasuale(r: Rng, o: { voci?: boolean } = {}): Genoma {
 }
 
 /** Incrocio uniforme per categoria; i segni si ereditano uno per uno dall'uno o dall'altro genitore. */
-export function incrocio(r: Rng, a: Genoma, b: Genoma, o: { voci?: boolean } = {}): Genoma {
+export function incrocio(r: Rng, a: Genoma, b: Genoma, o: Vincoli = {}): Genoma {
   const scegli = <T>(x: T, y: T) => (r.chance(0.5) ? x : y)
   const unione = (x: Gene[], y: Gene[]) => [...new Map([...x, ...y].map(q => [q.id, q])).values()].filter(() => r.chance(0.6))
   for (let i = 0; i < 12; i++) {
@@ -105,7 +106,7 @@ export function incrocio(r: Rng, a: Genoma, b: Genoma, o: { voci?: boolean } = {
 }
 
 /** Mutazione: sposta un parametro, scambia un segno o un mattone con uno compatibile. */
-export function muta(r: Rng, gen: Genoma, o: { voci?: boolean; forza?: number } = {}): Genoma {
+export function muta(r: Rng, gen: Genoma, o: Vincoli & { forza?: number } = {}): Genoma {
   const f = structuredClone(gen)
   const n = 1 + Math.round((o.forza ?? 0.5) * 2)
   for (let i = 0; i < n; i++) {

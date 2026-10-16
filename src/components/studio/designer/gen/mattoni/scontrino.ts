@@ -38,9 +38,9 @@ export const banco: Ossatura = {
     const rs = righe(g, { max: 7, dettagli: true })
     if (!rs) return false
     const titoloDentro = gen.titolo.id === 'cassa'
-    const v = titoloDentro ? Math.round(par(p, 'variante', varianteScontrino(g))) : 2
-    if (titoloDentro && v === 2) return no(g, 'cassa: il titolo dentro non sta nella variante 2')
-    if (v === 1 && !g.photo) return no(g, 'scontrino sulla foto senza foto')
+    // con il titolo in cassa la variante 2 (titolo fuori) non c'è: si torna al banco; senza foto niente variante 1
+    const v0 = titoloDentro ? Math.round(par(p, 'variante', varianteScontrino(g))) : 2
+    const v = titoloDentro && (v0 === 2 || (v0 === 1 && !g.photo)) ? 0 : v0
     const titoloFuori = v === 2
     const side = g.landscape
     const font = mono(g)

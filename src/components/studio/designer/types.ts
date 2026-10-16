@@ -57,8 +57,16 @@ export interface Gradient { from: string; to: string; fromAt: number; toAt: numb
 /** effetto del motore (fx/catalog) applicato a un elemento: duotone, retino, riso, genFill… */
 export interface FxSpec { id: string; variant?: string; p?: Record<string, number | string> }
 
-/** Proprietà comuni di resa: sovrastampa (multiply…), trasparenza, effetti. */
-export interface Look { blend?: GlobalCompositeOperation; opacity?: number; fx?: FxSpec[] }
+/**
+ * Sovrapposizione voluta tra gli strati (V1): `sopra` = l'elemento resta sopra i testi
+ * (il titolo passa dietro), `copre` = il testo che può coprire, `area` = mezzo disco
+ * coperto (n = verso della metà; n nullo = disco intero). La regola di leggibilità
+ * la applica il controllo degli spazi.
+ */
+export interface Intreccio { tipo: string; sopra?: boolean; copre?: string; area?: { cx: number; cy: number; r: number; nx: number; ny: number } }
+
+/** Proprietà comuni di resa: sovrastampa (multiply…), trasparenza, effetti, intreccio voluto. */
+export interface Look { blend?: GlobalCompositeOperation; opacity?: number; fx?: FxSpec[]; intreccio?: Intreccio }
 
 export type SceneEl =
   | ({ kind: 'rect'; name: string; x: number; y: number; w: number; h: number; fill: string | Gradient; r?: number; angle?: number; stroke?: string; sw?: number } & Look)

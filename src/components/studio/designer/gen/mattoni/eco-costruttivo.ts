@@ -9,7 +9,7 @@ import {
   type G, put, U, txt, lab, display, putLab, putDisplay, infoBlock, photo, ticker, dotField, sizeForWidth, keyword, up, words, readable, lum,
 } from '../tools'
 import { lineWidth } from '../../text'
-import type { Ossatura, MTitolo, MFoto, MSegno, Box, Zona } from './tipi'
+import type { Ossatura, MTitolo, MFoto, MSegno, Box, Zona, Piano, Param } from './tipi'
 import { par, no } from './tipi'
 
 const ink = (g: G) => ({ fg: g.P.fg, sec: g.P.sec, acc: readable(g.P.bg, [g.P.acc, g.P.acc2, g.P.fg], 3.6) })
@@ -23,11 +23,16 @@ const ruota = (b: Box, deg: number): Box => {
 
 /* ═══ Eco ═══════════════════════════════════════════════════════════════ */
 export const fasce: Ossatura = {
-  id: 'fasce', nome: 'Fasce', ricetta: 'eco', cat: 'ossatura', offre: ['campo', 'fascia-alta', 'foto-rett'],
+  id: 'fasce', nome: 'Fasce', ricetta: 'eco', cat: 'ossatura', offre: ['campo', 'fascia-alta'],
   param: { nastro: [40, 80], infoLarg: [0.35, 0.6] },
-  fai(g, piano, p) {
+  fai(g, piano, p, gen) {
     const { W, m, T, B } = g
     const tickH = U(g, par(p, 'nastro', 58))
+    // senza il nastro il brand sta nella fascia alta, fermo
+    if (!gen.dispositivi.some(d => d.id === 'nastro')) {
+      const b = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  ·  '), W - 2 * m)
+      if (b) putLab(g, 'brand', b, m, Math.max(m * 0.6, (tickH - b.h) / 2), g.P.fg)
+    }
     piano.ancore.nastro = { x: 0, y: 0, w: W, h: tickH }
     const info = infoBlock(g, g.landscape ? (W - 2 * m) * par(p, 'infoLarg', 0.45) : W - 2 * m, { kicker: false })
     const infoTop = B - info.h
@@ -85,23 +90,35 @@ export const titoloEco: MTitolo = {
   },
 }
 
+/** Il posto di un tondo nella zona della foto: la metà lontana dal titolo, senza toccarne i riquadri. */
+function postoTondo(g: G, piano: Piano, p: Param) {
+  const { W, r } = g
+  const z = piano.zonaFoto!
+  const occ = piano.titolo?.occupa(...(piano.titoloXY ?? [0, 0])) ?? []
+  const riga = occ[0]
+  const D = Math.min(W * par(p, 'diametro', 0.52), z.h * 0.5, z.w)
+  if (D < 120 * g.u) return null
+  const fy = riga ? riga.y : z.y
+  const upHalf = riga ? fy - z.y > (z.h - riga.h) / 2 : r.chance(0.5)
+  const cy = upHalf ? z.y + D / 2 + U(g, 10) : z.y + z.h - D / 2
+  const cx = z.x + z.w * par(p, 'centro', r.range(0.32 * W - z.x, 0.68 * W - z.x) / z.w)
+  const size = riga ? riga.h / 1.13 : 0
+  if (riga && Math.abs(cy - (fy + size * 0.56)) <= D / 2 + size * 0.6) return null
+  // nessun altro riquadro del titolo dentro il tondo (titolo pieno su più righe, titolo intero)
+  const aria = U(g, 16)
+  if (occ.slice(1).some(b => cx + D / 2 > b.x - aria && cx - D / 2 < b.x + b.w + aria && cy + D / 2 > b.y - aria && cy - D / 2 < b.y + b.h + aria)) return null
+  return { cx, cy, D }
+}
+
 /** Foto tonda nella metà del campo lontana dal titolo, con l'alone d'accento in sovrastampa. */
 export const tondo: MFoto = {
   id: 'tondo', nome: 'Foto tonda', ricetta: 'eco', cat: 'foto',
   param: { diametro: [0.35, 0.6], centro: [0.3, 0.7], alone: [0, 1] },
   fai(g, piano, p) {
-    const { W, P, k, r } = g
-    const z = piano.zonaFoto!
-    const occ = piano.titolo?.occupa(...(piano.titoloXY ?? [0, 0])) ?? []
-    const riga = occ[0]
-    const D = Math.min(W * par(p, 'diametro', 0.52), z.h * 0.5, z.w)
-    if (D < 120 * g.u) return false
-    const fy = riga ? riga.y : z.y
-    const upHalf = riga ? fy - z.y > (z.h - riga.h) / 2 : r.chance(0.5)
-    const cy = upHalf ? z.y + D / 2 + U(g, 10) : z.y + z.h - D / 2
-    const cx = z.x + z.w * par(p, 'centro', r.range(0.32 * W - z.x, 0.68 * W - z.x) / z.w)
-    const size = riga ? riga.h / 1.13 : 0
-    if (riga && Math.abs(cy - (fy + size * 0.56)) <= D / 2 + size * 0.6) return false
+    const { P, k } = g
+    const t = postoTondo(g, piano, p)
+    if (!t) return false
+    const { cx, cy, D } = t
     const alone = par(p, 'alone', k.sovrastampa)
     if (alone > 0.2) put(g, { kind: 'circle', name: 'alone', cx: cx + U(g, 24) * alone, cy: cy - U(g, 20) * alone, r: D / 2, fill: P.acc2, blend: over(g) })
     photo(g, 'foto', { x: cx - D / 2, y: cy - D / 2, w: D, h: D }, { shape: 'circle' })
@@ -133,7 +150,7 @@ export const stella: MSegno = {
 export const asse: Ossatura = {
   id: 'asse', nome: 'Asse inclinato', ricetta: 'costruttivo', cat: 'ossatura', offre: ['riga', 'disco', 'angolo-numero'],
   param: { angolo: [-40, -8], disco: [0.28, 0.5], discoX: [0.55, 0.75] },
-  fai(g, piano, p) {
+  fai(g, piano, p, gen) {
     const { W, H, m, T, B, P, s, k, r } = g
     const ang = par(p, 'angolo', -(14 + k.energia * 22) + r.range(-4, 4))
     const a = (ang * Math.PI) / 180
@@ -148,12 +165,14 @@ export const asse: Ossatura = {
     const visible = Math.min(W / Math.cos(a), H / Math.abs(Math.sin(a))) * 0.82
     const one = words(g.c.title).length <= 4
     const bcx = W * 0.48, bcy = g.landscape ? H * 0.66 : H * 0.6
-    const tw = visible * (0.7 + 0.25 * k.scala), th = H * 0.3
+    const brand = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), H * 0.5)
+    // un titolo che non sta in una barra non deve arrivare al brand in verticale sul bordo
+    const libero = gen.titolo.id === 'barra' ? Infinity : 2 * (bcx - m - (brand ? brand.h + U(g, 30) : 0))
+    const tw = Math.min(visible * (0.7 + 0.25 * k.scala), libero), th = H * 0.3
     const t = piano.misuraTitolo({ x: bcx - tw / 2, y: bcy - th / 2, w: tw, h: th, forma: 'riga', angle: ang, maxSize: 190, minSize: 40, maxLines: one ? 1 : 2, caps: s.displayUpper || k.energia > 0.5 })
     if (!t) return false
     piano.titolo = t; piano.titoloXY = [bcx - t.w / 2, bcy - t.h / 2]
     piano.ancore.asse = [bcx, bcy]
-    const brand = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), H * 0.5)
     if (brand) putLab(g, 'brand', brand, m, Math.max(T, m * 0.6 + ns * 1.13 + U(g, 20)) + brand.w, P.fg, 'left', brand.w, { angle: -90 })
     const colW = g.landscape ? W * 0.32 : W * 0.5
     const info = infoBlock(g, colW, { kicker: false })
@@ -203,7 +222,10 @@ export const disco: MFoto = {
   id: 'disco', nome: 'Foto nel disco', ricetta: 'costruttivo', cat: 'foto', param: { raggio: [0.7, 0.95] },
   fai(g, piano, p) {
     const z = piano.zonaFoto!
-    const d = z.disco ?? { cx: z.x + z.w / 2, cy: z.y + z.h / 2, r: Math.min(z.w, z.h) / 2 }
+    // senza il disco dell'ossatura se ne disegna uno dove starebbe la foto tonda, lontano dal titolo
+    const t = z.disco ? null : postoTondo(g, piano, p)
+    if (!z.disco && !t) return false
+    const d = z.disco ?? { cx: t!.cx, cy: t!.cy, r: t!.D / 2 }
     if (!z.disco) put(g, { kind: 'circle', name: 'disco', cx: d.cx, cy: d.cy, r: d.r, fill: g.P.acc })
     const pr = d.r * par(p, 'raggio', 0.78 + 0.1 * g.k.densita)
     photo(g, 'foto', { x: d.cx - pr + d.r * 0.12, y: d.cy - pr + d.r * 0.1, w: pr * 2, h: pr * 2 }, { shape: 'circle', blend: g.photo ? over(g, g.P.acc) : undefined })

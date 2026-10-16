@@ -3,14 +3,14 @@
  * (anche ruotato, a contorno, a tutta larghezza), trattamenti foto del motore
  * effetti, segni di stampa e il controllo finale di leggibilità.
  */
-import type { DesignContent, FontSpec, Format, FxSpec, Scene, SceneEl } from '../types'
+import type { DesignContent, FontSpec, Format, FxSpec, Look, Scene, SceneEl } from '../types'
 import { FORMAT_SIZE } from '../types'
 import type { Style } from '../styles'
 import { fit, lineWidth, blockHeight, type Fit, type FitOpts } from '../text'
 import { type Knobs, type Rng, rng, hashText } from './knobs'
 import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
-import { spazi } from './spazi'
+import { spazi, intrecci } from './spazi'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
 import { conSpecifica, specializza } from './specializza'
@@ -544,6 +544,8 @@ export function mirror(g: G) {
     return { x: W - x - w * Math.cos(a), y: y + w * Math.sin(a), angle: angle ? -angle : angle }
   }
   for (const e of g.els) {
+    const area = (e as Look).intreccio?.area
+    if (area) (e as Look).intreccio = { ...(e as Look).intreccio!, area: { ...area, cx: W - area.cx, nx: -area.nx } }
     switch (e.kind) {
       case 'rect': Object.assign(e, rot(e.x, e.y, e.w, e.angle)); break
       case 'text': Object.assign(e, rot(e.x, e.y, e.w, e.angle), { align: flipAlign(e.align) }); break
@@ -599,6 +601,11 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   // i testi veri e i sigilli stanno sopra la grana: nitidi, come li comporrebbe un tipografo
   const front = g.els.filter(e => (e.kind === 'text' && !e.deco) || e.kind === 'seal' || e.kind === 'arcText')
   g.els = [...g.els.filter(e => !front.includes(e)), ...front]
+  // gli intrecci voluti restano sopra i testi (il titolo passa dietro): la regola di leggibilità è in `intrecci`
+  const sopra = g.els.filter(e => (e as Look).intreccio?.sopra)
+  g.els = [...g.els.filter(e => !sopra.includes(e)), ...sopra]
+  const iv = intrecci(g)
+  if (iv) { discard(g, iv); return null }
   // misure vere riga per riga: margini, contatti e aria tra i testi, corretti dove si può
   const sp = spazi(g)
   if (sp) { discard(g, sp); return null }
