@@ -7,7 +7,7 @@ import * as fabric from 'fabric'
 import { generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, ammesso, type Knobs } from '@/components/studio/designer/gen'
 import { styleById } from '@/components/studio/designer/styles'
 import { incrocia } from '@/components/studio/designer/gen/incrocio'
-import { concetti, simulato } from '@/components/studio/designer/gen/concetto'
+import { concetti, simulato, type Idea } from '@/components/studio/designer/gen/concetto'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
@@ -56,7 +56,9 @@ async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; c
   const t0 = performance.now()
   // C1 a secco: la chiamata del concetto simulata (risponde con le regole), contata
   const conta = { chiamate: 0, token: 0 }
-  const idee = (job as { senzaIdee?: boolean }).senzaIdee ? false as const : await concetti(job.content, { chiedi: simulato(job.content, conta) })
+  // le idee dal modello vero (--idee-modello) arrivano già pronte; a secco la chiamata è simulata
+  const date = (job as { idee?: Idea[] }).idee
+  const idee = (job as { senzaIdee?: boolean }).senzaIdee ? false as const : date ?? await concetti(job.content, { chiedi: simulato(job.content, conta) })
   const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee })
   const items: Result[] = []
   for (const sc of p.scene) {

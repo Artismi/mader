@@ -8,6 +8,7 @@
  *   npm run designer:vetrina -- --contenuti caffe,mostra --formati storia
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
  *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
+ *   npm run designer:idee                           le idee del concetto (C1) da un modello vero (OpenRouter, Claude o Gemini), ripiego a regole
  *   npm run designer:vetrina -- --senza-idee          proposte senza le idee del concetto (C1–C2), per il confronto
  *   npm run designer:vetrina -- --ibridi              in più un foglio <contenuto>-<formato>-ibridi.jpg con i soli ibridi dell'incrocio (V1)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
@@ -19,6 +20,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 
@@ -99,6 +101,18 @@ if (args.occhio) {
   const lib = await import('data:text/javascript;base64,' + Buffer.from(b.outputFiles[0].text).toString('base64'))
   const oc = await import('../occhio/index.mjs')
   occhio = { lib, oc, chiedi: args['a-secco'] ? oc.simulato() : await oc.modello(), memoria: oc.memoriaFile(path.join(out, 'verdetti.jsonl')), prima: oc.contaVuota(), dopo: oc.contaVuota() }
+}
+
+/* ── C1 con il modello vero: --idee-modello (registro dei modelli, profilo medio; ripiego a regole) ── */
+let ideeModello = null
+if (args['idee-modello']) {
+  // le chiavi del portale (.env.local) e il database delle impostazioni (OpenRouter collegato, modelli scelti)
+  for (const f of ['.env.local', '.env']) if (fs.existsSync(path.join(repo, f))) process.loadEnvFile(path.join(repo, f))
+  const file = path.join(here, 'out', 'concetto-modello.mjs')
+  await esbuild.build({ entryPoints: [path.join(repo, 'src/lib/ai/concetto-modello.ts')], bundle: true, format: 'esm', platform: 'node', outfile: file, packages: 'external', logLevel: 'error', alias: { '@': path.join(repo, 'src') } })
+  const cwd = process.cwd(); process.chdir(repo)
+  ideeModello = await import(pathToFileURL(file).href)
+  process.chdir(cwd)
 }
 
 /* ── giro ──────────────────────────────────────────────────────────────── */
@@ -230,7 +244,13 @@ for (const nome of contenuti) {
     let res, info = ''
     if (args.vecchio || sistemi) res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })
     else {
-      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'] })
+      let idee
+      if (ideeModello) {
+        const r = await ideeModello.chiediIdee(fx.c)
+        idee = r.idee
+        console.log(`  ${nome}: concetto dal ${r.fonte}${r.modello ? ' ' + r.modello : ''}${r.token ? ` (${r.token} token)` : ''}${r.motivo ? ' — ' + r.motivo : ''}`)
+      }
+      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'], idee })
       if (p.idee?.length) console.log(`  ${nome}: idee ${p.idee.join(' | ')} · concetto ${p.concetto.chiamate} chiamata, ~${p.concetto.token} token`)
       res = p.items
       info = ` · ${p.promosse} promosse su ${p.candidate} candidate in ${p.giri} giri`
@@ -256,8 +276,10 @@ for (const nome of contenuti) {
       const prime = res.filter(r => r.ok && r.url).slice(0, 12)
       const dv = await page.evaluate(o => window.designer.diversita(o), { urls: prime.map(r => r.url), mattoni: prime.map(r => r.mattoni ?? [r.sistema]) })
       dv.carattere = prime.reduce((a, r) => a + (r.esame?.carattere?.carattere ?? 0), 0) / Math.max(1, prime.length)
+      dv.intrecci = prime.filter(r => (r.mattoni ?? []).some(m => m.startsWith('intreccio:'))).length
+      dv.idee = prime.filter(r => r.knobs?.idea).length
       diversita.push(dv)
-      info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)}) · carattere ${dv.carattere.toFixed(1)}`
+      info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)}) · carattere ${dv.carattere.toFixed(1)} · intrecci ${dv.intrecci} · idee ${dv.idee}`
     }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
     if (args.ibridi) {
@@ -304,8 +326,8 @@ ${occhio.oc.riga('dopo', dopo)}
 
 if (diversita.length) {
   const m = k => diversita.reduce((a, d) => a + d[k], 0) / diversita.length
-  console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)} · carattere ${m('carattere').toFixed(1)}`)
-  fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), carattere: m('carattere'), tavole: diversita }, null, 2))
+  console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)} · carattere ${m('carattere').toFixed(1)} · intrecci ${m('intrecci').toFixed(1)} · idee ${m('idee').toFixed(1)} (per contenuto)`)
+  fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), carattere: m('carattere'), intrecci: m('intrecci'), idee: m('idee'), tavole: diversita }, null, 2))
 }
 console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)
 

@@ -61,22 +61,33 @@ export function ideeDaRegole(c: DesignContent): Idea[] {
   if (c.numero) out.push(idea(`il ${c.numero} come immagine`, 'parola-immagine', { parola: c.numero, motivi: ['numero'] }))
   out.push(idea(`«${kw}» come immagine`, 'parola-immagine', { parola: kw }))
   out.push(idea('il titolo enorme, il resto sussurrato', 'scala', { togli: ['ornamenti', 'dettagli'] }))
-  if (parole(c.title).length >= 2) out.push(idea(`«${kw}» ripetuta fino a diventare trama`, 'ripetizione', { parola: kw, motivi: ['ripetizione'] }))
+  if (parole(c.title).length >= 2) out.push(idea(`«${kw}» ripetuta fino a riempire la tavola`, 'ripetizione', { parola: kw, motivi: ['ripetizione'] }))
   out.push(idea('il messaggio piccolo nel vuoto', 'vuoto', { togli: ['ornamenti', 'dettagli', 'testo'] }))
   // una per gesto, nell'ordine trovato (le metafore prima)
   const visti = new Set<Gesto>()
   return out.filter(x => (visti.has(x.gesto) ? false : (visti.add(x.gesto), true))).slice(0, 5)
 }
 
-/** Il prompt della chiamata (breve: il brief, i gesti ammessi, lo schema). */
+/** Esempi d'autore (non decorazioni): mostrano il tipo di salto che si chiede. */
+const ESEMPI = [
+  'Caffè "Notte Etiope" → {"nome":"una tazzina che è una luna nel nero","gesto":"vuoto","parola":"Notte","scala":0,"energia":0,"densita":0,"togli":["dettagli","ornamenti"],"motivi":[]}',
+  'Palestra "Allenati come una squadra" → {"nome":"ALLENATI troppo grande per stare nel quadrato","gesto":"scala","parola":"Allenati","scala":1,"energia":1,"densita":0,"togli":["ornamenti"],"motivi":[]}',
+  'Mostra "Creature della luce" → {"nome":"la foto della medusa dentro la parola LUCE","gesto":"parola-immagine","parola":"luce","scala":1,"energia":0,"densita":0,"togli":["dettagli"],"motivi":[]}',
+]
+
+/** Il prompt della chiamata (breve: il brief, i gesti ammessi, tre esempi d'autore, lo schema). */
 export function promptIdee(c: DesignContent) {
   return [
-    'Sei un direttore artistico. Dal brief ricava da 3 a 5 idee visive per un post: una metafora, un gioco di parole visivo o un gesto tipografico, non una decorazione.',
+    'Sei un direttore artistico. Dal brief ricava da 3 a 5 idee visive per un post: una metafora, un gioco di parole visivo o un gesto tipografico. Non decorazioni (cornici, texture, sfondi, icone): un’idea che si capisce in un secondo.',
+    `Ogni idea ha un solo gesto dominante tra: ${GESTI.join(', ')}; spingilo all'estremo e riduci il resto. Idee diverse, gesti diversi.`,
+    'Esempi:', ...ESEMPI,
     `Brief: ${[c.brand, c.kicker, c.title, c.body, ...(c.details ?? [])].filter(Boolean).join(' · ')}`,
-    `Per ogni idea un solo gesto dominante tra: ${GESTI.join(', ')}. Spingilo all'estremo; il resto si riduce.`,
-    `Rispondi solo con JSON: [{"nome":"…","gesto":"…","parola":"parola del titolo che porta il gesto","scala":0|1,"energia":0|1,"densita":0|1,"togli":["testo"|"dettagli"|"foto"|"ornamenti"],"motivi":[${MOTIVI.map(m => `"${m}"`).join('|')}]}]`,
+    `Rispondi solo con un array JSON: [{"nome":"…","gesto":"…","parola":"una parola del titolo","scala":0|1,"energia":0|1,"densita":0|1,"togli":["testo"|"dettagli"|"foto"|"ornamenti"],"motivi":[${MOTIVI.map(m => `"${m}"`).join('|')}]}]`,
   ].join('\n')
 }
+
+/** Idee che sono decorazioni travestite: si scartano. */
+const DECORO = /cornic|ornament|decor|texture|trama|sfond|bordo|icon|cuoric|stellin|glitter|elegan|carin/i
 
 /** Legge la risposta del modello; idee non valide si scartano, meno di 3 → si completano con le regole. */
 export function leggiIdee(testo: string, c: DesignContent): Idea[] {
@@ -86,17 +97,20 @@ export function leggiIdee(testo: string, c: DesignContent): Idea[] {
   const idee = (Array.isArray(grezze) ? grezze : []).flatMap(x => {
     const o = x as Record<string, unknown>
     const gesto = GESTI.find(gg => gg === o?.gesto)
-    if (!gesto || typeof o.nome !== 'string') return []
+    if (!gesto || typeof o.nome !== 'string' || DECORO.test(o.nome)) return []
     const parola = typeof o.parola === 'string' && (c.title + ' ' + (c.numero ?? '')).toLowerCase().includes(o.parola.toLowerCase()) ? o.parola : undefined
     return [idea(o.nome.slice(0, 80), gesto, {
       parola, scala: polo(o.scala), energia: polo(o.energia), densita: polo(o.densita),
       togli: (Array.isArray(o.togli) ? o.togli : []).filter((t): t is Idea['togli'][number] => ['testo', 'dettagli', 'foto', 'ornamenti'].includes(t as string)),
       motivi: (Array.isArray(o.motivi) ? o.motivi : []).filter((m): m is string => (MOTIVI as readonly string[]).includes(m as string)),
     })]
-  }).slice(0, 5)
-  if (idee.length >= 3) return idee
-  const resto = ideeDaRegole(c).filter(r => !idee.some(i => i.gesto === r.gesto))
-  return [...idee, ...resto].slice(0, Math.max(3, idee.length))
+  })
+  // un gesto per idea: i doppioni si tolgono (si tiene la prima)
+  const visti = new Set<Gesto>()
+  const uniche = idee.filter(i => (visti.has(i.gesto) ? false : (visti.add(i.gesto), true))).slice(0, 5)
+  if (uniche.length >= 3) return uniche
+  const resto = ideeDaRegole(c).filter(r => !uniche.some(i => i.gesto === r.gesto))
+  return [...uniche, ...resto].slice(0, Math.max(3, uniche.length))
 }
 
 export type Chiedi = (prompt: string) => Promise<string>

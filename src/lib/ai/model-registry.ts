@@ -194,8 +194,8 @@ export interface Need {
   tools?: boolean
   vision?: boolean
   structured?: boolean
-  /** preferenza di forza: 'forte' mette avanti i forti, 'leggero' gli economici */
-  preferisci?: 'forte' | 'leggero'
+  /** preferenza di forza: 'forte' mette avanti i forti, 'leggero' gli economici, 'medio' quelli di mezzo */
+  preferisci?: 'forte' | 'leggero' | 'medio'
 }
 
 export interface PickOptions {
@@ -245,7 +245,7 @@ export function candidatesFor(need: Need, opts: PickOptions = {}): ModelCandidat
     }
   }
   if (need.preferisci) {
-    const rank = (s: Strength) => (need.preferisci === 'forte' ? { forte: 0, medio: 1, debole: 2 } : { debole: 0, medio: 1, forte: 2 })[s]
+    const rank = (s: Strength) => (need.preferisci === 'forte' ? { forte: 0, medio: 1, debole: 2 } : need.preferisci === 'medio' ? { medio: 0, forte: 1, debole: 2 } : { debole: 0, medio: 1, forte: 2 })[s]
     // ordinamento stabile: dentro lo stesso livello resta l'ordine dei fornitori
     return out.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c.profile.strength) - rank(b.c.profile.strength) || a.i - b.i).map(x => x.c)
   }

@@ -15,6 +15,7 @@ import { STYLES, inferStyle } from './styles'
 import { findPhoto } from './generate'
 import { renderPreview } from './preview'
 import { generateSystem, proposeKnobs, proponi, SISTEMI, TRATTAMENTI, RANGE_KNOBS, rng, type Knobs } from './gen'
+import type { Idea } from './gen/concetto'
 
 const N_PROPOSTE = 12
 
@@ -111,6 +112,19 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
     return photoCache.current.get(key)
   }
 
+  /** Le idee del brief (C1): una chiamata breve al modello dal portale; senza chiave o credito, le regole. */
+  const ideeCache = useRef(new Map<string, { idee: Idea[]; fonte: string; modello?: string }>())
+  async function ideeDelBrief(c: DesignContent) {
+    const key = [c.title, c.kicker, c.body].join('|')
+    if (!ideeCache.current.has(key)) {
+      try {
+        const r = await fetch('/api/design/idee', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: c }) })
+        if (r.ok) ideeCache.current.set(key, await r.json())
+      } catch { /* senza rete: proponi usa le regole */ }
+    }
+    return ideeCache.current.get(key)
+  }
+
   /** Compone e mostra le proposte: dalle direzioni dell'IA, oppure una per sistema. */
   async function compose(o: { form?: Form; format?: Format; dirs?: Direzione[]; enfasi?: string } = {}) {
     const fmt = o.format ?? format, c = toContent(o.form ?? f), dirs = o.dirs ?? direzioni, enf = o.enfasi ?? enfasi
@@ -124,10 +138,12 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       // il critico esamina tutto e restano le 12 migliori diverse tra loro
       const ks: Knobs[] = dirs.flatMap((d, i) => [0, 1, 2, 3].map(j => knobsFrom(d, 1000 + i * 97 + j * 7919, enf)))
       setItems(Array.from({ length: N_PROPOSTE }, () => ({ k: ks[0] ?? proposeKnobs(c, { hasPhoto: !!photo })[0], sc: null })))
-      const p = await proponi(c, fmt, { photo, n: N_PROPOSTE, knobs: ks, onProgress: (a, b) => gen.current === my && setBusy(`compongo ${a}/${b}`) })
+      setBusy('cerco le idee')
+      const concetto = await ideeDelBrief(c)
+      const p = await proponi(c, fmt, { photo, n: N_PROPOSTE, knobs: ks, idee: concetto?.idee, onProgress: (a, b) => gen.current === my && setBusy(`compongo ${a}/${b}`) })
       if (gen.current !== my) return
       setBusy('compongo')
-      setMsg(`${p.promosse} promosse dal critico su ${p.candidate} candidate.`)
+      setMsg(`${p.promosse} promosse dal critico su ${p.candidate} candidate · idee ${concetto?.fonte === 'modello' ? `dal modello ${concetto.modello ?? ''}` : 'dalle regole'}.`)
       const scene = p.scene.map(sc => ({ ...sc, knobs: { ...sc.knobs, enfasi: enf } }))
       setItems(scene.map(sc => ({ k: sc.knobs as Knobs, sc })))
       for (let i = 0; i < scene.length; i++) {

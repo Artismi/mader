@@ -59,7 +59,7 @@ test('il ripiego trova i motivi dal brief', () => {
 
 /* ── C1: il concetto dal brief ─────────────────────────────────────────── */
 const con = await esbuild.build({ entryPoints: [path.join(repo, 'src/components/studio/designer/gen/concetto.ts')], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error' })
-const { ideeDaRegole, leggiIdee, concetti, simulato } = await import('data:text/javascript;base64,' + Buffer.from(con.outputFiles[0].text).toString('base64'))
+const { ideeDaRegole, leggiIdee, concetti, simulato, promptIdee } = await import('data:text/javascript;base64,' + Buffer.from(con.outputFiles[0].text).toString('base64'))
 const caffe = { brand: 'Tostatura Nera', kicker: 'Nuovo blend', title: 'Notte Etiope', numero: '250 g', body: 'Note di cacao, spezie e frutti rossi.' }
 
 test('C1: dalle regole da 3 a 5 idee, un gesto diverso ciascuna, poli estremi', () => {
@@ -78,4 +78,16 @@ test('C1: risposta illeggibile o povera → si completa con le regole; la simula
   const s = await concetti(caffe, { chiedi: simulato(caffe, conta) })
   assert.deepEqual(s.map(i => i.gesto), ideeDaRegole(caffe).map(i => i.gesto))
   assert.equal(conta.chiamate, 1); assert.ok(conta.token > 100 && conta.token < 1500, `${conta.token} token`)
+})
+
+test('C1: il controllo dell\'uscita scarta le decorazioni travestite e i gesti doppi; il prompt ha gli esempi d\'autore', () => {
+  const r = leggiIdee('[{"nome":"una cornice dorata elegante","gesto":"scala"},{"nome":"la notte che inghiotte il titolo","gesto":"vuoto"},{"nome":"il buio ancora","gesto":"vuoto"}]', caffe)
+  assert.ok(!r.some(i => /cornice/.test(i.nome)))
+  assert.equal(r.filter(i => i.gesto === 'vuoto').length, 1)
+  assert.equal(r[0].nome, 'la notte che inghiotte il titolo')
+})
+test('C1: il prompt è breve e porta il brief', () => {
+  const p = promptIdee(caffe)
+  assert.ok(p.includes('Notte Etiope') && p.includes('Esempi'))
+  assert.ok(p.length / 4 < 700, `${Math.round(p.length / 4)} token`)
 })
