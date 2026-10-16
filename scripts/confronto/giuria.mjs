@@ -7,6 +7,9 @@
  *
  *   npm run confronto:giuria
  *   npm run confronto:giuria -- --max 4               solo le prime 4 coppie (prova)
+ *   npm run confronto:giuria -- --campione 10         10 coppie sparse sui brief (predefinito 6, o CONFRONTO_CAMPIONE)
+ *   npm run confronto:giuria -- --tutte               tutte le coppie (costa)
+ *   npm run confronto:giuria -- --a-secco             tavole finte e giurati simulati: solo la conta di chiamate e token, prima e dopo
  *   CONFRONTO_GIURIA=gemini:gemini-3.8-flash,openrouter:anthropic/claude-sonnet-5.5,openrouter:openai/gpt-6.1-sol npm run confronto:giuria
  *
  * Scelta dei giurati: un Gemini con visione (GEMINI_API_KEY), poi Claude e GPT su OpenRouter,
@@ -17,18 +20,22 @@
  * non si rigiudica mai, ma una tavola rifatta sì.
  * Ai giurati vanno miniature (lato lungo 512 px; --lato o OCCHIO_LATO per cambiarlo), non le tavole intere.
  */
+import fs from 'node:fs'
 import path from 'node:path'
-import { GIURIA, NOSTRO, DOMANDE, caricaBrief, coppie, chiave, leggiJsonl, aggiungiJsonl } from './lib.mjs'
+import { GIURIA as FILE_GIURIA, NOSTRO, DOMANDE, caricaBrief, coppie, chiave, leggiJsonl, aggiungiJsonl } from './lib.mjs'
 import { chiavi } from './chiavi.mjs'
 import { createHash } from 'node:crypto'
-import { miniatura, LATO } from '../occhio/index.mjs'
+import os from 'node:os'
+import { miniatura, LATO, tokenImmagine, contaVuota, riga } from '../occhio/index.mjs'
 import { chiediGemini, chiediOpenRouter, visioneGemini, visioneOpenRouter, modelliOpenRouter, modelliGemini } from './ia.mjs'
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true'])
   return acc
 }, []))
-const k = await chiavi()
+const secco = !!args['a-secco']
+const k = secco ? {} : await chiavi()
+const GIURIA = secco ? path.join(os.tmpdir(), 'giuria-a-secco.jsonl') : FILE_GIURIA
 const brief = caricaBrief()
 const perId = Object.fromEntries(brief.map(b => [b.id, b]))
 const pausa = ms => new Promise(r => setTimeout(r, ms))
@@ -57,6 +64,7 @@ async function candidati() {
 
 async function chiedi(giurato, prompt, immagini, riprova = 3) {
   const [servizio, ...resto] = giurato.split(':'), modello = resto.join(':')
+  if (servizio === 'secco') return JSON.stringify(Object.fromEntries(DOMANDE.map((d, i) => [d.id, 1 + ((immagini[0]?.dati.length ?? 0) + i + modello.length) % 2])))
   for (let tentativo = 0; ; tentativo++) {
     try {
       return servizio === 'gemini' ? await chiediGemini(k.gemini, modello, prompt, immagini) : await chiediOpenRouter(k.openrouter, modello, prompt, immagini)
@@ -70,6 +78,7 @@ async function chiedi(giurato, prompt, immagini, riprova = 3) {
 }
 
 async function scegliGiurati() {
+  if (secco) return ['secco:uno', 'secco:due', 'secco:tre']
   const tutti = await candidati(), scelti = [], scartati = []
   for (const forzaFamiglia of [true, false]) {
     for (const g of tutti) {
@@ -111,12 +120,27 @@ function leggi(testo, primo, secondo) {
   return out
 }
 
+/** A secco: tavole finte (un colore per brief e concorrente) in una cartella temporanea. */
+async function tavoleFinte() {
+  const sharp = (await import('node:module')).createRequire(import.meta.url)('sharp')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'q0-secco-'))
+  for (const [j, s] of [NOSTRO, 'google', 'chatgpt'].entries()) {
+    fs.mkdirSync(path.join(dir, s))
+    for (const [i, b] of brief.entries()) await sharp({ create: { width: 1080, height: 1350, channels: 3, background: { r: (i * 37) % 255, g: j * 90, b: 120 } } }).png().toFile(path.join(dir, s, `${b.id}.png`))
+  }
+  return dir
+}
+/** Campione sparso: n coppie prese a passo regolare, così si toccano brief e concorrenti diversi. */
+const campione = (l, n) => (n >= l.length ? l : Array.from({ length: n }, (_, i) => l[Math.floor((i * l.length) / n)]))
+
 /* ── giro ──────────────────────────────────────────────────────────────── */
-let lista = coppie(brief)
+let lista = coppie(brief, secco ? await tavoleFinte() : undefined)
+const tutteLeCoppie = lista.length
 if (args.concorrenti) lista = lista.filter(c => args.concorrenti.split(',').includes(c.concorrente))
 if (args.max) lista = lista.slice(0, Number(args.max))
+else if (!args.tutte) lista = campione(lista, Number(args.campione ?? process.env.CONFRONTO_CAMPIONE ?? 6))
 if (!lista.length) { console.log('Nessuna coppia da giudicare: servono tavole in out/creative-os e in almeno una cartella di concorrente.'); process.exit(0) }
-if (!k.gemini && !k.openrouter) { console.error('Servono GEMINI_API_KEY o OpenRouter collegato per la giuria.'); process.exit(1) }
+if (!secco && !k.gemini && !k.openrouter) { console.error('Servono GEMINI_API_KEY o OpenRouter collegato per la giuria.'); process.exit(1) }
 
 console.log('Scelgo i giurati…')
 const giurati = await scegliGiurati()
@@ -128,6 +152,7 @@ const righe = leggiJsonl(GIURIA)
 const fatte = new Set([...righe.filter(r => !r.impronta).map(r => `${chiave(r.brief, r.concorrente)}|${r.modello}|${r.ordine}`), ...righe.map(r => r.impronta).filter(Boolean)])
 const hash = (...xs) => { const h = createHash('sha256'); for (const x of xs) h.update(x); return h.digest('hex').slice(0, 32) }
 let nuove = 0
+const conta = contaVuota()
 for (const c of lista) {
   const b = perId[c.brief]
   const [nostro, loro] = await Promise.all([immagine(c.nostro), immagine(c.loro)])
@@ -139,7 +164,10 @@ for (const c of lista) {
       const imgs = ordine === 'nostro-primo' ? [nostro, loro] : [loro, nostro]
       let risposte = null, grezza = ''
       for (let t = 0; t < 2 && !risposte; t++) {
-        try { grezza = await chiedi(g, prompt(b), imgs); risposte = leggi(grezza, primo, secondo) } catch (e) { grezza = `errore: ${e.message}` }
+        try {
+          grezza = await chiedi(g, prompt(b), imgs); risposte = leggi(grezza, primo, secondo)
+          conta.chiamate++; conta.tokenImmagine += imgs.reduce((a, i) => a + tokenImmagine(i.w, i.h), 0); conta.tokenTesto += Math.ceil((prompt(b).length + grezza.length) / 4)
+        } catch (e) { grezza = `errore: ${e.message}` }
       }
       if (!risposte) { console.warn(`  ${c.brief} vs ${c.concorrente} · ${g} · ${ordine}: risposta non valida (${grezza.slice(0, 80)})`); continue }
       aggiungiJsonl(GIURIA, { quando: new Date().toISOString(), brief: c.brief, famiglia: c.famiglia, concorrente: c.concorrente, modello: g, ordine, risposte, impronta })
@@ -148,4 +176,9 @@ for (const c of lista) {
     }
   }
 }
+// prima: tutte le coppie, 3 giurati, 2 ordini, tavole intere (1080×1350 circa)
+const piena = 2 * tokenImmagine(1080, 1350), testo = Math.ceil((prompt(brief[0]).length + 120) / 4)
+const prima = { chiamate: tutteLeCoppie * 3 * 2, tokenImmagine: tutteLeCoppie * 3 * 2 * piena, tokenTesto: tutteLeCoppie * 3 * 2 * testo, consegnate: tutteLeCoppie }
+conta.consegnate = lista.length
+console.log(`\nConta${secco ? ' (a secco)' : ''} su ${lista.length} coppie giudicate di ${tutteLeCoppie}:\n${riga('prima', prima)}\n${riga('dopo', conta)}`)
 console.log(`\n${nuove} risposte nuove in ${path.basename(GIURIA)}. Per il rapporto: npm run confronto:rapporto`)

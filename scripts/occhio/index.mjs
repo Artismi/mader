@@ -53,3 +53,36 @@ export function memoriaFile(file) {
     get size() { return m.size },
   }
 }
+
+/* ── conta e modelli ───────────────────────────────────────────────────── */
+/** Token d'immagine stimati (regola di Anthropic: lato lungo ≤ 1568 px, w·h/750); gli stessi di occhio.ts. */
+export function tokenImmagine(w, h) { const s = Math.min(1, 1568 / Math.max(w, h)); return Math.ceil((w * s) * (h * s) / 750) }
+export const contaVuota = () => ({ chiamate: 0, tokenImmagine: 0, tokenTesto: 0, consegnate: 0 })
+export const somma = (a, b) => Object.fromEntries(Object.keys(contaVuota()).map(k => [k, (a[k] ?? 0) + (b[k] ?? 0)]))
+/** «x chiamate, y token d'immagine» in tutto e per tavola consegnata. */
+export function riga(nome, c) {
+  const per = v => (c.consegnate ? (v / c.consegnate).toFixed(v / c.consegnate < 10 ? 2 : 0) : '—')
+  return `${nome.padEnd(6)} ${String(c.chiamate).padStart(5)} chiamate · ${String(c.tokenImmagine).padStart(7)} token immagine · ${String(c.tokenTesto).padStart(6)} testo  |  per tavola consegnata: ${per(c.chiamate)} chiamate, ${per(c.tokenImmagine + c.tokenTesto)} token`
+}
+
+/** Modello simulato (prove a secco): classifica a caso ma stabile per la stessa immagine, niente rete. */
+export function simulato(rit = 0) {
+  return async (prompt, img) => {
+    const n = Number(prompt.match(/Tavole: (\d+)/)?.[1] ?? 2)
+    let s = 0
+    for (let i = 0; i < img.dati.length; i += 997) s = (s * 31 + img.dati[i]) >>> 0
+    const ordine = Array.from({ length: n }, (_, i) => i + 1).sort((a, b) => ((a * 2654435761 + s) >>> 0) % 1000 - ((b * 2654435761 + s) >>> 0) % 1000)
+    if (rit) await new Promise(r => setTimeout(r, rit))
+    return JSON.stringify({ ordine, scarta: [] })
+  }
+}
+
+/** Modello vero da OCCHIO_MODELLO (es. gemini:gemini-flash-lite-latest o openrouter:google/gemma-3-27b-it:free). */
+export async function modello(spec = process.env.OCCHIO_MODELLO) {
+  if (!spec) throw new Error('serve OCCHIO_MODELLO (servizio:modello) oppure --a-secco')
+  const { chiavi } = await import('../confronto/chiavi.mjs')
+  const { chiediGemini, chiediOpenRouter } = await import('../confronto/ia.mjs')
+  const k = await chiavi()
+  const [servizio, ...resto] = spec.split(':'), id = resto.join(':')
+  return (prompt, img) => (servizio === 'gemini' ? chiediGemini(k.gemini, id, prompt, [img]) : chiediOpenRouter(k.openrouter, id, prompt, [img]))
+}

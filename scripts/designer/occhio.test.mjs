@@ -120,3 +120,12 @@ test('i verdetti si ricordano per impronta: la stessa tavola non si rigiudica', 
   const m = await miniatura(imgs[0])
   assert.notEqual(await occhio.impronta(m, 'a'), await occhio.impronta(m, 'b'))
 })
+
+test('con controlla l\'occhio guarda anche finaliste tutte sicure, una volta sola', async () => {
+  const imgs = await Promise.all([[1, 2, 3], [4, 5, 6]].map(c => tavola(...c)))
+  const fin = finaliste(imgs.map((_, i) => ({ id: `t${i}`, sistema: `s${i}`, esame: esame(95) }))).finaliste
+  const oc = { miniatura: id => miniatura(imgs[Number(id.slice(1))]), griglia, chiedi: async () => '{"ordine":[2,1],"scarta":[]}', memoria: memoriaRam(), conta: occhio.contaVuota() }
+  const r = await occhio.giudica(fin, 2, oc, { controlla: true })
+  assert.equal(oc.conta.chiamate, 1)
+  assert.equal(r.scelte[0].id, fin[1].x.id)
+})

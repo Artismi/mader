@@ -8,6 +8,8 @@
  *   npm run designer:vetrina -- --contenuti caffe,mostra --formati storia
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
  *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
+ *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
+ *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
  *
  * Prima volta: cd scripts/designer && npm install
  * Browser: DESIGNER_CHROME=/percorso/chrome, altrimenti Chrome installato.
@@ -42,7 +44,7 @@ const sistemi = args.sistemi ? args.sistemi.split(',') : undefined
 const over = args.knobs ? JSON.parse(args.knobs) : {}
 if (args.stile) over.stile = args.stile
 const out = path.resolve(args.out ?? path.join(here, 'out'))
-const thumb = Number(args.thumb ?? 0.36)
+const thumb = Number(args.thumb ?? (args.occhio ? 0.5 : 0.36))
 fs.mkdirSync(out, { recursive: true })
 
 /* ── pagina ────────────────────────────────────────────────────────────── */
@@ -79,6 +81,15 @@ await page.route('http://designer.local/**', async route => {
   return serve(route, path.join(out, u.pathname === '/' ? 'index.html' : u.pathname))
 })
 await page.goto('http://designer.local/')
+
+/* ── occhio: imbuto in codice, una griglia per giro, verdetti in memoria ── */
+let occhio = null
+if (args.occhio) {
+  const b = await esbuild.build({ stdin: { contents: "export * from './imbuto'; export * from './occhio'", resolveDir: path.join(repo, 'src/components/studio/designer/gen'), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error' })
+  const lib = await import('data:text/javascript;base64,' + Buffer.from(b.outputFiles[0].text).toString('base64'))
+  const oc = await import('../occhio/index.mjs')
+  occhio = { lib, oc, chiedi: args['a-secco'] ? oc.simulato() : await oc.modello(), memoria: oc.memoriaFile(path.join(out, 'verdetti.jsonl')), prima: oc.contaVuota(), dopo: oc.contaVuota() }
+}
 
 /* ── giro ──────────────────────────────────────────────────────────────── */
 // --progetto auto: ogni contenuto riceve la specifica di ripiego (motivi dalle parole del brief)
@@ -148,6 +159,22 @@ for (const nome of contenuti) {
       const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0) })
       res = p.items
       info = ` · ${p.promosse} promosse su ${p.candidate} candidate in ${p.giri} giri`
+      if (occhio) {
+        const { lib, oc } = occhio
+        // prima: il critico con la vista guardava ogni promossa, una chiamata per tavola, a piena risoluzione
+        const w = 1080, h = Math.round(1080 * RATIO[format])
+        occhio.prima = oc.somma(occhio.prima, { chiamate: p.promosse, tokenImmagine: p.promosse * oc.tokenImmagine(w, h), tokenTesto: p.promosse * (lib.tokenTesto(lib.CRITERIO) + 20), consegnate: res.length })
+        const cand = res.map((r, i) => ({ id: String(i), sistema: r.sistema, esame: r.esame, url: r.url })).filter(x => x.esame && x.url)
+        const { finaliste: fin, scartate } = lib.finaliste(cand)
+        const conta = lib.contaVuota()
+        const g = await lib.giudica(fin, fin.length, { miniatura: id => oc.miniatura(cand.find(x => x.id === id).url), griglia: oc.griglia, chiedi: occhio.chiedi, memoria: occhio.memoria, conta }, { controlla: true })
+        conta.consegnate = res.length
+        occhio.dopo = oc.somma(occhio.dopo, conta)
+        // in testa le finaliste nell'ordine dell'occhio, poi le altre; in coda quelle che il codice scarta
+        const testa = g.scelte.map(x => res[Number(x.id)]), via = new Set(scartate.map(y => res[Number(y.x.id)]))
+        res = [...testa, ...res.filter(r => !testa.includes(r) && !via.has(r)), ...res.filter(r => via.has(r))]
+        info += ` · occhio: ${fin.length} finaliste, ${scartate.length} scartate dal codice, ${g.chiamata ? '1 chiamata' : 'nessuna chiamata'}`
+      }
     }
     const items = res.map(r => ({
       url: r.url, label: `${r.sistema}${r.ok ? (r.esame ? `  ${r.esame.voto} ${r.esame.promossa ? '✓' : '✗ bocciata'}` : '') : '  — scartata'}`,
@@ -166,6 +193,15 @@ for (const nome of contenuti) {
   }
 }
 await browser.close()
+if (occhio) {
+  const { prima, dopo } = occhio, x = (prima.tokenImmagine + prima.tokenTesto) / Math.max(1, dopo.tokenImmagine + dopo.tokenTesto)
+  console.log(`
+Occhio${args['a-secco'] ? ' (a secco, modello simulato)' : ''}:
+${occhio.oc.riga('prima', prima)}
+${occhio.oc.riga('dopo', dopo)}
+  ${dopo.tokenImmagine + dopo.tokenTesto ? `${x.toFixed(0)} volte meno token` : 'nessun token: tutto dalla memoria o dal codice'} · verdetti in memoria: ${occhio.memoria.size}`)
+  fs.writeFileSync(path.join(out, 'occhio.json'), JSON.stringify({ prima, dopo }, null, 2))
+}
 
 /* ── rapporto ──────────────────────────────────────────────────────────── */
 fs.writeFileSync(path.join(out, 'rapporto.json'), JSON.stringify(report, null, 2))

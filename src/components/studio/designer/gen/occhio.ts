@@ -65,10 +65,11 @@ export interface Occhio {
  * Ordina le finaliste con l'occhio: i verdetti già in memoria non si richiedono,
  * le nuove vanno insieme in una sola griglia. Senza risposta valida resta l'ordine del codice.
  */
-export async function giudica<T>(fin: { x: Candidata<T>; v: Vaglio }[], n: number, oc: Occhio) {
+export async function giudica<T>(fin: { x: Candidata<T>; v: Vaglio }[], n: number, oc: Occhio, o: { controlla?: boolean } = {}) {
   const criterio = oc.criterio ?? CRITERIO
   const tutteSicure = fin.every(f => f.v.esito === 'buona')
-  if (fin.length <= 1 || (tutteSicure && fin.length <= n)) return { scelte: fin.slice(0, n).map(f => f.x), chiamata: false }
+  // controlla: le finaliste sono quelle che l'utente vede per prime, l'occhio le guarda comunque (una volta)
+  if (fin.length <= 1 || (!o.controlla && tutteSicure && fin.length <= n)) return { scelte: fin.slice(0, n).map(f => f.x), chiamata: false }
   const mini = await Promise.all(fin.map(f => oc.miniatura(f.x.id)))
   const chiavi = await Promise.all(mini.map(m => impronta(m, criterio)))
   const voti = new Map<number, Verdetto>()
