@@ -37,6 +37,17 @@ t('trascinare sul vuoto della tavola fa un riquadro di selezione e non sposta la
   assert.equal((await T.active())?.n, 2)
 })
 
+t('la tavola si seleziona dalla sua etichetta e trascinandola porta con sé il contenuto', async T => {
+  await T.rect(100, 100)
+  await T.page.getByTitle('Seleziona la tavola').first().dispatchEvent('mousedown')
+  await T.page.waitForTimeout(80)
+  assert.equal((await T.active())?.artboard, true)
+  const b0 = await T.board(), o0 = (await T.objs())[0]
+  await T.drag(500, 500, 600, 550)
+  const b1 = await T.board(), o1 = (await T.objs())[0]
+  near(b1.left - b0.left, 100, 2); near(o1.bx - o0.bx, 100, 2, 'il contenuto segue')
+})
+
 t('lazo seleziona gli oggetti racchiusi', async T => {
   await T.rect(100, 100); await T.rect(300, 100); await T.rect(700, 700)
   await T.key('a')

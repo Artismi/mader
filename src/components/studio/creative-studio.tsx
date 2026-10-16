@@ -313,6 +313,7 @@ function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
   return { x: Math.round(r.left - o.x), y: Math.round(r.top - o.y), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) }
 }
 import { cutout } from './compose/cutout'
+import { installSelection, selectAll, cycleSelection, selectBoard, pickable } from './editor/selection'
 import { copySelection, cutSelection, pasteClip, duplicateSelection, deleteSelection, type Clip } from './editor/clipboard'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -697,6 +698,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const detachFx = attachFx(canvas)   // effetti su qualsiasi oggetto, ricostruiti da JSON/annulla
     const detachFonts = watchCanvasFonts(canvas)   // ogni testo carica il suo carattere
     const detachBoards = installArtboards(canvas)   // le tavole tagliano il contenuto e lo portano con sé
+    const detachSelection = installSelection(canvas)   // il vuoto delle tavole è vuoto, Ctrl+clic nei gruppi
     ;(canvas as any)._springIntegrator = springIntegratorRef.current
     ;(canvasRef.current as any)._fabric = canvas
 
@@ -1133,14 +1135,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); redo(); return }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); triggerSave(); return }
       // Ctrl+A — select all
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        e.preventDefault()
-        const objs = canvas.getObjects().filter(o => o.selectable !== false)
-        if (objs.length === 1) canvas.setActiveObject(objs[0])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else if (objs.length > 1) canvas.setActiveObject(new (fabric as any).ActiveSelection(objs, { canvas }))
-        canvas.requestRenderAll(); return
-      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') { e.preventDefault(); selectAll(canvas); return }
+      // Tab / Maiusc+Tab: oggetto successivo / precedente
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); cycleSelection(canvas, e.shiftKey ? -1 : 1); return }
       // Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+D: più oggetti diventano oggetti separati
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC' && !e.shiftKey && !e.altKey) {
         copySelection(canvas).then(cl => { if (cl) clipboardRef.current = cl }); return
@@ -1183,6 +1180,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       // Space — enter grab/pan mode (cursor feedback)
       if (e.key === ' ' && !spaceDown.current) {
         spaceDown.current = true
+        // con Spazio premuto il mouse sposta solo la vista, mai gli oggetti
+        canvas.skipTargetFind = true; canvas.selection = false
         if (canvasContainerRef.current) canvasContainerRef.current.style.cursor = 'grab'
         e.preventDefault(); return
       }
@@ -1228,6 +1227,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         spaceDown.current = false
+        canvas.skipTargetFind = false; canvas.selection = toolRef.current === 'select'
         if (canvasContainerRef.current) canvasContainerRef.current.style.cursor = ''
       }
     }
@@ -1346,6 +1346,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       detachFx()
       detachFonts()
       detachBoards()
+      detachSelection()
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
@@ -1700,7 +1701,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   function eraseAt(canvas: fabric.Canvas, p: fabric.Point) {
-    const remove = canvas.getObjects().filter(o => o.selectable !== false && o.evented !== false && o.containsPoint(p))
+    const remove = canvas.getObjects().filter(o => !(o as any).isArtboard && !o.excludeFromExport && o.selectable !== false && o.evented !== false && o.containsPoint(p))
     remove.forEach(o => canvas.remove(o)); if (remove.length) canvas.requestRenderAll()
   }
 
@@ -1736,7 +1737,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       canvas.remove(lassoLine.current); lassoLine.current = null
       const pts = lassoPoints.current
       if (pts.length > 2) {
-        const sel = canvas.getObjects().filter(o => o.selectable !== false && pointInPoly(o.getCenterPoint(), pts))
+        const sel = pickable(canvas).filter(o => pointInPoly(o.getCenterPoint(), pts))
         if (sel.length === 1) canvas.setActiveObject(sel[0])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         else if (sel.length > 1) canvas.setActiveObject(new (fabric as any).ActiveSelection(sel, { canvas }))
@@ -4326,7 +4327,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
                   <div className="w-4 h-4 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
                     <Layers className="w-2.5 h-2.5 text-white/40 group-hover:text-accent transition-colors" />
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-tighter text-white/60 cursor-default select-none group-hover:text-white transition-colors">
+                  <span onMouseDown={() => { if (fabricRef.current) selectBoard(fabricRef.current, badge.id) }} title="Seleziona la tavola"
+                    className="text-[9px] font-black uppercase tracking-tighter text-white/60 cursor-pointer select-none group-hover:text-white transition-colors">
                     {badge.id.replace('artboard_', '')}
                   </span>
                 </div>
