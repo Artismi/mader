@@ -122,9 +122,10 @@ t('penna: Esc annulla il tracciato in corso; cambiare strumento non lascia antep
   await T.key('v')
   assert.equal(await leftovers(T), 0, 'anteprima rimasta cambiando strumento')
   await T.key('f'); await T.click(600, 600); await T.click(700, 700); await T.key('Enter')
+  // cambiando strumento il tracciato in corso si chiude (come in Illustrator); quello nuovo parte da zero
   const ps = (await T.objs()).filter(o => o.type === 'path')
-  assert.equal(ps.length, 1, 'i punti vecchi non devono finire nel tracciato nuovo')
-  near(ps[0].bw, 100, 6)
+  assert.equal(ps.length, 2)
+  near(ps[1].bw, 100, 6, 'i punti vecchi non devono finire nel tracciato nuovo')
 })
 
 t('penna: tracciato spostato si modifica nel posto giusto', async T => {
