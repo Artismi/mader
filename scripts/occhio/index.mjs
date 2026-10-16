@@ -83,6 +83,20 @@ export async function modello(spec = process.env.OCCHIO_MODELLO) {
   const { chiavi } = await import('../confronto/chiavi.mjs')
   const { chiediGemini, chiediOpenRouter } = await import('../confronto/ia.mjs')
   const k = await chiavi()
-  const [servizio, ...resto] = spec.split(':'), id = resto.join(':')
-  return (prompt, img) => (servizio === 'gemini' ? chiediGemini(k.gemini, id, prompt, [img]) : chiediOpenRouter(k.openrouter, id, prompt, [img]))
+  // più modelli separati da virgola: ripiego in ordine; 429 e 503 si riprovano due volte (la quota del giorno no)
+  const vie = spec.split(',').map(s => { const [servizio, ...resto] = s.trim().split(':'); return { servizio, id: resto.join(':') } })
+  const uno = (v, prompt, img) => (v.servizio === 'gemini' ? chiediGemini(k.gemini, v.id, prompt, [img]) : chiediOpenRouter(k.openrouter, v.id, prompt, [img]))
+  return async (prompt, img) => {
+    let ultimo
+    for (const v of vie) {
+      for (const attesa of [0, 4000, 12000]) {
+        if (attesa) await new Promise(r => setTimeout(r, attesa))
+        try { return await uno(v, prompt, img) } catch (e) {
+          ultimo = e
+          if (!(e.status === 429 || e.status === 503) || /per.?day|daily|PerDay/i.test(e.message)) break
+        }
+      }
+    }
+    throw ultimo
+  }
 }
