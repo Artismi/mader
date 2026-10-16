@@ -8,7 +8,7 @@ import type { SceneEl, FxSpec } from '../../types'
 import { textBox, lum, mix, type G } from '../tools'
 import { rng, hashText, type Rng } from '../knobs'
 import { scegliFx, looksPer } from './effetti'
-import type { Palette } from '../../types'
+import type { Palette, Oggetto3D } from '../../types'
 
 /** La palette della tavola nella forma degli ornamenti. */
 const pal = (g: G): Palette => ({ bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf })
@@ -122,8 +122,41 @@ function generatori(g: G) {
   g.els.splice(at, 0, { kind: 'ornament', name: 'campo', id, x: c.b.x, y: c.b.y, w: c.b.w, h: c.b.h, seed: g.k.seme, opacity: libera ? (scuro ? 0.7 : 0.55) : 0.2, under: !libera, pal: { ...pal(g), ink } })
 }
 
+/* ── 3. oggetto 3D: forma dal contenuto, o il segno del marchio estruso ─── */
+const FORMA_DAL_CONTENUTO: [RegExp, Oggetto3D['forma']][] = [
+  [/vinil|disco|dj|radio|musica/i, 'disco'], [/caff|tazz|t[eè]|ciambell|anell/i, 'toro'], [/palestr|fitness|allenament|pesi|integrator|capsul/i, 'capsula'],
+  [/arte|mostra|museo|scultur|design/i, 'nodo'], [/tech|app|software|dati|cubo|box|scatol/i, 'cubo'], [/sfera|pianet|luna|palla|bolla/i, 'sfera'], [/lattin|barattol|bottigli/i, 'cilindro'],
+]
+const MATERIALE_REGISTRO: Partial<Record<string, Oggetto3D['materiale'][]>> = {
+  pop: ['plastica', 'olografico'], tech: ['cromo', 'vetro', 'olografico'], notte: ['cromo', 'vetro', 'olografico'], infantile: ['plastica', 'argilla'],
+  sportivo: ['plastica', 'cromo'], avanguardia: ['cromo', 'argilla', 'vetro'], lusso: ['oro', 'vetro'], artigianale: ['argilla'], retro: ['plastica', 'cromo'],
+}
+function oggetto3d(g: G) {
+  const r = rngRisorse(g, '3d')
+  const mats = MATERIALE_REGISTRO[g.s.registro]
+  const foto = g.els.some(e => e.kind === 'image')
+  if (!mats || g.els.some(e => e.kind === 'ornament') || !r.chance(foto ? 0.12 : 0.3)) return
+  const testo = [g.c.title, g.c.kicker, g.c.body, g.c.imageQuery].filter(Boolean).join(' ')
+  // la forma viene dal contenuto; altrimenti il segno del marchio (iniziale) estruso nel carattere del titolo
+  const forma = FORMA_DAL_CONTENUTO.find(([re]) => re.test(testo))?.[1] ?? (g.c.brand ? 'testo' : null)
+  if (!forma) return
+  // zona libera da testi e foto, ma vicina al contenuto (un oggetto isolato è un riempitivo)
+  const lato = Math.min(g.W, g.H) * r.range(0.32, 0.42)
+  const cand: Box[] = []
+  for (const fx of [0.08, 0.5, 0.92]) for (const fy of [0.12, 0.5, 0.88]) cand.push({ x: Math.max(0, Math.min(g.W - lato, g.W * fx - lato / 2)), y: Math.max(0, Math.min(g.H - lato, g.H * fy - lato / 2)), w: lato, h: lato })
+  const ts = testi(g).map(textBox)
+  const ok = cand.filter(b => coperturaTesti(g, b) < 0.005 && !g.els.some(e => e.kind === 'image' && inter(b, boxOf(e)!) > 0)
+    && ts.some(t => inter({ x: b.x - lato * 0.25, y: b.y - lato * 0.25, w: b.w + lato * 0.5, h: b.h + lato * 0.5 }, t) > 0))
+  if (!ok.length) return
+  const b = r.pick(ok)
+  const o3d: Oggetto3D = { forma, materiale: r.pick(mats), colore: g.P.acc, colore2: g.P.bg, testo: forma === 'testo' ? g.c.brand!.trim().charAt(0).toUpperCase() : undefined, famiglia: g.s.display.family, inclina: r.range(-25, -8), gira: r.range(-35, 35), angolo: r.range(-12, 12) }
+  const at = Math.max(0, g.els.findIndex(e => e.kind === 'text' && !e.deco))
+  g.els.splice(at, 0, { kind: 'ornament', name: 'oggetto3d', id: `3d:${forma}`, x: b.x, y: b.y, w: b.w, h: b.h, seed: g.k.seme, opacity: 1, o3d })
+}
+
 /** Il passaggio delle risorse dello Studio (chiamato da `finish`). */
 export function arricchisci(g: G) {
+  oggetto3d(g)
   generatori(g)
   effetti(g)
 }

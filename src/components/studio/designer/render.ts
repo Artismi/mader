@@ -12,6 +12,7 @@ import { SHAPE_LIBRARY } from '../libraries/shape-library'
 import { applyFinish } from '../ai/finish'
 import { generateProceduralPattern, type ProceduralType } from '../libraries/procedural-generators'
 import { disegnaCampo } from './campi'
+import { disegnaOggetto3D } from './oggetto3d'
 
 type Obj = fabric.FabricObject & { parentBoard?: string; fx?: FxEntry[]; look?: { id: string; amount: number }; adjust?: Record<string, number> }
 
@@ -104,6 +105,12 @@ async function campoObj(el: Extract<SceneEl, { kind: 'ornament' }>, k: number, O
   const clip = () => new fabric.Rect({ left: zx, top: zy, width: zw, height: zh, rx: (el.r ?? 0) * k, ry: (el.r ?? 0) * k, originX: 'left', originY: 'top', absolutePositioned: true })
   try {
     let o: Obj
+    if (tipo === '3d' && el.o3d) {
+      const cv = await disegnaOggetto3D(el.o3d, zw, zh)
+      o = new fabric.FabricImage(cv, { left: zx, top: zy, originX: 'left', originY: 'top' }) as Obj
+      o.set({ opacity: el.opacity })
+      return o
+    }
     if (tipo === 'proc') {
       const scala = Math.min(sc.w, sc.h) * k / 1080
       o = generateProceduralPattern(gen as ProceduralType, { width: zw, height: zh, color: pal.ink, density: 0.5, radius: 6 * scala, spacing: 34 * scala, weight: 2.5 * scala, amplitude: 14 * scala }) as unknown as Obj
@@ -212,7 +219,7 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       continue
     } else if (el.kind === 'ornament') {
       // generatori procedurali (campo, trama) e pattern della libreria: un'immagine ritagliata nella zona
-      if (/^(campo|trama|proc):/.test(el.id)) {
+      if (/^(campo|trama|proc|3d):/.test(el.id)) {
         const o = await campoObj(el, k, OX, OY, sc)
         if (!o) continue
         o.set('name', name(el.name)); o.parentBoard = boardName

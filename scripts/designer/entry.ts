@@ -8,7 +8,7 @@ import { generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, ammesso, typ
 import { styleById } from '@/components/studio/designer/styles'
 import { incrocia } from '@/components/studio/designer/gen/incrocio'
 import { renderScene } from '@/components/studio/designer/render'
-import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
+import type { DesignContent, Format, Scene, Oggetto3D } from '@/components/studio/designer/types'
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/campi'
@@ -129,13 +129,14 @@ async function diversita(o: { urls: string[]; mattoni: string[][] }) {
 
 /** Tutti i generatori su una tavola piccola, con il backend che li ha disegnati (foglio --campi). */
 async function campi() {
-  const ids = [...GENERATORI_CAMPO.map(g => `campo:${g}`), 'proc:halftone', 'proc:dot_grid', 'proc:wave_lines', 'proc:zigzag_fill', 'proc:stripe_diagonal', 'proc:crosshatch', 'proc:honeycomb', 'proc:organic_noise', 'proc:perspective_grid', 'proc:circuit_board', 'proc:memphis_mix', 'proc:star_scatter']
+  const ids = [...GENERATORI_CAMPO.map(g => `campo:${g}`), 'proc:halftone', 'proc:dot_grid', 'proc:wave_lines', 'proc:zigzag_fill', 'proc:stripe_diagonal', 'proc:crosshatch', 'proc:honeycomb', 'proc:organic_noise', 'proc:perspective_grid', 'proc:circuit_board', 'proc:memphis_mix', 'proc:star_scatter', '3d:sfera', '3d:toro', '3d:cubo', '3d:disco', '3d:capsula', '3d:nodo', '3d:testo']
   const out: { url: string; label: string; sub: string }[] = []
   for (const [i, id] of ids.entries()) {
-    backendCampi.ultimo = id.startsWith('proc:') ? 'fabric' : undefined
+    backendCampi.ultimo = id.startsWith('proc:') ? 'fabric' : id.startsWith('3d:') ? 'three webgl' : undefined
+    const forma = id.slice(3) as Oggetto3D['forma'], mat = (['plastica', 'cromo', 'oro', 'vetro', 'argilla', 'olografico', 'plastica'] as const)[i % 7]
     const pal = { bg: '#f3efe6', ink: '#1d2b4f', accent: '#e4572e', muted: '#8a8a8a', surface: '#e9e2d3' }
-    const sc: Scene = { w: 540, h: 540, bg: pal.bg, palette: pal, els: [{ kind: 'ornament', name: 'campo', id, x: 0, y: 0, w: 540, h: 540, seed: 11 + i * 7, opacity: 0.9, pal }], layout: 'campi', style: '', label: id }
-    out.push({ url: await draw(sc, 1), label: id, sub: backendCampi.ultimo ?? '' })
+    const sc: Scene = { w: 540, h: 540, bg: pal.bg, palette: pal, els: [{ kind: 'ornament', name: 'campo', id, x: 0, y: 0, w: 540, h: 540, seed: 11 + i * 7, opacity: 0.9, pal, o3d: id.startsWith('3d:') ? { forma, materiale: mat, colore: pal.accent, testo: 'N', famiglia: 'Anton' } : undefined }], layout: 'campi', style: '', label: id }
+    out.push({ url: await draw(sc, 1), label: id, sub: `${backendCampi.ultimo ?? ''}${id.startsWith('3d:') ? ' · ' + mat : ''}` })
   }
   return out
 }
