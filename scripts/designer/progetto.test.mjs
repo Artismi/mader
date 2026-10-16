@@ -56,3 +56,26 @@ test('il ripiego trova i motivi dal brief', () => {
   assert.deepEqual(ripiego('niente di riconoscibile qui').motivi, [])
   assert.ok(!ripiego('Su appuntamento, taglio classico').motivi.includes('risparmio'), 'parole intere, non pezzi')
 })
+
+/* ── C1: il concetto dal brief ─────────────────────────────────────────── */
+const con = await esbuild.build({ entryPoints: [path.join(repo, 'src/components/studio/designer/gen/concetto.ts')], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error' })
+const { ideeDaRegole, leggiIdee, concetti, simulato } = await import('data:text/javascript;base64,' + Buffer.from(con.outputFiles[0].text).toString('base64'))
+const caffe = { brand: 'Tostatura Nera', kicker: 'Nuovo blend', title: 'Notte Etiope', numero: '250 g', body: 'Note di cacao, spezie e frutti rossi.' }
+
+test('C1: dalle regole da 3 a 5 idee, un gesto diverso ciascuna, poli estremi', () => {
+  const idee = ideeDaRegole(caffe)
+  assert.ok(idee.length >= 3 && idee.length <= 5, `${idee.length} idee`)
+  assert.equal(new Set(idee.map(i => i.gesto)).size, idee.length)
+  for (const i of idee) for (const k of ['scala', 'energia', 'densita']) assert.ok(i[k] === 0 || i[k] === 1)
+  assert.ok(idee.some(i => i.gesto === 'vuoto'), 'la notte dà il vuoto')
+})
+
+test('C1: risposta illeggibile o povera → si completa con le regole; la simulata passa dal lettore', async () => {
+  assert.ok(leggiIdee('non so', caffe).length >= 3)
+  const una = leggiIdee('[{"nome":"lettere di caffè","gesto":"spezzato","parola":"Notte","scala":1,"energia":0.9,"densita":0,"togli":["dettagli","x"],"motivi":["mano","boh"]}]', caffe)
+  assert.equal(una[0].gesto, 'spezzato'); assert.deepEqual(una[0].togli, ['dettagli']); assert.deepEqual(una[0].motivi, ['mano']); assert.ok(una.length >= 3)
+  const conta = { chiamate: 0, token: 0 }
+  const s = await concetti(caffe, { chiedi: simulato(caffe, conta) })
+  assert.deepEqual(s.map(i => i.gesto), ideeDaRegole(caffe).map(i => i.gesto))
+  assert.equal(conta.chiamate, 1); assert.ok(conta.token > 100 && conta.token < 1500, `${conta.token} token`)
+})
