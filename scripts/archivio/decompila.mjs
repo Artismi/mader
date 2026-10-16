@@ -40,7 +40,7 @@ const SOGLIA = Number(args.soglia ?? 0.85)
 const cache = path.join(here, 'cache'), letture = path.join(cache, 'letture')
 const scene = path.join(cache, 'scene')
 fs.mkdirSync(scene, { recursive: true })
-const out = path.join(here, 'out'), confronti = path.join(out, 'confronti')
+const out = path.join(here, 'out', args.parte ? `parte-${args.parte.replace('/', 'su')}` : ''), confronti = path.join(here, 'out', 'confronti')
 fs.mkdirSync(letture, { recursive: true }); fs.mkdirSync(confronti, { recursive: true })
 const ARCHIVIO = path.join(repo, 'src/components/studio/designer/archivio/archivio.json')
 const archivio = fs.existsSync(ARCHIVIO) ? JSON.parse(fs.readFileSync(ARCHIVIO, 'utf8')) : { versione: 1, esempi: [] }
@@ -106,7 +106,9 @@ if (args.motore) {
   }
 } else {
   const registro = fs.readFileSync(path.join(cache, 'registro.jsonl'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
-  const scelti = registro.slice(0, Number(args.solo ?? registro.length))
+  // --parte k/n: solo i pezzi con indice ≡ k (mod n), per più processi in parallelo (poi --solo-schede riunisce)
+  const [pk, pn] = (args.parte ?? '0/1').split('/').map(Number)
+  const scelti = registro.slice(0, Number(args.solo ?? registro.length)).filter((_, i) => i % pn === pk)
   for (const p of scelti) {
     corrente = p.id
     const fileScena = path.join(scene, `${p.id}.json`)
@@ -121,7 +123,8 @@ if (args.motore) {
     if (++fatti % 6 === 0) await page.reload()
     const meta = metaDi(p)
     let r
-    try { r = await page.evaluate(o => window.archivio.pezzo(o), { url: `http://designer.local/cache/${p.file}`, meta }) } catch (e) {
+    try { r = await Promise.race([page.evaluate(o => window.archivio.pezzo(o), { url: `http://designer.local/cache/${p.file}`, meta }), new Promise((_, no) => setTimeout(() => no(new Error('pezzo oltre 6 min')), 360000))]) } catch (e) {
+      if (/oltre 6 min|allocation/.test(e.message)) await page.reload().catch(() => {})
       console.log(`${p.id} errore ${String(e.message).slice(0, 100)}`)
       esito.errori++; esito.scartati.push({ id: p.id, motivo: `errore: ${String(e.message).slice(0, 120)}` }); esempi.delete(p.id)
       if (/quota|RESOURCE_EXHAUSTED|429/i.test(e.message)) { console.log('quota del modello finita: mi fermo'); break }
