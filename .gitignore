@@ -70,3 +70,5 @@ ts-error.txt
 # catalogo degli asset: i file scaricati restano in locale (npm run asset:caratteri)
 /public/asset-cache/
 /.asset-cache/
+/scripts/archivio/cache/
+/scripts/archivio/out/
