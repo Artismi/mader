@@ -12,6 +12,7 @@ import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { spazi, intrecci } from './spazi'
 import { conPalette, sorgentePalette } from './risorse/palette'
+import { arricchisci } from './risorse'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
 import { conSpecifica, specializza } from './specializza'
@@ -598,6 +599,8 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   if (g.seq) seqMarks(g)
   // la specifica del brief: segni, icone, effetto del titolo (poi i controlli di sempre)
   specializza(g)
+  // le risorse dello Studio: effetti del catalogo, generatori, 3D; via le forme senza motivo
+  arricchisci(g)
   if (!legible(g)) return null
   grainTop(g)
   // i testi veri e i sigilli stanno sopra la grana: nitidi, come li comporrebbe un tipografo
