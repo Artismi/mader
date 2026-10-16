@@ -315,6 +315,7 @@ import { cutout } from './compose/cutout'
 import { installSelection, selectAll, cycleSelection, selectBoard, pickable } from './editor/selection'
 import { boxFrom, makeShape, placeTopLeft, constrain45, anchorsInScene, splitLine, splitPolyline, CLICK_PX, DEFAULT_SIZE, type ShapeTool } from './editor/draw'
 import { snapMoving } from './editor/snap'
+import { flipSelection, lockSelection, hideSelection, zoomBy, zoomTo, toggleTextStyle } from './editor/commands'
 import { copySelection, cutSelection, pasteClip, duplicateSelection, deleteSelection, type Clip } from './editor/clipboard'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -921,7 +922,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         setSel({ ...D, ...base, type: 'line', hasStartArrow: obj.hasStartArrow, hasEndArrow: obj.hasEndArrow, isConnector: obj.isConnector } as SelState)
       } else if (obj.type === 'image') {
         setSel({ ...D, ...base, type: 'image' } as SelState)
-      } else if (obj.type === 'activeSelection') {
+      } else if (obj.type === 'activeSelection' || obj.type === 'activeselection' || (obj instanceof fabric.Group && !(obj as any).isClipMask)) {
         setSel({ ...D, ...base, type: 'group' } as SelState)
       } else {
         setSel({ ...D, ...base, type: 'shape' } as SelState)
@@ -1105,10 +1106,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     // Keyboard shortcuts
     const onKey = (e: KeyboardEvent) => {
-      const tag = (document.activeElement as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-
       const activeObj = canvas.getActiveObject() as any
+      const mod = e.ctrlKey || e.metaKey
+      // mentre si scrive in un testo: Ctrl+B / I / U sulle lettere selezionate
+      if (activeObj?.isEditing && mod && !e.altKey && ['KeyB', 'KeyI', 'KeyU'].includes(e.code)) {
+        e.preventDefault()
+        toggleTextStyle(canvas, e.code === 'KeyB' ? 'bold' : e.code === 'KeyI' ? 'italic' : 'underline'); return
+      }
+      const tag = (document.activeElement as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable) return
+
       if (activeObj?.isEditing) {
         // Allow Enter to exit editing if desired, otherwise let Fabric handle it
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -1145,6 +1152,21 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         duplicateSelection(canvas); return
       }
       // Ctrl+0 — fit to screen
+      // zoom da tastiera: Ctrl+più, Ctrl+meno, Ctrl+1 al 100%
+      if (mod && ['Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract', 'Digit1', 'Numpad1'].includes(e.code)) {
+        e.preventDefault()
+        const z = e.code.endsWith('1') ? zoomTo(canvas, 1) : zoomBy(canvas, e.code === 'Equal' || e.code === 'NumpadAdd' ? 1.25 : 0.8)
+        setZoom(z); updateArtboardBadges(); return
+      }
+      // testo selezionato: grassetto, corsivo, sottolineato
+      if (mod && !e.altKey && !e.shiftKey && ['KeyB', 'KeyI', 'KeyU'].includes(e.code) && toggleTextStyle(canvas, e.code === 'KeyB' ? 'bold' : e.code === 'KeyI' ? 'italic' : 'underline')) { e.preventDefault(); return }
+      // blocca e nascondi (si annullano dai livelli)
+      if (mod && e.shiftKey && e.code === 'KeyL') { e.preventDefault(); lockSelection(canvas); refreshLayers(); return }
+      if (mod && e.shiftKey && e.code === 'KeyH') { e.preventDefault(); hideSelection(canvas); refreshLayers(); return }
+      // Maiusc+H / Maiusc+V: capovolgi
+      if (e.shiftKey && !mod && !e.altKey && (e.code === 'KeyH' || e.code === 'KeyV') && canvas.getActiveObject()) {
+        e.preventDefault(); flipSelection(canvas, e.code === 'KeyH' ? 'x' : 'y'); return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === '0') {
         e.preventDefault()
         fitToArtboards(); return
@@ -1169,6 +1191,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         canvas.discardActiveObject(); canvas.requestRenderAll(); return
       }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'g') { setShowGrid(p => !p); return }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { setSnapGrid(p => !p); return }
       // Space — enter grab/pan mode (cursor feedback)
       if (e.key === ' ' && !spaceDown.current) {
         spaceDown.current = true
@@ -4470,9 +4493,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {([
             ['Grid', showGrid, () => setShowGrid(p => !p), 'G'],
             ['Snap', snapGrid, () => setSnapGrid(p => !p), 'S'],
-            ['Ruler', showRulers, () => setShowRulers(p => !p), 'R'],
-            ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), 'E'],
-            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), 'O'],
+            ['Ruler', showRulers, () => setShowRulers(p => !p), ''],
+            ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), ''],
+            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), ''],
             ['Gravity', gravityEnabled, () => setGravityEnabled(p => !p), ''],
           ] as [string, boolean, () => void, string][]).map(([label, active, toggle, key]) => (
             <button key={label} onClick={toggle} title={key ? `${label} [${key}]` : label}
@@ -5081,9 +5104,17 @@ function PropertiesPanel(props: PanelProps) {
               )}
 
               {/* Gruppo */}
-              {propTab === 'group' && sel.type === 'group' && (
-                <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v / 100 })} />
-              )}
+              {propTab === 'group' && sel.type === 'group' && (() => {
+                const c = props.fabricRef.current, a = c?.getActiveObject()
+                const isAS = a instanceof fabric.ActiveSelection
+                return (<div className="space-y-3">
+                  <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v / 100 })} />
+                  {c && <button onClick={() => (isAS ? groupSelection(c) : ungroupSelection(c))}
+                    className="w-full h-7 rounded-lg border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/[0.05]">
+                    {isAS ? 'Raggruppa · Ctrl+G' : 'Separa · Ctrl+Maiusc+G'}
+                  </button>}
+                </div>)
+              })()}
 
               {/* Effetti: filtri pronti, regolazioni, effetti a pila (motore fx, valido per ogni oggetto) */}
               {propTab === 'fx' && hasSelection && (

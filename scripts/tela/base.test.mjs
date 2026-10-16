@@ -326,3 +326,26 @@ t('Spazio+trascina sposta la vista senza spostare oggetti', async T => {
   const o = (await T.objs())[0], b = await T.board()
   near(o.bx - b.left, 100, 0.5, 'l\'oggetto non deve muoversi')
 })
+
+// ── Blocca e nascondi ────────────────────────────────────────────────────────
+t('Ctrl+Maiusc+L blocca, Ctrl+Maiusc+H nasconde; annulla li ripristina', async T => {
+  const a = await T.rect(100, 100), b = await T.rect(400, 100)
+  await T.settle()
+  await T.click(150, 150); await T.key('Control+Shift+l')
+  await T.click(-80, -80); await T.click(150, 150)
+  assert.equal(await T.active(), null, 'un oggetto bloccato non si seleziona col mouse')
+  await T.drag(150, 150, 300, 300)
+  near((await T.objs())[0].bx - (await T.board()).left, 100, 0.5, 'non si sposta')
+  await T.click(450, 150); await T.key('Control+Shift+h')
+  assert.equal((await T.objs())[1].visible, false)
+  await T.settle()
+  await T.key('Control+z'); await T.settle(300)
+  assert.equal((await T.objs())[1].visible, true)
+})
+
+t('selezione multipla: scheda Gruppo, non Forma', async T => {
+  const a = await T.rect(100, 100), b = await T.rect(400, 100)
+  await T.select([a, b])
+  const tabs = await T.page.locator('button[title="Forma"], button[title="Gruppo"]').evaluateAll(bs => bs.map(b => b.title))
+  assert.deepEqual(tabs, ['Gruppo'])
+})

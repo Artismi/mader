@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react'
 import * as fabric from 'fabric'
+import { setLocked, setVisible } from '../editor/commands'
 const getObjId = (obj: any): string => {
   if (!obj) return ''
   if (!obj.objId) {
@@ -62,16 +63,15 @@ export function useCanvasLayers(fabricRef: React.RefObject<fabric.Canvas | null>
   function layerToggleVisible(id: string) {
     const canvas = fabricRef.current; if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).objId === id); if (!obj) return
-    obj.set('visible', obj.visible === false)
-    canvas.requestRenderAll(); refreshLayers()
+    setVisible(canvas, obj, obj.visible === false)   // annullabile e salvato
+    refreshLayers()
   }
 
   function layerToggleLock(id: string) {
     const canvas = fabricRef.current; if (!canvas) return
     const obj = canvas.getObjects().find(o => (o as any).objId === id); if (!obj) return
-    const lock = obj.selectable !== false
-    obj.set({ selectable: !lock, evented: !lock, hasControls: !lock })
-    canvas.requestRenderAll(); refreshLayers()
+    setLocked(canvas, obj, obj.selectable !== false)   // annullabile e salvato
+    refreshLayers()
   }
 
   const layerMoveUp = useCallback((id?: string) => {

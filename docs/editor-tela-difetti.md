@@ -69,4 +69,33 @@ Le prove sono in `strumenti.test.mjs` e `base.test.mjs`:
 
 ## Stato
 
-Le correzioni sono elencate in `docs/STATO-LAVORI.md` con i commit. Cosa resta è in fondo a questo file, nella sezione "Resta".
+Tutti i 26 difetti sono corretti, e le 53 prove passano. Ogni gruppo di correzioni ha il suo commit, con la sua prova che prima falliva:
+- **c60066c**: A1, A2, M1;
+- **4e60f08**: A3, M8;
+- **5272303**: A4, A5, A6, M2, B1, B2;
+- **a2acf15**: M3, M6, M7, B7, B8;
+- **7a0bf57**: M4, M5, M9, B3, B4;
+- **commit delle funzioni di base**: B5, B6, B9, B10, B11, più blocca e nascondi.
+
+Trovato durante le correzioni: la selezione multipla mostrava la scheda "Forma", perché in Fabric 7 il tipo è `activeselection`, tutto minuscolo. Corretto insieme a B10.
+
+Il codice nuovo sta in `src/components/studio/editor/`:
+- `clipboard.ts`;
+- `selection.ts`;
+- `draw.ts`;
+- `snap.ts`;
+- `commands.ts`.
+
+## Resta
+
+- Le guide si agganciano solo trascinando, non mentre si scala.
+- Ci sono ancora le guide intelligenti della vecchia implementazione per i connettori, e l'ArrangeBar ha le sue scorciatoie: andrebbero riunite in un unico gestore della tastiera.
+- La rotella zooma sempre. In Figma la rotella scorre e Ctrl+rotella zooma: è una scelta da fare con l'utente.
+- `creative-studio.tsx` è ancora di circa 6.400 righe. Il prossimo passo è spostare il gestore della tastiera e i gestori del mouse in `editor/`.
+- Non ci sono ancora prove per:
+  - testo su tracciato;
+  - maschere;
+  - distorsione;
+  - sostituzione di un'immagine (serve una finestra di sistema);
+  - esportazione in SVG e PDF.
+- Restano gli errori di tipo preesistenti in `creative-studio.tsx` (32 righe, nessuna nei file nuovi).
