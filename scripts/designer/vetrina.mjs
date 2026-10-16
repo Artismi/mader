@@ -70,7 +70,7 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ ignoreHTTPSErrors: true })
 page.on('pageerror', e => console.log('[errore pagina]', e.message))
-const TYPES = { '.js': 'application/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.html': 'text/html', '.json': 'application/json' }
+const TYPES = { '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff2': 'font/woff2', '.js': 'application/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.html': 'text/html', '.json': 'application/json' }
 const serve = (route, file) => fs.existsSync(file)
   ? route.fulfill({ body: fs.readFileSync(file), contentType: TYPES[path.extname(file)] ?? 'application/octet-stream', headers: { 'Access-Control-Allow-Origin': '*' } })
   : route.fulfill({ status: 404, body: '' })
@@ -83,6 +83,8 @@ await page.route('http://designer.local/**', async route => {
     return route.fulfill({ response: r, headers: { 'Access-Control-Allow-Origin': '*' } })
   }
   if (u.pathname.startsWith('/fixtures/')) return serve(route, path.join(here, u.pathname))
+  // caratteri del catalogo: cache locale (public/asset-cache) e caratteri liberi di public/fonts
+  if (u.pathname.startsWith('/asset-cache/') || u.pathname.startsWith('/fonts/')) return serve(route, path.join(repo, 'public', decodeURIComponent(u.pathname)))
   return serve(route, path.join(out, u.pathname === '/' ? 'index.html' : u.pathname))
 })
 await page.goto('http://designer.local/')

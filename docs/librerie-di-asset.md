@@ -72,6 +72,17 @@ Ne ricava genere ed epoca: grotesco, neo-grotesco, geometrico, umanista, didone,
 - Ammessi nelle tavole: OFL, Apache, UFL, MIT, ISC, CC0, CC BY (con attribuzione). Fuori: CC BY-SA, solo uso personale, licenza non verificata. Ogni tavola porta `scene.crediti` con le attribuzioni dovute.
 - `npm run asset:catalogo` reimporta i 57 caratteri del motore (licenza dal repo google/fonts), i 32 Velvetyne di `public/fonts/libere` e i 222 asset di `public/assets`. Restano fuori dalle tavole i 3 caratteri di `public/fonts/pack` e i pack `ds-*` (licenza non verificata); le texture ambientCG sono CC0.
 
+## Come è fatto (AS2)
+
+- `npm run asset:caratteri` scarica in `public/asset-cache/caratteri` circa 150 MB: 266 famiglie Google OFL (i 57 storici più le più usate per categoria: 70 bastoni, 50 graziati, 65 display, 18 script, 10 mono, stencil) e i caratteri OFL di Collletttivo (GitHub), League (GitHub), Velvetyne (GitLab, solo quelli non già in `public/fonts/libere`: GitLab concede pochi archivi all'ora) e dei repo di Badass Libre Fonts by Womxn. Le altre famiglie Google su richiesta: `-- --famiglia "Nome,Nome"`. Escluse: licenza non OFL o non dichiarata (Fungal, Lack, Pilowlava, Euripides) e famiglie senza tutti gli accenti italiani (Orbitron, Ostrich, Junction e altre).
+- **Fontshare escluso**: la licenza (ITF Free Font License) permette l'uso commerciale, ma la ridistribuzione dentro un'app non è verificata. Si rivaluta solo con una conferma scritta.
+- Classificazione (`scripts/asset/misure.mjs`): opentype.js misura peso, larghezza delle minuscole, altezza della x sulle maiuscole, contrasto (tratto della o), grazie (la I alla base), rotondità, stencil (la o aperta), assi variabili, accenti; da qui genere, epoca, personalità, ruoli (titolo, testo, etichetta) e `osa` (0 classico → 1 d'autore). I 57 storici tengono la personalità scritta a mano.
+- Abbinamenti (`core/caratteri.ts`): niente coppie fisse; il testo si sceglie con una regola, stessa struttura oppure contrasto di genere con altezze della x compatibili (±0,08), etichette e carattere da manifesto dalle misure.
+- Regolatore `sperimentazione` (0–1, nei regolatori e nell'id dell'identità): a 0 entrano solo i caratteri con `osa` ≤ 0,3, da 0,7 tutti, e più è alto più pesano quelli che osano. Ogni registro ha la sua dose (svizzero 0,2, avanguardia 0,8).
+- Caricamento: prima i file del catalogo (cache o `public/fonts`), poi Google Fonts dalla rete. Senza cache i caratteri delle fonderie non si caricano: va lanciato lo script.
+- Vivaio: 3 composizioni per identità invece di 6, così le prime 12 proposte mostrano più identità.
+- Vetrina a secco (caffe, mostra, t_menu, palestra, quadrato), coppie di font diverse nelle prime 12: prima 6/7/8/7 (28 in tutto, 30 famiglie), con il catalogo 7/7/9/7 (30, 54 famiglie), con il vivaio a 3 composizioni 10/11/11/9 (41).
+
 ## Fasi
 
 - **AS1. Catalogo e licenze**: lo schema del catalogo, la cache locale e le regole di licenza e attribuzione. Si importano i 57 font attuali e gli asset di `public/` per non perdere niente.

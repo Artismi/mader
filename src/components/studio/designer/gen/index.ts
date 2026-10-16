@@ -5,7 +5,7 @@
  */
 import type { DesignContent, Format, Scene } from '../types'
 import { styleById, fontsOf, inferRegistro } from '../styles'
-import { idIdentita, VICINI } from '../identita'
+import { idIdentita, VICINI, conSperimentazione } from '../identita'
 import { creditiCaratteri } from '../asset/catalogo'
 import { tintaDominante } from '../core/colore'
 import { loadFonts } from '../fonts'
@@ -62,7 +62,7 @@ export const SISTEMI_DEL_REGISTRO = Object.fromEntries(Object.entries(SISTEMI_A_
  * trova una eccellente. Se nessuna regge, riprova con il titolo più piccolo.
  */
 export async function generateSystem(c: DesignContent, format: Format, k: Knobs, photo?: string, o: { tentativi?: number } = {}): Promise<Scene | null> {
-  const style = styleById(k.stile)
+  const style = styleById(conSperimentazione(k.stile, k.sperimentazione))
   const [, pix] = await Promise.all([loadFonts(fontsOf(style)), loadPix(photo ?? c.imageUrl)])
   const tentativi = o.tentativi ?? (k.sistema === 'composto' ? 14 : 6)
   let best: Scene | null = null, falliti = 0
@@ -99,7 +99,10 @@ export async function tintaFoto(url?: string) {
  * del contenuto, una da un registro vicino), ognuna con due o tre sistemi
  * del suo registro. Varietà tra le identità, coerenza dentro ciascuna.
  */
-export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhoto: boolean; sistemi?: SistemaId[]; tinta?: number; seme?: number; ampio?: boolean | number }): Knobs[] {
+/** Composizioni per identità nel vivaio ampio. */
+const PER_IDENTITA = 3
+
+export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhoto: boolean; sistemi?: SistemaId[]; tinta?: number; seme?: number; ampio?: boolean | number; sperimentazione?: number }): Knobs[] {
   const r = rng(hashText(allText(c)) ^ (opts.seme ?? 0))
   const registro = opts.styleId ? styleById(opts.styleId).registro : inferRegistro(allText(c))
   const tipo = c.tipo && c.tipo !== 'copertina' ? c.tipo : undefined
@@ -119,19 +122,19 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   }
   const vicini = [...VICINI[registro]].sort(() => r.next() - 0.5)
   const identita = opts.styleId
-    ? [{ stile: opts.styleId, registro, n: opts.ampio ? 6 * (opts.ampio === true ? 5 : opts.ampio) : 8 }]
+    ? [{ stile: opts.styleId, registro, n: opts.ampio ? PER_IDENTITA * (opts.ampio === true ? 5 : opts.ampio) : 8 }]
     : opts.ampio
     ? Array.from({ length: opts.ampio === true ? 5 : opts.ampio }, (_, i) => {
         // vivaio ampio per la selezione del critico: metà identità nel registro del contenuto
-        // (una su due accordata alla foto), metà dai registri vicini; sei composizioni ciascuna
+        // (una su due accordata alla foto), metà dai registri vicini; poche composizioni ciascuna (più identità e più coppie di caratteri tra le prime)
         const reg = i % 2 === 0 || !vicini.length ? registro : vicini[Math.floor(i / 2) % vicini.length]
-        return { stile: idIdentita(reg, r.int(1, 99999), { tinta: i % 3 === 0 ? opts.tinta : undefined }), registro: reg, n: 6 }
+        return { stile: idIdentita(reg, r.int(1, 99999), { tinta: i % 3 === 0 ? opts.tinta : undefined, sperimentazione: opts.sperimentazione }), registro: reg, n: PER_IDENTITA }
       })
     : [
         // la prima accordata alla foto, la seconda libera, la terza da un registro vicino
-        { stile: idIdentita(registro, r.int(1, 99999), { tinta: opts.tinta }), registro, n: 3 },
-        { stile: idIdentita(registro, r.int(1, 99999)), registro, n: 3 },
-        ((v: RegistroId) => ({ stile: idIdentita(v, r.int(1, 99999), { tinta: r.chance(0.5) ? opts.tinta : undefined }), registro: v, n: 2 }))(r.pick(VICINI[registro])),
+        { stile: idIdentita(registro, r.int(1, 99999), { tinta: opts.tinta, sperimentazione: opts.sperimentazione }), registro, n: 3 },
+        { stile: idIdentita(registro, r.int(1, 99999), { sperimentazione: opts.sperimentazione }), registro, n: 3 },
+        ((v: RegistroId) => ({ stile: idIdentita(v, r.int(1, 99999), { tinta: r.chance(0.5) ? opts.tinta : undefined, sperimentazione: opts.sperimentazione }), registro: v, n: 2 }))(r.pick(VICINI[registro])),
       ]
   const out: Knobs[] = []
   const usati = new Set<SistemaId>()
@@ -150,7 +153,7 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
     const scelti = opts.sistemi ?? (tipo
       ? [...(dedicato ? [dedicato] : []), 'composto', ...mano.slice(0, Math.max(0, id.n - (dedicato ? 2 : 1))), ...Array(id.n).fill('composto')] as SistemaId[]
       : opts.ampio
-      ? ['composto', ...mano.slice(0, id.n - 2), 'composto'] as SistemaId[]
+      ? ['composto', ...mano.slice(0, id.n - (id.n > 3 ? 2 : 1)), ...(id.n > 3 ? ['composto'] : [])] as SistemaId[]
       : ['composto', ...mano.slice(0, id.n - 1), ...(id.n > 3 ? ['composto'] : [])] as SistemaId[])
     for (const sistema of scelti.slice(0, opts.sistemi ? opts.sistemi.length : id.n)) {
       usati.add(sistema)
@@ -158,7 +161,7 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
         sistema, stile: id.stile,
         scala: 0.55 + r.range(0, 0.4), energia: 0.25 + r.range(0, 0.6), densita: 0.45 + r.range(0, 0.45),
         sovrastampa: 0.3 + r.range(0, 0.5), trattamento: r.pick(tratt), inverti: r.chance(0.15), grana: 0.3 + r.range(0, 0.4),
-        seme: r.int(1, 99999), ...prefK[sistema],
+        seme: r.int(1, 99999), ...(opts.sperimentazione !== undefined ? { sperimentazione: opts.sperimentazione } : {}), ...prefK[sistema],
       })
     }
   }
@@ -174,7 +177,7 @@ export interface Proposte { scene: Scene[]; candidate: number; promosse: number;
  * altro giro con semi nuovi (al massimo `giri`); in ultimo si completa con le
  * bocciate migliori, segnate come tali.
  */
-export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; giri?: number; vivaio?: number; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
+export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
   const n = o.n ?? 12
   // si genera quattro volte quello che si mostra: il critico sceglie su un vivaio ampio
   const vivaio = o.vivaio ?? n * 4
@@ -185,7 +188,7 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
   for (; giro < maxGiri; giro++) {
     // le direzioni dell'IA (se ci sono) entrano nel primo giro; il resto del vivaio lo genera il motore
     const date = giro === 0 ? o.knobs ?? [] : []
-    const pool = [...date, ...proposeKnobs(c, { hasPhoto: !!o.photo, styleId: o.styleId, tinta, seme: (o.seme ?? 0) + giro * 104729, ampio: Math.max(2, Math.ceil((vivaio - date.length) / 6)) })]
+    const pool = [...date, ...proposeKnobs(c, { hasPhoto: !!o.photo, styleId: o.styleId, tinta, sperimentazione: o.sperimentazione, seme: (o.seme ?? 0) + giro * 104729, ampio: Math.max(2, Math.ceil((vivaio - date.length) / PER_IDENTITA)) })]
     for (const [i, k] of pool.entries()) {
       const sc = await generateSystem(c, format, k, o.photo, { tentativi: k.sistema === 'composto' ? 8 : 4 })
       candidate++

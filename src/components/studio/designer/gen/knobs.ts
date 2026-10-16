@@ -32,6 +32,8 @@ export interface Knobs {
   seme: number
   /** parola del titolo da mettere in evidenza */
   enfasi?: string
+  /** 0 caratteri sobri e classici → 1 display, stencil e caratteri d'autore (entra nell'identità) */
+  sperimentazione?: number
 }
 
 export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean; /** sistema dedicato a un tipo di contenuto (elenco, programma…) */ tipo?: TipoContenuto }
@@ -72,12 +74,13 @@ export const TRATTAMENTI: { id: Trattamento; nome: string }[] = [
 ]
 
 /** Descrizione dei regolatori per la UI e per l'IA. */
-export const RANGE_KNOBS: { key: 'scala' | 'energia' | 'densita' | 'sovrastampa' | 'grana'; nome: string; hint: string }[] = [
+export const RANGE_KNOBS: { key: 'scala' | 'energia' | 'densita' | 'sovrastampa' | 'grana' | 'sperimentazione'; nome: string; hint: string }[] = [
   { key: 'scala', nome: 'Scala', hint: 'quanto è grande il titolo' },
   { key: 'energia', nome: 'Energia', hint: 'diagonali, sfalsamenti, movimento' },
   { key: 'densita', nome: 'Densità', hint: 'quanti elementi e strati' },
   { key: 'sovrastampa', nome: 'Sovrastampa', hint: 'inchiostri sovrapposti fuori registro' },
   { key: 'grana', nome: 'Grana', hint: 'trama di stampa e carta' },
+  { key: 'sperimentazione', nome: 'Sperimenta', hint: 'caratteri: dai classici sobri ai display e ai caratteri d’autore' },
 ]
 
 const clamp01 = (n: unknown, d: number) => (typeof n === 'number' && isFinite(n) ? Math.max(0, Math.min(1, n)) : d)
@@ -96,6 +99,7 @@ export function normKnobs(k: Partial<Knobs> & Record<string, unknown>, fallback:
     grana: clamp01(k.grana, fallback.grana),
     seme: typeof k.seme === 'number' && isFinite(k.seme) ? Math.round(k.seme) : fallback.seme,
     enfasi: typeof k.enfasi === 'string' ? k.enfasi : fallback.enfasi,
+    sperimentazione: k.sperimentazione === undefined && fallback.sperimentazione === undefined ? undefined : clamp01(k.sperimentazione, fallback.sperimentazione ?? 0.35),
   }
 }
 

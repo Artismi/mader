@@ -1,12 +1,18 @@
 /**
- * Raccolta di caratteri (Google Fonts) con la loro personalità, e abbinamenti
- * per affinità: il registro indica una direzione (giocoso, elegante, tecnico,
- * caldo, sperimentale, forte, morbido), il seme sceglie tra i candidati più
- * vicini; ogni tanto si pesca apposta fuori direzione, per sorprendere.
- * I pesi elencati sono quelli che Google Fonts serve davvero.
+ * Caratteri del motore, presi dal catalogo degli asset (asset/caratteri.json):
+ * ognuno con personalità, ruoli, genere e misure lette dal file. Il registro
+ * indica una direzione (giocoso, elegante, tecnico, caldo, sperimentale,
+ * forte, morbido), il seme sceglie tra i candidati più vicini; ogni tanto si
+ * pesca apposta fuori direzione, per sorprendere.
+ *
+ * Gli abbinamenti non sono coppie fisse: nascono da regole sulle misure
+ * (stessa struttura con ruoli diversi, oppure contrasto netto di genere con
+ * altezze della x compatibili). Il regolatore `sperimentazione` (0–1) apre ai
+ * display, agli stencil e ai caratteri d'autore: a 0 testi sobri e classici.
  */
 import type { FontSpec } from '../types'
 import type { Rng } from '../gen/knobs'
+import { CATALOGO_CARATTERI, type Genere, type MisureCarattere } from '../asset/catalogo'
 
 export type Tratto = 'giocoso' | 'elegante' | 'tecnico' | 'caldo' | 'sperimentale' | 'forte' | 'morbido'
 export type Personalita = Partial<Record<Tratto, number>>
@@ -21,116 +27,86 @@ export interface Carattere {
   /** regge il tutto maiuscolo */
   maiuscolo?: boolean
   p: Personalita
+  /** quanto osa: 0 classico → 1 display d'autore (si apre con la sperimentazione) */
+  osa: number
+  genere?: Genere
+  misure?: MisureCarattere
+  fonte: string
 }
 
-const V = (a: number, b: number) => Array.from({ length: (b - a) / 100 + 1 }, (_, i) => a + i * 100)
+/** Sperimentazione di partenza: sobria ma non chiusa. */
+export const SPERIMENTAZIONE = 0.35
 
-export const CARATTERI: Carattere[] = [
-  // graziati da titolo
-  { family: 'Fraunces', pesi: V(100, 900), corsivo: true, ruoli: ['titolo'], sans: false, p: { caldo: 0.9, morbido: 0.6, elegante: 0.5, giocoso: 0.3 } },
-  { family: 'Instrument Serif', pesi: [400], corsivo: true, ruoli: ['titolo'], sans: false, p: { elegante: 0.9, caldo: 0.4 } },
-  { family: 'DM Serif Display', pesi: [400], corsivo: true, ruoli: ['titolo'], sans: false, p: { elegante: 0.7, forte: 0.5, caldo: 0.4 } },
-  { family: 'Bodoni Moda', pesi: V(400, 900), corsivo: true, ruoli: ['titolo'], sans: false, p: { elegante: 1, forte: 0.3 } },
-  { family: 'Playfair Display', pesi: V(400, 900), corsivo: true, ruoli: ['titolo'], sans: false, p: { elegante: 0.8, caldo: 0.3 } },
-  { family: 'Gloock', pesi: [400], ruoli: ['titolo'], sans: false, p: { elegante: 0.6, forte: 0.6, sperimentale: 0.3 } },
-  { family: 'Young Serif', pesi: [400], ruoli: ['titolo'], sans: false, p: { caldo: 0.8, giocoso: 0.4, morbido: 0.5 } },
-  { family: 'Cormorant Garamond', pesi: V(300, 700), corsivo: true, ruoli: ['titolo'], sans: false, p: { elegante: 0.95, caldo: 0.3 } },
-  { family: 'Rozha One', pesi: [400], ruoli: ['titolo'], sans: false, maiuscolo: true, p: { forte: 0.8, elegante: 0.5 } },
-  { family: 'Newsreader', pesi: V(200, 800), corsivo: true, ruoli: ['titolo', 'testo'], sans: false, p: { elegante: 0.6, caldo: 0.6 } },
-  { family: 'Spectral', pesi: V(200, 800), corsivo: true, ruoli: ['testo'], sans: false, p: { elegante: 0.6, caldo: 0.4 } },
-  { family: 'Literata', pesi: V(200, 900), corsivo: true, ruoli: ['testo'], sans: false, p: { caldo: 0.7 } },
-  { family: 'Source Serif 4', pesi: V(200, 900), corsivo: true, ruoli: ['testo'], sans: false, p: { elegante: 0.4, tecnico: 0.3 } },
-  // grotesk e bastoni da titolo
-  { family: 'Inter', pesi: V(100, 900), ruoli: ['titolo', 'testo', 'etichetta'], sans: true, maiuscolo: true, p: { tecnico: 0.8, forte: 0.4 } },
-  { family: 'Archivo', pesi: V(100, 900), ruoli: ['titolo', 'testo', 'etichetta'], sans: true, maiuscolo: true, p: { tecnico: 0.6, forte: 0.6 } },
-  { family: 'Archivo Black', pesi: [400], ruoli: ['titolo'], sans: true, maiuscolo: true, p: { forte: 1, sperimentale: 0.3 } },
-  { family: 'Bricolage Grotesque', pesi: V(200, 800), ruoli: ['titolo'], sans: true, p: { giocoso: 0.7, sperimentale: 0.5, caldo: 0.4, forte: 0.5 } },
-  { family: 'Space Grotesk', pesi: V(300, 700), ruoli: ['titolo', 'testo'], sans: true, maiuscolo: true, p: { tecnico: 0.9, sperimentale: 0.4 } },
-  { family: 'Syne', pesi: V(400, 800), ruoli: ['titolo'], sans: true, maiuscolo: true, p: { sperimentale: 1, forte: 0.5 } },
-  { family: 'Unbounded', pesi: V(200, 900), ruoli: ['titolo'], sans: true, maiuscolo: true, p: { sperimentale: 0.8, forte: 0.7, giocoso: 0.3 } },
-  { family: 'Familjen Grotesk', pesi: V(400, 700), ruoli: ['titolo', 'testo'], sans: true, p: { tecnico: 0.5, caldo: 0.4, sperimentale: 0.3 } },
-  { family: 'Hanken Grotesk', pesi: V(100, 900), ruoli: ['titolo', 'testo', 'etichetta'], sans: true, p: { tecnico: 0.5, morbido: 0.3 } },
-  { family: 'Schibsted Grotesk', pesi: V(400, 900), ruoli: ['titolo', 'testo'], sans: true, maiuscolo: true, p: { forte: 0.6, tecnico: 0.5 } },
-  { family: 'Instrument Sans', pesi: V(400, 700), ruoli: ['titolo', 'testo', 'etichetta'], sans: true, p: { tecnico: 0.5, elegante: 0.4 } },
-  { family: 'Sora', pesi: V(100, 800), ruoli: ['titolo', 'testo'], sans: true, p: { tecnico: 0.7, morbido: 0.4 } },
-  { family: 'Outfit', pesi: V(100, 900), ruoli: ['titolo', 'testo'], sans: true, p: { morbido: 0.6, tecnico: 0.5, giocoso: 0.3 } },
-  { family: 'Epilogue', pesi: V(100, 900), ruoli: ['titolo', 'testo'], sans: true, maiuscolo: true, p: { forte: 0.6, sperimentale: 0.4 } },
-  { family: 'Darker Grotesque', pesi: V(300, 900), ruoli: ['titolo'], sans: true, p: { sperimentale: 0.7, elegante: 0.4 } },
-  { family: 'Big Shoulders Display', pesi: V(100, 900), ruoli: ['titolo'], sans: true, maiuscolo: true, p: { forte: 1, tecnico: 0.4 } },
-  { family: 'Anton', pesi: [400], ruoli: ['titolo'], sans: true, maiuscolo: true, p: { forte: 1 } },
-  { family: 'Bebas Neue', pesi: [400], ruoli: ['titolo'], sans: true, maiuscolo: true, p: { forte: 0.9, tecnico: 0.3 } },
-  { family: 'Oswald', pesi: V(200, 700), ruoli: ['titolo'], sans: true, maiuscolo: true, p: { forte: 0.8 } },
-  { family: 'Antonio', pesi: V(100, 700), ruoli: ['titolo'], sans: true, maiuscolo: true, p: { forte: 0.7, elegante: 0.3 } },
-  { family: 'Chivo', pesi: V(100, 900), ruoli: ['titolo', 'testo'], sans: true, maiuscolo: true, p: { forte: 0.6, tecnico: 0.5 } },
-  { family: 'Rubik', pesi: V(300, 900), ruoli: ['titolo', 'testo'], sans: true, p: { morbido: 0.7, giocoso: 0.5 } },
-  { family: 'Lexend', pesi: V(100, 900), ruoli: ['titolo', 'testo'], sans: true, p: { morbido: 0.5, tecnico: 0.5 } },
-  // tondi e giocosi
-  { family: 'Baloo 2', pesi: V(400, 800), ruoli: ['titolo'], sans: true, p: { giocoso: 1, morbido: 1, caldo: 0.5 } },
-  { family: 'Fredoka', pesi: V(300, 700), ruoli: ['titolo', 'testo'], sans: true, p: { giocoso: 0.9, morbido: 1 } },
-  { family: 'Nunito', pesi: V(200, 900), ruoli: ['titolo', 'testo', 'etichetta'], sans: true, p: { morbido: 0.8, giocoso: 0.5, caldo: 0.4 } },
-  { family: 'Quicksand', pesi: V(300, 700), ruoli: ['titolo', 'testo'], sans: true, p: { morbido: 0.8, elegante: 0.3 } },
-  { family: 'Chewy', pesi: [400], ruoli: ['titolo'], sans: true, p: { giocoso: 1, morbido: 0.7 } },
-  { family: 'Bowlby One', pesi: [400], ruoli: ['titolo'], sans: true, p: { forte: 0.8, giocoso: 0.6, caldo: 0.5 } },
-  { family: 'Shrikhand', pesi: [400], ruoli: ['titolo'], sans: false, p: { giocoso: 0.8, caldo: 0.8 } },
-  { family: 'Rammetto One', pesi: [400], ruoli: ['titolo'], sans: true, p: { giocoso: 0.8, forte: 0.7 } },
-  { family: 'Caveat', pesi: V(400, 700), ruoli: ['titolo'], sans: false, p: { caldo: 0.8, giocoso: 0.6, morbido: 0.5 } },
-  // testo
-  { family: 'DM Sans', pesi: V(100, 900), ruoli: ['testo', 'etichetta'], sans: true, p: { morbido: 0.4, tecnico: 0.4 } },
-  { family: 'Jost', pesi: V(100, 900), ruoli: ['testo', 'etichetta'], sans: true, p: { elegante: 0.6, tecnico: 0.3 } },
-  { family: 'Manrope', pesi: V(200, 800), ruoli: ['testo', 'etichetta'], sans: true, p: { tecnico: 0.5, morbido: 0.4 } },
-  { family: 'Work Sans', pesi: V(100, 900), ruoli: ['testo', 'etichetta'], sans: true, p: { tecnico: 0.4, caldo: 0.3 } },
-  { family: 'Karla', pesi: V(200, 800), ruoli: ['testo', 'etichetta'], sans: true, p: { caldo: 0.4, sperimentale: 0.2 } },
-  { family: 'Figtree', pesi: V(300, 900), ruoli: ['testo', 'etichetta'], sans: true, p: { morbido: 0.5, giocoso: 0.3 } },
-  { family: 'Barlow', pesi: V(100, 900), ruoli: ['testo', 'etichetta'], sans: true, p: { tecnico: 0.5, forte: 0.3 } },
-  { family: 'Barlow Condensed', pesi: V(100, 900), ruoli: ['etichetta'], sans: true, maiuscolo: true, p: { forte: 0.6, tecnico: 0.5 } },
-  // mono
-  { family: 'Space Mono', pesi: [400, 700], ruoli: ['testo', 'etichetta'], sans: true, mono: true, p: { tecnico: 0.8, sperimentale: 0.7 } },
-  { family: 'IBM Plex Mono', pesi: V(100, 700), ruoli: ['testo', 'etichetta'], sans: true, mono: true, p: { tecnico: 1 } },
-  { family: 'DM Mono', pesi: [300, 400, 500], ruoli: ['etichetta'], sans: true, mono: true, p: { tecnico: 0.7, morbido: 0.3 } },
-  { family: 'JetBrains Mono', pesi: V(100, 800), ruoli: ['testo', 'etichetta'], sans: true, mono: true, p: { tecnico: 0.9 } },
-]
+export const CARATTERI: Carattere[] = CATALOGO_CARATTERI
+  .filter(a => a.carattere!.misure?.italiano !== false && (a.carattere!.pesi ?? a.carattere!.misure?.pesi)?.length)
+  .map(a => {
+    const c = a.carattere!
+    return {
+      family: a.nome, pesi: (c.pesi ?? c.misure!.pesi), corsivo: c.corsivo ?? c.misure?.corsivo, ruoli: c.ruoli,
+      sans: c.sans ?? !c.misure?.grazie, mono: c.mono ?? c.misure?.mono, maiuscolo: c.maiuscolo, p: c.p, osa: c.osa,
+      genere: a.tag.genere?.[0] as Genere | undefined, misure: c.misure, fonte: a.fonte,
+    }
+  })
 
 const TRATTI: Tratto[] = ['giocoso', 'elegante', 'tecnico', 'caldo', 'sperimentale', 'forte', 'morbido']
 const affinita = (a: Personalita, b: Personalita) => TRATTI.reduce((n, t) => n + (a[t] ?? 0) * (b[t] ?? 0), 0) / (Math.hypot(...TRATTI.map(t => a[t] ?? 0)) * Math.hypot(...TRATTI.map(t => b[t] ?? 0)) || 1)
 
-/** Sceglie per affinità con un po' di caso: i primi candidati pesano di più, ma non sono gli unici. */
-function scegli(r: Rng, list: Carattere[], dir: Personalita, temperatura = 0.12, fuori = 0.12): Carattere {
+/** Sceglie per affinità con un po' di caso; `peso` aggiunge le regole (abbinamento, sperimentazione). */
+function scegli(r: Rng, list: Carattere[], dir: Personalita, temperatura = 0.12, fuori = 0.12, peso: (c: Carattere) => number = () => 1): Carattere {
   if (r.chance(fuori)) return r.pick(list)
-  const scored = list.map(c => ({ c, w: Math.exp(affinita(c.p, dir) / temperatura) }))
+  const scored = list.map(c => ({ c, w: Math.exp(affinita(c.p, dir) / temperatura) * peso(c) }))
   const tot = scored.reduce((a, s) => a + s.w, 0)
   let x = r.next() * tot
   for (const s of scored) { if ((x -= s.w) <= 0) return s.c }
   return scored[0].c
 }
 
-const peso = (c: Carattere, voluto: number) => c.pesi.reduce((best, p) => (Math.abs(p - voluto) < Math.abs(best - voluto) ? p : best), c.pesi[0])
+const pesoVicino = (c: Carattere, voluto: number) => c.pesi.reduce((best, p) => (Math.abs(p - voluto) < Math.abs(best - voluto) ? p : best), c.pesi[0])
+const maxPeso = (c: Carattere) => c.pesi[c.pesi.length - 1]
 
-export interface Abbinamento { display: FontSpec; text: FontSpec; label: FontSpec; impact: FontSpec; impactSans: boolean; displayUpper: boolean; displaySerif: boolean; corsivo: boolean; nome: string }
+/** Il carattere è aperto a questa sperimentazione? A 0 solo i classici, da ~0.7 tutto. */
+const aperto = (c: Carattere, s: number) => c.osa <= s + 0.3
+/** Con la sperimentazione alta pesano di più quelli che osano; con quella bassa i sobri. */
+const spinta = (c: Carattere, s: number) => Math.max(0.05, 1 + 3 * s * c.osa - 1.5 * (1 - s) * c.osa)
+/** Altezze della x compatibili (se non sono misurate, si fida). */
+const xCompatibile = (a: Carattere, b: Carattere) => !a.misure || !b.misure || Math.abs(a.misure.altezzaX - b.misure.altezzaX) <= 0.08
 
-/** Abbinamento di caratteri per una direzione di personalità. */
-export function abbina(r: Rng, dir: Personalita, opts: { maiuscolo?: number } = {}): Abbinamento {
-  const titoli = CARATTERI.filter(c => c.ruoli.includes('titolo'))
-  const d = scegli(r, titoli, dir)
+/** Regole d'abbinamento del testo al titolo: stessa struttura, oppure contrasto netto di genere. */
+export function compatibilita(d: Carattere, t: Carattere, regola: 'struttura' | 'contrasto'): number {
+  if (t.family === d.family) return d.ruoli.includes('testo') ? (regola === 'struttura' ? 1.2 : 0.3) : 0
+  if (regola === 'struttura') return t.sans === d.sans && (t.genere === d.genere || xCompatibile(d, t)) ? 1 : 0.12
+  return t.sans !== d.sans ? (xCompatibile(d, t) ? 1 : 0.45) : 0.1
+}
+
+export interface Abbinamento { display: FontSpec; text: FontSpec; label: FontSpec; impact: FontSpec; impactSans: boolean; displayUpper: boolean; displaySerif: boolean; corsivo: boolean; nome: string; regola: 'struttura' | 'contrasto' }
+
+/** Abbinamento di caratteri per una direzione di personalità e una dose di sperimentazione. */
+export function abbina(r: Rng, dir: Personalita, opts: { maiuscolo?: number; sperimentazione?: number } = {}): Abbinamento {
+  const s = Math.max(0, Math.min(1, opts.sperimentazione ?? SPERIMENTAZIONE))
+  const titoli = CARATTERI.filter(c => c.ruoli.includes('titolo') && aperto(c, s))
+  const d = scegli(r, titoli, dir, 0.12, 0.12, c => spinta(c, s))
   const forte = dir.forte ?? 0, elegante = dir.elegante ?? 0, giocoso = dir.giocoso ?? 0
-  const display: FontSpec = { family: d.family, weight: peso(d, forte > 0.6 ? 800 : giocoso > 0.6 ? 700 : elegante > 0.6 ? 400 : 600) }
-  // testo: di solito contrasta il titolo (graziato con bastoni, e viceversa); lo stesso carattere solo se è da testo
+  const display: FontSpec = { family: d.family, weight: pesoVicino(d, forte > 0.6 ? 800 : giocoso > 0.6 ? 700 : elegante > 0.6 ? 400 : 600) }
+  // testo: stessa struttura (una su tre circa) o contrasto di genere con la x compatibile
   const testi = CARATTERI.filter(c => c.ruoli.includes('testo') && !(c.mono && (dir.tecnico ?? 0) < 0.5 && (dir.sperimentale ?? 0) < 0.5))
-  const voglioSans = d.sans ? r.chance(0.7) : r.chance(0.85)
-  const pool = testi.filter(c => c.sans === voglioSans || (d.ruoli.includes('testo') && c.family === d.family))
-  const t = scegli(r, pool.length ? pool : testi, { ...dir, sperimentale: (dir.sperimentale ?? 0) * 0.5 }, 0.2, 0.08)
-  const text: FontSpec = { family: t.family, weight: peso(t, elegante > 0.7 ? 300 : 400) }
+  const regola = r.chance(d.sans ? 0.3 : 0.15) ? 'struttura' : 'contrasto'
+  const t = scegli(r, testi, { ...dir, sperimentale: (dir.sperimentale ?? 0) * 0.5 }, 0.2, 0.05, c => compatibilita(d, c, regola))
+  const text: FontSpec = { family: t.family, weight: pesoVicino(t, elegante > 0.7 ? 300 : 400) }
   // etichette: il carattere del testo in neretto, oppure un mono (tecnico, sperimentale), oppure un condensato (forte)
-  const lab = (dir.tecnico ?? 0) + (dir.sperimentale ?? 0) > 1 && r.chance(0.6) ? r.pick(CARATTERI.filter(c => c.mono))
-    : forte > 0.8 && r.chance(0.4) ? CARATTERI.find(c => c.family === 'Barlow Condensed')!
-      : t.ruoli.includes('etichetta') ? t : CARATTERI.find(c => c.family === 'DM Sans')!
-  const label: FontSpec = { family: lab.family, weight: peso(lab, lab.mono ? 500 : 700) }
-  // carattere da manifesto: il titolo al massimo peso se è un bastone pesante, altrimenti un condensato forte
-  const pesanti = CARATTERI.filter(c => c.ruoli.includes('titolo') && c.sans && (c.pesi[c.pesi.length - 1] >= 800 || ['Anton', 'Archivo Black', 'Bebas Neue', 'Bowlby One', 'Rammetto One'].includes(c.family)))
-  const imp = d.sans && d.pesi[d.pesi.length - 1] >= 800 ? d : scegli(r, pesanti, { ...dir, forte: 1 }, 0.15, 0.1)
-  const impact: FontSpec = { family: imp.family, weight: imp.pesi[imp.pesi.length - 1] }
+  const etichette = CARATTERI.filter(c => c.ruoli.includes('etichetta'))
+  const mono = etichette.filter(c => c.mono), stretti = etichette.filter(c => c.sans && !c.mono && maxPeso(c) >= 600 && (c.misure?.larghezza ?? 1) < 0.47)
+  const lab = (dir.tecnico ?? 0) + (dir.sperimentale ?? 0) + s * 0.5 > 1 && mono.length && r.chance(0.6) ? scegli(r, mono, dir, 0.2)
+    : forte > 0.8 && stretti.length && r.chance(0.4) ? scegli(r, stretti, dir, 0.2)
+      : t.ruoli.includes('etichetta') ? t
+        : scegli(r, etichette.filter(c => c.sans && !c.mono && xCompatibile(c, t)), dir, 0.2, 0.05)
+  const label: FontSpec = { family: lab.family, weight: pesoVicino(lab, lab.mono ? 500 : 700) }
+  // carattere da manifesto: il titolo al massimo peso se è un bastone pesante, altrimenti un bastone pesante affine
+  const pesanti = titoli.filter(c => c.sans && !c.mono && c.genere !== 'script' && (maxPeso(c) >= 800 || (c.misure?.spessore ?? 0) >= 0.16 || ['Anton', 'Archivo Black', 'Bebas Neue', 'Bowlby One', 'Rammetto One'].includes(c.family)))
+  const imp = d.sans && maxPeso(d) >= 800 ? d : scegli(r, pesanti, { ...dir, forte: 1 }, 0.15, 0.1, c => spinta(c, s))
+  const impact: FontSpec = { family: imp.family, weight: maxPeso(imp) }
   const displayUpper = !!d.maiuscolo && r.chance(opts.maiuscolo ?? 0.25)
   return {
-    display, text, label, impact, impactSans: imp.sans, displayUpper, displaySerif: !d.sans, corsivo: !!d.corsivo,
+    display, text, label, impact, impactSans: imp.sans, displayUpper, displaySerif: !d.sans, corsivo: !!d.corsivo, regola,
     nome: `${d.family}${t.family !== d.family ? ' + ' + t.family : ''}`,
   }
 }

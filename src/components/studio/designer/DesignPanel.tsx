@@ -277,7 +277,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
           {RANGE_KNOBS.map(r => (
             <label key={r.key} className="flex items-center gap-2" title={r.hint}>
               <span className="w-20 text-[8px] text-white/45 uppercase tracking-widest">{r.nome}</span>
-              <input type="range" min={0} max={1} step={0.05} value={sel.k[r.key]} className="flex-1 accent-[var(--accent,#c6f432)]"
+              <input type="range" min={0} max={1} step={0.05} value={sel.k[r.key] ?? 0.35} className="flex-1 accent-[var(--accent,#c6f432)]"
                 onChange={e => setItems(list => { const n = list.slice(); n[selected] = { ...n[selected], k: { ...n[selected].k, [r.key]: Number(e.target.value) } }; return n })}
                 onPointerUp={e => retune(selected, { [r.key]: Number((e.target as HTMLInputElement).value) })}
                 onKeyUp={e => retune(selected, { [r.key]: Number((e.target as HTMLInputElement).value) })} />

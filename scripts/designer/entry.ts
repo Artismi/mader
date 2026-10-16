@@ -31,7 +31,7 @@ async function run(job: Job): Promise<Result[]> {
   const sink: string[] = []
   ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
   const tinta = await tintaFoto(job.photo)
-  const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi, tinta, seme: (job as { seme?: number }).seme })
+  const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi, tinta, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
   const out: Result[] = []
   // primo: solo la prima identità (un esemplare per sistema), per confronti a parità di regolatori
   for (const k0 of (job as { primo?: boolean }).primo ? ks.slice(0, job.sistemi?.length ?? ks.length) : ks) {
@@ -52,7 +52,7 @@ async function run(job: Job): Promise<Result[]> {
 async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number }> {
   ;(globalThis as { __designerSink?: string[] }).__designerSink = []
   const t0 = performance.now()
-  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme })
+  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
   const items: Result[] = []
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
