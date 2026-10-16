@@ -38,7 +38,7 @@ export const graphRelated = defineAction({
     profondità: z.number().int().min(1).max(2).optional().describe('1 = vicini diretti, 2 = anche i vicini dei vicini'),
   }),
   run: ({ ref, profondità }) => {
-    const vicini = related(ref, { depth: profondità ?? 1, limit: 30 })
+    const vicini = related(ref, { depth: profondità === 2 ? 2 : 1, limit: 30 })
     const [kind, id] = ref.split(':')
     const contesto = kind === 'client' ? completeness(id) : undefined
     if (!vicini.length && !contesto) return { success: false, message: `Nessun nodo ${ref} (o nessun vicino). Cercalo con graphSearch.` }
