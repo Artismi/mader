@@ -4,7 +4,7 @@
  * vetrina.mjs (Playwright).
  */
 import * as fabric from 'fabric'
-import { generateSystem, proposeKnobs, proponi, tintaFoto, type Knobs } from '@/components/studio/designer/gen'
+import { generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, type Knobs } from '@/components/studio/designer/gen'
 import { styleById } from '@/components/studio/designer/styles'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
@@ -87,4 +87,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, motivi: () => MOTIVI, ripiego }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, motivi: () => MOTIVI, ripiego, sistemi: () => Object.keys(SYSTEMS) }

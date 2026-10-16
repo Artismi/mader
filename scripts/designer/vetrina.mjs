@@ -9,6 +9,7 @@
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
  *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
+ *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
  *
  * Prima volta: cd scripts/designer && npm install
@@ -115,6 +116,67 @@ function tracciatoIcona(id) {
 function risolvi(sp, motivi) {
   const ids = [...(sp.icone ?? []).map(i => i.id), ...(sp.motivi ?? []).flatMap(m => motivi[m]?.icone ?? [])]
   return { ...sp, icone: [...new Set(ids)].map(id => ({ id, d: tracciatoIcona(id) })).filter(i => i.d) }
+}
+
+/* ── schede: difetti per archetipo (P3), un esemplare per sistema, niente fogli ── */
+// npm run designer:vetrina -- --schede [--contenuti … --formati …]: scrive out/schede.md e out/schede.json
+const CLASSI = {
+  sovrapposizioni: [/sovrapposti|spazi: .* troppo vicini/, /troppo vicini/],
+  'testo piccolo': [null, /troppo piccolo per il telefono/],
+  vuoti: [null, /non progettat/],
+  tagli: [/fuori|non entr|troppo (lung|pien|alt)|incomplet/, null],
+  contrasto: [/contrasto|leggib|si legge/, /si legge a fatica/],
+  'fuori tema': [null, /stile (estraneo|lontano)/],
+}
+if (args.schede) {
+  // campione di partenza: contenuti di tipo diverso, tutti i formati (tutto il vivaio è lento)
+  const campione = args.contenuti ? contenuti : Object.keys(CONTENUTI).filter((_, i, l) => i % Math.max(1, Math.round(l.length / 8)) === 0).slice(0, 8)
+  const tutti = await page.evaluate(() => window.designer.sistemi())
+  const S = {}
+  const t0 = Date.now()
+  for (const nome of campione) for (const format of formati) {
+    const fx = CONTENUTI[nome]
+    const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+    const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi: sistemi ?? tutti, primo: true, thumb: 0.08, seme: Number(args.seme ?? 0) })
+    for (const r of res) {
+      const s = (S[r.sistema] ??= { prove: 0, scartate: 0, voti: [], classi: Object.fromEntries(Object.keys(CLASSI).map(k => [k, 0])), correzioni: 0, motivi: {} })
+      s.prove++
+      const corr = r.reasons.filter(m => / spazi (rientrato|spostato|ridotto|accorciato|tolto)/.test(m))
+      s.correzioni += corr.length
+      const motivi = r.reasons.filter(m => !corr.includes(m)).map(m => m.replace(/^[^:]+: /, ''))
+      if (!r.ok) {
+        s.scartate++
+        const m = motivi[0] ?? 'senza motivo'
+        s.motivi[m] = (s.motivi[m] ?? 0) + 1
+        for (const [k, [re]] of Object.entries(CLASSI)) if (re && motivi.some(x => re.test(x))) s.classi[k]++
+        continue
+      }
+      if (r.esame) s.voti.push(r.esame.voto)
+      for (const [k, [, re]] of Object.entries(CLASSI)) if (re && r.esame?.difetti.some(x => re.test(x))) s.classi[k]++
+    }
+    console.log(`${nome.padEnd(12)} ${format.padEnd(12)} ${res.filter(r => r.ok).length}/${res.length}  ${((Date.now() - t0) / 1000).toFixed(0)} s`)
+  }
+  await browser.close()
+  // indice: quota di prove con almeno un problema (scarto o difetto di classe), più i difetti in eccesso
+  const righe = Object.entries(S).map(([sistema, s]) => {
+    const difetti = Object.values(s.classi).reduce((a, b) => a + b, 0)
+    const media = s.voti.length ? Math.round(s.voti.reduce((a, b) => a + b, 0) / s.voti.length) : 0
+    return { sistema, ...s, voti: undefined, media, indice: +((s.scartate + difetti) / s.prove).toFixed(2) }
+  }).sort((a, b) => b.indice - a.indice || a.media - b.media)
+  const pct = (n, d) => `${Math.round((100 * n) / Math.max(1, d))}%`
+  const md = [
+    '# Schede dei difetti per archetipo', '',
+    `Campione: ${campione.join(', ')} × ${formati.join(', ')}; un esemplare per sistema (${righe.reduce((a, r) => a + r.prove, 0)} prove, ${((Date.now() - t0) / 1000).toFixed(0)} s). Generato da \`vetrina.mjs --schede\`, in locale.`, '',
+    'Indice = (scarti + difetti di classe) / prove: più alto, peggio. Le classi contano sia gli scarti del codice sia le note del critico. Correzioni = interventi del controllo degli spazi (P1).', '',
+    `| # | archetipo | indice | prove | scartate | voto medio | ${Object.keys(CLASSI).join(' | ')} | correzioni | motivo di scarto più frequente |`,
+    `|---|---|---|---|---|---|${Object.keys(CLASSI).map(() => '---').join('|')}|---|---|`,
+    ...righe.map((r, i) => `| ${i + 1} | ${r.sistema} | ${r.indice} | ${r.prove} | ${pct(r.scartate, r.prove)} | ${r.media || '—'} | ${Object.values(r.classi).map(n => (n ? pct(n, r.prove) : '·')).join(' | ')} | ${r.correzioni || '·'} | ${Object.entries(r.motivi).sort((a, b) => b[1] - a[1])[0]?.join(' ×') ?? '·'} |`),
+    '',
+  ].join('\n')
+  fs.writeFileSync(path.join(out, 'schede.md'), md)
+  fs.writeFileSync(path.join(out, 'schede.json'), JSON.stringify({ campione, formati, righe }, null, 2))
+  console.log(`\nPeggiori: ${righe.slice(0, 5).map(r => `${r.sistema} (${r.indice})`).join(', ')}\nschede in ${path.relative(process.cwd(), out)}`)
+  process.exit(0)
 }
 
 if (args.specializza) {
