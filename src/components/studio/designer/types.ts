@@ -123,4 +123,6 @@ export interface Scene {
   esame?: Esame
   /** attribuzioni richieste dalle licenze degli asset usati (catalogo) */
   crediti?: string[]
+  /** mattoni della ricetta (V1): ossatura, titolo, foto, dispositivi, finiture */
+  mattoni?: string[]
 }

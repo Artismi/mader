@@ -6,10 +6,11 @@
  */
 import type { Scene } from '../types'
 import {
-  type G, put, U, txt, lab, para, display, putLab, putPara, putDisplay, infoBlock, photo, treat, printMarks, regMark, ticker,
-  dotField, finish, keyword, stackLines, accentChars, sizeForWidth, detailsLine, ctaText, mix, alpha, readable, darker, lighter, words, up, lum, discard,
+  type G, put, U, txt, lab, para, display, putLab, putPara, putDisplay, infoBlock, photo, treat, printMarks, regMark,
+  dotField, finish, keyword, stackLines, accentChars, sizeForWidth, detailsLine, ctaText, mix, alpha, readable, darker, lighter, up, lum, discard,
 } from './tools'
 import { lineWidth } from '../text'
+import { ricetta } from './mattoni'
 
 export const ink = (g: G) => ({ fg: g.P.fg, sec: g.P.sec, acc: readable(g.P.bg, [g.P.acc, g.P.acc2, g.P.fg], 3.6) })
 /** Sovrastampa che funziona sul fondo: moltiplica sul chiaro, schiarisce sul buio. */
@@ -150,54 +151,8 @@ function sealAt(g: G, cx: number, cy: number, r0: number) {
 }
 
 /* ═══ 2. Eco ════════════════════════════════════════════════════════════ */
-export function eco(g: G): Scene | null {
-  const { W, H, m, T, B, P, s, k, r } = g
-  const font = s.display
-  const tickH = U(g, 58)
-  // passo 1: nastri in alto e in basso con il brand che scorre
-  const tape = [g.c.brand, g.c.kicker].filter(Boolean).join('  ✦  ') || g.c.title
-  ticker(g, 'nastro_alto', tape, 0, tickH, P.acc, readable(P.acc, [P.bg, P.fg, '#111111', '#ffffff']))
-  // passo 2: blocco informativo in fondo
-  const info = infoBlock(g, g.landscape ? (W - 2 * m) * 0.45 : W - 2 * m, { kicker: false })
-  const infoTop = B - info.h
-  const many = words(g.c.title).length > 3
-  const full = many ? display(g, g.c.title, W - 2 * m, U(g, 140), 54, 28, 2) : null
-  const fullTop = full ? infoTop - full.h - U(g, 22) : infoTop
-  const zoneTop = Math.max(tickH + U(g, 24), T), zoneBot = fullTop - U(g, 36)
-  // passo 3: la riga piena e le sue eco a contorno
-  const row = up(many ? keyword(g) : g.c.title, true)
-  const size = Math.min(sizeForWidth(row, font, (W - 2 * m) * (0.75 + 0.25 * k.scala), s.displayTracking), (zoneBot - zoneTop) * 0.3)
-  const rowW = lineWidth(row, font, size, s.displayTracking)
-  const step = size * (0.78 + (1 - k.densita) * 0.35)
-  const n = Math.max(3, Math.floor((zoneBot - zoneTop - size * 1.13) / step) + 1)
-  const fi = Math.min(n - 1, Math.max(0, Math.round((n - 1) * r.pick([0.25, 0.7, 0.5]))))
-  const x0 = (W - rowW) / 2
-  for (let i = 0; i < n; i++) {
-    const y = zoneTop + i * step
-    const shift = (i - fi) * k.energia * U(g, 70)
-    if (i === fi) continue
-    const fade = 1 - Math.abs(i - fi) / n
-    txt(g, { name: 'eco', lines: [row], font, size, x: x0 + shift, y, color: P.fg, hollow: true, sw: Math.max(1.2, size * 0.012 * (1 + k.densita)), opacity: 0.18 + 0.7 * fade, tracking: s.displayTracking, leading: 1, deco: true })
-  }
-  // passo 4: foto tonda nella metà opposta alla riga piena
-  const fy = zoneTop + fi * step
-  const D = Math.min(W * 0.52, (zoneBot - zoneTop) * 0.5)
-  const upHalf = fi > (n - 1) / 2
-  const cy = upHalf ? zoneTop + D / 2 + U(g, 10) : zoneBot - D / 2
-  const cx = W * r.range(0.32, 0.68)
-  if (Math.abs(cy - (fy + size * 0.56)) > D / 2 + size * 0.6) {
-    if (k.sovrastampa > 0.2) put(g, { kind: 'circle', name: 'alone', cx: cx + U(g, 24) * k.sovrastampa, cy: cy - U(g, 20) * k.sovrastampa, r: D / 2, fill: P.acc2, blend: over(g) })
-    photo(g, 'foto', { x: cx - D / 2, y: cy - D / 2, w: D, h: D }, { shape: 'circle' })
-  }
-  // passo 5: la riga piena sopra a tutto
-  txt(g, { name: 'titolo', lines: [row], font, size, x: x0, y: fy, color: ink(g).acc, tracking: s.displayTracking, leading: 1 })
-  // passo 6: testo e, se la riga è solo la parola chiave, il titolo intero
-  const y = fullTop
-  if (full) putDisplay(g, 'titolo_intero', full, m, y, P.fg)
-  info.place(m, infoTop, ink(g))
-  if (k.densita > 0.6) put(g, { kind: 'glyph', name: 'stella', path: r.pick(s.decor.glyphs), cx: W - m - U(g, 30), cy: y - U(g, 60), size: U(g, 56), color: P.acc })
-  return finish(g, 'eco', 'Eco')
-}
+/** Ricetta di mattoni (gen/mattoni): ossatura a fasce, titolo a eco, foto tonda, nastro, stella. */
+export const eco = (g: G): Scene | null => ricetta(g, 'eco')
 
 /* ═══ 3. Strisce ════════════════════════════════════════════════════════ */
 export function strisce(g: G): Scene | null {
@@ -284,61 +239,8 @@ export function strisce(g: G): Scene | null {
 }
 
 /* ═══ 4. Costruttivista ═════════════════════════════════════════════════ */
-export function costruttivo(g: G): Scene | null {
-  const { W, H, m, T, B, P, s, k, r } = g
-  const ang = -(14 + k.energia * 22) + r.range(-4, 4)
-  const a = (ang * Math.PI) / 180
-  // passo 1: il grande disco, che esce dalla tavola in alto a destra
-  const R = Math.min(W, H) * ((g.landscape ? 0.3 : 0.36) + 0.12 * k.scala) * r.range(0.9, 1.05)
-  const dcx = W * (g.landscape ? 0.7 : 0.66) + r.range(-0.04, 0.04) * W, dcy = g.landscape ? H * 0.36 : H * 0.3
-  put(g, { kind: 'circle', name: 'disco', cx: dcx, cy: dcy, r: R, fill: P.acc })
-  // passo 2: la foto retinata nel disco, in sovrastampa
-  const pr = R * (0.78 + 0.1 * k.densita)
-  photo(g, 'foto', { x: dcx - pr + R * 0.12, y: dcy - pr + R * 0.1, w: pr * 2, h: pr * 2 }, { shape: 'circle', blend: g.photo ? over(g, P.acc) : undefined })
-  // passo 3: numero gigante a contorno, dietro
-  const num = g.c.numero || ''
-  let numH = 0
-  if (num) {
-    const ns = Math.min(sizeForWidth(num, s.display, W * 0.5), H * 0.3)
-    numH = ns * 1.13
-    txt(g, { name: 'numero', lines: [num], font: s.display, size: ns, x: m * 0.6, y: m * 0.6, color: P.fg, hollow: true, sw: Math.max(1.5, ns * 0.012), deco: true })
-  }
-  // passo 4: la barra diagonale con il titolo dentro
-  const visible = Math.min(W / Math.cos(a), H / Math.abs(Math.sin(a))) * 0.82
-  const title = up(g.c.title, s.displayUpper || k.energia > 0.5)
-  const one = words(title).length <= 4
-  const t = display(g, title, visible * (0.7 + 0.25 * k.scala), H * 0.3, 190, 40, one ? 1 : 2)
-  if (!t) return null
-  const pad = t.size * 0.3
-  const barH = t.h + 2 * pad
-  // centro della barra: sotto il disco, verso sinistra
-  const bcx = W * 0.48, bcy = g.landscape ? H * 0.66 : H * 0.6
-  const L = Math.hypot(W, H) * 1.6
-  const bx = bcx - (L / 2) * Math.cos(a) + (barH / 2) * Math.sin(a), by = bcy - (L / 2) * Math.sin(a) - (barH / 2) * Math.cos(a)
-  put(g, { kind: 'rect', name: 'velo_barra', x: bx, y: by, w: L, h: barH, fill: P.fg, angle: ang })
-  // barra sottile parallela nell'altro inchiostro
-  if (k.densita > 0.3) {
-    const off = U(g, 22 + 30 * k.densita)
-    const h2 = U(g, 14 + 16 * k.densita)
-    put(g, { kind: 'rect', name: 'barra_sottile', x: bx - Math.sin(a) * (barH + off), y: by + Math.cos(a) * (barH + off), w: L, h: h2, fill: P.acc2 === P.bg ? P.acc : P.acc2, angle: ang, blend: k.sovrastampa > 0.4 ? over(g) : undefined })
-  }
-  // il titolo, centrato lungo la barra
-  const tx0 = bcx - (t.w / 2) * Math.cos(a) + (t.h / 2) * Math.sin(a), ty0 = bcy - (t.w / 2) * Math.sin(a) - (t.h / 2) * Math.cos(a)
-  putDisplay(g, 'titolo', t, tx0, ty0, P.bg, 'center', t.w, { angle: ang, su: P.fg })
-  // passo 5: brand e occhiello in verticale sul bordo sinistro
-  const brand = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), H * 0.5)
-  if (brand) putLab(g, 'brand', brand, m, Math.max(T, m * 0.6 + numH + U(g, 20)) + brand.w, P.fg, 'left', brand.w, { angle: -90 })
-  // passo 6: informazioni in basso a destra, allineate a destra
-  const colW = g.landscape ? W * 0.32 : W * 0.5
-  const info = infoBlock(g, colW, { kicker: false })
-  info.place(W - m - colW, B - info.h, ink(g), 'right')
-  // passo 7: blocchetti e puntini lungo l'asse
-  if (k.densita > 0.5) {
-    dotField(g, 'puntini', { x: m * 1.6, y: H * 0.08 + (num ? H * 0.2 : 0), w: W * 0.28, h: H * 0.18 }, U(g, 16), P.fg, 'x')
-    put(g, { kind: 'rect', name: 'tassello', x: dcx - R - U(g, 40), y: dcy + R * 0.2, w: U(g, 46), h: U(g, 46), fill: P.fg, angle: ang })
-  }
-  return finish(g, 'costruttivo', 'Costruttivista')
-}
+/** Ricetta di mattoni (gen/mattoni): asse inclinato con il disco, titolo in barra, foto nel disco, numero a contorno, puntini. */
+export const costruttivo = (g: G): Scene | null => ricetta(g, 'costruttivo')
 
 /* ═══ 5. Risograph ══════════════════════════════════════════════════════ */
 export function riso(g: G): Scene | null {

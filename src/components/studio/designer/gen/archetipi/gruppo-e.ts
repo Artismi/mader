@@ -10,24 +10,24 @@
  * più scale e tiene la più grande che entra: l'elenco riempie la tavola.
  * Le righe si chiamano voce_i, valore_i, testo_i (il critico le riconosce).
  */
-import type { FontSpec, Scene, SceneEl } from '../../types'
+import type { FontSpec, Scene } from '../../types'
 import {
-  type G, put, U, txt, lab, para, display, putLab, putPara, putDisplay, photo, finish, discard, textBox,
+  type G, put, U, txt, lab, para, display, putLab, putPara, putDisplay, photo, finish, discard,
   ctaText, mix, alpha, readable, contrast, darker, lighter,
 } from '../tools'
 import { fit, lineWidth, type Fit } from '../../text'
 import { wobblyPath, starPath, scribbleEllipse } from '../forme'
 import { type Riga, righe, conVoci, valoreProtagonista, elencoRiuscito } from './voci'
 import { riga1 } from './comune'
+import { ricetta } from '../mattoni'
 import {
-  carta as foglioCarta, cartaPer, nastro, nastroPer, timbro, codice, contatore, largoContatore, barra, sceglie, dettaglio, stratoGenerativo,
-  type Codice, type Avanzamento, type Contatore,
+  carta as foglioCarta, cartaPer, nastro, nastroPer, contatore, largoContatore, barra, sceglie, dettaglio, stratoGenerativo,
+  type Avanzamento, type Contatore,
 } from '../materia'
 
 type Sistema = (g: G) => Scene | null
 type Box = { x: number; y: number; w: number; h: number }
 type Pt = [number, number]
-type Text = Extract<SceneEl, { kind: 'text' }>
 
 /* ── attrezzi comuni ──────────────────────────────────────────────────── */
 const f1 = (n: number) => n.toFixed(1)
@@ -47,21 +47,7 @@ const STACCO = 12
 
 const scrivi = (g: G, name: string, f: Fit, font: FontSpec, x: number, y: number, color: string, o: { align?: 'left' | 'center' | 'right'; w?: number; angle?: number; deco?: boolean; opacity?: number } = {}) =>
   txt(g, { name, lines: f.lines, font, size: f.size, x, y, color, align: o.align ?? 'left', w: o.w ?? f.w, leading: f.leading ?? 1.22, tracking: f.tracking ?? 0.04, angle: o.angle || undefined, deco: o.deco, opacity: o.opacity })
-/** Il testo già piazzato con questo nome (per cerchiarlo, indicarlo). */
-const testo = (g: G, name: string) => g.els.find(e => e.kind === 'text' && e.name === name) as Text | undefined
-
-/**
- * Riferimento locale ruotato (un foglio appoggiato storto): le misure si fanno
- * in coordinate del foglio, il disegno in coordinate della tavola.
- */
-function foglio(cx: number, cy: number, w: number, h: number, deg: number) {
-  const a = (deg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a)
-  const P = (lx: number, ly: number): Pt => [cx + (lx - w / 2) * ca - (ly - h / 2) * sa, cy + (lx - w / 2) * sa + (ly - h / 2) * ca]
-  return { P, deg, w, h, ang: deg || undefined, corners: [P(0, 0), P(w, 0), P(w, h), P(0, h)] as Pt[] }
-}
-type Foglio = ReturnType<typeof foglio>
 const poly = (pts: Pt[]) => 'M ' + pts.map(p => `${f1(p[0])} ${f1(p[1])}`).join(' L ') + ' Z'
-const dentro = (g: G, pts: Pt[], pad: number) => pts.every(([x, y]) => x >= pad && y >= pad && x <= g.W - pad && y <= g.H - pad)
 /** Numero dal valore scritto ("12.400", "3,5", "38%"). */
 function numeroDa(v?: string) {
   if (!v) return NaN
@@ -72,186 +58,11 @@ function numeroDa(v?: string) {
 
 /* ═══ Scontrino ═════════════════════════════════════════════════════════ */
 /**
- * Uno scontrino di cassa: carta termica con i bordi a dente di sega, tutto in
- * caratteri di sistema, le voci come righe con i puntini guida e il valore a
- * destra, il totale (numero o invito) in negativo, il codice a barre, il
- * timbro e un valore cerchiato a penna. Varianti: 0 appena storto su un banco
- * a quadretti, 1 storto sopra la foto a tutta tavola, 2 accanto al titolo enorme.
+ * Uno scontrino di cassa, ora ricetta di mattoni (gen/mattoni/scontrino.ts):
+ * il banco (carta a dente di sega con voci, totale in negativo, codice), il
+ * titolo in cassa o fuori, la foto sotto, timbro, cerchiato, freccia, quadretti.
  */
-export function scontrino(g: G): Scene | null {
-  const v = variante(g, 3) === 1 && !g.photo ? 0 : variante(g, 3)
-  const sc = scontrinoCon(g, v)
-  if (sc || v === 2) return sc
-  // nei formati bassi lo scontrino con il titolo dentro spesso non entra: il titolo esce
-  g.els = []; g.letture = []
-  return scontrinoCon(g, 2)
-}
-function scontrinoCon(g: G, v: number): Scene | null {
-  const { W, H, m, T, B, P, k, s, c } = g
-  const rs = righe(g, { max: 7, dettagli: true })
-  if (!rs) return null
-  const titoloFuori = v === 2
-  const side = g.landscape
-  const font = mono(g)
-  const carta = P.dark ? '#f4f1e8' : contrast(P.bg, '#fbfaf6') < 1.08 ? '#efe9dc' : '#fbfaf6'
-  const inch = '#1d1d1b'
-  const segno = readable(carta, [P.acc, acc2(g), inch], 3.6)
-  const penna = readable(carta, [acc2(g), P.acc, '#2747c9'], 3)
-  const pw = side ? W * 0.4 : Math.min(W - 2 * m, W * (titoloFuori ? 0.6 : 0.72))
-  const pad = U(g, 40), inner = pw - 2 * pad
-  const dente = U(g, 16)
-  const verso = g.r.chance(0.5) ? -1 : 1
-  // il titolo fuori dalla carta (variante 2): misurato per primo, decide lo spazio dello scontrino
-  let tFuori: Fit | null = null
-  if (titoloFuori) {
-    tFuori = display(g, c.title, side ? W - 2 * m - pw - U(g, 60) : W - 2 * m, side ? (B - T) * 0.6 : (B - T) * 0.26, 170 + 80 * k.scala, 52, 4)
-    if (!tFuori) return no(g, 'titolo non entra')
-  }
-  const alto = titoloFuori && !side ? T + tFuori!.h + U(g, 50) : T
-  const avail = B - alto + U(g, 20)
-
-  /** Le parti dello scontrino a una scala: ognuna sa quanto è alta e come si disegna nel foglio. */
-  function costruisci(f: number) {
-    const parti: { h: number; draw: (F: Foglio, y: number) => void }[] = []
-    const centro = (ff: Fit, name: string, color: string, deco = false) => ({ h: ff.h, draw: (F: Foglio, y: number) => { const [x, yy] = F.P(pad, y); scrivi(g, name, ff, font, x, yy, color, { align: 'center', w: inner, angle: F.deg, deco }) } })
-    const tratteggio = () => ({ h: U(g, 8), draw: (F: Foglio, y: number) => { const a = F.P(pad, y + U(g, 4)), b = F.P(pw - pad, y + U(g, 4)); put(g, { kind: 'line', name: 'tratteggio', x1: a[0], y1: a[1], x2: b[0], y2: b[1], color: alpha(inch, 0.55), width: Math.max(1.5, U(g, 2.5)), dash: [U(g, 8), U(g, 7)] }) } })
-    const br = c.brand ? riga1(g, c.brand, font, inner, 30 * f, 18, { tracking: 0.18 }) : null
-    if (c.brand && !br) return null
-    if (br) parti.push(centro(br, 'brand', inch))
-    const intest = riga1(g, `scontrino n. ${String(1000 + (k.seme % 9000))} · cassa ${1 + (k.seme % 4)}`, font, inner, 15 * f, 12, { tracking: 0.1 })
-    if (intest) parti.push(centro(intest, 'intestazione', inch, true))
-    const kick = c.kicker ? riga1(g, c.kicker, font, inner, 22 * f, 16, { tracking: 0.12 }) : null
-    if (kick) parti.push(centro(kick, 'occhiello', segno))
-    parti.push(tratteggio())
-    if (!titoloFuori) {
-      const t = display(g, c.title, inner, avail * 0.3, (96 + 50 * k.scala) * f, 40, 3)
-      if (!t) return null
-      parti.push({ h: t.h, draw: (F, y) => { const [x, yy] = F.P(pad, y); putDisplay(g, 'titolo', t, x, yy, inch, 'center', inner, { angle: F.ang, su: carta }) } })
-      const body = !conVoci(g) ? para(g, c.body, inner, 3, 24 * Math.min(f, 1.3)) : null
-      if (body) parti.push({ h: body.h, draw: (F, y) => { const [x, yy] = F.P(pad, y); txt(g, { name: 'testo', lines: body.lines, font: s.text, size: body.size, x, y: yy, color: inch, align: 'center', w: inner, leading: body.leading ?? 1.4, angle: F.ang }) } })
-      parti.push(tratteggio())
-    }
-    // le righe: numero, nome a sinistra, valore a destra, puntini guida in mezzo, spiegazione sotto
-    const rsz = (rs!.length > 5 ? 24 : 28) * f
-    const numW = lineWidth('00  ', font, rsz * g.u, 0.04)
-    let messe = 0, testi = 0
-    for (const [i, r] of rs!.entries()) {
-      const vf = r.valore ? riga1(g, r.valore, font, inner * 0.4, rsz, 18, { tracking: 0.02 }) : null
-      const nf = riga1(g, r.nome, font, inner - (vf ? vf.w + U(g, 40) : 0) - numW, rsz, 18, { lines: 2, lettura: true })
-      if (!nf) continue
-      const tf = r.testo ? para(g, r.testo, inner - numW, 2, 22 * Math.min(f, 1.25)) : null
-      messe++
-      if (tf) testi++
-      const h = nf.h + (tf ? tf.h + U(g, STACCO) : 0)
-      parti.push({ h, draw: (F, y) => {
-        const [nx, ny] = F.P(pad, y)
-        const nn = riga1(g, r.n, font, numW, nf.size / g.u, 16, { tracking: 0.04 })
-        if (nn) scrivi(g, `numero_${i}`, nn, font, nx, ny, segno, { angle: F.deg })
-        const [x, yy] = F.P(pad + numW, y)
-        scrivi(g, `voce_${i}`, nf, font, x, yy, inch, { angle: F.deg })
-        if (vf) {
-          scrivi(g, `valore_${i}`, vf, font, nx, ny, inch, { align: 'right', w: inner, angle: F.deg })
-          const lw = lineWidth(nf.lines[nf.lines.length - 1], font, nf.size, nf.tracking ?? 0.04)
-          const yb = y + nf.size * (nf.lines.length - 1) * (nf.leading ?? 1.22) + nf.size * 0.95
-          const a = F.P(pad + numW + lw + U(g, 14), yb), b = F.P(pw - pad - vf.w - U(g, 14), yb)
-          if (b[0] - a[0] > U(g, 24)) put(g, { kind: 'line', name: 'puntini', x1: a[0], y1: a[1], x2: b[0], y2: b[1], color: alpha(inch, 0.5), width: U(g, 3), dash: [U(g, 2), U(g, 8)] })
-        }
-        if (tf) { const [tx, ty] = F.P(pad + numW, y + nf.h + U(g, STACCO)); txt(g, { name: `testo_${i}`, lines: tf.lines, font: s.text, size: tf.size, x: tx, y: ty, color: '#3a3936', leading: tf.leading ?? 1.35, angle: F.ang }) }
-      } })
-    }
-    // il totale: il numero protagonista o l'invito, in negativo
-    const tot = c.numero?.trim() || (c.cta ? ctaText(c) : '')
-    const totF = tot ? riga1(g, tot, font, c.numero ? inner * 0.6 : inner - U(g, 40), (c.numero ? 40 : 26) * f, 18, { tracking: 0.06 }) : null
-    if (totF) {
-      parti.push(tratteggio())
-      const lt = c.numero ? riga1(g, 'Totale', font, inner * 0.35, 22 * f, 16) : null
-      const bh = totF.h + U(g, 36)
-      parti.push({ h: bh, draw: (F, y) => {
-        const [x, yy] = F.P(pad - U(g, 8), y)
-        put(g, { kind: 'rect', name: 'totale', x, y: yy, w: inner + U(g, 16), h: bh, fill: inch, angle: F.ang })
-        const [tx, ty] = F.P(pad + U(g, 14), y + U(g, 18))
-        if (c.numero) {
-          if (lt) { const [lx, ly] = F.P(pad + U(g, 14), y + U(g, 18) + (totF.h - lt.h) / 2); scrivi(g, 'etichetta_totale', lt, font, lx, ly, carta, { angle: F.deg, deco: true }) }
-          const [rx, ry] = F.P(pad, y + U(g, 18))
-          scrivi(g, 'numero', totF, font, rx, ry, carta, { align: 'right', w: inner - U(g, 14), angle: F.deg })
-        } else scrivi(g, 'invito', totF, font, tx, ty, carta, { angle: F.deg })
-      } })
-    }
-    const cta2 = c.numero && c.cta ? riga1(g, ctaText(c), font, inner, 22 * f, 16) : null
-    if (cta2) parti.push(centro(cta2, 'invito', segno))
-    const tipoCodice = sceglie<Codice>(g, 'codice', ['barre', 'ean', 'qr'])
-    const bcH = U(g, (tipoCodice === 'qr' ? 120 : tipoCodice === 'ean' ? 74 : 60) * Math.min(f, 1.3))
-    parti.push({ h: bcH, draw: (F, y) => {
-      const w = tipoCodice === 'qr' ? bcH : inner * 0.76
-      codice(g, { P: F.P, deg: F.deg, b: { x: 0, y: 0, w: pw, h: F.h }, corners: F.corners }, { x: pad + (inner - w) / 2, y, w, h: bcH }, tipoCodice, inch)
-    } })
-    const saluto = riga1(g, 'grazie e arrivederci', font, inner, 16 * f, 12, { tracking: 0.14 })
-    if (saluto) parti.push(centro(saluto, 'saluto', inch, true))
-    const gap = U(g, 20 * Math.min(f, 1.4))
-    const ph = parti.reduce((a, p) => a + p.h, 0) + gap * (parti.length - 1) + 2 * pad + 2 * dente
-    return { parti, ph, gap, messe, testi }
-  }
-  let mis: NonNullable<ReturnType<typeof costruisci>> | null = null
-  for (const f of SCALE) { const x = costruisci(f); if (x && x.ph <= avail) { mis = x; break } }
-  if (!mis) return no(g, 'scontrino troppo lungo')
-  if (!elencoRiuscito(g, rs, mis.messe, mis.testi)) return null
-  const { parti, ph, gap } = mis
-  // dove: storto al centro, sulla foto, o accanto al titolo
-  const deg = titoloFuori ? (k.energia - 0.5) * 5 : v === 1 ? verso * (1.6 + 3 * k.energia) : k.energia > 0.15 ? verso * (1.1 + 1.8 * k.energia) : 0
-  const cx = titoloFuori || side ? W - m - pw / 2 - U(g, 10) : W / 2
-  const cy = titoloFuori && !side ? alto + Math.min(ph, B - alto) / 2 : (T + B) / 2
-  const F = foglio(cx, cy, pw, ph, deg)
-  if (!dentro(g, F.corners, m * 0.2)) return no(g, 'scontrino fuori tavola')
-  // fondo: la foto a tutta tavola (storto, o in orizzontale) o il banco a quadretti
-  if (g.photo && (v === 1 || side)) photo(g, 'foto', side && v !== 1 ? { x: 0, y: 0, w: W * 0.56, h: H } : { x: 0, y: 0, w: W, h: H })
-  else {
-    let d = ''
-    const q = U(g, 44)
-    for (let x = q; x < W; x += q) d += `M ${f1(x)} 0 L ${f1(x)} ${f1(H)} `
-    for (let y = q; y < H; y += q) d += `M 0 ${f1(y)} L ${f1(W)} ${f1(y)} `
-    put(g, { kind: 'path', name: 'trama', d, fill: 'transparent', stroke: alpha(inkSu(g, P.bg), 0.08), sw: Math.max(1, g.u) })
-    if (g.photo && titoloFuori) {
-      // la foto al vivo sotto il titolo, accanto allo scontrino
-      const py = alto
-      const pwid = Math.min(...F.corners.map(p => p[0])) - U(g, 30)
-      if (pwid > W * 0.22 && B - py > H * 0.2) photo(g, 'foto', { x: 0, y: py, w: pwid, h: H - py })
-    }
-  }
-  // la carta: ombra, dente di sega in alto e in basso
-  const teeth = (y0: number, dir: number) => {
-    const n = Math.max(6, Math.round(pw / (dente * 1.6)))
-    const out: Pt[] = []
-    for (let i = 0; i <= n; i++) out.push(F.P((pw * i) / n, y0 + (i % 2 ? dir * dente : 0)))
-    return out
-  }
-  const shape = [...teeth(0, 1), ...teeth(ph, -1).reverse()]
-  const sotto = g.els.length
-  const scelte = cartaPer(g, 'scontrino')
-  foglioCarta(g, { x: cx - pw / 2, y: cy - ph / 2, w: pw, h: ph }, deg, carta, { name: 'carta', sagoma: poly(shape), rientro: dente, ombra: scelte.ombra === 'netta' ? 'piatta' : scelte.ombra, trama: scelte.trama, piega: scelte.piega === 'diagonale' ? 'orizzontale' : scelte.piega })
-  let y = dente + pad
-  for (const p of parti) { p.draw(F, y); y += p.h + gap }
-  // a penna: il valore più importante cerchiato (o l'occhiello)
-  const bersaglio = testo(g, conVoci(g) && valoreProtagonista(g) ? 'valore_0' : rs.some(r => r.valore) ? `valore_${rs.length - 1}` : 'occhiello')
-  if (bersaglio) {
-    const b = textBox(bersaglio)
-    put(g, { kind: 'path', name: 'cerchiato', d: scribbleEllipse(g.r, { x: b.x - U(g, 6), y: b.y, w: b.w + U(g, 12), h: b.h }), fill: 'transparent', stroke: penna, sw: U(g, 3.5) })
-  }
-  // timbro sul fondo dello scontrino, a cavallo del bordo
-  if (k.densita > 0.35 || k.energia > 0.5) {
-    const [sx, sy] = F.P(pw * 0.78, ph - dente - pad - U(g, 40))
-    timbro(g, g.c.tipo === 'menu' ? 'pagato' : g.c.tipo === 'dati' ? 'verificato' : 'originale', sx, sy, -12 - 10 * k.energia, readable(carta, [P.acc, acc2(g), '#c0392b'], 3), U(g, 26))
-  }
-  stratoGenerativo(g, [], { at: sotto })
-  if (tFuori) {
-    const ty = side ? T + (B - T - tFuori.h) * (0.3 + 0.3 * k.energia) : T
-    putDisplay(g, 'titolo', tFuori, m, ty, inkSu(g, P.bg, 3), 'left', tFuori.w, { caps: true })
-    if (side) {
-      const x1 = m + tFuori.w * 0.55, y1 = ty + tFuori.h + U(g, 40), x2 = Math.min(...F.corners.map(p => p[0])) - U(g, 30), y2 = y1 + U(g, 80)
-      if (x2 > x1 + U(g, 80) && y2 < B) put(g, { kind: 'path', name: 'freccia', d: wobblyPath(g.r, x1, y1, x2, y2, U(g, 6)), fill: 'transparent', stroke: accSu(g, P.bg, 3), sw: U(g, 5) })
-    }
-  }
-  return finish(g, 'scontrino', 'Scontrino', { specchio: false })
-}
+export const scontrino = (g: G): Scene | null => ricetta(g, 'scontrino')
 
 /* ═══ Lavagna ═══════════════════════════════════════════════════════════ */
 /**
