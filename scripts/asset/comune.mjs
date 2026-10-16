@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
+import { execFile } from 'node:child_process'
 
 export const here = path.dirname(fileURLToPath(import.meta.url))
 export const repo = path.resolve(here, '../..')
@@ -23,16 +24,22 @@ export const leggiJson = (f, d) => (fs.existsSync(f) ? JSON.parse(fs.readFileSyn
 export const scriviJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 1) + '\n') }
 
 /** Scarica con cache su disco (i metadati non si richiedono due volte). */
-export async function scarica(url, file, { testo = false, headers = {} } = {}) {
+export async function scarica(url, file, { testo = false, headers = {}, curl = false } = {}) {
   if (file && fs.existsSync(file) && fs.statSync(file).size > 0) return testo ? fs.readFileSync(file, 'utf8') : fs.readFileSync(file)
-  for (let i = 0; i < 3; i++) {
+  // GitLab risponde 406 al fetch di Node (intestazioni di undici): lì si passa da curl
+  if (curl) {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await new Promise((ok, ko) => execFile('curl', ['-sfL', '--retry', '3', '--retry-delay', '10', '-o', file, url], e => (e ? ko(new Error(`curl ${url}`)) : ok())))
+    return testo ? fs.readFileSync(file, 'utf8') : fs.readFileSync(file)
+  }
+  for (let i = 0; i < 4; i++) {
     try {
-      const r = await fetch(url, { headers, signal: AbortSignal.timeout(60000) })
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(240000) })
       if (!r.ok) throw new Error(`${r.status} ${url}`)
       const b = Buffer.from(await r.arrayBuffer())
       if (file) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, b) }
       return testo ? b.toString('utf8') : b
-    } catch (e) { if (i === 2) throw e; await new Promise(r => setTimeout(r, 1500 * (i + 1))) }
+    } catch (e) { if (i === 3 || /^40[46] /.test(e.message)) throw e; await new Promise(r => setTimeout(r, (/^429 /.test(e.message) ? 15000 : 1500) * (i + 1))) }
   }
 }
 

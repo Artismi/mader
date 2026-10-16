@@ -57,6 +57,8 @@ export interface MisureCarattere {
   grazie: boolean
   /** rotondità della o (larghezza/altezza) */
   tondo: number
+  /** spessore dell'asta della I a metà altezza, in em */
+  spessore: number
   mono: boolean
   stencil: boolean
   /** assi variabili (wght, wdth, opsz, …) */
