@@ -129,3 +129,11 @@ test('con controlla l\'occhio guarda anche finaliste tutte sicure, una volta sol
   assert.equal(oc.conta.chiamate, 1)
   assert.equal(r.scelte[0].id, fin[1].x.id)
 })
+
+test('le note del critico pesano sul voto secondo la gravità', async () => {
+  const { pesoDifetti } = await carica('critico.ts')
+  assert.equal(pesoDifetti([]), 0)
+  assert.ok(pesoDifetti(["manca l'invito"]) > pesoDifetti(['brand quasi allineato (5u)']))
+  assert.ok(pesoDifetti(['manca il titolo']) >= 30)
+  assert.equal(pesoDifetti(['nota mai vista']), 2)
+})

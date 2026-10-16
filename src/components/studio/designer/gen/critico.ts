@@ -245,16 +245,35 @@ export function esamina(g: G): Esame {
   // voto severo: la media pesata passa per una curva (tutto "corretto" non basta per l'eccellenza),
   // ogni difetto toglie punti, un criterio debole mette un tetto
   const media = (Object.keys(PESI) as Criterio[]).reduce((a, k) => a + PESI[k] * criteri[k], 0)
-  let voto = 100 * (media / 10) ** 2.4 - doppia(Math.min(difetti.length, 6), 1.5)
+  // ogni difetto toglie punti secondo la gravità (GRAVITA); i vuoti in proporzione alla loro ampiezza
+  let voto = 100 * (media / 10) ** 2.4 - pesoDifetti(difetti) - vuoti.reduce((a, z) => a + 4 + 40 * Math.max(0, z - 0.1), 0)
   const tetti: [boolean, number][] = [
     [contenuto < 8, 50], [leggibilita < 6, 50], [Math.min(...Object.values(criteri)) < 4, 58],
     [sperimentazione < 6, 66], [gerarchia < 5.5, 64], [Math.min(...Object.values(criteri)) < 6, 70],
   ]
   for (const [cond, max] of tetti) if (cond) voto = Math.min(voto, max)
+  // blocchi: difetti che da soli non lasciano consegnare la tavola
+  const blocca = (zone[0] ?? 0) > 0.4 || (!!c.cta && difetti.includes("manca l'invito"))
+  if (blocca) voto = Math.min(voto, SOGLIA - 1)
   voto = Math.max(0, Math.round(voto))
   const promossa = voto >= SOGLIA
   const misure: Misure = { ...misureLibere(g, texts), densita: 1 - zone.reduce((a, z) => a + z, 0), armonia: armonia(vivi), contrastoMin: lett.length ? Math.min(...lett.map(l => l.contrasto)) : 21 }
   return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g), misure }
+}
+
+/** Quanto pesa ogni nota del critico sul voto (punti su 100). La prima regola che combacia vale. */
+const GRAVITA: [RegExp, number][] = [
+  [/^manca il titolo/, 30], [/^manca il brand/, 12], [/^manca l'invito/, 10], [/^manca la voce/, 8],
+  [/si legge a fatica/, 8], [/troppo piccolo per il telefono/, 6],
+  [/^gerarchia debole/, 6], [/parole del titolo troppo piccole/, 6], [/frammenti del titolo/, 5], [/troppi corpi/, 3],
+  [/quasi allineato/, 3], [/troppi assi/, 3], [/stretto nel suo riquadro/, 3], [/troppo vicini/, 3],
+  [/colori quasi uguali/, 3], [/troppe tinte/, 3], [/palette dispersa/, 3], [/di colore senza funzione/, 3], [/senza un punto d'attenzione/, 4],
+  [/nessun segno/, 4], [/troppi segni/, 3], [/decorazione rumorosa/, 4], [/segn[oi] isolat/, 3], [/pochi gesti/, 4],
+  [/stile lontano dal soggetto/, 12], [/stile estraneo al soggetto/, 40],
+  [/non progettat/, 0], // i vuoti pesano a parte, in proporzione all'ampiezza
+]
+export function pesoDifetti(difetti: string[]) {
+  return difetti.reduce((a, d) => a + (GRAVITA.find(([re]) => re.test(d))?.[1] ?? 2), 0)
 }
 
 /** Testi fuori tavola o sovrapposti, margine minimo, equilibrio dei pesi visivi. */
