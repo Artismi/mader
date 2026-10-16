@@ -10,11 +10,16 @@
  *     i modelli che hanno finito la quota si saltano per un po'.
  * Solo lato server: le chiavi non escono dal portale.
  */
-import { anthropic } from '@ai-sdk/anthropic'
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { generateObject, generateText, type LanguageModel } from 'ai'
 import type { z } from 'zod'
 import { google } from '@/lib/ai/google'
+
+// L'indirizzo di Anthropic è fisso: un ANTHROPIC_BASE_URL ereditato dall'ambiente (per esempio
+// da un altro strumento che ha avviato il server) manderebbe ogni chiamata altrove, con un 404 muto.
+// Per un proxy voluto si usa CREATIVE_OS_ANTHROPIC_BASE_URL.
+const anthropic = createAnthropic({ baseURL: process.env.CREATIVE_OS_ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1' })
 import { config } from '@/lib/db'
 import { getOpenRouterKey, getOpenRouterModels, type AiTask } from '@/lib/ai/model-provider'
 import { idState, markRetired, refreshStaleCatalogs, type IdState } from '@/lib/ai/model-catalog'
