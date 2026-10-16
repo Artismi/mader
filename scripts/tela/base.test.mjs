@@ -234,6 +234,7 @@ t('copia e incolla di più oggetti: diventano oggetti separati', async T => {
   assert.equal(os.length, 4, JSON.stringify(os.map(o => o.type)))
   assert.ok(os.every(o => o.type === 'rect'))
   assert.equal(new Set(os.map(o => o.id)).size, 4, 'id unici')
+  near(os[2].bx, os[0].bx + 20, 0.5, 'incollato sfalsato di 20'); near(os[3].by, os[1].by + 20, 0.5)
 })
 
 t('duplica (Ctrl+D) più oggetti', async T => {

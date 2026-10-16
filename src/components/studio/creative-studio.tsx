@@ -313,6 +313,7 @@ function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
   return { x: Math.round(r.left - o.x), y: Math.round(r.top - o.y), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) }
 }
 import { cutout } from './compose/cutout'
+import { copySelection, cutSelection, pasteClip, duplicateSelection, deleteSelection, type Clip } from './editor/clipboard'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -410,7 +411,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // Inspector (position/size/rotation of selected object)
   const [insp, setInsp] = useState<{ x: number; y: number; w: number; h: number; r: number } | null>(null)
   // Clipboard
-  const clipboardRef = useRef<fabric.FabricObject | null>(null)
+  const clipboardRef = useRef<Clip | null>(null)
   // Dropdown trigger refs (for DropdownPortal positioning)
   const artboardBtnRef = useRef<HTMLButtonElement | null>(null)
   const exportBtnRef = useRef<HTMLButtonElement | null>(null)
@@ -1140,26 +1141,20 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         else if (objs.length > 1) canvas.setActiveObject(new (fabric as any).ActiveSelection(objs, { canvas }))
         canvas.requestRenderAll(); return
       }
-      // Ctrl+C — copy
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        const a = canvas.getActiveObject(); if (!a) return
-        a.clone().then(cl => { clipboardRef.current = cl }); return
+      // Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+D: più oggetti diventano oggetti separati
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC' && !e.shiftKey && !e.altKey) {
+        copySelection(canvas).then(cl => { if (cl) clipboardRef.current = cl }); return
       }
-      // Ctrl+V — paste
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-        if (!clipboardRef.current) return
-        clipboardRef.current.clone().then(cl => {
-          cl.set({ left: (cl.left || 0) + 20, top: (cl.top || 0) + 20, evented: true })
-          getObjId(cl); canvas.add(cl); canvas.setActiveObject(cl); canvas.requestRenderAll()
-          clipboardRef.current = cl // allow repeated pastes
-        }); return
-      }
-      // Ctrl+D — duplicate
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') {
         e.preventDefault()
-        const a = canvas.getActiveObject()
-        if (a) a.clone().then(cl => { cl.set({ left: (a.left || 0) + 20, top: (a.top || 0) + 20 }); getObjId(cl); canvas.add(cl); canvas.setActiveObject(cl) })
-        return
+        cutSelection(canvas).then(cl => { if (cl) clipboardRef.current = cl }); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV' && !e.shiftKey) {
+        pasteClip(canvas, clipboardRef.current); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyD' && !e.shiftKey) {
+        e.preventDefault()
+        duplicateSelection(canvas); return
       }
       // Ctrl+0 — fit to screen
       if ((e.ctrlKey || e.metaKey) && e.key === '0') {
@@ -1175,11 +1170,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (bzEditRef.current) { exitBzEdit(); return }
         if (toolRef.current === 'pen') { finalizePenPath(); return }
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const objs = canvas.getActiveObjects()
-        if (objs.length) { objs.forEach(o => canvas.remove(o)); canvas.discardActiveObject(); canvas.requestRenderAll() }
-        return
-      }
+      if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelection(canvas); return }
       if (e.key === '[' && (e.ctrlKey || e.metaKey)) { layerSendToBack(); e.preventDefault(); return }
       if (e.key === ']' && (e.ctrlKey || e.metaKey)) { layerBringToFront(); e.preventDefault(); return }
       if (e.key === '[') { layerMoveDown(); e.preventDefault(); return }
@@ -4585,12 +4576,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       )}
       {ctxMenu && typeof document !== 'undefined' && createPortal(
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y}
-          onDuplicate={() => {
-            const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return
-            obj.clone().then((cl: fabric.FabricObject) => { cl.set({ left: (cl.left || 0) + 20, top: (cl.top || 0) + 20 }); canvas!.add(cl); canvas!.setActiveObject(cl) })
-            setCtxMenu(null)
-          }}
-          onDelete={() => { const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return; canvas!.remove(obj); setCtxMenu(null) }}
+          onDuplicate={() => { if (fabricRef.current) duplicateSelection(fabricRef.current); setCtxMenu(null) }}
+          onDelete={() => { if (fabricRef.current) deleteSelection(fabricRef.current); setCtxMenu(null) }}
           onBringForward={() => { layerMoveUp(); setCtxMenu(null) }}
           onSendBackward={() => { layerMoveDown(); setCtxMenu(null) }}
           onBringToFront={() => { layerBringToFront(); setCtxMenu(null) }}
