@@ -807,12 +807,19 @@ function colonne(g: G): Scene | null {
     const lead = 1.43, bz0 = g.sc.testo
     const drop = Math.round(bz0 * (lead * 2 + 1.13) * 1.0)
     const rest = body.slice(1)
-    const b = para(g, rest, w - drop * 0.82, maxLines, 26)
-    if (!b) return -1
     const ch = body[0].toUpperCase()
     const dz = drop / metrics(s.display).cap * 0.98
+    // il testo parte subito dopo l'inchiostro della lettera: un rientro fisso la staccava dal resto della parola ("A llenamento")
+    const ind = lineWidth(ch, s.display, dz) + U(g, 8)
+    // se la parola resta di una lettera sola dopo il capolettera, niente capolettera: si legge meglio intero
+    if (!/^\p{L}{2}/u.test(body)) {
+      const t = para(g, body, w, maxLines, 26)
+      return t ? putPara(g, 'testo', t, x, yy, C.fg).h : -1
+    }
+    const b = para(g, rest, w - ind, maxLines, 26)
+    if (!b) return -1
     txt(g, { name: 'capolettera', lines: [ch], font: s.display, size: dz, x, y: yy + b.size * FIRST_BASE - metrics(s.display).cap * b.size - (dz * FIRST_BASE - metrics(s.display).cap * dz), color: C.acc, leading: 1, deco: true })
-    putPara(g, 'testo', b, x + drop * 0.82, yy, C.fg)
+    putPara(g, 'testo', b, x + ind, yy, C.fg)
     return Math.max(b.h, drop)
   }
   /** elenco "in breve": dettagli numerati e invito */
