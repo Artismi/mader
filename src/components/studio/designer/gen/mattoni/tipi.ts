@@ -68,7 +68,7 @@ interface Base { id: string; nome: string; ricetta: string; serve?: string[]; of
 export interface Ossatura extends Base { cat: 'ossatura'; voci?: boolean; fai: (g: G, piano: Piano, p: Param, gen: Genoma) => boolean }
 export interface MTitolo extends Base { cat: 'titolo'; forme: FormaZona[]; fai: (g: G, piano: Piano, z: Zona, p: Param) => Titolo | null }
 export interface MFoto extends Base { cat: 'foto'; fai: (g: G, piano: Piano, p: Param) => boolean }
-export interface MSegno extends Base { cat: 'dispositivi' | 'finiture' | 'intreccio'; /** prima del titolo (sotto di lui) */ prima?: boolean; dove?: 'fondo' | 'sotto'; fai: (g: G, piano: Piano, p: Param) => boolean }
+export interface MSegno extends Base { cat: 'dispositivi' | 'finiture' | 'intreccio'; /** l'idea che lo giustifica (C2): con un'idea, entra solo se motivato */ motivo?: string; /** prima del titolo (sotto di lui) */ prima?: boolean; dove?: 'fondo' | 'sotto'; fai: (g: G, piano: Piano, p: Param) => boolean }
 export type Mattone = Ossatura | MTitolo | MFoto | MSegno
 
 export interface Gene { id: string; p?: Param }
@@ -130,6 +130,8 @@ export function componi(g: G, gen: Genoma, catalogo: Record<string, Mattone>, o:
     for (const x of lista) {
       const m = catalogo[x.id] as MSegno | undefined
       if (!m || !!m.prima !== prima || !ok(m)) continue
+      // con un'idea gli ornamenti entrano solo se l'idea li motiva
+      if (g.k.idea && m.motivo && !g.k.idea.motivi.includes(m.motivo)) continue
       if (conRng(g, m.id, () => infila(g, piano, m.dove ?? 'fine', () => m.fai(g, piano, x.p ?? {})))) usati.push(`${m.cat}:${m.id}`)
     }
   }

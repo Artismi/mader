@@ -7,6 +7,7 @@ import * as fabric from 'fabric'
 import { generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, ammesso, type Knobs } from '@/components/studio/designer/gen'
 import { styleById } from '@/components/studio/designer/styles'
 import { incrocia } from '@/components/studio/designer/gen/incrocio'
+import { concetti, simulato } from '@/components/studio/designer/gen/concetto'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
@@ -50,17 +51,20 @@ async function run(job: Job): Promise<Result[]> {
 }
 
 /** Le proposte come le vede lo Studio: vivaio ampio, critico, selezione delle migliori diverse. */
-async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number }> {
+async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number; idee: string[]; concetto: { chiamate: number; token: number } }> {
   ;(globalThis as { __designerSink?: string[] }).__designerSink = []
   const t0 = performance.now()
-  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
+  // C1 a secco: la chiamata del concetto simulata (risponde con le regole), contata
+  const conta = { chiamate: 0, token: 0 }
+  const idee = (job as { senzaIdee?: boolean }).senzaIdee ? false as const : await concetti(job.content, { chiedi: simulato(job.content, conta) })
+  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee })
   const items: Result[] = []
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema] })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema] })
   }
-  return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri }
+  return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta }
 }
 
 /** Gli ibridi dell'incrocio dei mattoni (V1), da soli: per guardarli in un foglio. */

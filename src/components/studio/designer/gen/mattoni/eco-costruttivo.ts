@@ -29,7 +29,7 @@ export const fasce: Ossatura = {
     const { W, m, T, B } = g
     const tickH = U(g, par(p, 'nastro', 58))
     // senza il nastro il brand sta nella fascia alta, fermo
-    if (!gen.dispositivi.some(d => d.id === 'nastro')) {
+    if (!gen.dispositivi.some(d => d.id === 'nastro') || (g.k.idea && !g.k.idea.motivi.includes('ripetizione'))) {
       const b = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  ·  '), W - 2 * m)
       if (b) putLab(g, 'brand', b, m, Math.max(m * 0.6, (tickH - b.h) / 2), g.P.fg)
     }
@@ -127,7 +127,7 @@ export const tondo: MFoto = {
 }
 
 export const nastro: MSegno = {
-  id: 'nastro', nome: 'Nastro scorrevole', ricetta: 'eco', cat: 'dispositivi', serve: ['fascia-alta'],
+  id: 'nastro', nome: 'Nastro scorrevole', ricetta: 'eco', cat: 'dispositivi', serve: ['fascia-alta'], motivo: 'ripetizione',
   fai(g, piano) {
     const b = piano.ancore.nastro as Box
     const tape = [g.c.brand, g.c.kicker].filter(Boolean).join('  ✦  ') || g.c.title
@@ -137,7 +137,7 @@ export const nastro: MSegno = {
 }
 
 export const stella: MSegno = {
-  id: 'stella', nome: 'Stella', ricetta: 'eco', cat: 'dispositivi', param: { attivo: [0, 1] },
+  id: 'stella', nome: 'Stella', ricetta: 'eco', cat: 'dispositivi', motivo: 'decoro', param: { attivo: [0, 1] },
   fai(g, piano, p) {
     const a = piano.ancore.stella as [number, number] | undefined
     if (!a || par(p, 'attivo', g.k.densita) <= 0.6) return false
@@ -149,7 +149,7 @@ export const stella: MSegno = {
 /* ═══ Costruttivista ════════════════════════════════════════════════════ */
 export const asse: Ossatura = {
   id: 'asse', nome: 'Asse inclinato', ricetta: 'costruttivo', cat: 'ossatura', offre: ['riga', 'disco', 'angolo-numero'],
-  param: { angolo: [-40, -8], disco: [0.28, 0.5], discoX: [0.55, 0.75] },
+  param: { angolo: [-40, -8], disco: [0.28, 0.5], discoX: [0.55, 0.75], titolo: [0.9, 1.6] },
   fai(g, piano, p, gen) {
     const { W, H, m, T, B, P, s, k, r } = g
     const ang = par(p, 'angolo', -(14 + k.energia * 22) + r.range(-4, 4))
@@ -168,8 +168,8 @@ export const asse: Ossatura = {
     const brand = lab(g, [g.c.brand, g.c.kicker].filter(Boolean).join('  /  '), H * 0.5)
     // un titolo che non sta in una barra non deve arrivare al brand in verticale sul bordo
     const libero = gen.titolo.id === 'barra' ? Infinity : 2 * (bcx - m - (brand ? brand.h + U(g, 30) : 0))
-    const tw = Math.min(visible * (0.7 + 0.25 * k.scala), libero), th = H * 0.3
-    const t = piano.misuraTitolo({ x: bcx - tw / 2, y: bcy - th / 2, w: tw, h: th, forma: 'riga', angle: ang, maxSize: 190, minSize: 40, maxLines: one ? 1 : 2, caps: s.displayUpper || k.energia > 0.5 })
+    const tw = Math.min(visible * Math.min(1.1, (0.7 + 0.25 * k.scala) * par(p, 'titolo', 1)), libero), th = H * 0.3 * Math.min(1.6, par(p, 'titolo', 1))
+    const t = piano.misuraTitolo({ x: bcx - tw / 2, y: bcy - th / 2, w: tw, h: th, forma: 'riga', angle: ang, maxSize: 190 * par(p, 'titolo', 1), minSize: 40, maxLines: one ? 1 : 2, caps: s.displayUpper || k.energia > 0.5 })
     if (!t) return false
     piano.titolo = t; piano.titoloXY = [bcx - t.w / 2, bcy - t.h / 2]
     piano.ancore.asse = [bcx, bcy]
@@ -234,7 +234,7 @@ export const disco: MFoto = {
 }
 
 export const numeroContorno: MSegno = {
-  id: 'numero-contorno', nome: 'Numero gigante a contorno', ricetta: 'costruttivo', cat: 'dispositivi', serve: ['angolo-numero'], prima: true,
+  id: 'numero-contorno', nome: 'Numero gigante a contorno', ricetta: 'costruttivo', cat: 'dispositivi', serve: ['angolo-numero'], prima: true, motivo: 'numero',
   fai(g, piano) {
     const num = g.c.numero || ''
     const b = piano.ancore.numero as Box
@@ -246,7 +246,7 @@ export const numeroContorno: MSegno = {
 }
 
 export const puntini: MSegno = {
-  id: 'puntini', nome: 'Puntini e tassello', ricetta: 'costruttivo', cat: 'dispositivi', param: { attivo: [0, 1] },
+  id: 'puntini', nome: 'Puntini e tassello', ricetta: 'costruttivo', cat: 'dispositivi', motivo: 'ritmo', param: { attivo: [0, 1] },
   fai(g, piano, p) {
     const { W, H, m, P } = g
     if (par(p, 'attivo', g.k.densita) <= 0.5) return false
@@ -254,5 +254,36 @@ export const puntini: MSegno = {
     const t = piano.ancore.tassello as [number, number] | undefined, ang = (piano.ancore.angolo as [number, number] | undefined)?.[0] ?? 0
     if (t) put(g, { kind: 'rect', name: 'tassello', x: t[0], y: t[1], w: U(g, 46), h: U(g, 46), fill: P.fg, angle: ang })
     return true
+  },
+}
+
+/* ═══ Gesti dell'idea (C2) ══════════════════════════════════════════════ */
+/**
+ * La parola come immagine: la parola dell'idea (o la chiave del titolo) così
+ * grande che i bordi la tagliano, in una sola tinta; sotto, il titolo intero
+ * leggibile e piccolo. La copia gigante è decorativa: si legge il titolo.
+ */
+export const gigante: MTitolo = {
+  id: 'gigante', nome: 'Parola come immagine', ricetta: 'eco', cat: 'titolo', forme: ['campo', 'riga'],
+  param: { taglio: [1.05, 1.5] },
+  fai(g, _piano, z, p) {
+    const { W, P, s } = g
+    const parola = up(g.k.idea?.parola?.trim() || keyword(g), true)
+    const full = display(g, g.c.title, z.w, Math.max(U(g, 90), z.h * 0.28), 96, 36, 2)
+    if (!full) return null
+    const alto = z.h - full.h - U(g, 28)
+    const size = Math.min(sizeForWidth(parola, s.impact, W * par(p, 'taglio', 1.25), -0.03), alto / 0.86)
+    if (!(size > 120 * g.u)) { no(g, 'parola gigante: zona troppo bassa'); return null }
+    const pw = lineWidth(parola, s.impact, size, -0.03)
+    const tinta = readable(P.bg, [P.acc, P.acc2, P.fg], 1.6)
+    // la riga gigante sale di un quinto del corpo: le lettere toccano il titolo da sopra
+    const gy = z.y - size * 0.12
+    const ty = z.y + size * 0.86 + U(g, 20)
+    return {
+      w: z.w, h: z.h,
+      occupa: () => [{ x: z.x, y: ty, w: full.w, h: full.h }, { x: (W - pw) / 2, y: gy, w: pw, h: size }],
+      dietro: () => { txt(g, { name: 'parola', lines: [parola], font: s.impact, size, x: (W - pw) / 2, y: gy, color: tinta, tracking: -0.03, leading: 0.9, deco: true }) },
+      davanti: () => { putDisplay(g, 'titolo', full, z.x, ty, P.fg) },
+    }
   },
 }

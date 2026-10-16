@@ -32,7 +32,7 @@ export const varianteScontrino = (g: G) => (variante(g, 3) === 1 && !g.photo ? 0
 
 export const banco: Ossatura = {
   id: 'banco', nome: 'Scontrino sul banco', ricetta: 'scontrino', cat: 'ossatura', voci: true, offre: ['carta', 'foto-rett'],
-  param: { variante: [0, 2], larghezza: [0.55, 0.8] },
+  param: { variante: [0, 2], larghezza: [0.4, 0.8] },
   fai(g, piano, p, gen) {
     const { W, H, m, T, B, P, k, s, c } = g
     const rs = righe(g, { max: 7, dettagli: true })
@@ -213,7 +213,7 @@ export const piena: MFoto = {
 }
 
 export const quadretti: MSegno = {
-  id: 'quadretti', nome: 'Banco a quadretti', ricetta: 'scontrino', cat: 'finiture', dove: 'fondo', param: { passo: [30, 64] },
+  id: 'quadretti', nome: 'Banco a quadretti', ricetta: 'scontrino', cat: 'finiture', dove: 'fondo', motivo: 'materia', param: { passo: [30, 64] },
   fai(g, piano, p) {
     if (piano.offre.has('fondo-pieno')) return false
     const { W, H } = g
@@ -227,12 +227,12 @@ export const quadretti: MSegno = {
 }
 
 export const strato: MSegno = {
-  id: 'strato', nome: 'Strato generativo', ricetta: 'scontrino', cat: 'finiture', dove: 'sotto',
+  id: 'strato', nome: 'Strato generativo', ricetta: 'scontrino', cat: 'finiture', dove: 'sotto', motivo: 'materia',
   fai(g) { stratoGenerativo(g, []); return true },
 }
 
 export const cerchiato: MSegno = {
-  id: 'cerchiato', nome: 'Cerchiato a penna', ricetta: 'scontrino', cat: 'dispositivi',
+  id: 'cerchiato', nome: 'Cerchiato a penna', ricetta: 'scontrino', cat: 'dispositivi', motivo: 'mano',
   fai(g, piano) {
     const nome = piano.bersaglio ?? 'occhiello'
     const t = g.els.find(e => e.kind === 'text' && e.name === nome) as Extract<typeof g.els[number], { kind: 'text' }> | undefined
@@ -246,7 +246,7 @@ export const cerchiato: MSegno = {
 }
 
 export const timbro: MSegno = {
-  id: 'timbro', nome: 'Timbro', ricetta: 'scontrino', cat: 'dispositivi', serve: ['carta'], param: { attivo: [0, 1] },
+  id: 'timbro', nome: 'Timbro', ricetta: 'scontrino', cat: 'dispositivi', serve: ['carta'], motivo: 'documento', param: { attivo: [0, 1] },
   fai(g, piano, p) {
     const { k, P } = g
     if (par(p, 'attivo', Math.max(k.densita > 0.35 ? 1 : 0, k.energia > 0.5 ? 1 : 0)) < 0.5) return false
@@ -258,7 +258,7 @@ export const timbro: MSegno = {
 
 /** Freccia a mano dal titolo alla carta (solo in orizzontale, con il titolo a sinistra). */
 export const freccia: MSegno = {
-  id: 'freccia', nome: 'Freccia a mano', ricetta: 'scontrino', cat: 'dispositivi', serve: ['carta'],
+  id: 'freccia', nome: 'Freccia a mano', ricetta: 'scontrino', cat: 'dispositivi', serve: ['carta'], motivo: 'mano',
   fai(g, piano) {
     if (!g.landscape || !piano.titolo || !piano.titoloXY || !piano.carta) return false
     const [, ty] = piano.titoloXY

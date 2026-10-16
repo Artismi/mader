@@ -184,7 +184,9 @@ export function esamina(g: G): Esame {
   const zone = spazioMorto(g)
   const sobrio = ['lusso', 'svizzero', 'editoriale'].includes(g.s.registro)
   const limite = sobrio ? 0.38 : 0.28
-  const vuoti = zone.filter((z, i) => z > 0.1 && (i > 0 || z > limite))
+  // il vuoto come gesto dell'idea (C2): la zona più grande è progettata, le altre contano come sempre
+  const voluto = g.k.idea?.gesto === 'vuoto'
+  const vuoti = zone.filter((z, i) => z > 0.1 && (i > 0 || z > limite)).slice(voluto ? 1 : 0)
   if (vuoti.length) difetti.push(`${vuoti.length === 1 ? 'un vuoto' : `${vuoti.length} vuoti`} non progettati (${vuoti.map(z => Math.round(z * 100) + '%').join(', ')} della tavola senza niente)`)
   // ogni ripetizione dello stesso difetto pesa il doppio della precedente
   respiro = clamp(respiro - doppia(stretti, 2) - doppia(vicini, 1) - doppia(vuoti.length, 2.5))
@@ -273,7 +275,7 @@ export function esamina(g: G): Esame {
   ]
   for (const [cond, max] of tetti) if (cond) voto = Math.min(voto, max)
   // blocchi: difetti che da soli non lasciano consegnare la tavola
-  const blocca = (zone[0] ?? 0) > 0.4 || (!!c.cta && difetti.includes("manca l'invito"))
+  const blocca = (!voluto && (zone[0] ?? 0) > 0.4) || (!!c.cta && difetti.includes("manca l'invito"))
   if (blocca) voto = Math.min(voto, SOGLIA - 1)
   voto = Math.max(0, Math.round(voto))
   const promossa = voto >= SOGLIA

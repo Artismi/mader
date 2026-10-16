@@ -46,7 +46,7 @@ const METAFORE: [RegExp, Gesto, string, Partial<Idea>][] = [
   [/taglio|tost|macin|fett|pezz|frammen|rott/i, 'taglio', 'il dettaglio tagliato da vicino', { scala: 1 }],
   [/incontr|insieme|unit|legam|intrecc|mano/i, 'spezzato', 'le lettere che si incastrano', { energia: 1 }],
 ]
-const RICETTA: Record<Gesto, Idea['ricetta']> = { 'parola-immagine': 'eco', ripetizione: 'eco', scala: 'costruttivo', taglio: 'costruttivo', spezzato: 'costruttivo', vuoto: 'scontrino' }
+const RICETTA: Record<Gesto, Idea['ricetta']> = { 'parola-immagine': 'eco', ripetizione: 'eco', scala: 'costruttivo', taglio: 'costruttivo', spezzato: 'eco', vuoto: 'scontrino' }
 
 const idea = (nome: string, gesto: Gesto, o: Partial<Idea> = {}): Idea => ({
   nome, gesto, scala: gesto === 'vuoto' ? 0 : 1, energia: gesto === 'vuoto' ? 0 : 1, densita: 0, togli: ['ornamenti'], motivi: [], ricetta: RICETTA[gesto], ...o,

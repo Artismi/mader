@@ -8,6 +8,7 @@
  *   npm run designer:vetrina -- --contenuti caffe,mostra --formati storia
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
  *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
+ *   npm run designer:vetrina -- --senza-idee          proposte senza le idee del concetto (C1–C2), per il confronto
  *   npm run designer:vetrina -- --ibridi              in più un foglio <contenuto>-<formato>-ibridi.jpg con i soli ibridi dell'incrocio (V1)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
@@ -229,7 +230,8 @@ for (const nome of contenuti) {
     let res, info = ''
     if (args.vecchio || sistemi) res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi, thumb, seme: Number(args.seme ?? 0) })
     else {
-      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0) })
+      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'] })
+      if (p.idee?.length) console.log(`  ${nome}: idee ${p.idee.join(' | ')} · concetto ${p.concetto.chiamate} chiamata, ~${p.concetto.token} token`)
       res = p.items
       info = ` · ${p.promosse} promosse su ${p.candidate} candidate in ${p.giri} giri`
       if (occhio) {

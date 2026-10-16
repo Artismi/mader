@@ -19,6 +19,7 @@ import { SYSTEMS_TIPI } from './tipi'
 import { composto } from './compositore'
 import { ibrido, scheletro } from './mattoni'
 import { incrocia } from './incrocio'
+import { ideeDaRegole, type Idea } from './concetto'
 import { ARCHETIPI } from './archetipi/elenco'
 import { affinita } from './affinita'
 import { SYSTEMS_A } from './archetipi/gruppo-a'
@@ -227,7 +228,7 @@ export interface Proposte { scene: Scene[]; candidate: number; promosse: number;
  * altro giro con semi nuovi (al massimo `giri`); in ultimo si completa con le
  * bocciate migliori, segnate come tali.
  */
-export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
+export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; idee?: Idea[] | false; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
   const n = o.n ?? 12
   // si genera quattro volte quello che si mostra: il critico sceglie su un vivaio ampio
   const vivaio = o.vivaio ?? n * 4
@@ -243,6 +244,12 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
       const sc = await generateSystem(c, format, k, o.photo, { tentativi: k.sistema === 'composto' ? 8 : 4 })
       candidate++
       o.onProgress?.(i + 1, pool.length)
+      if (sc) tutte.push(sc)
+    }
+    // le idee (C1–C2): ogni idea del brief eseguita dalla sua ricetta, con due identità del vivaio
+    if (giro === 0 && o.idee !== false) for (const k of knobsDelleIdee(c, o.idee ?? ideeDaRegole(c), pool, !!o.photo)) {
+      const sc = await generateSystem(c, format, k, o.photo, { tentativi: 3 })
+      candidate++
       if (sc) tutte.push(sc)
     }
     // gli incroci dei mattoni (V1): le identità del vivaio, poche generazioni, restano gli ibridi promossi
@@ -269,8 +276,24 @@ const punteggio = (sc: Scene) => {
   return v + (v >= ECCELLENTE ? cur : cur * 0.4) + (car - 50) * 0.3
 }
 
+/**
+ * I regolatori di un'idea: la sua ricetta (con le voci solo lo scontrino), i poli
+ * dell'idea spinti all'estremo, la grana solo se l'idea vuole la materia.
+ */
+export function knobsDelleIdee(c: DesignContent, idee: Idea[], pool: Knobs[], hasPhoto: boolean): Knobs[] {
+  const elenco = !!c.tipo && c.tipo !== 'copertina'
+  const stili = [...new Map(pool.map(k => [k.stile, k])).values()].slice(0, 2)
+  const r = rng(hashText(`${c.title}|idee`))
+  const polo = (v: 0 | 1) => (v ? 0.86 + r.range(0, 0.12) : 0.02 + r.range(0, 0.12))
+  return idee.flatMap(idea => {
+    const sistema = elenco ? 'scontrino' : idea.ricetta
+    if (!ammesso(c, sistema, hasPhoto) && !(elenco && sistema === 'scontrino')) return []
+    return stili.map(b => ({ ...b, sistema, idea, scala: polo(idea.scala), energia: polo(idea.energia), densita: polo(idea.densita), grana: idea.motivi.includes('materia') ? b.grana : 0, seme: r.int(1, 99999) }) as Knobs)
+  })
+}
+
 /** Il sistema per la selezione: un ibrido vale come l'archetipo del suo scheletro (stessa ossatura, stessa idea di pagina). */
-const sistemaDi = (sc: Scene) => { const k = sc.knobs as Knobs | undefined; return k?.sistema === 'ibrido' && k.genoma ? scheletro(k.genoma) : k?.sistema ?? sc.layout }
+const sistemaDi = (sc: Scene) => { const k = sc.knobs as Knobs | undefined; return k?.sistema === 'ibrido' && k.genoma ? scheletro(k.genoma) : k?.idea ? `${k.sistema}|${k.idea.gesto}` : k?.sistema ?? sc.layout }
 
 /** Selezione: per punteggio, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità (gli ibridi al più un terzo). */
 function scegli(tutte: Scene[], n: number, soloPromosse: boolean, maxLivello = 3): Scene[] {

@@ -36,6 +36,8 @@ export interface Knobs {
   sperimentazione?: number
   /** sistema "ibrido": i mattoni da comporre (gen/mattoni) */
   genoma?: import('./mattoni/tipi').Genoma
+  /** l'idea della tavola (C1, concetto.ts): gesto dominante, poli, ornamenti motivati */
+  idea?: import('./concetto').Idea
 }
 
 export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean; /** sistema dedicato a un tipo di contenuto (elenco, programma…) */ tipo?: TipoContenuto }

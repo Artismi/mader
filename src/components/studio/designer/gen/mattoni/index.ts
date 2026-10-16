@@ -10,13 +10,14 @@ import type { Scene } from '../../types'
 import type { G } from '../tools'
 import type { Rng } from '../knobs'
 import { componi, type Genoma, type Gene, type Mattone, type Ossatura, type MTitolo, type Categoria, type Param } from './tipi'
-import { fasce, titoloEco, tondo, nastro, stella, asse, barra, disco, numeroContorno, puntini } from './eco-costruttivo'
+import { fasce, titoloEco, tondo, nastro, stella, asse, barra, disco, numeroContorno, puntini, gigante } from './eco-costruttivo'
+import type { Idea } from '../concetto'
 import { banco, cassa, pieno, piena, quadretti, strato, cerchiato, timbro, freccia, varianteScontrino } from './scontrino'
 import { INTRECCI } from './intreccio'
 
 export * from './tipi'
 
-const LISTA: Mattone[] = [fasce, titoloEco, tondo, nastro, stella, asse, barra, disco, numeroContorno, puntini, banco, cassa, pieno, piena, quadretti, strato, cerchiato, timbro, freccia, ...INTRECCI]
+const LISTA: Mattone[] = [fasce, titoloEco, gigante, tondo, nastro, stella, asse, barra, disco, numeroContorno, puntini, banco, cassa, pieno, piena, quadretti, strato, cerchiato, timbro, freccia, ...INTRECCI]
 export const MATTONI: Record<string, Mattone> = Object.fromEntries(LISTA.map(m => [m.id, m]))
 export const perCategoria = (c: Categoria) => LISTA.filter(m => m.cat === c)
 
@@ -30,16 +31,56 @@ export type RicettaId = keyof typeof RICETTE
 
 const ETICHETTE: Record<RicettaId, [string, boolean]> = { eco: ['Eco', true], costruttivo: ['Costruttivista', true], scontrino: ['Scontrino', false] }
 
+/**
+ * Il gesto dell'idea sul genoma della ricetta (C2): un solo protagonista spinto
+ * all'estremo, il resto ridotto. Gli ornamenti li filtra `componi` (solo i motivati).
+ */
+export function genomaPerIdea(idea: Idea, base: Genoma): Genoma {
+  const gen: Genoma = structuredClone(base)
+  const senzaFoto = idea.togli.includes('foto')
+  switch (idea.gesto) {
+    case 'parola-immagine':
+      gen.titolo = { id: 'gigante' }
+      if (gen.ossatura.id !== 'banco') gen.foto = undefined
+      break
+    case 'ripetizione':
+      if (gen.ossatura.id === 'fasce') gen.titolo = { id: 'eco', p: { passo: 0.6, spostamento: 1 } }
+      break
+    case 'scala':
+      if (gen.ossatura.id === 'asse') { gen.ossatura.p = { ...gen.ossatura.p, titolo: 1.6, disco: 0.28 }; gen.titolo.p = { ...gen.titolo.p, margine: 0.2, sottile: 0 } }
+      else gen.titolo = { id: 'pieno', p: { scala: 1.15 } }
+      break
+    case 'taglio':
+      // il disco (con la foto) così grande e spostato che il bordo lo taglia
+      if (gen.ossatura.id === 'asse') { gen.ossatura.p = { ...gen.ossatura.p, disco: 0.66, discoX: 0.92 }; gen.foto = { id: 'disco', p: { raggio: 0.96 } } }
+      break
+    case 'spezzato':
+      if (gen.ossatura.id === 'fasce') { gen.titolo = { id: 'pieno', p: { scala: 1.15 } }; gen.foto = { id: 'tondo', p: { diametro: 0.6 } } }
+      gen.intreccio = [{ id: 'davanti-dietro', p: { avvicina: 0.6 } }]
+      break
+    case 'vuoto':
+      if (gen.ossatura.id === 'banco') gen.ossatura.p = { ...gen.ossatura.p, larghezza: 0.42 }
+      gen.foto = undefined
+      break
+  }
+  if (senzaFoto) gen.foto = undefined
+  return gen
+}
+
 /** L'archetipo di prima come ricetta. Lo scontrino con il titolo dentro, se non entra, passa al titolo fuori. */
 export function ricetta(g: G, id: RicettaId): Scene | null {
   const [label, specchio] = ETICHETTE[id]
-  if (id !== 'scontrino') return componi(g, RICETTE[id], MATTONI, { layout: id, label, specchio })
-  const v = varianteScontrino(g)
+  // con un'idea la ricetta esegue il suo gesto (C2)
+  const idea = g.k.idea
+  const conIdea = (gen: Genoma) => (idea ? genomaPerIdea(idea, gen) : gen)
+  const etichetta = idea ? `${label}: ${idea.nome}` : label
+  if (id !== 'scontrino') return componi(g, conIdea(RICETTE[id]), MATTONI, { layout: id, label: etichetta, specchio })
+  const v = idea?.gesto === 'vuoto' ? 0 : varianteScontrino(g)
   const fuori: Genoma = { ...RICETTE.scontrino, titolo: { id: 'pieno' } }
-  const sc = componi(g, v === 2 ? fuori : RICETTE.scontrino, MATTONI, { layout: id, label, specchio })
+  const sc = componi(g, conIdea(v === 2 ? fuori : RICETTE.scontrino), MATTONI, { layout: id, label: etichetta, specchio })
   if (sc || v === 2) return sc
   g.els = []; g.letture = []
-  return componi(g, fuori, MATTONI, { layout: id, label, specchio })
+  return componi(g, conIdea(fuori), MATTONI, { layout: id, label: etichetta, specchio })
 }
 
 /** Sigla del genoma (per i doppioni e per la selezione): ossatura+titolo+foto. */
