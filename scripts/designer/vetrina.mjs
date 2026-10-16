@@ -15,6 +15,8 @@
  *   npm run designer:vetrina -- --foto-fissa          una sola foto per contenuto (senza: anche quelle di npm run designer:foto, a rotazione)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
+ *   npm run designer:vetrina -- --sforzo            prova sotto sforzo dei testi (fixtures/sforzo.json) nei 4 formati: difetti e scarti per caso
+ *   npm run designer:vetrina -- --difetti --contenuti caffe,mostra --formati quadrato   la stessa scheda dei difetti su altri contenuti
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
  *
  * Prima volta: cd scripts/designer && npm install
@@ -47,7 +49,10 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
 import { famiglia, distanzaPalette, neutriChiari } from './varieta.mjs'
 import { altreFoto } from './foto.mjs'
 const CONTENUTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/contenuti.json'), 'utf8'))
-const contenuti = args.contenuti ? args.contenuti.split(',') : Object.keys(CONTENUTI)
+// prova sotto sforzo (blocco A): titoli di una parola e di quindici, testi lunghissimi, elenchi da 2 a 12, brand lunghi, senza foto, solo numeri
+const SFORZO = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/sforzo.json'), 'utf8'))
+const TUTTI = { ...CONTENUTI, ...SFORZO }
+const contenuti = args.contenuti ? args.contenuti.split(',') : Object.keys(args.sforzo ? SFORZO : CONTENUTI)
 const formati = (args.formati ?? 'quadrato,verticale,storia,orizzontale').split(',')
 const sistemi = args.sistemi ? args.sistemi.split(',') : undefined
 const over = args.knobs ? JSON.parse(args.knobs) : {}
@@ -55,7 +60,7 @@ if (args.stile) over.stile = args.stile
 // valori sconosciuti: errore chiaro con l'elenco dei validi, non una vetrina vuota
 const FORMATI = ['quadrato', 'verticale', 'storia', 'orizzontale']
 const ignoti = (l, validi, cosa) => { const x = l.filter(v => !validi.includes(v)); if (x.length) { console.error(`${cosa} sconosciut${x.length > 1 ? 'i' : 'o'}: ${x.join(', ')}. Validi: ${validi.join(', ')}`); process.exit(1) } }
-ignoti(contenuti, Object.keys(CONTENUTI), 'contenuto')
+ignoti(contenuti, Object.keys(TUTTI), 'contenuto')
 ignoti(formati, FORMATI, 'formato')
 const out = path.resolve(args.out ?? path.join(here, 'out'))
 const thumb = Number(args.thumb ?? (args.occhio ? 0.5 : 0.36))
@@ -202,6 +207,49 @@ if (args.schede) {
   process.exit(0)
 }
 
+/* ── scheda dei difetti (blocco A): --sforzo (i casi di fixtures/sforzo.json, 4 formati) o --difetti (contenuti scelti) ── */
+if (args.sforzo || args.difetti) {
+  const fmts = args.formati ? formati : FORMATI
+  const CLASSI_A = ['sovrapposizioni', 'contrasto', 'vuoti', 'tagliati', 'saltati']
+  const righe = []
+  const t0 = Date.now()
+  for (const nome of contenuti) for (const format of fmts) {
+    const fx = TUTTI[nome]
+    const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+    const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb: Number(args.thumb ?? 0.3), n: Number(args.n ?? 8), seme: Number(args.seme ?? 0), misura: true })
+    const its = p.items
+    const conta = Object.fromEntries(CLASSI_A.map(k => [k, its.filter(r => r.difetti?.[k]?.length).length]))
+    const voti = its.map(r => r.esame?.voto ?? 0)
+    righe.push({ caso: nome, formato: format, candidate: p.candidate, scartate: p.scartate, motivi: p.motivi, consegnate: its.length, promosse: its.filter(r => r.esame?.promossa).length, sane: its.filter(r => CLASSI_A.every(k => !r.difetti?.[k]?.length)).length, voto: Math.round(voti.reduce((a, b) => a + b, 0) / Math.max(1, voti.length)), ...conta, dettaglio: its.map(r => ({ sistema: r.sistema, voto: r.esame?.voto, difetti: r.difetti })) })
+    const breve = d => [d.sovrapposizioni.length && `sovr ${d.sovrapposizioni[0]}`, d.contrasto.length && `contr ${d.contrasto[0]}`, d.vuoti.length && `vuoto ${d.vuoti.map(v => Math.round(v * 100) + '%').join('+')}`, d.tagliati.length && `taglio ${d.tagliati[0]}`, d.saltati.length && `manca ${d.saltati.join(',')}`].filter(Boolean).join(' · ')
+    const items = its.map(r => ({ url: r.url, label: `${r.sistema}  ${r.esame?.voto ?? ''}`, sub: (r.difetti && breve(r.difetti)) || 'nessun difetto misurato' }))
+    if (items.length) {
+      const sh = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format} · ${its.length} consegnate, ${p.scartate}/${p.candidate} candidate scartate · ${CLASSI_A.map(k => `${k} ${conta[k]}`).join(' · ')}`, items, cols: format === 'orizzontale' ? 3 : 4, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
+      fs.writeFileSync(path.join(out, `${nome}-${format}.jpg`), Buffer.from(sh.split(',')[1], 'base64'))
+    }
+    console.log(`${nome.padEnd(15)} ${format.padEnd(12)} ${its.length} consegnate · scartate ${p.scartate}/${p.candidate} · ${CLASSI_A.map(k => `${k} ${conta[k]}`).join(' · ')}  ${((Date.now() - t0) / 1000).toFixed(0)} s`)
+  }
+  await browser.close()
+  const tot = k => righe.reduce((a, r) => a + r[k], 0)
+  const tavole = tot('consegnate')
+  const pct = (n, d) => `${Math.round((100 * n) / Math.max(1, d))}%`
+  const sintesi = { tavole, sane: tot('sane'), candidate: tot('candidate'), scartate: tot('scartate'), ...Object.fromEntries(CLASSI_A.map(k => [k, tot(k)])) }
+  const md = [
+    '# Scheda dei difetti', '',
+    `Casi: ${contenuti.join(', ')} × ${fmts.join(', ')}; ${Number(args.n ?? 8)} proposte per caso (${((Date.now() - t0) / 1000).toFixed(0)} s). Generato da \`vetrina.mjs ${args.sforzo ? '--sforzo' : '--difetti'}\`, in locale.`, '',
+    'Ogni classe conta le tavole consegnate con almeno quel difetto, misurato sulla tavola finale: sovrapposizioni sui riquadri d\'inchiostro, contrasto delle righe sui pixel veri del render, vuoti non progettati, campi del brief tagliati o saltati. Scartate = candidate che nessun tentativo ha retto.', '',
+    `**Totale:** ${tavole} tavole, senza difetti ${sintesi.sane} (${pct(sintesi.sane, tavole)}); scartate ${sintesi.scartate}/${sintesi.candidate} (${pct(sintesi.scartate, sintesi.candidate)}); ${CLASSI_A.map(k => `${k} ${sintesi[k]} (${pct(sintesi[k], tavole)})`).join(', ')}.`, '',
+    `| caso | formato | consegnate | sane | voto | scartate | ${CLASSI_A.join(' | ')} | motivi di scarto (tentativi) |`,
+    `|---|---|---|---|---|---|${CLASSI_A.map(() => '---').join('|')}|---|`,
+    ...righe.map(r => `| ${r.caso} | ${r.formato} | ${r.consegnate} | ${r.sane} | ${r.voto} | ${r.scartate}/${r.candidate} | ${CLASSI_A.map(k => r[k] || '·').join(' | ')} | ${Object.entries(r.motivi).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ') || '·'} |`),
+    '',
+  ].join('\n')
+  fs.writeFileSync(path.join(out, 'difetti.md'), md)
+  fs.writeFileSync(path.join(out, 'difetti.json'), JSON.stringify({ sintesi, righe }, null, 2))
+  console.log(`\nTotale: ${tavole} tavole, sane ${sintesi.sane}, scartate ${sintesi.scartate}/${sintesi.candidate} · ${CLASSI_A.map(k => `${k} ${sintesi[k]}`).join(' · ')}\nscheda in ${path.relative(process.cwd(), out)}`)
+  process.exit(0)
+}
+
 // --campi: un foglio con tutti i generatori (campi, trame, pattern della libreria) e il backend usato
 if (args.campi) {
   const items = await page.evaluate(() => window.designer.campi())
@@ -246,7 +294,7 @@ const diversita = []
 const varieta = []
 
 for (const nome of contenuti) {
-  const fx = CONTENUTI[nome]
+  const fx = TUTTI[nome]
   if (!fx) { console.warn('contenuto sconosciuto:', nome); continue }
   for (const format of formati) {
     const t0 = Date.now()

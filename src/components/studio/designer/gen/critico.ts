@@ -14,6 +14,7 @@ import { affinita } from './affinita'
 import { corpoMinimo } from '../core/scala'
 export { corpoMinimo }
 import { carattere, type Carattere } from './carattere'
+import { zoneVuote, vuotiNonProgettati } from './difetti'
 
 export type { Criterio } from './rubrica'
 export interface Esame {
@@ -192,12 +193,10 @@ function esame(g: G): Esame {
   }
   // spazio morto: zone continue dove non succede niente (solo fondo o campi piatti grandi). Un solo
   // vuoto ampio può essere una scelta; ogni zona vuota in più raddoppia il peso della precedente
-  const zone = spazioMorto(g)
-  const sobrio = ['lusso', 'svizzero', 'editoriale'].includes(g.s.registro)
-  const limite = sobrio ? 0.38 : 0.28
+  const zz = zoneVuote({ W: g.W, H: g.H, u: g.u, els: g.els }), zone = zz.map(z => z.frac)
   // il vuoto come gesto dell'idea (C2): la zona più grande è progettata, le altre contano come sempre
-  const voluto = g.k.idea?.gesto === 'vuoto'
-  const vuoti = zone.filter((z, i) => z > 0.1 && (i > 0 || z > limite)).slice(voluto ? 1 : 0)
+  const { voluto } = vuotiDi(g)
+  const vuoti = vuotiNonProgettati(zz, vuotiDi(g)).map(z => z.frac)
   if (vuoti.length) difetti.push(`${vuoti.length === 1 ? 'un vuoto' : `${vuoti.length} vuoti`} non progettati (${vuoti.map(z => Math.round(z * 100) + '%').join(', ')} della tavola senza niente)`)
   // ogni ripetizione dello stesso difetto pesa il doppio della precedente
   respiro = clamp(respiro - doppia(stretti, 2) - doppia(vicini, 1) - doppia(vuoti.length, 2.5))
@@ -346,43 +345,8 @@ function armonia(h: number[]): Misure['armonia'] {
   return 'libera'
 }
 
-/** Zone continue vuote (griglia 16×16), come frazioni della tavola, dalla più grande. */
-function spazioMorto(g: G): number[] {
-  const N = 16, cw = g.W / N, ch = g.H / N, area = g.W * g.H
-  const pieno = Array.from({ length: N * N }, () => false)
-  for (const e of g.els) {
-    let b: Box | null = null
-    // la tipografia decorativa grande (parola gigante, eco, ripetizioni) è una massa progettata, non vuoto
-    if (e.kind === 'text' && e.deco) { if (e.size >= 100 * g.u && (e.opacity ?? 1) >= 0.25) b = textBox(e) }
-    else if (isText(e)) b = textBox(e)
-    else if (e.kind === 'image' || e.kind === 'ornament' || e.kind === 'glyph' || e.kind === 'seal' || e.kind === 'arcText' || e.kind === 'line') b = e.kind === 'line' ? { x: Math.min(e.x1, e.x2), y: Math.min(e.y1, e.y2), w: Math.abs(e.x2 - e.x1) + 1, h: Math.abs(e.y2 - e.y1) + 1 } : e.kind === 'arcText' ? { x: e.cx - e.r, y: e.cy - e.r, w: 2 * e.r, h: 2 * e.r } : boxOf(e)
-    else if ((e.kind === 'rect' || e.kind === 'circle' || e.kind === 'path') && !/grana|fondo|carta/.test(e.name)) {
-      const x = boxOf(e)
-      // i campi piatti grandi sono fondo; le forme piccole e i tratti sono segni
-      if (x && (x.w * x.h < area * 0.2 || (e as { stroke?: string }).stroke || (e as { fx?: unknown[] }).fx?.length)) b = x
-    }
-    if (!b) continue
-    for (let i = Math.max(0, Math.floor(b.x / cw)); i <= Math.min(N - 1, Math.floor((b.x + b.w) / cw)); i++)
-      for (let j = Math.max(0, Math.floor(b.y / ch)); j <= Math.min(N - 1, Math.floor((b.y + b.h) / ch)); j++) pieno[j * N + i] = true
-  }
-  const visto = new Set<number>()
-  const zone: number[] = []
-  for (let k = 0; k < N * N; k++) {
-    if (pieno[k] || visto.has(k)) continue
-    let n = 0
-    const coda = [k]; visto.add(k)
-    while (coda.length) {
-      const c = coda.pop()!; n++
-      const i = c % N, j = Math.floor(c / N)
-      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const ni = i + di, nj = j + dj, nk = nj * N + ni
-        if (ni >= 0 && nj >= 0 && ni < N && nj < N && !pieno[nk] && !visto.has(nk)) { visto.add(nk); coda.push(nk) }
-      }
-    }
-    zone.push(n / (N * N))
-  }
-  return zone.sort((a, b) => b - a)
-}
+/** Chi decide se un vuoto è voluto: il registro (i sobri ne reggono di più) e l'idea del vuoto (C2). */
+export const vuotiDi = (g: G) => ({ sobrio: ['lusso', 'svizzero', 'editoriale'].includes(g.s.registro), voluto: g.k.idea?.gesto === 'vuoto' })
 
 /** Un testo che attraversa il bordo di una foto o di un campo: la composizione si lega, non è a scomparti. */
 function sconfina(g: G, texts: Text[]) {

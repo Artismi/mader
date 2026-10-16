@@ -226,7 +226,7 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   return out
 }
 
-export interface Proposte { scene: Scene[]; candidate: number; promosse: number; giri: number }
+export interface Proposte { scene: Scene[]; candidate: number; /** candidate che nessun tentativo ha retto (scartate dal codice) */ scartate: number; promosse: number; giri: number }
 
 /**
  * Le proposte: un vivaio ampio di candidate (identità × sistemi × ossature),
@@ -241,7 +241,7 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
   const vivaio = o.vivaio ?? n * 4
   const tinta = await tintaFoto(o.photo)
   const tutte: Scene[] = []
-  let candidate = 0, giro = 0
+  let candidate = 0, giro = 0, scartate = 0
   const maxGiri = o.giri ?? 3
   for (; giro < maxGiri; giro++) {
     // le direzioni dell'IA (se ci sono) entrano nel primo giro; il resto del vivaio lo genera il motore
@@ -252,12 +252,14 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
       candidate++
       o.onProgress?.(i + 1, pool.length)
       if (sc) tutte.push(sc)
+      else scartate++
     }
     // le idee (C1–C2): ogni idea del brief eseguita dalla sua ricetta, con due identità del vivaio
     if (giro === 0 && o.idee !== false) for (const k of knobsDelleIdee(c, o.idee ?? ideeDaRegole(c), pool, !!o.photo)) {
       const sc = await generateSystem(c, format, k, o.photo, { tentativi: 3 })
       candidate++
       if (sc) tutte.push(sc)
+      else scartate++
       ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`idea ${k.sistema}: ${k.idea!.gesto} → ${sc ? `${sc.esame?.voto}${sc.esame?.promossa ? '' : ' bocciata'} car ${sc.esame?.carattere?.carattere} — ${sc.esame?.difetti.slice(0, 3).join('; ')}` : 'scartata'}`)
     }
     // gli incroci dei mattoni (V1): le identità del vivaio, poche generazioni, restano gli ibridi promossi
@@ -268,7 +270,7 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
   const promosse = scegli(tutte, n, true)
   const scene = promosse.length >= n ? promosse : [...promosse, ...scegli(tutte.filter(x => !promosse.includes(x)), n - promosse.length, false)]
   ricorda(scene.map(sc => ({ sistema: (sc.knobs as Knobs | undefined)?.sistema ?? sc.layout, firma: sc.esame?.firma })))
-  return { scene, candidate, promosse: tutte.filter(x => x.esame?.promossa).length, giri: Math.min(giro + 1, maxGiri) }
+  return { scene, candidate, scartate, promosse: tutte.filter(x => x.esame?.promossa).length, giri: Math.min(giro + 1, maxGiri) }
 }
 
 /**

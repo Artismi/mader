@@ -16,9 +16,28 @@ import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/cam
 import { formeTolte, TEXTURE_CC0, registraTextureCC0 } from '@/components/studio/designer/gen/risorse'
 import { TEXTURE_PROCEDURALI, TEXTURE_LIBRERIA } from '@/components/studio/designer/texture'
 import { loadPix } from '@/components/studio/designer/core/foto'
+import { sfondoPixel } from '@/components/studio/designer/preview'
+import { lettureVere, sottoSoglia } from '@/components/studio/designer/gen/pixel'
+import { zoneVuote, vuotiNonProgettati, sovrapposizioni, testoMancante } from '@/components/studio/designer/gen/difetti'
+
+/** Difetti misurati sulla tavola consegnata (blocco A): sovrapposizioni, contrasto sui pixel veri, vuoti, testo tagliato o saltato. */
+export interface Difetti { sovrapposizioni: string[]; contrasto: string[]; vuoti: number[]; tagliati: string[]; saltati: string[] }
+async function difettiScena(sc: Scene, c: DesignContent): Promise<Difetti> {
+  const k = (sc.knobs ?? {}) as Partial<Knobs>
+  const t = { W: sc.w, H: sc.h, u: Math.min(sc.w, sc.h) / 1080, els: sc.els }
+  const reg = styleById(sc.style).registro
+  const px = await sfondoPixel(sc, 540)
+  const sotto = lettureVere(sc, px).filter(sottoSoglia)
+  return {
+    sovrapposizioni: sovrapposizioni(t).map(o => `${o.testo}/${o.con}`),
+    contrasto: sotto.map(l => `${l.testo}#${l.riga} ${l.contrasto.toFixed(1)}`),
+    vuoti: vuotiNonProgettati(zoneVuote(t), { sobrio: ['lusso', 'svizzero', 'editoriale'].includes(reg), voluto: k.idea?.gesto === 'vuoto' }).map(z => +z.frac.toFixed(2)),
+    ...testoMancante(sc.els, c, k.idea?.togli ?? []),
+  }
+}
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
+export interface Result { difetti?: Difetti; sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
 
 /** Risorse usate dalla scena (per contare la varietà nelle prime 12): palette, effetti, generatori, foto, trattamenti. */
 export interface Risorse { palette: string; fx: string[]; gen: string[]; foto: string[]; trattamento?: string; paletteDa?: string; tex: string[] }
@@ -72,7 +91,7 @@ async function run(job: Job): Promise<Result[]> {
 }
 
 /** Le proposte come le vede lo Studio: vivaio ampio, critico, selezione delle migliori diverse. */
-async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number; idee: string[]; concetto: { chiamate: number; token: number }; traccia: string[] }> {
+async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ items: Result[]; scartate: number; motivi: Record<string, number>; candidate: number; promosse: number; giri: number; idee: string[]; concetto: { chiamate: number; token: number }; traccia: string[] }> {
   const sink: string[] = []
   ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
   const t0 = performance.now()
@@ -88,9 +107,21 @@ async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; c
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc) })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
   }
-  return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ')) }
+  return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ')) }
+}
+
+/** I tentativi scartati dal codice, per classe (le correzioni, le bocciature e le tracce non contano). */
+function classiScarto(sink: string[]) {
+  const CL: [string, RegExp][] = [['sovrapposizioni', /sovrappost|troppo vicini|sopra i testi/], ['contrasto', /si legge|leggibil|contorno troppo|pixel/], ['vuoti', /vuot/], ['tagli', /fuori|non entr|troppo (lung|pien|alt)|incomplet|non ci sta/]]
+  const out: Record<string, number> = {}
+  for (const x of sink) {
+    if (/^idea |^intreccio |: spazi (rientrato|spostato|ridotto|accorciato|tolto|riempito|allargato|mosso)|: bocciata|: accorciato|: intreccio annullato|: pixel (colore|velo|fascia|alone)/.test(x)) continue
+    const k = CL.find(([, re]) => re.test(x))?.[0] ?? 'altro'
+    out[k] = (out[k] ?? 0) + 1
+  }
+  return out
 }
 
 /** Gli ibridi dell'incrocio dei mattoni (V1), da soli: per guardarli in un foglio. */
