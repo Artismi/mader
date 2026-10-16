@@ -9,8 +9,8 @@ import { idIdentita, VICINI } from '../identita'
 import { tintaDominante } from '../core/colore'
 import { loadFonts } from '../fonts'
 import { type Knobs, type SistemaId, SISTEMI, hashText, rng } from './knobs'
-import { makeG } from './tools'
-import { esamina, ECCELLENTE } from './critico'
+import { makeG, scarti } from './tools'
+import { esamina, ECCELLENTE, SOGLIA } from './critico'
 import { SYSTEMS_BASE } from './systems'
 import { SYSTEMS_REGISTRI } from './systems2'
 import { SYSTEMS_SLIDE } from './slides'
@@ -64,13 +64,14 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
   const style = styleById(k.stile)
   const [, pix] = await Promise.all([loadFonts(fontsOf(style)), loadPix(photo ?? c.imageUrl)])
   const tentativi = o.tentativi ?? (k.sistema === 'composto' ? 14 : 6)
-  let best: Scene | null = null, falliti = 0
+  let best: Scene | null = null, falliti = 0, nonCiSta = false
   for (let attempt = 0; attempt < tentativi; attempt++) {
     const kk = attempt ? { ...k, seme: k.seme + attempt * 7919, scala: Math.max(0, k.scala - falliti * 0.06) } : k
     try {
       const g = makeG(format, style, kk, c, photo, pix)
+      scarti.ultimo = ''
       const sc = SYSTEMS[k.sistema](g)
-      if (!sc) { falliti++; continue }
+      if (!sc) { falliti++; nonCiSta ||= NON_CI_STA.test(scarti.ultimo); continue }
       const esame = esamina(g)
       const scena: Scene = { ...sc, els: g.els, knobs: { ...kk }, esame }
       if (!best || esame.voto > (best.esame?.voto ?? 0)) best = scena
@@ -81,8 +82,50 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
       return null
     }
   }
+  // il testo non ci sta in nessun tentativo: prima si tolgono le righe meno importanti del messaggio,
+  // poi (se non basta) il vivaio passa a un'altra ossatura
+  if (!best && nonCiSta) for (const [livello, [cosa, cc]] of accorciamenti(c).entries()) {
+    for (let attempt = 0; attempt < 2 && !best; attempt++) {
+      const kk = { ...k, seme: k.seme + (livello * 2 + attempt + 1) * 104729 }
+      try {
+        const g = makeG(format, style, kk, cc, photo, pix)
+        const sc = SYSTEMS[k.sistema](g)
+        if (!sc) continue
+        const esame = esamina(g)
+        // il contenuto accorciato costa: più si toglie, più pesa
+        esame.difetti.push(`contenuto accorciato: ${cosa}`)
+        esame.voto = Math.max(0, esame.voto - 3 * (livello + 1))
+        esame.promossa = esame.voto >= SOGLIA
+        best = { ...sc, els: g.els, knobs: { ...kk }, esame }
+        ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: accorciato ${cosa}`)
+      } catch { /* come un tentativo fallito */ }
+    }
+    if (best) break
+  }
   if (best && !best.esame?.promossa) (globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: bocciata ${best.esame?.voto} — ${best.esame?.difetti.slice(0, 3).join('; ')}`)
   return best
+}
+
+/**
+ * Il contenuto via via più corto, dalle righe meno importanti del messaggio alle più importanti:
+ * dettagli in coda, poi tutti, poi il testo alla prima frase, le spiegazioni delle voci,
+ * le voci oltre la quarta, l'occhiello. Titolo, brand, invito e numero non si toccano mai.
+ */
+/** Scarti che vogliono dire "il testo non ci sta": si riprova con meno righe. */
+const NON_CI_STA = /non entr|troppo|fuori|spazi|sovrappost|stretto|incomplet|lung|pien/
+
+export function accorciamenti(c: DesignContent): [string, DesignContent][] {
+  const out: [string, DesignContent][] = []
+  let x = { ...c }
+  const passo = (cosa: string, ok: boolean, f: (y: DesignContent) => DesignContent) => { if (ok) { x = f(x); out.push([cosa, x]) } }
+  passo('dettagli in coda', (x.details?.length ?? 0) > 2, y => ({ ...y, details: y.details!.slice(0, 2) }))
+  passo('dettagli', !!x.details?.length, y => ({ ...y, details: [] }))
+  const frasi = x.body?.match(/[^.!?]+[.!?]+/g)
+  passo('testo alla prima frase', !!frasi && frasi.length > 1 && frasi[0].trim().length < x.body!.trim().length, y => ({ ...y, body: frasi![0].trim() }))
+  passo('spiegazioni delle voci', !!x.voci?.some(v => v.testo), y => ({ ...y, voci: y.voci!.map(v => ({ ...v, testo: undefined })) }))
+  passo('voci oltre la quarta', (x.voci?.length ?? 0) > 4, y => ({ ...y, voci: y.voci!.slice(0, 4) }))
+  passo('occhiello', !!x.kicker, y => ({ ...y, kicker: undefined }))
+  return out
 }
 
 const allText = (c: DesignContent) => [c.brand, c.kicker, c.title, c.body, c.imageQuery, ...(c.details ?? [])].filter(Boolean).join(' ')

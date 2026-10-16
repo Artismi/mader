@@ -319,7 +319,10 @@ export function grainTop(g: G) {
 }
 
 /** Motivo di uno scarto: per il banco di prova (scripts/designer) e per il debug. */
+/** Motivo dell'ultimo scarto (il motore decide se accorciare il contenuto e riprovare). */
+export const scarti = { ultimo: '' }
 export function discard(g: G, why: string): false {
+  scarti.ultimo = why
   const gl = globalThis as { __designerDebug?: boolean; __designerSink?: string[] }
   if (gl.__designerSink) gl.__designerSink.push(`${g.k.sistema}: ${why}`)
   if (gl.__designerDebug) console.log('[designer] scartata:', g.k.sistema, why)
