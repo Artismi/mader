@@ -9,6 +9,8 @@
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
  *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
  *   npm run designer:vetrina -- --ibridi              in più un foglio <contenuto>-<formato>-ibridi.jpg con i soli ibridi dell'incrocio (V1)
+ *   npm run designer:vetrina -- --campi               foglio campi.jpg con tutti i generatori procedurali e gli oggetti 3D
+ *   npm run designer:vetrina -- --foto-fissa          una sola foto per contenuto (senza: anche quelle di npm run designer:foto, a rotazione)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
@@ -40,6 +42,7 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
   return acc
 }, []))
 import { famiglia, distanzaPalette, neutriChiari } from './varieta.mjs'
+import { altreFoto } from './foto.mjs'
 const CONTENUTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/contenuti.json'), 'utf8'))
 const contenuti = args.contenuti ? args.contenuti.split(',') : Object.keys(CONTENUTI)
 const formati = (args.formati ?? 'quadrato,verticale,storia,orizzontale').split(',')
@@ -233,6 +236,8 @@ for (const nome of contenuti) {
   for (const format of formati) {
     const t0 = Date.now()
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+    // altre foto dello stesso soggetto (npm run designer:foto), a rotazione tra le composizioni
+    if (fx.foto && !args['foto-fissa']) fx.c = { ...fx.c, immagini: altreFoto(fx.foto).map(f => `http://designer.local/fixtures/foto/${f}`) }
     if (MOTIVI_APP && !fx.c.progetto) {
       const testo = [fx.c.brand, fx.c.kicker, fx.c.title, fx.c.body, ...(fx.c.details ?? [])].join(' ')
       fx.c = { ...fx.c, progetto: risolvi(await page.evaluate(t => window.designer.ripiego(t), testo), MOTIVI_APP) }

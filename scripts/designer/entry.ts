@@ -13,6 +13,7 @@ import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/campi'
 import { formeTolte } from '@/components/studio/designer/gen/risorse'
+import { loadPix } from '@/components/studio/designer/core/foto'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
 export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
@@ -71,6 +72,8 @@ async function run(job: Job): Promise<Result[]> {
 async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number }> {
   ;(globalThis as { __designerSink?: string[] }).__designerSink = []
   const t0 = performance.now()
+  // le foto in più devono avere i pixel pronti: il motore le sceglie a rotazione in makeG
+  await Promise.all((job.content.immagini ?? []).map(u => loadPix(u)))
   const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
   const items: Result[] = []
   for (const sc of p.scene) {

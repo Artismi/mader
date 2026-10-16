@@ -12,6 +12,7 @@ import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { spazi, intrecci } from './spazi'
 import { conPalette, sorgentePalette } from './risorse/palette'
+import { pixPronta } from '../core/foto'
 import { arricchisci } from './risorse'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
@@ -65,8 +66,15 @@ function palette(s: Style, inverti: boolean): Pal {
   return { bg, fg, acc, acc2: s.bg, sec: mix(fg, bg, 0.3), srf: mix(bg, fg, 0.12), dark: lum(bg) < 0.25 }
 }
 
-export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, photo?: string, pix?: Pix, seq?: Seq): G {
+export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, photo0?: string, pix0?: Pix, seq?: Seq): G {
   const [W, H] = FORMAT_SIZE[format]
+  // foto a rotazione tra le composizioni (solo quelle con i pixel già pronti: servono ai controlli di lettura)
+  let photo = photo0, pix = pix0
+  const altre = (c.immagini ?? []).filter(u => u !== photo0 && pixPronta(u))
+  if (photo0 && altre.length && !seq) {
+    const i = hashText(`${k0.stile}|${k0.seme}|foto`) % (altre.length + 1)
+    if (i > 0) { photo = altre[i - 1]; pix = pixPronta(photo) }
+  }
   // la specifica di progetto del brief orienta decori, foto ed enfasi
   // palette generativa (V5) al posto di quella dell'identità, poi la specifica del brief
   const { s, k } = conSpecifica(conPalette(s0, k0, c, pix), { ...k0, paletteDa: sorgentePalette(k0, c, pix) }, c)

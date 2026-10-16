@@ -32,6 +32,8 @@ export interface DesignContent {
   /** cosa mostra la foto (per la ricerca): "chicchi di caffè su pietra scura" */
   imageQuery?: string
   imageUrl?: string
+  /** altre foto dello stesso soggetto: il motore le usa a rotazione tra le composizioni (pixel già caricati con loadPix) */
+  immagini?: string[]
   /** specifica di progetto per questo brief (regia o persona): motivi, icone, effetti, look, segni */
   progetto?: Specifica
 }

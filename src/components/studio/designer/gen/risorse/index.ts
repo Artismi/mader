@@ -48,6 +48,11 @@ function effetti(g: G) {
       if (look) e.look = look
       if (f) aggiungi(e, { ...f })
     }
+    // ritaglio: a volte un dettaglio invece della foto intera (la foto copre un riquadro più grande e si taglia sull'elemento)
+    if (!main.view && !main.clipText && foto.filter(x => x.url === main.url).length === 1 && r.chance(0.3)) {
+      const z = r.range(1.35, 1.9), fx = r.range(0.2, 0.8), fy = r.range(0.2, 0.8)
+      main.view = { x: main.x - main.w * (z - 1) * fx, y: main.y - main.h * (z - 1) * fy, w: main.w * z, h: main.h * z }
+    }
   }
 
   // fondi e forme grandi senza effetti: trama o riempimento se nessun testo ci passa sopra, solo trama leggera se sì
@@ -189,7 +194,7 @@ export function forme(g: G): number {
     return false
   })
   if (via.length) g.els = g.els.filter(e => !via.includes(e))
-  for (const e of via) { const n = 'name' in e ? e.name : e.kind; formeTolte[n] = (formeTolte[n] ?? 0) + 1 }
+  for (const e of via) { const n = (e as { name: string }).name; formeTolte[n] = (formeTolte[n] ?? 0) + 1 }
   return via.length
 }
 

@@ -6,6 +6,10 @@
 import type { Pix } from '../gen/tools'
 
 const cache = new Map<string, Promise<Pix | undefined>>()
+const pronte = new Map<string, Pix | undefined>()
+
+/** I pixel di una foto già caricata (senza attendere): undefined se non è ancora pronta. */
+export const pixPronta = (url: string) => pronte.get(url)
 const srcOf = (u: string) => (u.startsWith('http') ? `/api/proxy-image?url=${encodeURIComponent(u)}` : u)
 
 export function loadPix(url: string | undefined, side = 160): Promise<Pix | undefined> {
@@ -28,5 +32,5 @@ export function loadPix(url: string | undefined, side = 160): Promise<Pix | unde
       im.src = srcOf(url)
     }))
   }
-  return cache.get(url)!
+  return cache.get(url)!.then(p => { pronte.set(url, p); return p })
 }
