@@ -300,7 +300,7 @@ export function fumetto(g: G): Scene | null {
   const vw = (Wp - gut * (cols - 1)) / cols
   const dentro = vw - 2 * pad
   const prep = rs.map(r => {
-    const nome = riga1(g, r.nome, s.display, dentro, 34, 22, { upper: false, tracking: 0, lines: 2 })
+    const nome = riga1(g, r.nome, s.display, dentro, 34, 22, { upper: false, tracking: 0, lines: 2, lettura: true })
     const val = r.valore ? riga1(g, r.valore, s.impact, dentro, 54, 26, { upper: false, tracking: 0 }) : null
     const tf = r.testo ? para(g, r.testo, dentro, 3, 22) : null
     return { r, nome, val, tf, h: (val ? val.h + U(g, 10) : 0) + (nome?.h ?? 0) + (tf ? tf.h + U(g, 12) : 0) + U(g, 64) + 2 * pad }

@@ -18,6 +18,7 @@ import {
 import { fit, lineWidth, type Fit } from '../../text'
 import { wobblyPath, starPath, scribbleEllipse } from '../forme'
 import { type Riga, righe, conVoci, valoreProtagonista, elencoRiuscito } from './voci'
+import { riga1 } from './comune'
 import {
   carta as foglioCarta, cartaPer, nastro, nastroPer, timbro, codice, contatore, largoContatore, barra, sceglie, dettaglio, stratoGenerativo,
   type Codice, type Avanzamento, type Contatore,
@@ -44,11 +45,6 @@ const SCALE = [1.75, 1.55, 1.38, 1.22, 1.1, 1, 0.9]
 /** Distanza tra due testi di gruppi diversi (sopra la soglia del controllo). */
 const STACCO = 12
 
-/** Una riga in un carattere dato, al corpo più grande che entra (null sotto il minimo). */
-function riga1(g: G, text: string, font: FontSpec, maxW: number, size: number, min = 18, o: { upper?: boolean; tracking?: number; lines?: number } = {}): Fit | null {
-  if (!text.trim()) return null
-  return fit({ text, font, maxW, maxSize: Math.max(size * g.u, min * g.u), minSize: min * g.u, maxLines: o.lines ?? 1, leading: 1.22, tracking: o.tracking ?? 0.04, upper: o.upper ?? true })
-}
 const scrivi = (g: G, name: string, f: Fit, font: FontSpec, x: number, y: number, color: string, o: { align?: 'left' | 'center' | 'right'; w?: number; angle?: number; deco?: boolean; opacity?: number } = {}) =>
   txt(g, { name, lines: f.lines, font, size: f.size, x, y, color, align: o.align ?? 'left', w: o.w ?? f.w, leading: f.leading ?? 1.22, tracking: f.tracking ?? 0.04, angle: o.angle || undefined, deco: o.deco, opacity: o.opacity })
 /** Il testo già piazzato con questo nome (per cerchiarlo, indicarlo). */
@@ -141,7 +137,7 @@ function scontrinoCon(g: G, v: number): Scene | null {
     let messe = 0, testi = 0
     for (const [i, r] of rs!.entries()) {
       const vf = r.valore ? riga1(g, r.valore, font, inner * 0.4, rsz, 18, { tracking: 0.02 }) : null
-      const nf = riga1(g, r.nome, font, inner - (vf ? vf.w + U(g, 40) : 0) - numW, rsz, 18, { lines: 2 })
+      const nf = riga1(g, r.nome, font, inner - (vf ? vf.w + U(g, 40) : 0) - numW, rsz, 18, { lines: 2, lettura: true })
       if (!nf) continue
       const tf = r.testo ? para(g, r.testo, inner - numW, 2, 22 * Math.min(f, 1.25)) : null
       messe++
@@ -297,7 +293,7 @@ export function lavagna(g: G): Scene | null {
     const nsz = (rs!.length > 4 ? 36 : 42) * f
     const rowsF = rs!.map(r => {
       const vf = r.valore ? display(g, r.valore, iw * 0.34, nsz * 2 * g.u, nsz, 30, 1) : null
-      const nf = fit({ text: r.nome, font: s.display, maxW: iw - segnoW - (vf ? vf.w + U(g, 40) : 0), maxSize: nsz * g.u, minSize: 24 * g.u, maxLines: 2, leading: 1.1, tracking: 0, balance: true })
+      const nf = fit({ text: r.nome, font: s.display, maxW: iw - segnoW - (vf ? vf.w + U(g, 40) : 0), maxSize: nsz * g.u, minSize: Math.max(24 * g.u, g.sc.minLettura), maxLines: 2, leading: 1.1, tracking: 0, balance: true })
       const tf = r.testo ? para(g, r.testo, iw - segnoW, 2, 24 * Math.min(f, 1.25)) : null
       return { vf, nf, tf, ok: !!nf && (!r.valore || !!vf) }
     })
@@ -441,7 +437,7 @@ export function tabellone(g: G): Scene | null {
     const colV = Math.max(...rs!.map(r => lineWidth((r.valore ?? r.n).toUpperCase(), font, U(g, rsz), 0.04))) + 2 * pad
     if (colV > w0 * 0.42) return null
     const nomeW = w0 - colV - U(g, 18) - 2 * pad
-    const rowsF = rs!.map(r => ({ r, nf: riga1(g, r.nome, font, nomeW, rsz, 18, { tracking: 0.04 }), tf: r.testo ? riga1(g, r.testo, g.s.text, nomeW, 22 * Math.min(f, 1.25), 18, { upper: false, tracking: 0, lines: 2 }) : null }))
+    const rowsF = rs!.map(r => ({ r, nf: riga1(g, r.nome, font, nomeW, rsz, 18, { tracking: 0.04, lettura: true }), tf: r.testo ? riga1(g, r.testo, g.s.text, nomeW, 22 * Math.min(f, 1.25), 18, { upper: false, tracking: 0, lines: 2, lettura: true }) : null }))
     if (rowsF.some(x => !x.nf)) return null
     const rowH = (x: typeof rowsF[number]) => x.nf!.h + 2 * pad + (x.tf ? x.tf.h + U(g, STACCO) : 0)
     const total = titH + U(g, 40) + U(g, 34) + rowsF.reduce((a, x) => a + rowH(x), 0) + rowGap * (rowsF.length - 1) + (cta ? U(g, 34) + cta.h : 0)
@@ -565,7 +561,7 @@ function fogliettiCon(g: G, side: boolean): Scene | null {
     const largo = cols === 1
     const iw = largo ? cw - 2 * pad - U(g, 110) : cw - 2 * pad
     // un corpo solo per i nomi e uno per i valori: il più piccolo che serve (niente corpi sparsi)
-    const fitNome = (t: string, max: number) => fit({ text: t, font: s.display, maxW: iw, maxH: ch * 0.4, maxSize: max, minSize: 22 * g.u, maxLines: 3, leading: 1.1, tracking: 0, balance: true })
+    const fitNome = (t: string, max: number) => fit({ text: t, font: s.display, maxW: iw, maxH: ch * 0.4, maxSize: max, minSize: Math.max(22 * g.u, g.sc.minLettura), maxLines: 3, leading: 1.1, tracking: 0, balance: true })
     const nomeMax = Math.min(...rs!.map(r => fitNome(r.nome, Math.min(48, ch / g.u * 0.16) * g.u)?.size ?? 0))
     const valMax = Math.min(...rs!.map(r => (r.valore && valoreProtagonista(g) ? display(g, r.valore, iw, ch * 0.36, 100, 32, 1)?.size : Infinity) ?? 0))
     return rs!.map(r => {
@@ -725,7 +721,7 @@ export function infografica(g: G): Scene | null {
       const grp = rs.map((r, i) => ({ r, i })).filter(x => (x.i % 2 ? 1 : -1) === dx)
       grp.forEach((x, j) => {
         const fy = A.y + (A.h * (j + 0.5)) / grp.length
-        const lf = fit({ text: x.r.nome, font: g.s.label, maxW: colW, maxSize: 26 * g.u, minSize: 16 * g.u, maxLines: 3, leading: 1.25, tracking: 0.1, upper: true })
+        const lf = fit({ text: x.r.nome, font: g.s.label, maxW: colW, maxSize: Math.max(26 * g.u, g.sc.minLettura), minSize: g.sc.minLettura, maxLines: 3, leading: 1.25, tracking: 0.1, upper: true })
         if (!lf) return
         const tf = x.r.testo ? para(g, x.r.testo, colW, 2, 22) : null
         const hh = lf.h + (tf ? tf.h + U(g, STACCO) : 0)
@@ -753,7 +749,7 @@ export function infografica(g: G): Scene | null {
     rs.forEach((r, i) => {
       const y0 = A.y + i * step
       const vf = display(g, r.valore!, vw, step * 0.62, 260, 40, 1)
-      const lf = lab(g, r.nome, A.w - vw - U(g, 30), 26)
+      const lf = lab(g, r.nome, A.w - vw - U(g, 30), 26, true)
       if (!vf || !lf) return
       putDisplay(g, `valore_${i}`, vf, A.x, y0, i % 2 ? fg : readable(P.bg, [ac, fg], 3), 'left', vf.w)
       putLab(g, `voce_${i}`, lf, A.x + A.w - lf.w, y0 + vf.h - lf.h - U(g, 6), fg, 'left', lf.w)
@@ -779,7 +775,7 @@ export function infografica(g: G): Scene | null {
       const R = Math.max(Rmax * 0.3, Rmax * Math.sqrt(nums[i] / max))
       const cx = A.x + cw * (col + 0.5), y0 = A.y + chh * row
       const vf = display(g, r.valore!, cw * 0.9, vh, 90, 30, 1)
-      const lf = lab(g, r.nome, cw * 0.9, 24)
+      const lf = lab(g, r.nome, cw * 0.9, 24, true)
       if (!vf || !lf) return
       putDisplay(g, `valore_${i}`, vf, cx - cw * 0.45, y0, fg, 'center', cw * 0.9)
       const by = y0 + vf.h + U(g, 16) + Rmax
@@ -819,7 +815,7 @@ export function infografica(g: G): Scene | null {
         const vf = r.valore ? display(g, r.valore, tw, step * 0.35, valoreProtagonista(g) ? 90 : 48, 30, 1) : null
         if (r.valore && !vf) return
         if (vf) { putDisplay(g, `valore_${i}`, vf, tx, ty, readable(P.bg, [ac, fg], 3), 'left', vf.w); ty += vf.h + U(g, STACCO) }
-        const nm = fit({ text: r.nome, font: s.display, maxW: tw, maxH: step * 0.4, maxSize: Math.min(60, step / g.u * 0.24) * g.u, minSize: 22 * g.u, maxLines: 2, leading: 1.1, tracking: 0, balance: true })
+        const nm = fit({ text: r.nome, font: s.display, maxW: tw, maxH: step * 0.4, maxSize: Math.min(60, step / g.u * 0.24) * g.u, minSize: Math.max(22 * g.u, g.sc.minLettura), maxLines: 2, leading: 1.1, tracking: 0, balance: true })
         if (!nm) return
         txt(g, { name: `voce_${i}`, lines: nm.lines, font: s.display, size: nm.size, x: tx, y: ty, color: fg, leading: 1.1 })
         ty += nm.h + U(g, STACCO)
@@ -840,7 +836,7 @@ export function infografica(g: G): Scene | null {
         const vf = r.valore ? display(g, r.valore, cw, ly - R - U(g, 16) - A.y, 80, 30, 1) : null
         if (r.valore && !vf) return
         if (vf) putDisplay(g, `valore_${i}`, vf, cx - cw / 2, ly - R - U(g, 16) - vf.h, readable(P.bg, [ac, fg], 3), 'center', cw)
-        const nm = fit({ text: r.nome, font: s.display, maxW: cw, maxH: A.h * 0.3, maxSize: 38 * g.u, minSize: 22 * g.u, maxLines: 3, leading: 1.1, tracking: 0, balance: true })
+        const nm = fit({ text: r.nome, font: s.display, maxW: cw, maxH: A.h * 0.3, maxSize: 38 * g.u, minSize: Math.max(22 * g.u, g.sc.minLettura), maxLines: 3, leading: 1.1, tracking: 0, balance: true })
         if (!nm) return
         txt(g, { name: `voce_${i}`, lines: nm.lines, font: s.display, size: nm.size, x: cx - cw / 2, y: ly + R + U(g, 20), color: fg, align: 'center', w: cw, leading: 1.1 })
         const tf = r.testo ? para(g, r.testo, cw, 3, 22) : null

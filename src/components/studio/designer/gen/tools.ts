@@ -68,7 +68,7 @@ export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, ph
   const { s, k } = conSpecifica(s0, k0, c)
   const ms = misure(format)
   return {
-    W, H, u: ms.u, m: ms.m.l, g: ms.gut, T: ms.safe.y, B: ms.safe.y + ms.safe.h, ms, sc: scala(ms, rapportoDa(k.scala)),
+    W, H, u: ms.u, m: ms.m.l, g: ms.gut, T: ms.safe.y, B: ms.safe.y + ms.safe.h, ms, sc: scala(ms, rapportoDa(k.scala), format),
     format, landscape: W > H * 1.15, portrait: H > W * 1.15,
     s, k, c, photo: photo ?? c.imageUrl,
     r: rng(k.seme ^ hashText(`${c.title}|${k.sistema}`)),
@@ -124,15 +124,16 @@ function fitScaled(g: G, o: Omit<FitOpts, 'tracking' | 'leading'>, voce: Voce, u
   return again && again.size >= first.size * 0.97 ? again : first
 }
 
-/** Etichetta maiuscola spaziata: mai sotto il corpo delle note (leggibile sul telefono). */
-export function lab(g: G, text: string | undefined, maxW: number, size = 0): Fit | null {
+/** Etichetta maiuscola spaziata: mai sotto il corpo delle note (leggibile sul telefono); `lettura` se fa da voce o testo. */
+export function lab(g: G, text: string | undefined, maxW: number, size = 0, lettura = false): Fit | null {
   if (!text?.trim()) return null
-  return fitScaled(g, { text, font: g.s.label, maxW, maxSize: Math.max(size * g.u, g.sc.note), minSize: 16 * g.u, maxLines: 1, upper: true }, 'etichetta', true)
+  const min = lettura ? g.sc.minLettura : g.sc.minNota
+  return fitScaled(g, { text, font: g.s.label, maxW, maxSize: Math.max(size * g.u, g.sc.note, min), minSize: min, maxLines: 1, upper: true }, 'etichetta', true)
 }
-/** Testo corrente: parte dal corpo della scala, scende al massimo a 22. */
+/** Testo corrente: parte dal corpo della scala, non scende sotto il minimo di lettura (se non entra, null). */
 export function para(g: G, text: string | undefined, maxW: number, maxLines = 3, size = 0): Fit | null {
   if (!text?.trim()) return null
-  return fitScaled(g, { text, font: g.s.text, maxW, maxSize: Math.max(size * g.u, g.sc.testo), minSize: 22 * g.u, maxLines }, 'testo')
+  return fitScaled(g, { text, font: g.s.text, maxW, maxSize: Math.max(size * g.u, g.sc.testo), minSize: g.sc.minLettura, maxLines }, 'testo')
 }
 export function display(g: G, text: string, maxW: number, maxH: number, maxSize: number, minSize: number, maxLines: number, upper = g.s.displayUpper): Fit | null {
   return fitScaled(g, { text, font: g.s.display, maxW, maxH, maxSize: maxSize * g.u, minSize: Math.max(minSize * g.u, g.sc.attacco), maxLines, upper, balance: true }, voceTitolo(g.s.display), !!upper)

@@ -27,10 +27,11 @@ export const poly = (pts: Pt[]) => 'M ' + pts.map(p => `${f1(p[0])} ${f1(p[1])}`
 export const rectD = (b: Box) => poly([[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]])
 export const circD = (cx: number, cy: number, r: number) => `M ${f1(cx - r)} ${f1(cy)} a ${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0 a ${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0 Z`
 
-/** Una riga in un carattere dato, al corpo più grande che entra (null sotto il minimo). */
-export function riga1(g: G, text: string, font: FontSpec, maxW: number, size: number, min = 18, o: { upper?: boolean; tracking?: number; lines?: number } = {}): Fit | null {
+/** Una riga in un carattere dato, al corpo più grande che entra (null sotto il minimo; mai sotto il corpo delle note, o di lettura con `lettura`). */
+export function riga1(g: G, text: string, font: FontSpec, maxW: number, size: number, min = 18, o: { upper?: boolean; tracking?: number; lines?: number; lettura?: boolean } = {}): Fit | null {
   if (!text.trim()) return null
-  return fit({ text, font, maxW, maxSize: Math.max(size * g.u, min * g.u), minSize: min * g.u, maxLines: o.lines ?? 1, leading: 1.22, tracking: o.tracking ?? 0.04, upper: o.upper ?? true })
+  const lo = Math.max(min * g.u, o.lettura ? g.sc.minLettura : g.sc.minNota)
+  return fit({ text, font, maxW, maxSize: Math.max(size * g.u, lo), minSize: lo, maxLines: o.lines ?? 1, leading: 1.22, tracking: o.tracking ?? 0.04, upper: o.upper ?? true })
 }
 export const scrivi = (g: G, name: string, f: Fit, font: FontSpec, x: number, y: number, color: string, o: { align?: 'left' | 'center' | 'right'; w?: number; angle?: number; deco?: boolean; opacity?: number; blend?: GlobalCompositeOperation } = {}) =>
   txt(g, { name, lines: f.lines, font, size: f.size, x, y, color, align: o.align ?? 'left', w: o.w ?? f.w, leading: f.leading ?? 1.22, tracking: f.tracking ?? 0.04, angle: o.angle || undefined, deco: o.deco, opacity: o.opacity, blend: o.blend })
@@ -91,7 +92,7 @@ export function elenco(g: G, rs: Riga[], w: number, f = 1) {
   const vals = rs.map(r => (r.valore ? (prot ? display(g, r.valore, w - numW, U(g, 120), 76 * f, 30, 1) : lab(g, r.valore, w * 0.3, 26 * f)) : null))
   if (rs.some((r, i) => r.valore && !vals[i])) return null
   const nomeW = (i: number) => w - numW - (!prot && vals[i] ? vals[i]!.w + U(g, 24) : 0)
-  const tryNome = (i: number, max: number) => fit({ text: rs[i].nome, font: s.display, maxW: nomeW(i), maxSize: max, minSize: 22 * g.u, maxLines: 2, leading: 1.1, tracking: 0, balance: true })
+  const tryNome = (i: number, max: number) => fit({ text: rs[i].nome, font: s.display, maxW: nomeW(i), maxSize: max, minSize: Math.max(22 * g.u, g.sc.minLettura), maxLines: 2, leading: 1.1, tracking: 0, balance: true })
   const size = Math.min(...rs.map((_, i) => tryNome(i, 40 * f * g.u)?.size ?? 0))
   if (!size) return null
   const nomi = rs.map((_, i) => tryNome(i, size)!)

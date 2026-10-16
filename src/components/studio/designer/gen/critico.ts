@@ -11,6 +11,8 @@ import { toOklch } from '../core/colore'
 import { type G, textBox, check, corners, obbTouch } from './tools'
 import { type Criterio, RUBRICA, SOGLIA, ECCELLENTE } from './rubrica'
 import { affinita } from './affinita'
+import { corpoMinimo } from '../core/scala'
+export { corpoMinimo }
 
 export type { Criterio } from './rubrica'
 export interface Esame {
@@ -272,17 +274,6 @@ export function esamina(g: G): Esame {
   const promossa = voto >= SOGLIA
   const misure: Misure = { ...misureLibere(g, texts), densita: 1 - zone.reduce((a, z) => a + z, 0), armonia: armonia(vivi), contrastoMin: lett.length ? Math.min(...lett.map(l => l.contrasto)) : 21 }
   return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g), misure }
-}
-
-/**
- * Corpo minimo leggibile su telefono, in px della tavola: frazione della larghezza
- * (la tavola si vede larga quanto lo schermo). Testi di lettura più grandi delle note;
- * la storia si guarda a tutto schermo e da vicino, regge un filo meno.
- */
-export function corpoMinimo(nome: string, format: string, W: number) {
-  const lettura = /^(testo|corpo|voce|risposta|domanda|punto|descrizione)/.test(nome)
-  const f = format === 'storia' ? (lettura ? 0.024 : 0.019) : (lettura ? 0.026 : 0.02)
-  return f * W
 }
 
 /** Quanto pesa ogni nota del critico sul voto (punti su 100). La prima regola che combacia vale. */

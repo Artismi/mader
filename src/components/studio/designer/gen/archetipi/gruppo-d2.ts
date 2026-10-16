@@ -151,7 +151,7 @@ export function agenzia(g: G): Scene | null {
   let messe = 0, testi = 0
   const rowsH: number[] = []
   const prep = rs.map(r => {
-    const nf = riga1(g, r.nome, s.display, colW - numW - (r.valore && !prot ? U(g, 120) : 0), 34, 20, { upper: false, tracking: 0, lines: 2 })
+    const nf = riga1(g, r.nome, s.display, colW - numW - (r.valore && !prot ? U(g, 120) : 0), 34, 20, { lettura: true, upper: false, tracking: 0, lines: 2 })
     const vf = r.valore ? riga1(g, r.valore, prot ? s.impact : font, prot ? colW - numW : U(g, 160), prot ? 56 : 20, 16, { upper: false, tracking: 0 }) : null
     const tf = r.testo ? para(g, r.testo, colW - numW, 2, 22) : null
     const h = Math.max(nsz * 1.05, (prot && vf ? vf.h + U(g, 8) : 0) + (nf?.h ?? 0) + (tf ? tf.h + U(g, 12) : 0)) + U(g, 28)

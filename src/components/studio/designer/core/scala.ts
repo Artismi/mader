@@ -3,7 +3,8 @@
  * fa a mano: spaziatura e interlinea cambiano con il corpo.
  *
  * I corpi sono pensati per il telefono: una tavola di 1080 px si vede larga
- * ~390 punti, quindi il testo parte da 28 px (≈10 pt) e le etichette da 18.
+ * ~390 punti, quindi il testo parte da 28 px (≈10 pt) e le etichette da 18;
+ * corpoMinimo fa da pavimento (lo stesso che misura il critico).
  */
 import type { Misure } from './misure'
 
@@ -17,6 +18,9 @@ export interface Scala {
   /** corpi in px della tavola */
   testo: number
   note: number
+  /** corpi minimi leggibili sul telefono (corpoMinimo): note e testi di lettura */
+  minNota: number
+  minLettura: number
   attacco: number
   sotto: number
   /** titolo al livello n (3 = sobrio … 6 = enorme) */
@@ -35,12 +39,26 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math
 /** Rapporto della scala dal regolatore Scala (0 sobria → 1 manifesto). */
 export const rapportoDa = (scala: number) => lerp(RAPPORTI.sobria, RAPPORTI.manifesto, scala)
 
-export function scala(ms: Misure, r: number): Scala {
+/**
+ * Corpo minimo leggibile su telefono, in px della tavola: frazione della larghezza
+ * (la tavola si vede larga quanto lo schermo). Testi di lettura più grandi delle note;
+ * la storia si guarda a tutto schermo e da vicino, regge un filo meno.
+ * Il critico lo misura, il motore lo usa come pavimento dei corpi.
+ */
+export function corpoMinimo(nome: string, format: string, W: number) {
+  const lettura = /^(testo|corpo|voce|risposta|domanda|punto|descrizione)/.test(nome)
+  const f = format === 'storia' ? (lettura ? 0.024 : 0.019) : (lettura ? 0.026 : 0.02)
+  return f * W
+}
+
+export function scala(ms: Misure, r: number, format = ''): Scala {
   const u = ms.u
-  const testo = 28 * u
-  const note = Math.max(18 * u, Math.min(22 * u, testo / r))
+  const minNota = Math.ceil(corpoMinimo('nota', format, ms.W))
+  const minLettura = Math.ceil(corpoMinimo('testo', format, ms.W))
+  const testo = Math.max(28 * u, minLettura)
+  const note = Math.max(18 * u, minNota, Math.min(22 * u, testo / r))
   return {
-    r, testo, note,
+    r, testo, note, minNota, minLettura,
     attacco: testo * r,
     sotto: testo * r * r,
     titolo: n => testo * r ** n,
