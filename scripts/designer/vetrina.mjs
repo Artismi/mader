@@ -43,6 +43,11 @@ const formati = (args.formati ?? 'quadrato,verticale,storia,orizzontale').split(
 const sistemi = args.sistemi ? args.sistemi.split(',') : undefined
 const over = args.knobs ? JSON.parse(args.knobs) : {}
 if (args.stile) over.stile = args.stile
+// valori sconosciuti: errore chiaro con l'elenco dei validi, non una vetrina vuota
+const FORMATI = ['quadrato', 'verticale', 'storia', 'orizzontale']
+const ignoti = (l, validi, cosa) => { const x = l.filter(v => !validi.includes(v)); if (x.length) { console.error(`${cosa} sconosciut${x.length > 1 ? 'i' : 'o'}: ${x.join(', ')}. Validi: ${validi.join(', ')}`); process.exit(1) } }
+ignoti(contenuti, Object.keys(CONTENUTI), 'contenuto')
+ignoti(formati, FORMATI, 'formato')
 const out = path.resolve(args.out ?? path.join(here, 'out'))
 const thumb = Number(args.thumb ?? (args.occhio ? 0.5 : 0.36))
 fs.mkdirSync(out, { recursive: true })
