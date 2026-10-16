@@ -5,7 +5,7 @@
  * e toglie le forme senza motivo. Deterministico dal seme della tavola.
  */
 import type { SceneEl, FxSpec } from '../../types'
-import { textBox, lum, mix, type G } from '../tools'
+import { textBox, lum, mix, pathBox, type G } from '../tools'
 import { rng, hashText, type Rng } from '../knobs'
 import { scegliFx, looksPer } from './effetti'
 import type { Palette, Oggetto3D } from '../../types'
@@ -154,8 +154,48 @@ function oggetto3d(g: G) {
   g.els.splice(at, 0, { kind: 'ornament', name: 'oggetto3d', id: `3d:${forma}`, x: b.x, y: b.y, w: b.w, h: b.h, seed: g.k.seme, opacity: 1, o3d })
 }
 
+/* ── 4. forme motivate: via i riempitivi senza ragione ──────────────────── */
+/** Riempitivi sparsi a caso (coriandoli, stelline, ghirigori): non vengono né dall'idea né dalla griglia. */
+const RIEMPITIVI = /^(coriandolo|stellina|ghirigoro)$/
+/** Forme decorative che restano solo se hanno una ragione nella composizione. */
+const DECORATIVE = /^(blob|macchia|alone|bolla|disco|triangolo|punto|forma|strato)$/
+const boxEl = (e: SceneEl): Box | null => (e.kind === 'path' ? pathBox(e.d) : boxOf(e))
+
+/**
+ * Una forma decorativa è motivata se dialoga con il contenuto (tocca un testo o la foto: fondo,
+ * cornice, appoggio), se è tagliata dal formato ed è grande (gesto di composizione), o se sta
+ * sulla griglia (bordo sui margini, centro sull'asse). Altrimenti è un riempitivo e non entra.
+ */
+function motivata(g: G, b: Box) {
+  const tol = 6 * g.u, big = area(b) > g.W * g.H * 0.03
+  const conti = [...testi(g).map(textBox), ...g.els.filter(e => e.kind === 'image').map(e => boxOf(e)!)]
+  if (conti.some(t => inter({ x: b.x - tol, y: b.y - tol, w: b.w + 2 * tol, h: b.h + 2 * tol }, t) > 0)) return true
+  if (big && (b.x < 0 || b.y < 0 || b.x + b.w > g.W || b.y + b.h > g.H)) return true
+  const vicino = (a: number, v: number) => Math.abs(a - v) < tol
+  return [g.m, g.W - g.m].some(v => vicino(b.x, v) || vicino(b.x + b.w, v)) && [g.T, g.B].some(v => vicino(b.y, v) || vicino(b.y + b.h, v)) || vicino(b.x + b.w / 2, g.W / 2) && big
+}
+
+/** Conta delle forme tolte (diagnosi della vetrina). */
+export const formeTolte: Record<string, number> = {}
+
+export function forme(g: G): number {
+  const via = g.els.filter(e => {
+    const n = 'name' in e ? e.name : ''
+    if (RIEMPITIVI.test(n)) return true
+    // il triangolo a contorno sparso (Memphis) e la macchia generativa a caso dello strato
+    if (e.kind === 'path' && n === 'triangolo' && e.stroke) return true
+    if (e.kind === 'circle' && n === 'strato') return true
+    if ((e.kind === 'circle' || e.kind === 'path') && DECORATIVE.test(n)) { const b = boxEl(e); return !!b && !motivata(g, b) }
+    return false
+  })
+  if (via.length) g.els = g.els.filter(e => !via.includes(e))
+  for (const e of via) { const n = 'name' in e ? e.name : e.kind; formeTolte[n] = (formeTolte[n] ?? 0) + 1 }
+  return via.length
+}
+
 /** Il passaggio delle risorse dello Studio (chiamato da `finish`). */
 export function arricchisci(g: G) {
+  forme(g)
   oggetto3d(g)
   generatori(g)
   effetti(g)

@@ -12,6 +12,7 @@ import type { DesignContent, Format, Scene, Oggetto3D } from '@/components/studi
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/campi'
+import { formeTolte } from '@/components/studio/designer/gen/risorse'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
 export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
@@ -166,4 +167,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }

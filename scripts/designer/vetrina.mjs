@@ -308,6 +308,7 @@ for (const nome of contenuti) {
 }
 const bc = await page.evaluate(() => window.designer.backendCampi())
 if (Object.keys(bc.conta).length) console.log(`Campi generativi: ${Object.entries(bc.conta).map(([b, n]) => `${b} ${n}`).join(', ')} (navigator.gpu ${bc.webgpu ? 'presente' : 'assente: nodi del Lab sul ripiego WebGL2 di three'})`)
+if (Object.keys(bc.formeTolte ?? {}).length) console.log(`Forme senza motivo tolte (tutte le prove): ${Object.entries(bc.formeTolte).map(([n, k]) => `${n} ${k}`).join(', ')}`)
 await browser.close()
 if (occhio) {
   const { prima, dopo } = occhio, x = (prima.tokenImmagine + prima.tokenTesto) / Math.max(1, dopo.tokenImmagine + dopo.tokenTesto)

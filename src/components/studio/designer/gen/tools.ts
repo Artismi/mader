@@ -458,7 +458,7 @@ function under(g: G, upto: number, px: number, py: number): { color: string; bus
 /** Cosa c'è sotto un punto della tavola composta: colore e se il fondo è mosso. */
 export const sotto = (g: G, x: number, y: number) => under(g, g.els.length, x, y)
 
-function pathBox(d: string): Box | null {
+export function pathBox(d: string): Box | null {
   const xs: number[] = [], ys: number[] = []
   for (const m of d.matchAll(/M\s*(-?[\d.]+)\s+(-?[\d.]+)/g)) { xs.push(+m[1]); ys.push(+m[2]) }
   if (!xs.length) return null
