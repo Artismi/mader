@@ -314,6 +314,7 @@ function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
 import { cutout } from './compose/cutout'
 import { installSelection, selectAll, cycleSelection, selectBoard, pickable } from './editor/selection'
 import { boxFrom, makeShape, placeTopLeft, constrain45, anchorsInScene, splitLine, splitPolyline, CLICK_PX, DEFAULT_SIZE, type ShapeTool } from './editor/draw'
+import { snapMoving } from './editor/snap'
 import { copySelection, cutSelection, pasteClip, duplicateSelection, deleteSelection, type Clip } from './editor/clipboard'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
@@ -945,44 +946,32 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     }
     canvas.on('object:scaling', throttledTransform)
     canvas.on('object:rotating', throttledTransform)
+    // Maiusc durante la rotazione: scatti di 15°
+    canvas.on('object:rotating', e => {
+      if (!(e.e as MouseEvent)?.shiftKey) return
+      e.target.rotate(Math.round((e.target.angle || 0) / 15) * 15); e.target.setCoords()
+    })
+    // le misure seguono frecce, allinea, valori e annulla
+    canvas.on('object:modified', refreshInsp)
+    canvas.on('history:restored' as never, () => setInsp(null))
+    // maniglie come in Illustrator e Figma: libere, Maiusc per le proporzioni
+    canvas.uniformScaling = false
 
     // Connector update + smart guides + snap-to-grid on move
     canvas.on('object:moving', e => {
       const moved = e.target as any
-      if (!moved.objId) return
 
-      // Snap to grid (Sync for UX precision)
-      if (snapGridRef.current && gridSizeRef.current) {
-        const gs = gridSizeRef.current
-        moved.set({ left: Math.round((moved.left || 0) / gs) * gs, top: Math.round((moved.top || 0) / gs) * gs })
+      // aggancio a griglia, oggetti e tavole (anche con più oggetti selezionati);
+      // le tavole no: il loro contenuto le segue con lo spostamento del mouse
+      if (!moved.isArtboard) {
+        const newGuides = snapMoving(canvas, moved, snapGridRef.current ? gridSizeRef.current : 0)
+        setGuides(prev => (prev.length === 0 && newGuides.length === 0 ? prev : newGuides))
       }
-
-      // Fabric schedules its own render on object:moving — no manual call needed
+      if (!moved.objId) return
 
       // Throttle heavy logic with RAF (Forward-only lock, no cancellation)
       if (moveRaf.current) return
       moveRaf.current = requestAnimationFrame(() => {
-        // Smart alignment guides
-        const GUIDE_T = 6
-        const mc = moved.getCenterPoint(), ml = moved.left || 0, mt = moved.top || 0
-        const mw = moved.getScaledWidth(), mh = moved.getScaledHeight()
-        const newGuides: { x?: number; y?: number }[] = []
-
-        const allObjs = canvas.getObjects().filter(o => o.selectable && o !== moved && !(o as any).isArtboard)
-
-        allObjs.forEach((obj: any) => {
-          const oc = obj.getCenterPoint(), ol = obj.left || 0, ot = obj.top || 0
-          const ow = obj.getScaledWidth(), oh = obj.getScaledHeight()
-          const xPairs = [[mc.x, oc.x], [ml, ol], [ml + mw, ol + ow], [mc.x, ol], [mc.x, ol + ow]]
-          xPairs.forEach(([a, b]) => { if (Math.abs(a - b) < GUIDE_T) newGuides.push({ x: b }) })
-          const yPairs = [[mc.y, oc.y], [mt, ot], [mt + mh, ot + oh], [mc.y, ot], [mc.y, ot + oh]]
-          yPairs.forEach(([a, b]) => { if (Math.abs(a - b) < GUIDE_T) newGuides.push({ y: b }) })
-        })
-        // Skip React update when guides unchanged (avoids re-render at 60fps during normal drag)
-        setGuides(prev => {
-          if (prev.length === 0 && newGuides.length === 0) return prev
-          return newGuides
-        })
 
         // Update ArrowLine connectors
         canvas.getObjects().forEach(obj => {
@@ -4791,13 +4780,29 @@ function PropSection({ label, summary, children, defaultOpen = false }: {
 }
 
 // Input compatto per il panel
+/**
+ * Campo numerico da programma di grafica: si scrive liberamente (anche "-" o vuoto),
+ * il valore si applica con Invio o uscendo dal campo, Esc torna al valore di prima.
+ */
 function PI({ label, value, onChange, min, max, className }:
   { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; className?: string }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft === null) return
+    const v = parseFloat(draft.replace(',', '.'))
+    setDraft(null)
+    if (Number.isFinite(v) && v !== value) onChange(Math.max(min ?? -Infinity, Math.min(max ?? Infinity, v)))
+  }
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[7px] font-black uppercase tracking-widest text-white/20">{label}</span>
-      <input type="number" value={value} min={min} max={max}
-        onChange={e => onChange(parseInt(e.target.value) || 0)}
+      <input type="number" value={draft ?? value} min={min} max={max} aria-label={label}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur() }
+          if (e.key === 'Escape') { setDraft(null); (e.target as HTMLInputElement).blur() }
+        }}
         className={cn('h-7 px-2 bg-white/[0.04] border border-white/[0.07] rounded-lg text-[11px] font-bold text-white/70 text-center focus:outline-none focus:border-accent/40 transition-colors', className)}
       />
     </div>
@@ -4919,9 +4924,14 @@ function PropertiesPanel(props: PanelProps) {
 
   const inspUpdate = (prop: string, val: number) => {
     const canvas = fabricRef.current; const obj = canvas?.getActiveObject(); if (!obj) return
-    if (prop === 'width') { obj.scaleX = (val || 1) / obj.width!; obj.setCoords() }
-    else if (prop === 'height') { obj.scaleY = (val || 1) / obj.height!; obj.setCoords() }
-    else if (prop === 'angle') { obj.set({ angle: val }); obj.setCoords() }
+    if (prop === 'width' || prop === 'height') {
+      // la misura comprende il bordo (come getScaledWidth); l'angolo in alto a sinistra resta fermo
+      const tl = obj.getPointByOrigin('left', 'top'), sw = obj.strokeUniform ? 0 : (obj.strokeWidth || 0)
+      if (prop === 'width') obj.scaleX = Math.max(1, val) / Math.max(1, obj.width! + sw)
+      else obj.scaleY = Math.max(1, val) / Math.max(1, obj.height! + sw)
+      obj.setPositionByOrigin(tl, 'left', 'top')
+    }
+    else if (prop === 'angle') { obj.rotate(val) }
     else {
       // X/Y sono misurati dalla tavola: si sposta l'oggetto della differenza
       const cur = inspOf(canvas!, obj)
