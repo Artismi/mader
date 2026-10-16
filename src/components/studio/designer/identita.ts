@@ -5,7 +5,7 @@
  * preset; il seme decide, e ogni tanto l'identità mescola il registro con un
  * vicino. La stessa identità (stesso id) torna identica: coerenza tra slide.
  *
- * id: "id:<registro>:<seme>:<tinta>:<armonia>:<tono>" (campi vuoti = liberi)
+ * id: "id:<registro>:<seme>:<tinta>:<armonia>:<tono>:<sperimentazione>" (campi vuoti = liberi)
  */
 import type { Style, RegistroId } from './styles'
 import { generaPalette, pesato, type TendenzaColore, type Armonia, type Tono } from './core/colore'
@@ -90,9 +90,23 @@ export const VICINI: Record<RegistroId, RegistroId[]> = {
   artigianale: ['editoriale', 'retro', 'lusso'], notte: ['avanguardia', 'pop', 'sportivo'], tech: ['svizzero', 'pop'], retro: ['pop', 'artigianale', 'notte'], sportivo: ['notte', 'svizzero', 'pop'],
 }
 
-export interface OpzioniIdentita { tinta?: number; armonia?: Armonia; tono?: Tono }
+export interface OpzioniIdentita { tinta?: number; armonia?: Armonia; tono?: Tono; /** 0–1: quanto osano i caratteri */ sperimentazione?: number }
 
-export const idIdentita = (registro: RegistroId, seme: number, o: OpzioniIdentita = {}) => `id:${registro}:${seme}:${o.tinta ?? ''}:${o.armonia ?? ''}:${o.tono ?? ''}`
+/** Sperimentazione dei caratteri di ogni registro, se non è data. */
+export const SPERIMENTAZIONE_REGISTRO: Record<RegistroId, number> = {
+  avanguardia: 0.8, pop: 0.55, retro: 0.5, infantile: 0.45, notte: 0.45, sportivo: 0.4, artigianale: 0.35, tech: 0.35, editoriale: 0.3, svizzero: 0.2, lusso: 0.15,
+}
+
+export const idIdentita = (registro: RegistroId, seme: number, o: OpzioniIdentita = {}) => `id:${registro}:${seme}:${o.tinta ?? ''}:${o.armonia ?? ''}:${o.tono ?? ''}${o.sperimentazione !== undefined ? ':' + +o.sperimentazione.toFixed(2) : ''}`
+
+/** Lo stesso id di identità con un'altra sperimentazione (gli stili fissi restano come sono). */
+export function conSperimentazione(id: string, s?: number): string {
+  if (s === undefined || !id.startsWith('id:')) return id
+  const p = id.split(':')
+  while (p.length < 7) p.push('')
+  p[6] = String(+Math.max(0, Math.min(1, s)).toFixed(2))
+  return p.join(':')
+}
 
 const cache = new Map<string, Style>()
 
@@ -110,7 +124,7 @@ export function identita(registro: RegistroId, seme: number, o: OpzioniIdentita 
     ? Object.fromEntries([...new Set([...Object.keys(T.persona), ...Object.keys(mix.persona)])].map(k => [k, ((T.persona as Record<string, number>)[k] ?? 0) * 0.6 + ((mix.persona as Record<string, number>)[k] ?? 0) * 0.4]))
     : T.persona
   const pal = generaPalette(r, colore, o)
-  const ab = abbina(r, persona, { maiuscolo: T.maiuscolo })
+  const ab = abbina(r, persona, { maiuscolo: T.maiuscolo, sperimentazione: o.sperimentazione ?? SPERIMENTAZIONE_REGISTRO[registro] })
   let accento = pesato(r, T.accenti)
   if (accento === 'corsivo' && !ab.corsivo) accento = 'colore'
   const forma = pesato(r, T.forme)
@@ -134,9 +148,10 @@ export function identita(registro: RegistroId, seme: number, o: OpzioniIdentita 
 /** Identità da id (null se l'id non è di un'identità generata). */
 export function daId(id: string): Style | null {
   if (!id.startsWith('id:')) return null
-  const [, registro, seme, tinta, armonia, tono] = id.split(':')
+  const [, registro, seme, tinta, armonia, tono, sper] = id.split(':')
   if (!(registro in TENDENZE)) return null
   return identita(registro as RegistroId, Number(seme) || 0, {
     tinta: tinta ? Number(tinta) : undefined, armonia: (armonia || undefined) as Armonia | undefined, tono: (tono || undefined) as Tono | undefined,
+    sperimentazione: sper ? Number(sper) : undefined,
   })
 }

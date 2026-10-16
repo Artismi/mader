@@ -1,0 +1,4953 @@
+[
+ {
+  "id": "elemento:compose-carta-1",
+  "tipo": "elemento",
+  "nome": "carta-1.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "carta"
+   ]
+  },
+  "colori": [
+   "#93938c",
+   "#74716b",
+   "#acaca6"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/carta-1.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-carta-2",
+  "tipo": "elemento",
+  "nome": "carta-2.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "carta"
+   ]
+  },
+  "colori": [
+   "#c6b196",
+   "#d7c4ac",
+   "#b8a78e"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/carta-2.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-carta-3",
+  "tipo": "elemento",
+  "nome": "carta-3.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "carta"
+   ]
+  },
+  "colori": [
+   "#93928e",
+   "#73716c",
+   "#53504d"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/carta-3.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-plastica-1",
+  "tipo": "elemento",
+  "nome": "plastica-1.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "plastica"
+   ]
+  },
+  "colori": [
+   "#0d0d0d",
+   "#2d2d2d",
+   "#515151"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/plastica-1.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-plastica-2",
+  "tipo": "elemento",
+  "nome": "plastica-2.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "plastica"
+   ]
+  },
+  "colori": [
+   "#050505",
+   "#2d2d2c",
+   "#4d4d4d"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/plastica-2.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-plastica-3",
+  "tipo": "elemento",
+  "nome": "plastica-3.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "plastica"
+   ]
+  },
+  "colori": [
+   "#0d0d0d",
+   "#2b2b2b",
+   "#4b4b4b"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/plastica-3.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-plastica-4",
+  "tipo": "elemento",
+  "nome": "plastica-4.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "plastica"
+   ]
+  },
+  "colori": [
+   "#121212",
+   "#2d2d2d",
+   "#4b4b4b"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/plastica-4.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-plastica-5",
+  "tipo": "elemento",
+  "nome": "plastica-5.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "plastica"
+   ]
+  },
+  "colori": [
+   "#060606",
+   "#2d2d2d",
+   "#525252"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/plastica-5.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-rumore-1",
+  "tipo": "elemento",
+  "nome": "rumore-1.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "rumore"
+   ]
+  },
+  "colori": [
+   "#757575",
+   "#818181"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/rumore-1.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-rumore-2",
+  "tipo": "elemento",
+  "nome": "rumore-2.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "rumore"
+   ]
+  },
+  "colori": [
+   "#6f6f6f",
+   "#303030",
+   "#4e4e4e"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/rumore-2.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-rumore-3",
+  "tipo": "elemento",
+  "nome": "rumore-3.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "rumore"
+   ]
+  },
+  "colori": [
+   "#8e8e8e",
+   "#a2a2a2",
+   "#7b7b7b"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/rumore-3.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-rumore-4",
+  "tipo": "elemento",
+  "nome": "rumore-4.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "rumore"
+   ]
+  },
+  "colori": [
+   "#767676",
+   "#818181"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/rumore-4.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-rumore-5",
+  "tipo": "elemento",
+  "nome": "rumore-5.jpg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "rumore"
+   ]
+  },
+  "colori": [
+   "#6d6d6d",
+   "#5b5b5b",
+   "#818181"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/rumore-5.jpg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-1",
+  "tipo": "elemento",
+  "nome": "segno-1.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-1.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-2",
+  "tipo": "elemento",
+  "nome": "segno-2.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-2.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-3",
+  "tipo": "elemento",
+  "nome": "segno-3.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-3.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-4",
+  "tipo": "elemento",
+  "nome": "segno-4.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-4.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-5",
+  "tipo": "elemento",
+  "nome": "segno-5.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-5.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-6",
+  "tipo": "elemento",
+  "nome": "segno-6.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-6.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-7",
+  "tipo": "elemento",
+  "nome": "segno-7.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-7.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-8",
+  "tipo": "elemento",
+  "nome": "segno-8.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-8.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-segno-9",
+  "tipo": "elemento",
+  "nome": "segno-9.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "segno"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/segno-9.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-10",
+  "tipo": "elemento",
+  "nome": "tavola-10.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-10.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-11",
+  "tipo": "elemento",
+  "nome": "tavola-11.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-11.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-12",
+  "tipo": "elemento",
+  "nome": "tavola-12.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-12.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-13",
+  "tipo": "elemento",
+  "nome": "tavola-13.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-13.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-14",
+  "tipo": "elemento",
+  "nome": "tavola-14.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-14.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-15",
+  "tipo": "elemento",
+  "nome": "tavola-15.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-15.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-16",
+  "tipo": "elemento",
+  "nome": "tavola-16.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-16.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-17",
+  "tipo": "elemento",
+  "nome": "tavola-17.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-17.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-18",
+  "tipo": "elemento",
+  "nome": "tavola-18.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-18.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-19",
+  "tipo": "elemento",
+  "nome": "tavola-19.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-19.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-2",
+  "tipo": "elemento",
+  "nome": "tavola-2.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-2.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-20",
+  "tipo": "elemento",
+  "nome": "tavola-20.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-20.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-21",
+  "tipo": "elemento",
+  "nome": "tavola-21.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-21.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-22",
+  "tipo": "elemento",
+  "nome": "tavola-22.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-22.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-23",
+  "tipo": "elemento",
+  "nome": "tavola-23.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-23.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-24",
+  "tipo": "elemento",
+  "nome": "tavola-24.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-24.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-25",
+  "tipo": "elemento",
+  "nome": "tavola-25.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-25.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-26",
+  "tipo": "elemento",
+  "nome": "tavola-26.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-26.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-27",
+  "tipo": "elemento",
+  "nome": "tavola-27.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-27.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-28",
+  "tipo": "elemento",
+  "nome": "tavola-28.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-28.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-29",
+  "tipo": "elemento",
+  "nome": "tavola-29.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-29.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-3",
+  "tipo": "elemento",
+  "nome": "tavola-3.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-3.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-30",
+  "tipo": "elemento",
+  "nome": "tavola-30.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-30.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-31",
+  "tipo": "elemento",
+  "nome": "tavola-31.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-31.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-32",
+  "tipo": "elemento",
+  "nome": "tavola-32.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-32.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-33",
+  "tipo": "elemento",
+  "nome": "tavola-33.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-33.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-34",
+  "tipo": "elemento",
+  "nome": "tavola-34.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-34.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-4",
+  "tipo": "elemento",
+  "nome": "tavola-4.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-4.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-5",
+  "tipo": "elemento",
+  "nome": "tavola-5.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-5.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-6",
+  "tipo": "elemento",
+  "nome": "tavola-6.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-6.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-7",
+  "tipo": "elemento",
+  "nome": "tavola-7.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-7.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-8",
+  "tipo": "elemento",
+  "nome": "tavola-8.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-8.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:compose-tavola-9",
+  "tipo": "elemento",
+  "nome": "tavola-9.png",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "compose",
+    "tavola"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/compose/tavola-9.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-arc-serpent",
+  "tipo": "elemento",
+  "nome": "arc-serpent.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "arc",
+    "serpent"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/arc-serpent.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-arc-wave",
+  "tipo": "elemento",
+  "nome": "arc-wave.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "arc",
+    "wave"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/arc-wave.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-bloom",
+  "tipo": "elemento",
+  "nome": "bloom.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "bloom"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/bloom.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-bloom-12",
+  "tipo": "elemento",
+  "nome": "bloom-12.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "bloom"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/bloom-12.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-bloom-6",
+  "tipo": "elemento",
+  "nome": "bloom-6.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "bloom"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/bloom-6.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-bloom-6-line",
+  "tipo": "elemento",
+  "nome": "bloom-6-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "bloom",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/bloom-6-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-bloom-line",
+  "tipo": "elemento",
+  "nome": "bloom-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "bloom",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/bloom-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-comet-trail",
+  "tipo": "elemento",
+  "nome": "comet-trail.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "comet",
+    "trail"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/comet-trail.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-cross-flare",
+  "tipo": "elemento",
+  "nome": "cross-flare.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "cross",
+    "flare"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/cross-flare.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-bloom",
+  "tipo": "elemento",
+  "nome": "dot-bloom.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "bloom"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-bloom.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-flare",
+  "tipo": "elemento",
+  "nome": "dot-flare.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "flare"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-flare.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-gear",
+  "tipo": "elemento",
+  "nome": "dot-gear.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "gear"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-gear.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-slim",
+  "tipo": "elemento",
+  "nome": "dot-slim.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "slim"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-slim.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-sparkle",
+  "tipo": "elemento",
+  "nome": "dot-sparkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "sparkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-sparkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-target",
+  "tipo": "elemento",
+  "nome": "dot-target.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "target"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-target.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-dot-twinkle",
+  "tipo": "elemento",
+  "nome": "dot-twinkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "dot",
+    "twinkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/dot-twinkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-echo-bloom",
+  "tipo": "elemento",
+  "nome": "echo-bloom.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "echo",
+    "bloom"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/echo-bloom.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-echo-slim",
+  "tipo": "elemento",
+  "nome": "echo-slim.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "echo",
+    "slim"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/echo-slim.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-echo-sparkle",
+  "tipo": "elemento",
+  "nome": "echo-sparkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "echo",
+    "sparkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/echo-sparkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-gear",
+  "tipo": "elemento",
+  "nome": "gear.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "gear"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/gear.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-gear-line",
+  "tipo": "elemento",
+  "nome": "gear-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "gear",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/gear-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-glint",
+  "tipo": "elemento",
+  "nome": "glint.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "glint"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/glint.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-globe",
+  "tipo": "elemento",
+  "nome": "globe.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "globe"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/globe.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halftone-burst",
+  "tipo": "elemento",
+  "nome": "halftone-burst.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halftone",
+    "burst"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halftone-burst.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halftone-star",
+  "tipo": "elemento",
+  "nome": "halftone-star.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halftone",
+    "star"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halftone-star.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halftone-star-glow",
+  "tipo": "elemento",
+  "nome": "halftone-star-glow.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halftone",
+    "star",
+    "glow"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halftone-star-glow.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halftone-star-hollow",
+  "tipo": "elemento",
+  "nome": "halftone-star-hollow.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halftone",
+    "star",
+    "hollow"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halftone-star-hollow.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halftone-star-line",
+  "tipo": "elemento",
+  "nome": "halftone-star-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halftone",
+    "star",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halftone-star-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halo-sparkle",
+  "tipo": "elemento",
+  "nome": "halo-sparkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halo",
+    "sparkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halo-sparkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-halo-wide",
+  "tipo": "elemento",
+  "nome": "halo-wide.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "halo",
+    "wide"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/halo-wide.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-arcs",
+  "tipo": "elemento",
+  "nome": "icon-arcs.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "arcs"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-arcs.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-bloom",
+  "tipo": "elemento",
+  "nome": "icon-bloom.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "bloom"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-bloom.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-bloom-line",
+  "tipo": "elemento",
+  "nome": "icon-bloom-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "bloom",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-bloom-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-flare",
+  "tipo": "elemento",
+  "nome": "icon-flare.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "flare"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-flare.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-gear",
+  "tipo": "elemento",
+  "nome": "icon-gear.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "gear"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-gear.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-glint",
+  "tipo": "elemento",
+  "nome": "icon-glint.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "glint"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-glint.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-globe",
+  "tipo": "elemento",
+  "nome": "icon-globe.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "globe"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-globe.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-halo",
+  "tipo": "elemento",
+  "nome": "icon-halo.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "halo"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-halo.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-orbit",
+  "tipo": "elemento",
+  "nome": "icon-orbit.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "orbit"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-orbit.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-sparkle",
+  "tipo": "elemento",
+  "nome": "icon-sparkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "sparkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-sparkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-sparkle-line",
+  "tipo": "elemento",
+  "nome": "icon-sparkle-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "sparkle",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-sparkle-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-sparkle-slim",
+  "tipo": "elemento",
+  "nome": "icon-sparkle-slim.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "sparkle",
+    "slim"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-sparkle-slim.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-starburst",
+  "tipo": "elemento",
+  "nome": "icon-starburst.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "starburst"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-starburst.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-target",
+  "tipo": "elemento",
+  "nome": "icon-target.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "target"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-target.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-thorn",
+  "tipo": "elemento",
+  "nome": "icon-thorn.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "thorn"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-thorn.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-icon-twinkle",
+  "tipo": "elemento",
+  "nome": "icon-twinkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "icon",
+    "twinkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/icon-twinkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-ink-smoke",
+  "tipo": "elemento",
+  "nome": "ink-smoke.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "ink",
+    "smoke"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/ink-smoke.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-ink-smoke-line",
+  "tipo": "elemento",
+  "nome": "ink-smoke-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "ink",
+    "smoke",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/ink-smoke-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-lens-grid",
+  "tipo": "elemento",
+  "nome": "lens-grid.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "lens",
+    "grid"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/lens-grid.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-master-sheet",
+  "tipo": "elemento",
+  "nome": "_master-sheet.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "master",
+    "sheet"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/_master-sheet.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-orbit-dust",
+  "tipo": "elemento",
+  "nome": "orbit-dust.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "orbit",
+    "dust"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/orbit-dust.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-orbit-swoosh",
+  "tipo": "elemento",
+  "nome": "orbit-swoosh.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "orbit",
+    "swoosh"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/orbit-swoosh.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-orbit-twin",
+  "tipo": "elemento",
+  "nome": "orbit-twin.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "orbit",
+    "twin"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/orbit-twin.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-orbit-x",
+  "tipo": "elemento",
+  "nome": "orbit-x.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "orbit"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/orbit-x.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-saturn-sparkle",
+  "tipo": "elemento",
+  "nome": "saturn-sparkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "saturn",
+    "sparkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/saturn-sparkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-saturn-tilt",
+  "tipo": "elemento",
+  "nome": "saturn-tilt.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "saturn",
+    "tilt"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/saturn-tilt.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-slim-line",
+  "tipo": "elemento",
+  "nome": "slim-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "slim",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/slim-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle",
+  "tipo": "elemento",
+  "nome": "sparkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-blade",
+  "tipo": "elemento",
+  "nome": "sparkle-blade.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "blade"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-blade.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-duo",
+  "tipo": "elemento",
+  "nome": "sparkle-duo.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "duo"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-duo.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-hatch",
+  "tipo": "elemento",
+  "nome": "sparkle-hatch.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "hatch"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-hatch.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-inlay",
+  "tipo": "elemento",
+  "nome": "sparkle-inlay.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "inlay"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-inlay.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-line",
+  "tipo": "elemento",
+  "nome": "sparkle-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-slim",
+  "tipo": "elemento",
+  "nome": "sparkle-slim.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "slim"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-slim.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-trio",
+  "tipo": "elemento",
+  "nome": "sparkle-trio.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "trio"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-trio.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-sparkle-wide",
+  "tipo": "elemento",
+  "nome": "sparkle-wide.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "sparkle",
+    "wide"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/sparkle-wide.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-squares",
+  "tipo": "elemento",
+  "nome": "squares.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "squares"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/squares.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-starburst",
+  "tipo": "elemento",
+  "nome": "starburst.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "starburst"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/starburst.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-starburst-alt",
+  "tipo": "elemento",
+  "nome": "starburst-alt.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "starburst",
+    "alt"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/starburst-alt.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-stella-radiale",
+  "tipo": "elemento",
+  "nome": "stella-radiale.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "stella",
+    "radiale"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/stella-radiale.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-target",
+  "tipo": "elemento",
+  "nome": "target.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "target"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/target.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-target-line",
+  "tipo": "elemento",
+  "nome": "target-line.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "target",
+    "line"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/target-line.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-thorn-branch",
+  "tipo": "elemento",
+  "nome": "thorn-branch.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "thorn",
+    "branch"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/thorn-branch.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-thorn-crown",
+  "tipo": "elemento",
+  "nome": "thorn-crown.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "thorn",
+    "crown"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/thorn-crown.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-thorn-stem",
+  "tipo": "elemento",
+  "nome": "thorn-stem.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "thorn",
+    "stem"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/thorn-stem.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-thorn-stipple",
+  "tipo": "elemento",
+  "nome": "thorn-stipple.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "thorn",
+    "stipple"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/thorn-stipple.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-thorn-stipple-arc",
+  "tipo": "elemento",
+  "nome": "thorn-stipple-arc.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "thorn",
+    "stipple",
+    "arc"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/thorn-stipple-arc.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-celestial-twinkle",
+  "tipo": "elemento",
+  "nome": "twinkle.svg",
+  "fonte": "public",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "celestial",
+    "twinkle"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/celestial/twinkle.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-1-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 1 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 1 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-10-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 10 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 10 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-11-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 11 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 11 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-12-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 12 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 12 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-13-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 13 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 13 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-14-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 14 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 14 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-15-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 15 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 15 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-16-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 16 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 16 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-17-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 17 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 17 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-18-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 18 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 18 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-19-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 19 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 19 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-2-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 2 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 2 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-20-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 20 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 20 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-21-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 21 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 21 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-22-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 22 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 22 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-23-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 23 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 23 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-24-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 24 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 24 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-25-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 25 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 25 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-26-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 26 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 26 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-27-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 27 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 27 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-28-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 28 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 28 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-29-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 29 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 29 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-3-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 3 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 3 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-30-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 30 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 30 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-31-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 31 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 31 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-32-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 32 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 32 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-33-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 33 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 33 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-34-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 34 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 34 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-4-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 4 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 4 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-5-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 5 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 5 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-6-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 6 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 6 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-7-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 7 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 7 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-8-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 8 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 8 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-asset-9-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "Asset 9 Design syndrome Assembly .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "asset",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/Asset 9 Design syndrome Assembly .png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-assembly-master-sheet-design-syndrome-assembly",
+  "tipo": "elemento",
+  "nome": "MASTER SHEET DESIGN SYNDROME ASSEMBLY.svg",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "assembly",
+    "master",
+    "sheet",
+    "design",
+    "syndrome"
+   ]
+  },
+  "colori": [],
+  "file": [
+   {
+    "url": "/assets/elements/ds-assembly/MASTER SHEET DESIGN SYNDROME ASSEMBLY.svg"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-10",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 10.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 10.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-11",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 11.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 11.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-3",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 3.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 3.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-4",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 4.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 4.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-5",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 5.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 5.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-6",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 6.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 6.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-7",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 7.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 7.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-8",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 8.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 8.png"
+   }
+  ]
+ },
+ {
+  "id": "elemento:elements-ds-tribals-design-syndrome-vektor-graphs-bartboard-9",
+  "tipo": "elemento",
+  "nome": "design_syndrome_vektor graphs BArtboard 9.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "elements",
+    "tribals",
+    "design",
+    "syndrome",
+    "vektor",
+    "graphs",
+    "bartboard"
+   ]
+  },
+  "colori": [
+   "#000000"
+  ],
+  "file": [
+   {
+    "url": "/assets/elements/ds-tribals/design_syndrome_vektor graphs BArtboard 9.png"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-bianca",
+  "tipo": "materiale",
+  "nome": "carta-bianca.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "bianca"
+   ]
+  },
+  "colori": [
+   "#f5f4f2"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-bianca.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-bianca-rilievo",
+  "tipo": "materiale",
+  "nome": "carta-bianca-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "bianca",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8080fc"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-bianca-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-grigia",
+  "tipo": "materiale",
+  "nome": "carta-grigia.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "grigia"
+   ]
+  },
+  "colori": [
+   "#c3b9b3"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-grigia.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-grigia-rilievo",
+  "tipo": "materiale",
+  "nome": "carta-grigia-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "grigia",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#807ffe",
+   "#8080fe",
+   "#7f7ffe"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-grigia-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-kraft",
+  "tipo": "materiale",
+  "nome": "carta-kraft.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "kraft"
+   ]
+  },
+  "colori": [
+   "#c9a779"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-kraft.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-kraft-rilievo",
+  "tipo": "materiale",
+  "nome": "carta-kraft-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "kraft",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8080ff",
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-kraft-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-paglia",
+  "tipo": "materiale",
+  "nome": "carta-paglia.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "paglia"
+   ]
+  },
+  "colori": [
+   "#a68768"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-paglia.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-paglia-rilievo",
+  "tipo": "materiale",
+  "nome": "carta-paglia-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "paglia",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-paglia-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-stropicciata",
+  "tipo": "materiale",
+  "nome": "carta-stropicciata.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "stropicciata"
+   ]
+  },
+  "colori": [
+   "#e1e1e1",
+   "#dddddd"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-stropicciata.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-carta-stropicciata-rilievo",
+  "tipo": "materiale",
+  "nome": "carta-stropicciata-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "carta",
+    "stropicciata",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8281ff",
+   "#827eff",
+   "#7e82ff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/carta-stropicciata-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-cartoncino-avana",
+  "tipo": "materiale",
+  "nome": "cartoncino-avana.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "cartoncino",
+    "avana"
+   ]
+  },
+  "colori": [
+   "#c0915d",
+   "#bf915d"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/cartoncino-avana.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-cartoncino-avana-rilievo",
+  "tipo": "materiale",
+  "nome": "cartoncino-avana-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "cartoncino",
+    "avana",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8080fb",
+   "#807ffb"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/cartoncino-avana-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-cemento-scuro",
+  "tipo": "materiale",
+  "nome": "cemento-scuro.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "cemento",
+    "scuro"
+   ]
+  },
+  "colori": [
+   "#65625d",
+   "#6b6763",
+   "#5c5954"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/cemento-scuro.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-cemento-scuro-rilievo",
+  "tipo": "materiale",
+  "nome": "cemento-scuro-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "cemento",
+    "scuro",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8080e7",
+   "#8080d9",
+   "#7f81e5"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/cemento-scuro-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-gesso",
+  "tipo": "materiale",
+  "nome": "gesso.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "gesso"
+   ]
+  },
+  "colori": [
+   "#d7d4d1"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/gesso.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-gesso-rilievo",
+  "tipo": "materiale",
+  "nome": "gesso-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "gesso",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8180e6",
+   "#8080da",
+   "#817fe6"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/gesso-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-intonaco",
+  "tipo": "materiale",
+  "nome": "intonaco.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "intonaco"
+   ]
+  },
+  "colori": [
+   "#b9b9b9",
+   "#c0c0c0"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/intonaco.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-intonaco-rilievo",
+  "tipo": "materiale",
+  "nome": "intonaco-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "intonaco",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8281f9",
+   "#827ef9",
+   "#7d82f9"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/intonaco-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-lamina",
+  "tipo": "materiale",
+  "nome": "lamina.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "lamina"
+   ]
+  },
+  "colori": [
+   "#eed996"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/lamina.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-lamina-rilievo",
+  "tipo": "materiale",
+  "nome": "lamina-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "lamina",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8384f5",
+   "#837cf6",
+   "#7d83f6"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/lamina-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-marmo-nero",
+  "tipo": "materiale",
+  "nome": "marmo-nero.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "marmo",
+    "nero"
+   ]
+  },
+  "colori": [
+   "#171718",
+   "#252524",
+   "#20201f"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/marmo-nero.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-marmo-nero-rilievo",
+  "tipo": "materiale",
+  "nome": "marmo-nero-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "marmo",
+    "nero",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/marmo-nero-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-metallo-bianco",
+  "tipo": "materiale",
+  "nome": "metallo-bianco.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "metallo",
+    "bianco"
+   ]
+  },
+  "colori": [
+   "#fcfbf7"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/metallo-bianco.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-metallo-bianco-rilievo",
+  "tipo": "materiale",
+  "nome": "metallo-bianco-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "metallo",
+    "bianco",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/metallo-bianco-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-metallo-spazzolato",
+  "tipo": "materiale",
+  "nome": "metallo-spazzolato.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "metallo",
+    "spazzolato"
+   ]
+  },
+  "colori": [
+   "#7d8893",
+   "#818d99"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/metallo-spazzolato.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-metallo-spazzolato-rilievo",
+  "tipo": "materiale",
+  "nome": "metallo-spazzolato-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "metallo",
+    "spazzolato",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/metallo-spazzolato-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-pelle",
+  "tipo": "materiale",
+  "nome": "pelle.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "pelle"
+   ]
+  },
+  "colori": [
+   "#633829"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/pelle.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-pelle-rilievo",
+  "tipo": "materiale",
+  "nome": "pelle-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "pelle",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8080fe",
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/pelle-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-plastica",
+  "tipo": "materiale",
+  "nome": "plastica.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "plastica"
+   ]
+  },
+  "colori": [
+   "#a3a6ab"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/plastica.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-plastica-rilievo",
+  "tipo": "materiale",
+  "nome": "plastica-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "plastica",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#807fff"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/plastica-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-tela",
+  "tipo": "materiale",
+  "nome": "tela.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "tela"
+   ]
+  },
+  "colori": [
+   "#5c5b5c"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/tela.jpg"
+   }
+  ]
+ },
+ {
+  "id": "materiale:materials-tela-rilievo",
+  "tipo": "materiale",
+  "nome": "tela-rilievo.jpg",
+  "fonte": "public",
+  "licenza": "CC0-1.0",
+  "tag": {
+   "soggetto": [
+    "materials",
+    "tela",
+    "rilievo"
+   ]
+  },
+  "colori": [
+   "#8080e1",
+   "#817fe1",
+   "#7f80e2"
+  ],
+  "file": [
+   {
+    "url": "/assets/materials/tela-rilievo.jpg"
+   }
+  ]
+ },
+ {
+  "id": "sovrapposizione:overlays-ds-plastic-plastic-bags1",
+  "tipo": "sovrapposizione",
+  "nome": "Plastic-bags1.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "overlays",
+    "plastic",
+    "bags1"
+   ]
+  },
+  "colori": [
+   "#0c0c0c",
+   "#515151",
+   "#2e2e2e"
+  ],
+  "file": [
+   {
+    "url": "/assets/overlays/ds-plastic/Plastic-bags1.png"
+   }
+  ]
+ },
+ {
+  "id": "sovrapposizione:overlays-ds-plastic-plastic-bags2",
+  "tipo": "sovrapposizione",
+  "nome": "Plastic-bags2.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "overlays",
+    "plastic",
+    "bags2"
+   ]
+  },
+  "colori": [
+   "#050505",
+   "#2f2e2f",
+   "#4e4e4e"
+  ],
+  "file": [
+   {
+    "url": "/assets/overlays/ds-plastic/Plastic-bags2.png"
+   }
+  ]
+ },
+ {
+  "id": "sovrapposizione:overlays-ds-plastic-plastic-bags3",
+  "tipo": "sovrapposizione",
+  "nome": "Plastic-bags3.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "overlays",
+    "plastic",
+    "bags3"
+   ]
+  },
+  "colori": [
+   "#0f0f0f",
+   "#2e2e2e",
+   "#4f4f4f"
+  ],
+  "file": [
+   {
+    "url": "/assets/overlays/ds-plastic/Plastic-bags3.png"
+   }
+  ]
+ },
+ {
+  "id": "sovrapposizione:overlays-ds-plastic-plastic-bags4",
+  "tipo": "sovrapposizione",
+  "nome": "Plastic-bags4.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "overlays",
+    "plastic",
+    "bags4"
+   ]
+  },
+  "colori": [
+   "#141414",
+   "#2d2d2d",
+   "#484848"
+  ],
+  "file": [
+   {
+    "url": "/assets/overlays/ds-plastic/Plastic-bags4.png"
+   }
+  ]
+ },
+ {
+  "id": "sovrapposizione:overlays-ds-plastic-plastic-bags5",
+  "tipo": "sovrapposizione",
+  "nome": "Plastic-bags5.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "overlays",
+    "plastic",
+    "bags5"
+   ]
+  },
+  "colori": [
+   "#070707",
+   "#313131",
+   "#747474"
+  ],
+  "file": [
+   {
+    "url": "/assets/overlays/ds-plastic/Plastic-bags5.png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-noise-design-syndrome-noise-texture-2",
+  "tipo": "texture",
+  "nome": "design syndrome noise texture 2 .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "noise",
+    "design",
+    "syndrome",
+    "texture"
+   ]
+  },
+  "colori": [
+   "#757575",
+   "#828282"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-noise/design syndrome noise texture 2 .png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-noise-design-syndrome-noise-texture-3",
+  "tipo": "texture",
+  "nome": "design syndrome noise texture 3 .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "noise",
+    "design",
+    "syndrome",
+    "texture"
+   ]
+  },
+  "colori": [
+   "#6f6f6f",
+   "#303030",
+   "#4e4e4e"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-noise/design syndrome noise texture 3 .png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-noise-design-syndrome-wave-noise-texture",
+  "tipo": "texture",
+  "nome": "design syndrome wave noise texture.png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "noise",
+    "design",
+    "syndrome",
+    "wave",
+    "texture"
+   ]
+  },
+  "colori": [
+   "#767676",
+   "#818181"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-noise/design syndrome wave noise texture.png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-noise-design-syndrome-wave-noise-texture-5",
+  "tipo": "texture",
+  "nome": "design syndrome wave noise texture 5  .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "noise",
+    "design",
+    "syndrome",
+    "wave",
+    "texture"
+   ]
+  },
+  "colori": [
+   "#8f8e8e",
+   "#a2a2a2",
+   "#7b7b7a"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-noise/design syndrome wave noise texture 5  .png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-noise-design-syndrome-wave-noise-texture4",
+  "tipo": "texture",
+  "nome": "design syndrome wave noise texture4 .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "noise",
+    "design",
+    "syndrome",
+    "wave",
+    "texture4"
+   ]
+  },
+  "colori": [
+   "#6d6d6d",
+   "#5b5b5b",
+   "#818181"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-noise/design syndrome wave noise texture4 .png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-paper-design-syndrome-paper-texture-free1",
+  "tipo": "texture",
+  "nome": "design syndrome paper texture free1 .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "paper",
+    "design",
+    "syndrome",
+    "texture",
+    "free1"
+   ]
+  },
+  "colori": [
+   "#93928c",
+   "#75716b",
+   "#acaca7"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-paper/design syndrome paper texture free1 .png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-paper-design-syndrome-paper-texture-free2",
+  "tipo": "texture",
+  "nome": "design syndrome paper texture free2 .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "paper",
+    "design",
+    "syndrome",
+    "texture",
+    "free2"
+   ]
+  },
+  "colori": [
+   "#c6b197",
+   "#d7c4ac",
+   "#b8a68e"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-paper/design syndrome paper texture free2 .png"
+   }
+  ]
+ },
+ {
+  "id": "texture:textures-ds-paper-design-syndrome-paper-texture-free3",
+  "tipo": "texture",
+  "nome": "design syndrome paper texture free3 .png",
+  "fonte": "pack",
+  "licenza": "sconosciuta",
+  "tag": {
+   "soggetto": [
+    "textures",
+    "paper",
+    "design",
+    "syndrome",
+    "texture",
+    "free3"
+   ]
+  },
+  "colori": [
+   "#93928e",
+   "#74726c",
+   "#53514d"
+  ],
+  "file": [
+   {
+    "url": "/assets/textures/ds-paper/design syndrome paper texture free3 .png"
+   }
+  ]
+ }
+]

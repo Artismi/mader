@@ -71,7 +71,7 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ ignoreHTTPSErrors: true })
 page.on('pageerror', e => console.log('[errore pagina]', e.message))
-const TYPES = { '.js': 'application/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.html': 'text/html', '.json': 'application/json' }
+const TYPES = { '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff2': 'font/woff2', '.js': 'application/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.html': 'text/html', '.json': 'application/json' }
 const serve = (route, file) => fs.existsSync(file)
   ? route.fulfill({ body: fs.readFileSync(file), contentType: TYPES[path.extname(file)] ?? 'application/octet-stream', headers: { 'Access-Control-Allow-Origin': '*' } })
   : route.fulfill({ status: 404, body: '' })
@@ -84,6 +84,8 @@ await page.route('http://designer.local/**', async route => {
     return route.fulfill({ response: r, headers: { 'Access-Control-Allow-Origin': '*' } })
   }
   if (u.pathname.startsWith('/fixtures/')) return serve(route, path.join(here, u.pathname))
+  // caratteri del catalogo: cache locale (public/asset-cache) e caratteri liberi di public/fonts
+  if (u.pathname.startsWith('/asset-cache/') || u.pathname.startsWith('/fonts/')) return serve(route, path.join(repo, 'public', decodeURIComponent(u.pathname)))
   return serve(route, path.join(out, u.pathname === '/' ? 'index.html' : u.pathname))
 })
 await page.goto('http://designer.local/')
@@ -209,6 +211,7 @@ if (args.specializza) {
 }
 
 const report = []
+const tutteCoppie = []
 for (const nome of contenuti) {
   const fx = CONTENUTI[nome]
   if (!fx) { console.warn('contenuto sconosciuto:', nome); continue }
@@ -257,6 +260,9 @@ for (const nome of contenuti) {
       esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, stile: r.stile })),
       tempi: Object.fromEntries(res.map(r => [r.sistema, r.ms])) })
     const voti = res.filter(r => r.esame).map(r => r.esame.voto)
+    const coppie = new Set(res.slice(0, 12).filter(r => r.ok && r.coppia).map(r => r.coppia))
+    tutteCoppie.push(...coppie)
+    if (!sistemi && !args.vecchio) info += ` · coppie di font: ${coppie.size}/${Math.min(12, res.length)}`
     console.log(`${nome.padEnd(12)} ${format.padEnd(12)}${info} ${ok}/${res.length} voti ${voti.join(' ')}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
   }
 }
@@ -270,6 +276,8 @@ ${occhio.oc.riga('dopo', dopo)}
   ${dopo.tokenImmagine + dopo.tokenTesto ? `${x.toFixed(0)} volte meno token` : 'nessun token: tutto dalla memoria o dal codice'} · verdetti in memoria: ${occhio.memoria.size}`)
   fs.writeFileSync(path.join(out, 'occhio.json'), JSON.stringify({ prima, dopo }, null, 2))
 }
+
+console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)
 
 /* ── rapporto ──────────────────────────────────────────────────────────── */
 fs.writeFileSync(path.join(out, 'rapporto.json'), JSON.stringify(report, null, 2))

@@ -12,7 +12,7 @@ import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; registro?: string; esame?: Scene['esame'] }
+export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame'] }
 
 async function draw(sc: Scene, thumb: number) {
   const el = document.createElement('canvas')
@@ -31,7 +31,7 @@ async function run(job: Job): Promise<Result[]> {
   const sink: string[] = []
   ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
   const tinta = await tintaFoto(job.photo)
-  const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi, tinta, seme: (job as { seme?: number }).seme })
+  const ks = proposeKnobs(job.content, { hasPhoto: !!job.photo, styleId: job.over?.stile, sistemi: job.sistemi, tinta, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
   const out: Result[] = []
   // primo: solo la prima identità (un esemplare per sistema), per confronti a parità di regolatori
   for (const k0 of (job as { primo?: boolean }).primo ? ks.slice(0, job.sistemi?.length ?? ks.length) : ks) {
@@ -43,7 +43,7 @@ async function run(job: Job): Promise<Result[]> {
     if (!sc) { out.push({ sistema: k.sistema, ok: false, ms: Math.round(performance.now() - t0), knobs: k, reasons }); continue }
     const url = await draw(sc, job.thumb)
     const st = styleById(k.stile)
-    out.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url, knobs: sc.knobs as Knobs ?? k, reasons, layout: sc.label, stile: st.name, registro: st.registro, esame: sc.esame })
+    out.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url, knobs: sc.knobs as Knobs ?? k, reasons, layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame })
   }
   return out
 }
@@ -52,12 +52,12 @@ async function run(job: Job): Promise<Result[]> {
 async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number }> {
   ;(globalThis as { __designerSink?: string[] }).__designerSink = []
   const t0 = performance.now()
-  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme })
+  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
   const items: Result[] = []
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, registro: st.registro, esame: sc.esame })
+    items.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame })
   }
   return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri }
 }

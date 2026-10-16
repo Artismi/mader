@@ -65,3 +65,7 @@ ts-error.txt
 /scripts/confronto/rapporto.md
 /scripts/confronto/rapporto.json
 /scripts/decompila/out
+
+# catalogo degli asset: i file scaricati restano in locale (npm run asset:caratteri)
+/public/asset-cache/
+/.asset-cache/
