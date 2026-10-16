@@ -17,6 +17,7 @@ import { SYSTEMS_SLIDE } from './slides'
 import { SYSTEMS_TIPI } from './tipi'
 import { composto } from './compositore'
 import { ARCHETIPI } from './archetipi/elenco'
+import { affinita } from './affinita'
 import { SYSTEMS_A } from './archetipi/gruppo-a'
 import { SYSTEMS_B } from './archetipi/gruppo-b'
 import { SYSTEMS_C } from './archetipi/gruppo-c'
@@ -106,7 +107,7 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
   const sannoElenchi = new Set<string>(ARCHETIPI.filter(a => 'voci' in a && a.voci).map(a => a.id))
   const ok = (id: SistemaId) => {
     const info = SISTEMI.find(s => s.id === id)
-    return !info?.slide && !info?.tipo && id !== 'composto' && (opts.hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sannoElenchi.has(id)))
+    return !info?.slide && !info?.tipo && id !== 'composto' && affinita(c, id) !== 'esclusa' && (opts.hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sannoElenchi.has(id)))
   }
   // il sistema dedicato al tipo di contenuto (o la slide equivalente), se c'è
   const dedicato = tipo ? (SISTEMI.find(s => s.tipo === tipo)?.id ?? (tipo === 'citazione' ? 'citazione' : undefined)) : undefined
@@ -138,7 +139,9 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
     // che il motore ha mostrato meno, così le impaginazioni nuove entrano nel vivaio
     const curioso = (l: SistemaId[]) => l.map(x => ({ x, key: mostrato(x) + r.next() * 0.9 })).sort((a, b) => a.key - b.key).map(o => o.x)
     const pref = curioso(SISTEMI_DEL_REGISTRO[id.registro].filter(ok))
-    const tutti = [...pref, ...curioso(SISTEMI.map(s => s.id).filter(x => ok(x) && !pref.includes(x)))]
+    // gli stili lontani dal soggetto vanno in fondo: entrano solo se il resto è finito
+    const lontano = (x: SistemaId) => affinita(c, x) === 'lontana'
+    const tutti = [...pref, ...curioso(SISTEMI.map(s => s.id).filter(x => ok(x) && !pref.includes(x)))].sort((a, b) => Number(lontano(a)) - Number(lontano(b)))
     // sistemi non ancora usati prima: le identità non si ripetono la stessa composizione.
     // Il compositore (ogni seme un'ossatura nuova) c'è in ogni identità; con un tipo di
     // contenuto (elenco, programma…) le proposte sono il sistema dedicato e il compositore.

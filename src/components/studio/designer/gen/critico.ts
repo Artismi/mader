@@ -10,6 +10,7 @@ import type { SceneEl } from '../types'
 import { toOklch } from '../core/colore'
 import { type G, textBox, check, corners, obbTouch } from './tools'
 import { type Criterio, RUBRICA, SOGLIA, ECCELLENTE } from './rubrica'
+import { affinita } from './affinita'
 
 export type { Criterio } from './rubrica'
 export interface Esame {
@@ -240,6 +241,10 @@ export function esamina(g: G): Esame {
   let sperimentazione = gesti.length === 0 ? 2 : clamp(10 * Math.min(1, gesti.length / attesi))
   if (gesti.length < attesi * 0.5) difetti.push(`pochi gesti (${gesti.length}): composizione ordinata ma senza idea`)
   sperimentazione = clamp(sperimentazione)
+
+  /* ── stile e soggetto: un archetipo fuori luogo per il settore pesa forte (affinita.ts) ── */
+  const aff = affinita(g.c, g.k.sistema)
+  if (aff !== 'ok') difetti.push(aff === 'esclusa' ? `stile estraneo al soggetto (${g.k.sistema})` : `stile lontano dal soggetto (${g.k.sistema})`)
 
   const criteri: Record<Criterio, number> = { leggibilita, contenuto, gerarchia, allineamento, respiro, colore, decoro, sperimentazione }
   // voto severo: la media pesata passa per una curva (tutto "corretto" non basta per l'eccellenza),

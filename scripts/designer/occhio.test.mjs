@@ -137,3 +137,17 @@ test('le note del critico pesano sul voto secondo la gravità', async () => {
   assert.ok(pesoDifetti(['manca il titolo']) >= 30)
   assert.equal(pesoDifetti(['nota mai vista']), 2)
 })
+
+test('lo stile segue il soggetto: niente manga per un caffè di pregio, niente onomatopee in palestra', async () => {
+  const { affinita, settori, onomatopeeAmmesse, giapponeseAmmesso } = await carica('affinita.ts')
+  const caffe = { brand: 'Tostatura Nera', title: 'Caffè monorigine di pregio' }
+  assert.ok(settori(caffe).includes('pregio'))
+  assert.equal(affinita(caffe, 'manga'), 'esclusa')
+  assert.equal(affinita(caffe, 'colonne'), 'ok')
+  const gym = { brand: 'Forge Gym', title: 'Allenamento funzionale' }
+  assert.equal(affinita(gym, 'fumetto'), 'lontana')
+  assert.equal(onomatopeeAmmesse(gym), false)
+  assert.equal(onomatopeeAmmesse({ title: 'Festa dei fumetti' }), true)
+  assert.equal(affinita({ title: 'Caffè di pregio e manga' }, 'manga'), 'ok', 'chiamato per nome')
+  assert.equal(giapponeseAmmesso(caffe), false)
+})

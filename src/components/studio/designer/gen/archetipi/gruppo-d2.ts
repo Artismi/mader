@@ -10,6 +10,7 @@ import { type G, put, U, txt, para, photo, finish, mix, alpha, readable, keyword
 import { blobPath, starPath, wobblyPath } from '../forme'
 import { lineWidth } from '../../text'
 import { sceglie, dettaglio, stratoGenerativo } from '../materia'
+import { onomatopeeAmmesse, giapponeseAmmesso } from '../affinita'
 import { righe, conVoci, valoreProtagonista, elencoRiuscito } from './voci'
 import {
   no, variante, mono, inkSu, scuro, chiaro, acc2, f1, poly, rectD, riga1, scrivi, tinteSu, blocco, titolo, putDisplay, putLab, lab, type Box, type Pt,
@@ -350,9 +351,10 @@ export function manga(g: G): Scene | null {
   put(g, { kind: 'path', name: 'segno_velocita', d: dd, fill: nero, opacity: 0.75 })
   put(g, { kind: 'path', name: 'bordo_vignetta', d: poly(alta), fill: 'transparent', stroke: nero, sw: bordo })
   // onomatopea in katakana di fantasia: decorativa, storta, con il contorno
-  const ono = sceglie(g, 'ono', ['ドドド', 'ゴゴゴ', 'バン!', 'ザッ'])
+  // katakana solo se il brief parla di Giappone o manga; altrimenti latine se il tono le consente, o niente
+  const ono = giapponeseAmmesso(g.c) ? sceglie(g, 'ono', ['ドドド', 'ゴゴゴ', 'バン!', 'ザッ']) : onomatopeeAmmesse(g.c) ? sceglie(g, 'ono', ['BAM!', 'ZOOM!', 'WHAM!']) : ''
   const os = Math.min((yb - Y0) * 0.24, U(g, 220))
-  txt(g, { name: 'onomatopea', lines: [ono], font: s.impact, size: os, x: X0 + U(g, 40), y: Y0 + U(g, 40), color: '#ffffff', stroke: nero, sw: Math.max(3, os * 0.06), angle: 8 + 6 * k.energia, deco: true })
+  if (ono) txt(g, { name: 'onomatopea', lines: [ono], font: s.impact, size: os, x: X0 + U(g, 40), y: Y0 + U(g, 40), color: '#ffffff', stroke: nero, sw: Math.max(3, os * 0.06), angle: 8 + 6 * k.energia, deco: true })
   // occhiello in verticale in un cartiglio bianco sul lato
   const kick = lab(g, c.kicker, (yb - Y0) * 0.6, 22)
   if (kick) {

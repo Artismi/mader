@@ -10,6 +10,7 @@ import { type G, put, U, txt, para, photo, finish, mix, alpha, readable, lum, ke
 import { blobPath, wobblyPath, starPath } from '../forme'
 import { lineWidth } from '../../text'
 import { carta, cartaPer, codice, timbro, sceglie, dettaglio, stratoGenerativo } from '../materia'
+import { onomatopeeAmmesse } from '../affinita'
 import { righe, conVoci, elencoRiuscito } from './voci'
 import {
   no, variante, mono, inkSu, acc2, f1, poly, riga1, scrivi, tinteSu, blocco, titolo, putDisplay, putLab, lab, type Box, type Pt,
@@ -348,11 +349,11 @@ export function fumetto(g: G): Scene | null {
   }
   put(g, { kind: 'path', name: 'segno_velocita', d: dd, fill: 'transparent', stroke: alpha(nero, 0.55), sw: Math.max(1.5, U(g, 2.5)), opacity: 0.4 + 0.4 * k.energia })
   put(g, { kind: 'rect', name: 'vignetta', ...fv, fill: 'transparent', stroke: nero, sw: bordo })
-  // onomatopea: decorativa, enorme, storta, con il contorno nero
+  // onomatopea: decorativa, enorme, storta, con il contorno nero (solo se il tono la consente)
   const ono = sceglie(g, 'ono', ['WOW!', 'BAM!', 'ZAP!', 'POP!', 'WHAM!', 'SBAM!'])
   const os = Math.min(fv.h * 0.32, U(g, 200))
   const ow = lineWidth(ono, s.impact, os, 0.02)
-  if (ow < fv.w * 0.7) {
+  if (onomatopeeAmmesse(g.c) && ow < fv.w * 0.7) {
     const ox = fv.x + fv.w - ow - U(g, 30), oy = fv.y + fv.h - os * 1.3 - U(g, 10), oa = -10 - 8 * k.energia
     txt(g, { name: 'onomatopea_ombra', lines: [ono], font: s.impact, size: os, x: ox + U(g, 8), y: oy + U(g, 8), color: nero, angle: oa, tracking: 0.02, deco: true })
     txt(g, { name: 'onomatopea', lines: [ono], font: s.impact, size: os, x: ox, y: oy, color: giallo, angle: oa, tracking: 0.02, deco: true, stroke: nero, sw: Math.max(3, os * 0.04) })
