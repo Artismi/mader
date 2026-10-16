@@ -19,7 +19,7 @@
     "confronto:rapporto": "node scripts/confronto/rapporto.mjs",
     "confronto:test": "node --test scripts/confronto/lib.test.mjs",
     "decompila:banco": "node scripts/decompila/banco.mjs",
-    "test:agente": "node --import ./scripts/agent/register.mjs --test scripts/agent/guscio.test.mts scripts/agent/registro.test.mts scripts/agent/catalogo.test.mts scripts/agent/maestra.test.mts scripts/agent/banco.test.mts scripts/agent/kernel.test.mts scripts/agent/events.test.mts scripts/agent/graph.test.mts scripts/agent/livelli.test.mts",
+    "test:agente": "node --import ./scripts/agent/register.mjs --test scripts/agent/guscio.test.mts scripts/agent/registro.test.mts scripts/agent/catalogo.test.mts scripts/agent/maestra.test.mts scripts/agent/banco.test.mts scripts/agent/kernel.test.mts scripts/agent/events.test.mts scripts/agent/graph.test.mts scripts/agent/livelli.test.mts scripts/agent/banco-motore.test.mts",
     "postinstall": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
