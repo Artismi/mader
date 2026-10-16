@@ -54,7 +54,8 @@ export const VIE_GRATUITE: Record<string, ViaGratuita> = Object.fromEntries([
 
 /** Ordine di preferenza: Gemini prima (quote più larghe), OpenRouter free come ripiego. */
 const ORDINE = {
-  design: ['google:gemini-flash-latest', 'google:gemini-3.8-flash', 'openrouter:nvidia/nemotron-3.5-super-vl:free', 'google:gemini-flash-lite-latest', 'openrouter:nvidia/nemotron-3-super-120b-a12b:free', 'google:gemini-3.5-flash-lite', 'openrouter:dots-studio/dots-3-note-preview:free'],
+  // Nemotron VL in fondo: sulle idee del concetto ha risposto vuoto due volte su due (tutto ragionamento)
+  design: ['google:gemini-flash-latest', 'google:gemini-3.8-flash', 'google:gemini-flash-lite-latest', 'google:gemini-3.5-flash-lite', 'openrouter:nvidia/nemotron-3-super-120b-a12b:free', 'openrouter:dots-studio/dots-3-note-preview:free', 'openrouter:nvidia/nemotron-3.5-super-vl:free'],
   general: ['google:gemini-flash-lite-latest', 'google:gemini-3.5-flash-lite', 'openrouter:nvidia/nemotron-3-super-120b-a12b:free', 'google:gemini-flash-latest', 'openrouter:nvidia/nemotron-3.5-super-vl:free', 'google:gemini-3.8-flash', 'openrouter:dots-studio/dots-3-note-preview:free'],
 } as const
 

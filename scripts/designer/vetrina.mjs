@@ -117,8 +117,10 @@ if (args.occhio) {
 /* ── C1 con il modello vero: --idee-modello (registro dei modelli, profilo medio; ripiego a regole) ── */
 let ideeModello = null
 if (args['idee-modello']) {
-  // le chiavi del portale (.env.local) e il database delle impostazioni (OpenRouter collegato, modelli scelti)
-  for (const f of ['.env.local', '.env']) if (fs.existsSync(path.join(repo, f))) process.loadEnvFile(path.join(repo, f))
+  // le chiavi del portale (.env.local, OpenRouter collegato), anche da un worktree; con "solo gratis" le vie gratuite
+  const { caricaChiavi } = await import(pathToFileURL(path.join(repo, 'scripts/ai/chiavi.mjs')).href)
+  const k = await caricaChiavi(repo)
+  console.log(`idee dal modello: chiavi ${Object.entries(k).filter(([, v]) => v).map(([n]) => n).join(', ') || 'nessuna'}`)
   const file = path.join(here, 'out', 'concetto-modello.mjs')
   await esbuild.build({ entryPoints: [path.join(repo, 'src/lib/ai/concetto-modello.ts')], bundle: true, format: 'esm', platform: 'node', outfile: file, packages: 'external', logLevel: 'error', alias: { '@': path.join(repo, 'src') } })
   const cwd = process.cwd(); process.chdir(repo)
@@ -344,7 +346,7 @@ for (const nome of contenuti) {
       if (ideeModello) {
         const r = await ideeModello.chiediIdee(fx.c)
         idee = r.idee
-        console.log(`  ${nome}: concetto dal ${r.fonte}${r.modello ? ' ' + r.modello : ''}${r.token ? ` (${r.token} token)` : ''}${r.motivo ? ' — ' + r.motivo : ''}`)
+        console.log(`  ${nome}: concetto dal ${r.fonte}${r.modello ? ' ' + r.modello : ''}${r.dalModello ? ` (${r.dalModello} idee sue)` : ''}${r.token ? ` (${r.token} token)` : ''}${r.motivo ? ' — ' + r.motivo : ''}`)
       }
       const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'], idee })
       if (p.idee?.length) console.log(`  ${nome}: idee ${p.idee.join(' | ')} · concetto ${p.concetto.chiamate} chiamata, ~${p.concetto.token} token`)
