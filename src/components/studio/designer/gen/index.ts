@@ -20,6 +20,9 @@ import { composto } from './compositore'
 import { ibrido, scheletro } from './mattoni'
 import { incrocia } from './incrocio'
 import { ideeDaRegole, type Idea } from './concetto'
+import { sistemaEsempi, chiediProgrammi, simulatoEsempi, type Chiedi as ChiediEsempi } from './esempi'
+import { vicini } from '../archivio/cerca'
+import type { Archivio } from '../archivio/tipi'
 import { ARCHETIPI } from './archetipi/elenco'
 import { affinita } from './affinita'
 import { SYSTEMS_A } from './archetipi/gruppo-a'
@@ -38,7 +41,7 @@ import { rifinisciPixel, type Pixel } from './pixel'
 export * from './knobs'
 export { dimentica as dimenticaMemoria } from './memoria'
 
-export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ibrido, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D, ...SYSTEMS_E }
+export const SYSTEMS: Record<SistemaId, (g: G) => SceneT | null> = { ...SYSTEMS_BASE, ...SYSTEMS_REGISTRI, ...SYSTEMS_SLIDE, ...SYSTEMS_TIPI, composto, ibrido, esempi: sistemaEsempi, ...SYSTEMS_A, ...SYSTEMS_B, ...SYSTEMS_C, ...SYSTEMS_D, ...SYSTEMS_E }
 
 /** Sistemi che parlano ciascun registro, dal più tipico. */
 const SISTEMI_A_MANO: Record<RegistroId, SistemaId[]> = {
@@ -167,7 +170,7 @@ export function ammesso(c: DesignContent, id: SistemaId, hasPhoto: boolean) {
   const elenco = !!tipo && TIPI_ELENCO.includes(tipo)
   const info = SISTEMI.find(s => s.id === id)
   const sa = ARCHETIPI.some(a => a.id === id && 'voci' in a && a.voci)
-  return !info?.slide && !info?.tipo && id !== 'composto' && id !== 'ibrido' && affinita(c, id) !== 'esclusa' && (hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sa))
+  return !info?.slide && !info?.tipo && id !== 'composto' && id !== 'ibrido' && id !== 'esempi' && affinita(c, id) !== 'esclusa' && (hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sa))
 }
 
 /** Composizioni per identità nel vivaio ampio. */
@@ -247,7 +250,7 @@ export interface Proposte { scene: Scene[]; candidate: number; /** candidate che
  * altro giro con semi nuovi (al massimo `giri`); in ultimo si completa con le
  * bocciate migliori, segnate come tali.
  */
-export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; idee?: Idea[] | false; onProgress?: (fatte: number, totale: number) => void; /** la tavola senza testi renderizzata e ridotta: abilita il controllo sui pixel veri */ pixel?: (sc: Scene) => Promise<Pixel> } = {}): Promise<Proposte> {
+export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; idee?: Idea[] | false; /** G2: programmi dagli esempi dell'archivio (simulati senza `chiedi`); false = niente */ esempi?: false | OpzioniEsempi; onProgress?: (fatte: number, totale: number) => void; /** la tavola senza testi renderizzata e ridotta: abilita il controllo sui pixel veri */ pixel?: (sc: Scene) => Promise<Pixel> } = {}): Promise<Proposte> {
   const n = o.n ?? 12
   // si genera quattro volte quello che si mostra: il critico sceglie su un vivaio ampio
   const vivaio = o.vivaio ?? n * 4
@@ -273,6 +276,14 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
       if (sc) tutte.push(sc)
       else scartate++
       ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`idea ${k.sistema}: ${k.idea!.gesto} → ${sc ? `${sc.esame?.voto}${sc.esame?.promossa ? '' : ' bocciata'} car ${sc.esame?.carattere?.carattere} — ${sc.esame?.difetti.slice(0, 3).join('; ')}` : 'scartata'}`)
+    }
+    // G2: programmi scritti dagli esempi più vicini dell'archivio, con le identità del vivaio
+    if (giro === 0 && o.esempi !== false) for (const k of await knobsDagliEsempi(c, format, pool, !!o.photo, o.esempi ?? {}, o.seme ?? 0)) {
+      const sc = await generateSystem(c, format, k, o.photo, { tentativi: 2 })
+      candidate++
+      if (sc) tutte.push(sc)
+      else scartate++
+      ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`esempi ${k.esempi?.slice(0, 3).join('+')}: ${sc ? `${sc.esame?.voto}${sc.esame?.promossa ? '' : ' bocciata'} car ${sc.esame?.carattere?.carattere}` : `scartata (${scarti.ultimo || 'senza titolo'})`}`)
     }
     // gli incroci dei mattoni (V1): le identità del vivaio, poche generazioni, restano gli ibridi promossi
     if (giro === 0 && o.ibridi !== false) tutte.push(...await incrocia(c, format, { base: pool, seme: o.seme, valuta: k => generateSystem(c, format, k, o.photo, { tentativi: 2 }) }))
@@ -315,6 +326,42 @@ const punteggio = (sc: Scene) => {
   return v + (v >= ECCELLENTE ? cur : cur * 0.4) + (car - 50) * 0.3
 }
 
+export interface OpzioniEsempi { archivio?: Archivio; /** la chiamata vera (registro dei modelli); senza, i programmi simulati */ chiedi?: ChiediEsempi; /** chiamate (3 programmi ciascuna) */ chiamate?: number; conta?: { chiamate: number; token: number }; /** ultimi esempi usati (per la vetrina) */ usati?: string[] }
+
+let archivioCache: Archivio | null = null
+/** L'archivio G1 incluso nel motore (caricato una volta, a richiesta). */
+export async function caricaArchivio(): Promise<Archivio> {
+  if (!archivioCache) archivioCache = (await import('../archivio/archivio.json')).default as unknown as Archivio
+  return archivioCache
+}
+
+/**
+ * G2: i regolatori dei programmi scritti dagli esempi. Per ogni chiamata, gli
+ * 8 esempi più vicini (con un seme diverso, la scelta cambia tra quelli di
+ * affinità simile) e 3 programmi; ognuno con un'identità del vivaio a rotazione.
+ * Gli elenchi (menu, programma…) restano agli archetipi delle voci.
+ */
+export async function knobsDagliEsempi(c: DesignContent, format: Format, pool: Knobs[], hasPhoto: boolean, o: OpzioniEsempi, seme: number): Promise<Knobs[]> {
+  if (c.tipo && c.tipo !== 'copertina') return []
+  const arch = o.archivio ?? await caricaArchivio().catch(() => null)
+  if (!arch?.esempi.length || !pool.length) return []
+  const stili = [...new Map(pool.map(k => [k.stile, k])).values()]
+  const r = rng(hashText(`${c.title}|esempi`) ^ seme)
+  const out: Knobs[] = []
+  o.usati = []
+  for (let i = 0; i < (o.chiamate ?? 2); i++) {
+    const es = vicini(c, format, arch, { k: 8, hasPhoto, seme: seme + i * 31 })
+    o.usati.push(...es.map(e => e.id))
+    const chiedi = o.chiedi ?? simulatoEsempi(c, format, es, { seme: seme + i * 104729, hasPhoto, conta: o.conta })
+    const { programmi } = await chiediProgrammi(c, format, es, { chiedi, quanti: 3, seme: seme + i * 104729, hasPhoto })
+    for (const [j, programma] of programmi.entries()) {
+      const b = stili[(i * 3 + j) % stili.length]
+      out.push({ ...b, sistema: 'esempi', programma, esempi: es.slice(0, 3).map(e => e.id), idea: undefined, genoma: undefined, intreccio: false, seme: r.int(1, 99999) })
+    }
+  }
+  return out
+}
+
 /** Gli archetipi che sanno eseguire ogni gesto (oltre alla ricetta a mattoni dell'idea). */
 const ESECUTORI: Record<Idea['gesto'], SistemaId[]> = {
   'parola-immagine': ['eco', 'ritaglio', 'supertipo'],
@@ -347,7 +394,7 @@ export function knobsDelleIdee(c: DesignContent, idee: Idea[], pool: Knobs[], ha
 }
 
 /** Il sistema per la selezione: un ibrido vale come l'archetipo del suo scheletro (stessa ossatura, stessa idea di pagina). */
-const sistemaDi = (sc: Scene) => { const k = sc.knobs as Knobs | undefined; return k?.sistema === 'ibrido' && k.genoma ? scheletro(k.genoma) : k?.idea ? `${k.sistema}|${k.idea.gesto}` : k?.sistema ?? sc.layout }
+const sistemaDi = (sc: Scene) => { const k = sc.knobs as Knobs | undefined; return k?.sistema === 'esempi' ? `esempi|${k.seme}` : k?.sistema === 'ibrido' && k.genoma ? scheletro(k.genoma) : k?.idea ? `${k.sistema}|${k.idea.gesto}` : k?.sistema ?? sc.layout }
 
 /** Selezione: per punteggio, senza tavole gemelle (stessa ossatura), con un tetto per sistema e per identità (gli ibridi al più un terzo). */
 function scegli(tutte: Scene[], n: number, soloPromosse: boolean, maxLivello = 3): Scene[] {
@@ -356,16 +403,18 @@ function scegli(tutte: Scene[], n: number, soloPromosse: boolean, maxLivello = 3
   for (const [perSistema, perStile] of ([[1, 3], [2, 4], [3, 6]] as const).slice(0, maxLivello)) {
     const out: Scene[] = []
     const firme = new Set<string>(), sist = new Map<string, number>(), stili = new Map<string, number>()
-    let ibridi = 0
+    let ibridi = 0, daEsempi = 0
     for (const sc of cand) {
       const k = sc.knobs as Knobs | undefined
       const sis = sistemaDi(sc), st = k?.stile ?? sc.style
-      const ib = k?.sistema === 'ibrido'
+      const ib = k?.sistema === 'ibrido', es = k?.sistema === 'esempi'
       if (ib && ibridi >= Math.ceil(n / 3)) continue
+      if (es && daEsempi >= Math.ceil(n / 3)) continue
       const firma = `${sis}|${sc.esame?.firma ?? ''}`
       const tetto = sis === 'composto' ? perSistema + 2 : perSistema
       if (firme.has(firma) || (sist.get(sis) ?? 0) >= tetto || (stili.get(st) ?? 0) >= perStile) continue
       if (ib) ibridi++
+      if (es) daEsempi++
       out.push(sc); firme.add(firma); sist.set(sis, (sist.get(sis) ?? 0) + 1); stili.set(st, (stili.get(st) ?? 0) + 1)
       if (out.length >= n) return out
     }

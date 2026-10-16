@@ -4,7 +4,7 @@
  * vetrina.mjs (Playwright).
  */
 import * as fabric from 'fabric'
-import { generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, ammesso, type Knobs } from '@/components/studio/designer/gen'
+import { knobsDagliEsempi, generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, ammesso, type Knobs } from '@/components/studio/designer/gen'
 import { styleById } from '@/components/studio/designer/styles'
 import { incrocia } from '@/components/studio/designer/gen/incrocio'
 import { concetti, simulato, type Idea } from '@/components/studio/designer/gen/concetto'
@@ -19,10 +19,14 @@ import { loadPix } from '@/components/studio/designer/core/foto'
 import { sfondoPixel } from '@/components/studio/designer/preview'
 import { lettureVere, sottoSoglia } from '@/components/studio/designer/gen/pixel'
 import { presentazione, type RuoloSlide } from '@/components/studio/designer/gen/sequenza'
+import { programmaDa, impronta } from '@/components/studio/designer/archivio/scheda'
 import { zoneVuote, vuotiNonProgettati, sovrapposizioni, testoMancante } from '@/components/studio/designer/gen/difetti'
 
 /** Difetti misurati sulla tavola consegnata (blocco A): sovrapposizioni, contrasto sui pixel veri, vuoti, testo tagliato o saltato. */
 export interface Difetti { sovrapposizioni: string[]; contrasto: string[]; vuoti: number[]; tagliati: string[]; saltati: string[] }
+/** luminanza relativa grezza di un colore esadecimale */
+const lumi = (h: string) => { const n = parseInt(h.replace('#', '').padEnd(6, '0').slice(0, 6), 16); return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 }
+
 async function difettiScena(sc: Scene, c: DesignContent): Promise<Difetti> {
   const k = (sc.knobs ?? {}) as Partial<Knobs>
   const t = { W: sc.w, H: sc.h, u: Math.min(sc.w, sc.h) / 1080, els: sc.els }
@@ -38,7 +42,7 @@ async function difettiScena(sc: Scene, c: DesignContent): Promise<Difetti> {
 }
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { difetti?: Difetti; sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
+export interface Result { difetti?: Difetti; sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse; impronta?: number[] }
 
 /** Risorse usate dalla scena (per contare la varietà nelle prime 12): palette, effetti, generatori, foto, trattamenti. */
 export interface Risorse { palette: string; fx: string[]; gen: string[]; foto: string[]; trattamento?: string; paletteDa?: string; tex: string[] }
@@ -103,14 +107,35 @@ async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ 
   const idee = (job as { senzaIdee?: boolean }).senzaIdee ? false as const : date ?? await concetti(job.content, { chiedi: simulato(job.content, conta) })
   await texturePronte
   await Promise.all((job.content.immagini ?? []).map(u => loadPix(u)))
-  const p = await proponi(job.content, job.format, { pixel: (job as { pixel?: boolean }).pixel === false ? undefined : sc => sfondoPixel(sc, 540), photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee })
+  // G2 a secco: i programmi dagli esempi dell'archivio, chiamata simulata e contata (--senza-esempi per spegnerlo)
+  const opzE = { conta: { chiamate: 0, token: 0 }, usati: [] as string[] }
+  const esempi = (job as { senzaEsempi?: boolean }).senzaEsempi ? false as const : opzE
+  const p = await proponi(job.content, job.format, { pixel: (job as { pixel?: boolean }).pixel === false ? undefined : sc => sfondoPixel(sc, 540), photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee, esempi })
   const items: Result[] = []
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), impronta: impronta(programmaDa(sc), (sc.palette?.bg ? lumi(sc.palette.bg) : 1) < 0.35), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
   }
-  return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ')) }
+  return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, esempi: { ...opzE.conta, usati: [...new Set(opzE.usati)] }, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ') || x.startsWith('esempi ')) }
+}
+
+/** G2 da solo: i programmi dagli esempi (simulati) resi con le identità del vivaio, tutte le candidate con voto e difetti. */
+async function soloEsempi(job: Job & { n?: number }) {
+  await Promise.all((job.content.immagini ?? []).map(u => loadPix(u)))
+  const tinta = await tintaFoto(job.photo)
+  const pool = proposeKnobs(job.content, { hasPhoto: !!job.photo, tinta, seme: (job as { seme?: number }).seme ?? 0, ampio: 4 })
+  const o = { conta: { chiamate: 0, token: 0 }, chiamate: 3 }
+  const ks = await knobsDagliEsempi(job.content, job.format, pool, !!job.photo, o, (job as { seme?: number }).seme ?? 0)
+  const out = []
+  const { scarti } = await import('@/components/studio/designer/gen/tools')
+  for (const k of ks) {
+    ;(globalThis as { __designerSink?: string[] }).__designerSink = []
+    const sc = await generateSystem(job.content, job.format, k, job.photo, { tentativi: 2 })
+    if (!sc) { out.push({ ok: false, esempi: k.esempi, difetti: [scarti.ultimo] }); continue }
+    out.push(sc ? { ok: true, url: await draw(sc, job.thumb), voto: sc.esame?.voto, promossa: sc.esame?.promossa, carattere: sc.esame?.carattere?.carattere, difetti: sc.esame?.difetti ?? [], esempi: k.esempi } : { ok: false, esempi: k.esempi, difetti: [] })
+  }
+  return out
 }
 
 /** Una presentazione (blocco A): le slide composte in sequenza, con i difetti misurati di ciascuna. */
@@ -230,4 +255,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
 // superfici CC0 della cache locale (npm run designer:texture), se ci sono
 const texturePronte = registraTextureCC0('http://designer.local/asset-cache/texture/')
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, sequenza, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, soloEsempi, sequenza, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }

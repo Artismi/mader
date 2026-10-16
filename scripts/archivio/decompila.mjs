@@ -9,6 +9,7 @@
  *   node scripts/archivio/decompila.mjs                 tutti i pezzi del registro
  *   node scripts/archivio/decompila.mjs --solo 5        i primi 5 (prova)
  *   node scripts/archivio/decompila.mjs --motore        solo le tavole del motore (campione standard, a secco)
+ *   --solo-schede    rifà le schede dalle scene già decompilate, senza D1
  *   --soglia 0.85    fedeltà minima · --cache    riusa solo le letture salvate (nessuna chiamata)
  */
 import fs from 'node:fs'
@@ -37,6 +38,8 @@ if (env.DECOMPILA_MODELLO && !process.env.DECOMPILA_MODELLO) process.env.DECOMPI
 const SOGLIA = Number(args.soglia ?? 0.85)
 
 const cache = path.join(here, 'cache'), letture = path.join(cache, 'letture')
+const scene = path.join(cache, 'scene')
+fs.mkdirSync(scene, { recursive: true })
 const out = path.join(here, 'out'), confronti = path.join(out, 'confronti')
 fs.mkdirSync(letture, { recursive: true }); fs.mkdirSync(confronti, { recursive: true })
 const ARCHIVIO = path.join(repo, 'src/components/studio/designer/archivio/archivio.json')
@@ -62,7 +65,7 @@ await page.exposeFunction('__leggi', async png => {
   if (!leggi) throw new Error('nessuna lettura in cache e nessuna chiave')
   chiamate++
   // una lettura non può bloccare il giro: dopo 150 s il pezzo si scarta
-  const { lettura, label } = await Promise.race([leggi(png), new Promise((_, no) => setTimeout(() => no(new Error('lettura oltre 150 s')), 150000))])
+  const { lettura, label } = await Promise.race([leggi(png), new Promise((_, no) => setTimeout(() => no(new Error('lettura oltre 120 s')), 120000))])
   fs.writeFileSync(file, JSON.stringify({ ...lettura, _modello: label }))
   return JSON.stringify(lettura)
 })
@@ -82,8 +85,13 @@ await page.route('http://designer.local/**', async route => {
 await page.goto('http://designer.local/')
 const salva = (file, url) => fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'))
 
+const metaDi = p => {
+  const anno = Number(String(p.inizio ?? p.data ?? '').match(/1[5-9]\d\d|20[0-2]\d/)?.[0]) || undefined
+  return { id: p.id, titolo: p.titolo, autore: p.autore, anno, testo: `${p.tipo ?? ''} ${p.fonte}`, licenza: { fonte: p.fonte, licenza: p.licenza, verifica: p.verifica, immagine: p.immagine, pagina: p.pagina } }
+}
 const esempi = new Map(archivio.esempi.map(e => [e.id, e]))
 const esito = { entrati: 0, scartati: [], errori: 0 }
+let fatti = 0
 
 if (args.motore) {
   // le tavole migliori del motore sul campione standard (a secco): tre per contenuto
@@ -101,10 +109,17 @@ if (args.motore) {
   const scelti = registro.slice(0, Number(args.solo ?? registro.length))
   for (const p of scelti) {
     corrente = p.id
-    // già passato da D1 in un giro precedente (il confronto c'è): si salta, salvo --rifai
-    if (!args.rifai && fs.existsSync(path.join(confronti, `${p.id}.jpg`))) continue
-    const anno = Number(String(p.inizio ?? p.data ?? '').match(/1[5-9]\d\d|20[0-2]\d/)?.[0]) || undefined
-    const meta = { id: p.id, titolo: p.titolo, autore: p.autore, anno, testo: `${p.tipo ?? ''} ${p.fonte}`, licenza: { fonte: p.fonte, licenza: p.licenza, verifica: p.verifica, immagine: p.immagine, pagina: p.pagina } }
+    const fileScena = path.join(scene, `${p.id}.json`)
+    // già decompilato: la scheda si rifà dalla scena salvata (schema cambiato), D1 non si ripete
+    if (!args.rifai && fs.existsSync(fileScena)) {
+      const { scena, fedelta, motivo } = JSON.parse(fs.readFileSync(fileScena, 'utf8'))
+      if (!motivo) esempi.set(p.id, await page.evaluate(o => window.archivio.rischeda(o), { scena, meta: metaDi(p), fedelta }))
+      continue
+    }
+    if (args['solo-schede']) continue
+    // la pagina accumula memoria (tele, caratteri): si ricarica ogni 6 pezzi
+    if (++fatti % 6 === 0) await page.reload()
+    const meta = metaDi(p)
     let r
     try { r = await page.evaluate(o => window.archivio.pezzo(o), { url: `http://designer.local/cache/${p.file}`, meta }) } catch (e) {
       console.log(`${p.id} errore ${String(e.message).slice(0, 100)}`)
@@ -115,7 +130,8 @@ if (args.motore) {
     // verifica di fedeltà: fedeltà dei pixel, almeno un testo letto, almeno un elemento oltre al fondo
     const motivo = r.fedelta < SOGLIA ? `fedeltà ${(r.fedelta * 100).toFixed(1)}% < ${SOGLIA * 100}%` : !r.testi.length ? 'nessun testo letto' : r.scheda.programma.strati.length < 3 ? 'troppo pochi strati' : ''
     salva(path.join(confronti, `${p.id}.jpg`), await page.evaluate(o => window.archivio.affianca(o), { a: r.originale, b: r.ricostruita, titolo: `${p.id} · ${(r.fedelta * 100).toFixed(1)}% · ${motivo || 'ENTRA'}` }))
-    console.log(`${p.id} ${(r.fedelta * 100).toFixed(1)}% ${motivo || 'entra'}`)
+    console.log(`${p.id} ${(r.fedelta * 100).toFixed(1)}% ${motivo || 'entra'} · ${Object.entries(r.tempi).map(([k, v]) => `${k} ${(v / 1000).toFixed(0)}s`).join(' ')}`)
+    fs.writeFileSync(fileScena, JSON.stringify({ scena: r.scena, fedelta: r.fedelta, motivo }))
     if (motivo) { esito.scartati.push({ id: p.id, motivo }); esempi.delete(p.id) } else { esempi.set(p.id, r.scheda); esito.entrati++ }
   }
 }

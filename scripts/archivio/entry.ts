@@ -29,10 +29,10 @@ async function draw(sc: Scene, multiplier = 1) {
   return url
 }
 
-/** L'immagine del museo come PNG col lato lungo a 1000 px (D1 lavora sui pixel veri). */
+/** L'immagine del museo come PNG col lato lungo a 800 px (D1 lavora sui pixel veri). */
 async function png(url: string) {
   const im = new Image(); im.src = url; await im.decode()
-  const k = Math.min(1, 1000 / Math.max(im.naturalWidth, im.naturalHeight))
+  const k = Math.min(1, 800 / Math.max(im.naturalWidth, im.naturalHeight))
   const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k)
   c.getContext('2d')!.drawImage(im, 0, 0, c.width, c.height)
   return c.toDataURL('image/png')
@@ -44,11 +44,14 @@ interface Meta { id: string; titolo?: string; autore?: string; anno?: number; te
 async function pezzo(o: { url: string; meta: Meta }) {
   const src = await png(o.url)
   const leggi = async (p: string) => JSON.parse(await window.__leggi!(p)) as Lettura
-  const r = await decompila(src, { leggi })
+  const r = await decompila(src, { leggi, scontorno: false, giri: 2 })
   const testi = r.testi.map(t => ({ ruolo: t.ruolo, righe: t.righe.length, errore: t.errore }))
   const sc = scheda(r.scena, { ...o.meta, origine: 'museo', fedelta: r.fedelta })
-  return { fedelta: r.fedelta, giri: r.giri, testi, avvisi: r.avvisi, scheda: sc, originale: src, ricostruita: await draw(r.scena) }
+  return { tempi: r.tempi, fedelta: r.fedelta, giri: r.giri, testi, avvisi: r.avvisi, scheda: sc, scena: r.scena, originale: src, ricostruita: await draw(r.scena) }
 }
+
+/** La scheda rifatta da una scena già decompilata (senza rifare D1). */
+function rischeda(o: { scena: Scene; meta: Meta; fedelta: number }) { return scheda(o.scena, { ...o.meta, origine: 'museo', fedelta: o.fedelta }) }
 
 /** Le tavole migliori del motore per un contenuto: voto più carattere, una per sistema. */
 async function motore(o: { content: DesignContent; format: Format; photo?: string; nome: string; settore: string[]; quante: number }) {
@@ -79,4 +82,4 @@ async function affianca(o: { a: string; b: string; titolo: string }) {
   return cv.toDataURL('image/jpeg', 0.8)
 }
 
-;(window as unknown as { archivio: unknown }).archivio = { pezzo, motore, affianca }
+;(window as unknown as { archivio: unknown }).archivio = { pezzo, motore, affianca, rischeda }

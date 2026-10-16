@@ -124,7 +124,25 @@ export function programmaDa(sc: Scene): Programma {
     }
   }
   if (!strati.some(s => s.ruolo === 'fondo')) strati.unshift({ ruolo: 'fondo', box: [0, 0, 1, 1], colore: 'fondo' })
-  return { rapporto: r3(W / H), strati: strati.slice(0, 40) }
+  return { rapporto: r3(W / H), strati: (sc.layout === 'decompilata' ? illustrazione(strati) : strati).slice(0, 40) }
+}
+
+/**
+ * Nei design decompilati l'illustrazione arriva a pezzi (immagini ritagliate,
+ * tracciati, macchie): per il generatore conta dove sta l'immagine rispetto ai
+ * testi, non i frammenti. Le immagini e i tracciati diventano una sola zona
+ * "foto" (il riquadro che li contiene); restano i campi grandi e regolari.
+ */
+function illustrazione(strati: Strato[]): Strato[] {
+  const pezzi = strati.filter(s => s.ruolo === 'foto' || (s.ruolo === 'campo' && s.box[2] * s.box[3] < 0.04) || s.ruolo === 'disco' && s.box[2] * s.box[3] < 0.01)
+  const resto = strati.filter(s => !pezzi.includes(s))
+  const foto = pezzi.filter(s => s.ruolo === 'foto')
+  if (!foto.length) return resto
+  const x0 = Math.min(...foto.map(s => s.box[0])), y0 = Math.min(...foto.map(s => s.box[1]))
+  const x1 = Math.max(...foto.map(s => s.box[0] + s.box[2])), y1 = Math.max(...foto.map(s => s.box[1] + s.box[3]))
+  const zona: Strato = { ruolo: 'foto', box: [r3(x0), r3(y0), r3(x1 - x0), r3(y1 - y0)] }
+  const i = resto.findIndex(s => s.ruolo !== 'fondo' && s.ruolo !== 'campo')
+  return [...resto.slice(0, i < 0 ? resto.length : i), zona, ...resto.slice(i < 0 ? resto.length : i)]
 }
 
 /* ── descrittori ────────────────────────────────────────────────────────── */

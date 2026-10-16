@@ -346,8 +346,9 @@ for (const nome of contenuti) {
         idee = r.idee
         console.log(`  ${nome}: concetto dal ${r.fonte}${r.modello ? ' ' + r.modello : ''}${r.token ? ` (${r.token} token)` : ''}${r.motivo ? ' — ' + r.motivo : ''}`)
       }
-      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'], idee })
+      const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb, n: Number(args.n ?? 12), seme: Number(args.seme ?? 0), senzaIdee: !!args['senza-idee'], senzaEsempi: !!args['senza-esempi'], misura: !!args.misura, idee })
       if (p.idee?.length) console.log(`  ${nome}: idee ${p.idee.join(' | ')} · concetto ${p.concetto.chiamate} chiamata, ~${p.concetto.token} token`)
+      if (p.esempi?.chiamate) console.log(`  ${nome}: G2 ${p.esempi.chiamate} chiamate simulate, ~${p.esempi.token} token, esempi ${p.esempi.usati.length}`)
       if (args.motivi && p.traccia?.length) console.log(p.traccia.map(x => '    ' + x).join('\n'))
       res = p.items
       info = ` · ${p.promosse} promosse su ${p.candidate} candidate in ${p.giri} giri`
@@ -383,6 +384,17 @@ for (const nome of contenuti) {
       varieta.push({ contenuto: nome, formato: format, ...v, dettaglio: rs })
       info += ` · palette ${v.palette} effetti ${v.effetti} generatori ${v.generatori} foto ${v.foto} trattamenti ${v.trattamenti} texture ${v.texture}`
     }
+    // --esempi: un foglio con le sole tavole G2 (programmi dagli esempi dell'archivio), con voto e primo difetto
+    if (args.esempi) {
+      const es = await page.evaluate(job => window.designer.soloEsempi(job), { content: fx.c, format, photo, over, thumb, seme: Number(args.seme ?? 0) })
+      const its = es.filter(r => r.ok).map(r => ({ url: r.url, label: `${r.voto} ${r.promossa ? '✓' : '✗'} car ${r.carattere}`, sub: r.difetti[0] ?? (r.esempi ?? []).join(' + ') }))
+      if (its.length) {
+        const sh = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format} · G2: ${es.filter(r => r.promossa).length} promosse su ${es.length}`, items: its, cols: 3, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
+        fs.writeFileSync(path.join(out, `${nome}-${format}-esempi.jpg`), Buffer.from(sh.split(',')[1], 'base64'))
+      }
+      if (args.motivi) for (const r of es) console.log(`    G2 ${r.ok ? r.voto : 'scartata'}: ${r.difetti.slice(0, 5).join('; ')}`)
+      info += ` · G2 da solo: ${es.filter(r => r.promossa).length}/${es.length} promosse`
+    }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
     if (args.ibridi) {
       const ib = await page.evaluate(job => window.designer.ibridi(job), { content: fx.c, format, photo, over, thumb, seme: Number(args.seme ?? 0) })
@@ -406,6 +418,7 @@ for (const nome of contenuti) {
     report.push({ contenuto: nome, formato: format, ok, totale: res.length, secondi: (Date.now() - t0) / 1000,
       scarti: res.filter(r => !r.ok).map(r => ({ sistema: r.sistema, motivi: r.reasons.slice(0, 4) })),
       mattoni: res.slice(0, 12).map(r => r.mattoni ?? [r.sistema]),
+      prime: res.filter(r => r.ok).slice(0, 12).map(r => ({ sistema: r.sistema, impronta: r.impronta, difetti: r.difetti, carattere: r.esame?.carattere?.carattere, voto: r.esame?.voto })),
       esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, carattere: r.esame.carattere, stile: r.stile })),
       tempi: Object.fromEntries(res.map(r => [r.sistema, r.ms])) })
     const voti = res.filter(r => r.esame).map(r => r.esame.voto)

@@ -8,7 +8,7 @@ import type { TipoContenuto } from '../types'
 import { ARCHETIPI, type ArchetipoId } from './archetipi/elenco'
 
 export type SistemaId = 'supertipo' | 'eco' | 'strisce' | 'costruttivo' | 'riso' | 'modulare' | 'orbita' | 'ritaglio' | 'giocoso' | 'decostruito' | 'rivista' | 'tesi' | 'dato' | 'citazione' | 'elenco' | 'chiusura'
-  | 'composto' | 'ibrido' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'faq' | 'prodotto' | 'timeline'
+  | 'composto' | 'ibrido' | 'esempi' | 'consigli' | 'passi' | 'dati' | 'confronto' | 'programma' | 'menu' | 'faq' | 'prodotto' | 'timeline'
   | ArchetipoId
 export type Trattamento = 'pellicola' | 'duotone' | 'retino' | 'riso' | 'serigrafia' | 'bn' | 'poster'
 
@@ -42,6 +42,9 @@ export interface Knobs {
   idea?: import('./concetto').Idea
   /** un intreccio voluto da provare sulla tavola (gesto.ts): il primo che riesce tra quelli in fila */
   intreccio?: boolean
+  /** sistema "esempi" (G2): il programma scritto dagli esempi dell'archivio e gli id degli esempi */
+  programma?: import('../archivio/tipi').Programma
+  esempi?: string[]
 }
 
 export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean; /** sistema dedicato a un tipo di contenuto (elenco, programma…) */ tipo?: TipoContenuto }
@@ -65,6 +68,7 @@ export const SISTEMI: SistemaInfo[] = [
   { id: 'ritaglio', nome: 'Foto nelle lettere', idea: 'la parola chiave enorme con la foto dentro le lettere, contorno fuori registro dietro, titolo completo sotto', foto: 'serve' },
   { id: 'composto', nome: 'Composto', idea: 'ossatura generata: la tavola tagliata in celle (terzi, sezione aurea, metà), ogni cella con un ruolo (titolo, foto, campo di colore, numero, segno, contenuto); ogni seme è un\'impaginazione diversa', foto: 'meglio' },
   { id: 'ibrido', nome: 'Ibrido', idea: 'mattoni di ricette diverse incrociati: l’ossatura di una, il titolo di un’altra, i dispositivi di una terza, con i parametri mutati; li sceglie il critico', foto: 'meglio' },
+  { id: 'esempi', nome: 'Da esempi', idea: 'un programma di strati scritto imitando i design più vicini dell’archivio (G2): ossatura, scala e colore da manifesti veri, non dalle nostre regole', foto: 'meglio' },
   { id: 'consigli', nome: 'Consigli', idea: 'titolo e voci numerate in elenco o in card', foto: 'no', tipo: 'consigli' },
   { id: 'passi', nome: 'Passo dopo passo', idea: 'passi numerati collegati da un filo', foto: 'no', tipo: 'passi' },
   { id: 'dati', nome: 'Dati', idea: 'numeri grandi o barre proporzionali', foto: 'no', tipo: 'dati' },
