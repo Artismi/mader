@@ -138,8 +138,11 @@ export function copertura(t: Text, dentro: (x: number, y: number) => boolean) {
   })
 }
 /** Il punto sta nel mezzo disco (n = verso della metà; n nullo = disco intero). */
-export const nelMezzoDisco = (a: NonNullable<Intreccio['area']>, x: number, y: number) =>
+export const nelMezzoDisco = (a: { cx: number; cy: number; r: number; nx: number; ny: number }, x: number, y: number) =>
   Math.hypot(x - a.cx, y - a.cy) <= a.r && (x - a.cx) * a.nx + (y - a.cy) * a.ny >= 0
+/** Il punto sta nell'area coperta dall'intreccio (mezzo disco o rettangolo). */
+export const nellArea = (a: NonNullable<Intreccio['area']>, x: number, y: number) =>
+  'r' in a ? nelMezzoDisco(a, x, y) : x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h
 
 /** Più di un quarto di una riga coperto: le lettere non si riconoscono più. */
 const MAX_COPERTO = 0.25
@@ -172,7 +175,7 @@ export function intrecci(g: G): string | null {
     const area = ii.area
     for (const t of testi) {
       if (t.angle) continue
-      const cop = copertura(t, (x, y) => nelMezzoDisco(area, x, y))
+      const cop = copertura(t, (x, y) => nellArea(area, x, y))
       const max = gruppo(t.name) === gruppo(bersaglio.name) ? MAX_COPERTO : 0.02
       if (Math.max(0, ...cop) > max) { via.add(ii); break }
     }

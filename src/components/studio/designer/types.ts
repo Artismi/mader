@@ -63,7 +63,8 @@ export interface FxSpec { id: string; variant?: string; p?: Record<string, numbe
  * coperto (n = verso della metà; n nullo = disco intero). La regola di leggibilità
  * la applica il controllo degli spazi.
  */
-export interface Intreccio { tipo: string; sopra?: boolean; copre?: string; area?: { cx: number; cy: number; r: number; nx: number; ny: number } }
+export type AreaIntreccio = { cx: number; cy: number; r: number; nx: number; ny: number } | { x: number; y: number; w: number; h: number }
+export interface Intreccio { tipo: string; sopra?: boolean; copre?: string; area?: AreaIntreccio }
 
 /** Proprietà comuni di resa: sovrastampa (multiply…), trasparenza, effetti, intreccio voluto. */
 export interface Look { blend?: GlobalCompositeOperation; opacity?: number; fx?: FxSpec[]; intreccio?: Intreccio }

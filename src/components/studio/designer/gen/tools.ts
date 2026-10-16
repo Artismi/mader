@@ -548,7 +548,7 @@ export function mirror(g: G) {
   }
   for (const e of g.els) {
     const area = (e as Look).intreccio?.area
-    if (area) (e as Look).intreccio = { ...(e as Look).intreccio!, area: { ...area, cx: W - area.cx, nx: -area.nx } }
+    if (area) (e as Look).intreccio = { ...(e as Look).intreccio!, area: 'r' in area ? { ...area, cx: W - area.cx, nx: -area.nx } : { ...area, x: W - area.x - area.w } }
     switch (e.kind) {
       case 'rect': Object.assign(e, rot(e.x, e.y, e.w, e.angle)); break
       case 'text': Object.assign(e, rot(e.x, e.y, e.w, e.angle), { align: flipAlign(e.align) }); break

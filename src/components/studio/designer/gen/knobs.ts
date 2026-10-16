@@ -38,6 +38,8 @@ export interface Knobs {
   genoma?: import('./mattoni/tipi').Genoma
   /** l'idea della tavola (C1, concetto.ts): gesto dominante, poli, ornamenti motivati */
   idea?: import('./concetto').Idea
+  /** un intreccio voluto da provare sulla tavola (gesto.ts): il primo che riesce tra quelli in fila */
+  intreccio?: boolean
 }
 
 export interface SistemaInfo { id: SistemaId; nome: string; idea: string; foto: 'serve' | 'meglio' | 'no'; /** solo per le slide interne di una sequenza */ slide?: boolean; /** sistema dedicato a un tipo di contenuto (elenco, programma…) */ tipo?: TipoContenuto }

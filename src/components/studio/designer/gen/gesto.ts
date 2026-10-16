@@ -26,12 +26,21 @@ const pianoVuoto = (): Piano => ({ offre: new Set(), ancore: {}, info: [], misur
 /** Applica un mattone d'intreccio per id; lo segna tra i mattoni della tavola se riesce. */
 export function intreccia(g: G, id: string) {
   const m = INTRECCI.find(x => x.id === id)
-  if (!m || !m.fai(g, pianoVuoto(), {})) return false
+  const ok = !!m && m.fai(g, pianoVuoto(), {})
+  if (!ok) return false
+  ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`intreccio ${id} (${g.k.sistema})`)
   ;(g.segni ??= []).push(`intreccio:${id}`)
   return true
 }
 
+/** Gli intrecci da provare, in un ordine che cambia col seme: il primo che regge resta. */
+const FILA = ['davanti-dietro', 'foto-lettere', 'incastro']
+
 export function gesto(g: G) {
+  if (g.k.intreccio && !g.segni?.some(s => s.startsWith('intreccio:'))) {
+    const k0 = Math.abs(g.k.seme) % FILA.length
+    for (const id of FILA.map((_, i) => FILA[(i + k0) % FILA.length])) if (intreccia(g, id)) break
+  }
   const idea = g.k.idea
   if (!idea) return
   // ornamenti senza motivo: fuori (i testi del messaggio non sono mai ornamenti)

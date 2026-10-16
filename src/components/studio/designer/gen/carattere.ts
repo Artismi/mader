@@ -89,6 +89,8 @@ export function carattere(g: G): Carattere {
   const genericita = !m || m.n < 4 ? 0.5 : clamp(1 - dist / 0.25)
   if (!m) MEDIE.set(g.k.sistema, { n: 1, v: imp })
   else { m.n++; m.v = m.v.map((x, i) => x + (imp[i] - x) / m.n) }
-  const base = 0.35 * dominanza + 0.3 * scala + 0.35 * (1 - genericita)
+  // l'intreccio voluto è profondità progettata: un gradino in più
+  const intreccio = g.segni?.some(s => s.startsWith('intreccio:')) || g.els.some(e => (e as { intreccio?: unknown }).intreccio) ? 0.08 : 0
+  const base = 0.35 * dominanza + 0.3 * scala + 0.35 * (1 - genericita) + intreccio
   return { carattere: Math.round(100 * clamp(base - ornamenti)), dominanza, scala, ornamenti, genericita }
 }

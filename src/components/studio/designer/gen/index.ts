@@ -217,6 +217,8 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
         sistema, stile: id.stile,
         scala: polo(), energia: polo(), densita: polo(),
         sovrastampa: 0.3 + r.range(0, 0.5), trattamento: r.pick(tratt), inverti: r.chance(0.15), grana: 0.3 + r.range(0, 0.4),
+        // una tavola su tre prova un intreccio voluto (titolo dietro e davanti, foto nelle lettere, incastro)
+        intreccio: r.chance(0.35),
         seme: r.int(1, 99999), ...(opts.sperimentazione !== undefined ? { sperimentazione: opts.sperimentazione } : {}), ...prefK[sistema],
       })
     }
@@ -309,7 +311,7 @@ export function knobsDelleIdee(c: DesignContent, idee: Idea[], pool: Knobs[], ha
     const ok = lista.filter(x => ammesso(c, x, hasPhoto))
     if (!ok.length) return []
     const scelti = [ok[(i * 2) % ok.length], ok[(i * 2 + 1) % ok.length]]
-    return stili.map((b, j) => ({ ...b, sistema: scelti[j % scelti.length], idea, scala: polo(idea.scala), energia: polo(idea.energia), densita: polo(idea.densita), grana: idea.motivi.includes('materia') ? b.grana : 0, seme: r.int(1, 99999) }) as Knobs)
+    return stili.map((b, j) => ({ ...b, sistema: scelti[j % scelti.length], idea, scala: polo(idea.scala), energia: polo(idea.energia), densita: polo(idea.densita), intreccio: j === 1 || idea.gesto === 'spezzato', grana: idea.motivi.includes('materia') ? b.grana : 0, seme: r.int(1, 99999) }) as Knobs)
   })
 }
 

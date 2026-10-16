@@ -22,7 +22,7 @@ const over = (g: G): GlobalCompositeOperation => (lum(g.P.bg) < 0.18 ? 'screen' 
 const titolo = (g: G) => g.els.filter((e): e is Text => e.kind === 'text' && !e.deco && /^titolo/.test(e.name) && !e.angle).sort((a, b) => b.size - a.size)[0]
 const i = (g: G, e: SceneEl) => g.els.indexOf(e)
 
-const mezzoDisco = (a: NonNullable<Intreccio['area']>) => {
+const mezzoDisco = (a: { cx: number; cy: number; r: number; nx: number; ny: number }) => {
   const f = (v: number) => v.toFixed(1)
   const p1 = [a.cx - a.r * a.ny, a.cy + a.r * a.nx], p2 = [a.cx + a.r * a.ny, a.cy - a.r * a.nx]
   return `M ${f(p1[0])} ${f(p1[1])} A ${f(a.r)} ${f(a.r)} 0 0 0 ${f(p2[0])} ${f(p2[1])} Z`
@@ -34,6 +34,7 @@ export const davantiDietro: MSegno = {
     const t = titolo(g)
     type Fig = Extract<SceneEl, { kind: 'image' | 'circle' }>
     const fig = g.els.find((e): e is Fig => (e.kind === 'image' && e.shape === 'circle' && !e.clipText && !e.mask) || (e.kind === 'circle' && (e.name === 'foto' || e.name === 'disco')))
+    if (t && !fig) return rettangolo(g, t)
     if (!t || !fig) return false
     const c0 = fig.kind === 'circle' ? { cx: fig.cx, cy: fig.cy, r: fig.r } : { cx: fig.x + fig.w / 2, cy: fig.y + fig.h / 2, r: Math.min(fig.w, fig.h) / 2 }
     const rs = righeVere(t)
@@ -62,8 +63,34 @@ export const davantiDietro: MSegno = {
         return true
       }
     }
-    return false
+    return rettangolo(g, t)
   },
+}
+
+/**
+ * Il titolo dietro e davanti alla foto rettangolare: dove il titolo già passa
+ * sopra la foto, una striscia della foto ripetuta sopra lo copre per un tratto
+ * (al più un quarto di ogni riga); dal resto il titolo resta davanti.
+ */
+function rettangolo(g: G, t: Text) {
+  const f = g.els.filter((e): e is Extract<SceneEl, { kind: 'image' }> => e.kind === 'image' && !e.clipText && !e.mask && (!e.shape || e.shape === 'rect') && e.w * e.h > g.W * g.H * 0.06).sort((a, b) => b.w * b.h - a.w * a.h)[0]
+  if (!f) return false
+  const dentro = (b: { x: number; y: number; w: number; h: number }) => (x: number, y: number) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h
+  const su = copertura(t, dentro(f))
+  if (Math.max(...su) < 0.15) return false
+  const rs = righeVere(t)
+  const x0 = Math.max(f.x, Math.min(...rs.map(r => r.x0))), x1 = Math.min(f.x + f.w, Math.max(...rs.map(r => r.x1)))
+  // tagli verticali dal bordo della foto verso l'interno: il primo che copre tra il 6% e il 25% delle righe
+  for (const lato of g.r.chance(0.5) ? [1, -1] : [-1, 1]) for (let k = 0.08; k <= 0.4; k += 0.04) {
+    const xc = lato > 0 ? x1 - (x1 - x0) * k : x0 + (x1 - x0) * k
+    const area = lato > 0 ? { x: xc, y: f.y, w: f.x + f.w - xc, h: f.h } : { x: f.x, y: f.y, w: xc - f.x, h: f.h }
+    const cop = copertura(t, dentro(area))
+    if (Math.max(...cop) > 0.25 || cop.reduce((a, b) => a + b, 0) / cop.length < 0.06) continue
+    const d = `M ${area.x.toFixed(1)} ${area.y.toFixed(1)} L ${(area.x + area.w).toFixed(1)} ${area.y.toFixed(1)} L ${(area.x + area.w).toFixed(1)} ${(area.y + area.h).toFixed(1)} L ${area.x.toFixed(1)} ${(area.y + area.h).toFixed(1)} Z`
+    g.els.push({ ...f, name: 'foto_sopra', mask: d, intreccio: { tipo: 'davanti-dietro', sopra: true, copre: t.name, area } } as SceneEl)
+    return true
+  }
+  return false
 }
 
 export const sovrastampa: MSegno = {
@@ -105,16 +132,22 @@ export const incastro: MSegno = {
   id: 'incastro', nome: 'Forma a incastro nel titolo', ricetta: 'intreccio', cat: 'intreccio', param: { misura: [0.6, 1] },
   fai(g, _piano, p) {
     const t = titolo(g)
-    if (!t || t.lines.length < 2 || t.align === 'center') return false
+    if (!t || t.angle) return false
     const rs = righeVere(t)
-    if (rs.length < 2) return false
+    if (!rs.length) return false
+    // a sinistra o al centro: il vuoto in fondo alla riga; a destra: all'inizio
     const dx = t.align === 'right' ? -1 : 1
-    const bordo = dx > 0 ? Math.max(...rs.map(r => r.x1)) : Math.min(...rs.map(r => r.x0))
+    // il bordo fino a cui si può andare: la riga più lunga, o (riga sola) il margine della tavola
+    const bordo = rs.length > 1 ? (dx > 0 ? Math.max(...rs.map(r => r.x1)) : Math.min(...rs.map(r => r.x0))) : dx > 0 ? g.W - g.m : g.m
     const j = rs.map((r, k) => ({ k, vuoto: dx > 0 ? bordo - r.x1 : r.x0 - bordo })).sort((a, b) => b.vuoto - a.vuoto)[0]
     const r = rs[j.k], h = r.y1 - r.y0, aria = t.size * 0.16
     const d = Math.min(h * par(p, 'misura', 0.9), j.vuoto - aria * 1.5)
     if (d < h * 0.5 || d < U(g, 40)) return false
     const cx = (dx > 0 ? r.x1 + aria : r.x0 - aria) + (dx * d) / 2, cy = (r.y0 + r.y1) / 2
+    // la forma non tocca altri testi né foto: si incastra nelle lettere, non nel resto
+    const q = { x: cx - d / 2 - aria, y: cy - d / 2 - aria, w: d + 2 * aria, h: d + 2 * aria }
+    const tocca = (b: { x: number; y: number; w: number; h: number }) => b.x < q.x + q.w && q.x < b.x + b.w && b.y < q.y + q.h && q.y < b.y + b.h
+    if (g.els.some(e => (e.kind === 'text' && !e.deco && e !== t && righeVere(e).some(l => tocca({ x: l.x0, y: l.y0, w: l.x1 - l.x0, h: l.y1 - l.y0 }))) || (e.kind === 'image' && tocca(e)))) return false
     const tinta = readable(g.P.bg, [g.P.acc, g.P.acc2, g.P.fg], 1.8)
     if (g.r.chance(0.5) && g.s.decor.glyphs.length) put(g, { kind: 'glyph', name: 'incastro', path: g.r.pick(g.s.decor.glyphs), cx, cy, size: d, color: tinta })
     else put(g, { kind: 'circle', name: 'incastro', cx, cy, r: d / 2, fill: tinta })

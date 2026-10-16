@@ -67,7 +67,7 @@ async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; c
     const st = styleById(k.stile)
     items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema] })
   }
-  return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ')) }
+  return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ')) }
 }
 
 /** Gli ibridi dell'incrocio dei mattoni (V1), da soli: per guardarli in un foglio. */
