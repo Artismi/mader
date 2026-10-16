@@ -187,6 +187,8 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
         { stile: idIdentita(registro, r.int(1, 99999), { sperimentazione: opts.sperimentazione }), registro, n: 3 },
         ((v: RegistroId) => ({ stile: idIdentita(v, r.int(1, 99999), { tinta: r.chance(0.5) ? opts.tinta : undefined, sperimentazione: opts.sperimentazione }), registro: v, n: 2 }))(r.pick(VICINI[registro])),
       ]
+  // regolatori a due poli (C3): scala, energia e densità vanno verso un estremo, mai verso il centro
+  const polo = () => (r.chance(0.5) ? 0.03 + r.range(0, 0.17) : 0.8 + r.range(0, 0.17))
   const out: Knobs[] = []
   const usati = new Set<SistemaId>()
   for (const id of identita) {
@@ -210,7 +212,7 @@ export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhot
       usati.add(sistema)
       out.push({
         sistema, stile: id.stile,
-        scala: 0.55 + r.range(0, 0.4), energia: 0.25 + r.range(0, 0.6), densita: 0.45 + r.range(0, 0.45),
+        scala: polo(), energia: polo(), densita: polo(),
         sovrastampa: 0.3 + r.range(0, 0.5), trattamento: r.pick(tratt), inverti: r.chance(0.15), grana: 0.3 + r.range(0, 0.4),
         seme: r.int(1, 99999), ...(opts.sperimentazione !== undefined ? { sperimentazione: opts.sperimentazione } : {}), ...prefK[sistema],
       })
