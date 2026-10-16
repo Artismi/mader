@@ -92,7 +92,11 @@ const DECORO = /cornic|ornament|decor|texture|trama|sfond|bordo|icon|cuoric|stel
 /** Legge la risposta del modello; idee non valide si scartano, meno di 3 → si completano con le regole. */
 export function leggiIdee(testo: string, c: DesignContent): Idea[] {
   let grezze: unknown[] = []
-  try { grezze = JSON.parse(testo.slice(testo.indexOf('['), testo.lastIndexOf(']') + 1)) } catch { /* risposta non leggibile: le regole */ }
+  const da = testo.indexOf('[')
+  try { grezze = JSON.parse(testo.slice(da, testo.lastIndexOf(']') + 1)) } catch {
+    // lista troncata (il modello ha finito i token): si tengono le idee complete
+    try { grezze = JSON.parse(testo.slice(da, testo.lastIndexOf('}') + 1) + ']') } catch { /* risposta non leggibile: le regole */ }
+  }
   const polo = (v: unknown): 0 | 1 => (Number(v) >= 0.5 ? 1 : 0)
   const idee = (Array.isArray(grezze) ? grezze : []).flatMap(x => {
     const o = x as Record<string, unknown>
