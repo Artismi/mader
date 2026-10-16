@@ -98,17 +98,22 @@ export async function tintaFoto(url?: string) {
  * del contenuto, una da un registro vicino), ognuna con due o tre sistemi
  * del suo registro. Varietà tra le identità, coerenza dentro ciascuna.
  */
+/** Il sistema entra nel vivaio delle copertine per questo contenuto? Niente slide, niente esclusi per tema, foto se serve. */
+export function ammesso(c: DesignContent, id: SistemaId, hasPhoto: boolean) {
+  const tipo = c.tipo && c.tipo !== 'copertina' ? c.tipo : undefined
+  // con un tipo con voci entrano anche gli archetipi che sanno impaginare elenchi (scontrino, lavagna…)
+  const elenco = !!tipo && TIPI_ELENCO.includes(tipo)
+  const info = SISTEMI.find(s => s.id === id)
+  const sa = ARCHETIPI.some(a => a.id === id && 'voci' in a && a.voci)
+  return !info?.slide && !info?.tipo && id !== 'composto' && affinita(c, id) !== 'esclusa' && (hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sa))
+}
+
 export function proposeKnobs(c: DesignContent, opts: { styleId?: string; hasPhoto: boolean; sistemi?: SistemaId[]; tinta?: number; seme?: number; ampio?: boolean | number }): Knobs[] {
   const r = rng(hashText(allText(c)) ^ (opts.seme ?? 0))
   const registro = opts.styleId ? styleById(opts.styleId).registro : inferRegistro(allText(c))
   const tipo = c.tipo && c.tipo !== 'copertina' ? c.tipo : undefined
   // con un tipo con voci entrano anche gli archetipi che sanno impaginare elenchi (scontrino, lavagna…)
-  const elenco = !!tipo && TIPI_ELENCO.includes(tipo)
-  const sannoElenchi = new Set<string>(ARCHETIPI.filter(a => 'voci' in a && a.voci).map(a => a.id))
-  const ok = (id: SistemaId) => {
-    const info = SISTEMI.find(s => s.id === id)
-    return !info?.slide && !info?.tipo && id !== 'composto' && affinita(c, id) !== 'esclusa' && (opts.hasPhoto || info?.foto !== 'serve') && (!tipo || (elenco && sannoElenchi.has(id)))
-  }
+  const ok = (id: SistemaId) => ammesso(c, id, opts.hasPhoto)
   // il sistema dedicato al tipo di contenuto (o la slide equivalente), se c'è
   const dedicato = tipo ? (SISTEMI.find(s => s.tipo === tipo)?.id ?? (tipo === 'citazione' ? 'citazione' : undefined)) : undefined
   const tratt: Knobs['trattamento'][] = ['pellicola', 'duotone', 'retino', 'riso', 'serigrafia', 'bn', 'poster']

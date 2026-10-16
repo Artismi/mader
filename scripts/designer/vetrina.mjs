@@ -131,12 +131,13 @@ const CLASSI = {
 if (args.schede) {
   // campione di partenza: contenuti di tipo diverso, tutti i formati (tutto il vivaio è lento)
   const campione = args.contenuti ? contenuti : Object.keys(CONTENUTI).filter((_, i, l) => i % Math.max(1, Math.round(l.length / 8)) === 0).slice(0, 8)
-  const tutti = await page.evaluate(() => window.designer.sistemi())
   const S = {}
   const t0 = Date.now()
   for (const nome of campione) for (const format of formati) {
     const fx = CONTENUTI[nome]
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+    // come il vivaio dello Studio: solo i sistemi ammessi per questo contenuto (niente slide, niente esclusi per tema)
+    const tutti = await page.evaluate(([c, f]) => window.designer.sistemi(c, f), [fx.c, !!photo])
     const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi: sistemi ?? tutti, primo: true, thumb: 0.08, seme: Number(args.seme ?? 0) })
     for (const r of res) {
       const s = (S[r.sistema] ??= { prove: 0, scartate: 0, voti: [], classi: Object.fromEntries(Object.keys(CLASSI).map(k => [k, 0])), correzioni: 0, motivi: {} })
