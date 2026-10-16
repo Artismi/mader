@@ -1123,12 +1123,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         }
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        if (e.altKey) { undo(); return } // Ctrl+Alt+Z as Undo (Alternative)
-        if (e.shiftKey) { redo(); return } // Ctrl+Shift+Z as Redo
-        undo(); return // Ctrl+Z as Undo
+      // con Maiusc e.key è 'Z': si confronta il tasto fisico
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+        e.preventDefault()
+        if (e.shiftKey) redo(); else undo()
+        return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { redo(); return }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); redo(); return }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); triggerSave(); return }
       // Ctrl+A — select all
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
@@ -1222,9 +1223,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           })
         } else {
           // Default artboard if totally empty
-          restoring(async () => { addArtboard(1080, 1080, 'Social Square', 'social') })
+          // lo stato di partenza entra nella cronologia: il primo gesto si può annullare
+          restoring(async () => { addArtboard(1080, 1080, 'Social Square', 'social') }).then(() => pushHistory(true))
           fitToArtboards()
-          pushHistory(true)
         }
       } else {
         cleanupOrphanedLabels(canvas)
