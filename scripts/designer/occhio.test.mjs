@@ -51,3 +51,41 @@ test('al massimo 6 finaliste, prima le buone', () => {
   assert.equal(f[0].v.esito, 'buona')
   assert.ok(f.every(y => y.x.esame.voto >= 60))
 })
+
+const occhio = await carica('occhio.ts')
+const { griglia, miniatura } = await import('../occhio/index.mjs')
+const sharp = createRequire(import.meta.url)('sharp')
+const tavola = (r, g, b) => sharp({ create: { width: 1080, height: 1350, channels: 3, background: { r, g, b } } }).png().toBuffer()
+const memoriaRam = () => { const m = new Map(); return { get: k => m.get(k), set: (k, v) => m.set(k, v), m } }
+
+test('le finaliste vanno al modello in una sola griglia numerata di miniature', async () => {
+  const imgs = await Promise.all([[200, 0, 0], [0, 200, 0], [0, 0, 200], [9, 9, 9]].map(c => tavola(...c)))
+  const lista = imgs.map((_, i) => ({ id: `t${i}`, sistema: `s${i}`, esame: esame(70 + i) }))
+  const { finaliste: fin } = finaliste(lista)
+  const viste = []
+  const oc = {
+    miniatura: id => miniatura(imgs[Number(id.slice(1))]), griglia,
+    chiedi: async (p, g) => { viste.push(g); return '{"ordine": [4, 1, 2, 3], "scarta": [3]}' },
+    memoria: memoriaRam(), conta: occhio.contaVuota(),
+  }
+  const r = await occhio.giudica(fin, 2, oc)
+  assert.equal(oc.conta.chiamate, 1)
+  assert.equal(viste.length, 1)
+  assert.ok(viste[0].w <= 3 * 512 + 100 && viste[0].h <= 2 * 512 + 100, `griglia ${viste[0].w}×${viste[0].h}`)
+  // la griglia segue l'ordine delle finaliste: il 4 è la quarta finalista
+  assert.equal(r.scelte[0].id, fin[3].x.id)
+  assert.equal(r.scelte.length, 2)
+})
+
+test('nessuna chiamata se le finaliste sono tutte sicure e bastano', async () => {
+  const lista = [0, 1].map(i => ({ id: `t${i}`, sistema: `s${i}`, esame: esame(90 + i) }))
+  const oc = { miniatura: () => { throw new Error('non serve') }, griglia, chiedi: () => { throw new Error('non serve') }, memoria: memoriaRam(), conta: occhio.contaVuota() }
+  const r = await occhio.giudica(finaliste(lista).finaliste, 2, oc)
+  assert.equal(oc.conta.chiamate, 0)
+  assert.equal(r.scelte.length, 2)
+})
+
+test('la classifica del modello si legge anche sporca, e senza risposta resta l\'ordine del codice', () => {
+  assert.deepEqual(occhio.leggiClassifica('ecco: {"ordine":[2,9,2],"scarta":[1]}', 3), { ordine: [2, 1, 3], scarta: [1] })
+  assert.equal(occhio.leggiClassifica('non so', 3), null)
+})
