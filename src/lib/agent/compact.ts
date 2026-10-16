@@ -21,7 +21,9 @@ export function estimateTokens(messages: ModelMessage[]): number {
 type Part = { type: string; toolName?: string; output?: { type: string; value?: unknown }; input?: unknown }
 
 function outcome(output: Part['output']): string {
-  const v = output?.value as { success?: boolean } | undefined
+  const v = output?.value as { success?: boolean } | string | undefined
+  // L1: i risultati arrivano al modello come riassunto di testo (summary.ts)
+  if (typeof v === 'string') return v.startsWith('NON RIUSCITO') ? 'errore' : 'ok'
   return v && typeof v === 'object' && v.success === false ? 'errore' : 'ok'
 }
 

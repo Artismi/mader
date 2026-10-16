@@ -77,3 +77,41 @@ test('runAgent medio: pochi strumenti attivi per passo, dentro il tetto di 12', 
   assert.ok(serverToolDefs().length > 12)
   for (const o of visti) assert.ok((o.tools as unknown[]).length <= 12, `strumenti visti: ${(o.tools as unknown[]).length}`)
 })
+
+/* ── riassunti dei risultati ──────────────────────────────────────────── */
+
+const { riassunto, riassuntoGenerico, RIASSUNTI } = await import('../../src/lib/agent/summary')
+const { SYSTEM_TOOLS } = await import('../../src/lib/agent/system-tools')
+
+test('ogni strumento di sistema ha il suo riassunto', () => {
+  for (const d of SYSTEM_TOOLS) assert.ok(RIASSUNTI[d.name], `manca il riassunto di ${d.name}`)
+})
+
+test('riassunto: errori in testa, elenchi tagliati con il conto, vault accorciato', () => {
+  const ko = riassuntoGenerico({ success: false, error: 'Cliente "X" non trovato.' })
+  assert.match(ko, /^NON RIUSCITO\nerror: Cliente "X"/)
+  const post = Array.from({ length: 40 }, (_, i) => `[p${i}] 2${i % 9} ott · Post numero ${i} [programmato]`).join('\n')
+  const lungo = { success: true, totale: 40, mostrati: 40, post }
+  const r = riassunto('readEditorialPlan', lungo)
+  assert.match(r, /totale: 40/)
+  assert.match(r, /\[p11\]/)
+  assert.match(r, /\+28 righe/)
+  assert.ok(r.length < JSON.stringify(lungo).length / 2)
+  const cli = riassunto('getClient', { success: true, cliente: 'Vigna Alta [ab12cd34] · vino', vault: 'v'.repeat(4000), prossimiPost: 'a\nb' })
+  assert.match(cli, /ab12cd34/)
+  assert.ok(cli.length < 600, String(cli.length))
+})
+
+test('il modello riceve il riassunto in testo, non il JSON', async () => {
+  const visti: Record<string, unknown>[] = []
+  const m = finto('forte', 'gemini-3-pro', [
+    chiama('createIdea', { text: 'Dal tornio', title: 'Dal tornio' }),
+    testo('Ho salvato l\'idea "Dal tornio".'),
+  ], visti)
+  const r = await runAgent({ compito: 'Salva come idea "Dal tornio"', candidati: [m] })
+  assert.equal(r.ok, true)
+  const tool = (visti[1].prompt as { role: string; content: { type: string; output?: { type: string; value: unknown } }[] }[]).find(x => x.role === 'tool')!
+  const out = tool.content.find(p => p.type === 'tool-result')!.output!
+  assert.equal(out.type, 'text')
+  assert.match(String(out.value), /^ok\nmessage: Idea "Dal tornio"/)
+})

@@ -15,6 +15,7 @@
 import { tool, type Tool } from 'ai'
 import type { z } from 'zod'
 import type { Trace } from './trace'
+import { riassunto } from './summary'
 
 export type Risk = 'read' | 'write' | 'destructive'
 export type ToolGroup = 'lavoro' | 'clienti' | 'idee' | 'social' | 'studio' | 'memoria' | 'finanze' | 'documenti' | 'piano'
@@ -105,6 +106,8 @@ export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?:
     description: def.description,
     inputSchema: def.inputSchema,
     needsApproval: approval as never,
+    // L1: al modello poche righe essenziali (summary.ts), all'interfaccia e alle prove il risultato intero
+    toModelOutput: ({ output }: { output: unknown }) => ({ type: 'text', value: riassunto(def.name, output, def.maxChars ?? DEFAULT_MAX) }),
     execute: async (input: z.infer<S>) => {
       const t0 = Date.now()
       let ok = true
