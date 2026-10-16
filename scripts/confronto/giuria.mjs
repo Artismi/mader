@@ -13,11 +13,14 @@
  * poi i modelli con visione gratuiti di OpenRouter e altri Gemini. Ogni candidato si prova con
  * una chiamata minima e si tengono i primi tre che rispondono, di famiglie diverse se si può.
  * Si riprende da dove si era rimasti: le risposte già in giuria.jsonl non si richiedono.
+ * Ogni risposta porta l'impronta (hash di immagini, domande, giurato e ordine): la stessa coppia
+ * non si rigiudica mai, ma una tavola rifatta sì.
  * Ai giurati vanno miniature (lato lungo 512 px; --lato o OCCHIO_LATO per cambiarlo), non le tavole intere.
  */
 import path from 'node:path'
 import { GIURIA, NOSTRO, DOMANDE, caricaBrief, coppie, chiave, leggiJsonl, aggiungiJsonl } from './lib.mjs'
 import { chiavi } from './chiavi.mjs'
+import { createHash } from 'node:crypto'
 import { miniatura, LATO } from '../occhio/index.mjs'
 import { chiediGemini, chiediOpenRouter, visioneGemini, visioneOpenRouter, modelliOpenRouter, modelliGemini } from './ia.mjs'
 
@@ -120,14 +123,18 @@ const giurati = await scegliGiurati()
 if (!giurati.length) { console.error('Nessun modello con visione disponibile.'); process.exit(1) }
 console.log(`Giuria: ${giurati.join(', ')}${giurati.length < 3 ? '  (meno di tre: il verdetto vale meno)' : ''}`)
 
-const fatte = new Set(leggiJsonl(GIURIA).map(r => `${chiave(r.brief, r.concorrente)}|${r.modello}|${r.ordine}`))
+const righe = leggiJsonl(GIURIA)
+// le righe vecchie senza impronta valgono per brief e concorrente, come prima
+const fatte = new Set([...righe.filter(r => !r.impronta).map(r => `${chiave(r.brief, r.concorrente)}|${r.modello}|${r.ordine}`), ...righe.map(r => r.impronta).filter(Boolean)])
+const hash = (...xs) => { const h = createHash('sha256'); for (const x of xs) h.update(x); return h.digest('hex').slice(0, 32) }
 let nuove = 0
 for (const c of lista) {
   const b = perId[c.brief]
   const [nostro, loro] = await Promise.all([immagine(c.nostro), immagine(c.loro)])
   for (const g of giurati) {
     for (const ordine of ['nostro-primo', 'nostro-secondo']) {
-      if (fatte.has(`${chiave(c.brief, c.concorrente)}|${g}|${ordine}`)) continue
+      const impronta = hash(nostro.dati, loro.dati, prompt(b), g, ordine)
+      if (fatte.has(impronta) || fatte.has(`${chiave(c.brief, c.concorrente)}|${g}|${ordine}`)) continue
       const [primo, secondo] = ordine === 'nostro-primo' ? [NOSTRO, c.concorrente] : [c.concorrente, NOSTRO]
       const imgs = ordine === 'nostro-primo' ? [nostro, loro] : [loro, nostro]
       let risposte = null, grezza = ''
@@ -135,7 +142,7 @@ for (const c of lista) {
         try { grezza = await chiedi(g, prompt(b), imgs); risposte = leggi(grezza, primo, secondo) } catch (e) { grezza = `errore: ${e.message}` }
       }
       if (!risposte) { console.warn(`  ${c.brief} vs ${c.concorrente} · ${g} · ${ordine}: risposta non valida (${grezza.slice(0, 80)})`); continue }
-      aggiungiJsonl(GIURIA, { quando: new Date().toISOString(), brief: c.brief, famiglia: c.famiglia, concorrente: c.concorrente, modello: g, ordine, risposte })
+      aggiungiJsonl(GIURIA, { quando: new Date().toISOString(), brief: c.brief, famiglia: c.famiglia, concorrente: c.concorrente, modello: g, ordine, risposte, impronta })
       nuove++
       console.log(`  ${c.brief.padEnd(20)} vs ${c.concorrente.padEnd(12)} ${g.padEnd(40)} ${ordine.padEnd(15)} ${DOMANDE.map(d => `${d.id}=${risposte[d.id] ?? 'pari'}`).join(' ')}`)
     }

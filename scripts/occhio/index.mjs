@@ -39,3 +39,17 @@ export async function griglia(imgs, o = {}) {
   const dati = await sharp({ create: { width: W, height: H, channels: 3, background: '#808080' } }).composite(pezzi).jpeg({ quality: 82 }).toBuffer()
   return { mime: 'image/jpeg', dati, w: W, h: H }
 }
+
+/**
+ * Memoria dei verdetti su file (una riga JSON per verdetto, chiave = impronta di
+ * immagine e criterio): lo stesso giudizio non si chiede mai due volte.
+ */
+export function memoriaFile(file) {
+  const m = new Map()
+  if (fs.existsSync(file)) for (const r of fs.readFileSync(file, 'utf8').split('\n')) { try { const j = JSON.parse(r); m.set(j.k, j.v) } catch { /* riga vuota o rotta */ } }
+  return {
+    get: k => m.get(k),
+    set: (k, v) => { m.set(k, v); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.appendFileSync(file, JSON.stringify({ k, v }) + '\n') },
+    get size() { return m.size },
+  }
+}

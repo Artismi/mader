@@ -100,3 +100,23 @@ test('al modello vanno miniature di circa 512 px, configurabili', async () => {
   assert.equal((await miniatura(piccola)).w, 200, 'mai ingrandita')
   assert.ok(occhio.tokenImmagine(m.w, m.h) * 5 < occhio.tokenImmagine(1080, 1350), 'la miniatura costa almeno 5 volte meno')
 })
+
+test('i verdetti si ricordano per impronta: la stessa tavola non si rigiudica', async () => {
+  const os = await import('node:os'), fs = await import('node:fs')
+  const { memoriaFile } = await import('../occhio/index.mjs')
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'occhio-')), 'verdetti.jsonl')
+  const imgs = await Promise.all([[200, 0, 0], [0, 200, 0], [0, 0, 200]].map(c => tavola(...c)))
+  const fin = finaliste(imgs.map((_, i) => ({ id: `t${i}`, sistema: `s${i}`, esame: esame(75 + i) }))).finaliste
+  const giro = async () => {
+    const oc = { miniatura: id => miniatura(imgs[Number(id.slice(1))]), griglia, chiedi: async () => '{"ordine":[2,3,1],"scarta":[]}', memoria: memoriaFile(file), conta: occhio.contaVuota() }
+    const r = await occhio.giudica(fin, 2, oc)
+    return { chiamate: oc.conta.chiamate, ids: r.scelte.map(x => x.id) }
+  }
+  const primo = await giro(), secondo = await giro()
+  assert.equal(primo.chiamate, 1)
+  assert.equal(secondo.chiamate, 0, 'dalla memoria su file')
+  assert.deepEqual(secondo.ids, primo.ids)
+  // un criterio diverso è un giudizio diverso
+  const m = await miniatura(imgs[0])
+  assert.notEqual(await occhio.impronta(m, 'a'), await occhio.impronta(m, 'b'))
+})
