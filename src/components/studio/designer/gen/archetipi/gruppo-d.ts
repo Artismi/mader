@@ -364,7 +364,8 @@ function mirino(g: G, b: Box, color: string, L: number, sw: number) {
 function targa(g: G, name: string, text: string, x: number, y: number, size: number, fg: string, bg: string, o: { align?: 'left' | 'right'; maxW?: number; deco?: boolean } = {}) {
   const padX = U(g, 16), padY = U(g, 15)
   const sz = o.maxW ? Math.min(size, sizeForWidth(text.toUpperCase(), mono(g), o.maxW - 2 * padX, 0.08)) : size
-  if (sz < 16 * g.u) return null
+  // le scritte vere non scendono sotto il corpo delle note; le decorative possono
+  if (sz < (o.deco ? 16 * g.u : g.sc.minNota)) return null
   const w = largo(g, text, sz, mono(g), 0.08) + 2 * padX, h = sz * 1.13 + 2 * padY
   const bx = o.align === 'right' ? x - w : x
   put(g, { kind: 'rect', name: 'targa', x: bx, y, w, h, fill: bg })
@@ -386,7 +387,7 @@ export function sorveglianza(g: G): Scene | null {
   const tempo = marcaTempo(g)
   const cam = `CAM ${String(1 + (k.seme % 9)).padStart(2, '0')}`
   const night: { fx?: Img['fx']; look?: string; adjust?: Record<string, number> } = { fx: [{ id: 'gradientMap', variant: 'duotone', p: { c1: mix(notte, '#000000', 0.4), c2: lighter(fosforo, lt) === fosforo ? fosforo : mix(fosforo, lt, 0.4), three: 0, contrast: 35 } }] }
-  const osd = U(g, 20)
+  const osd = Math.max(U(g, 20), g.sc.minNota)
 
   if (v === 2) {
     /* ── fascicolo: la foto è un fermo immagine graffettato su un documento riservato ── */
