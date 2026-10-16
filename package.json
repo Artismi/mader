@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "designer:vetrina": "node scripts/designer/vetrina.mjs",
-    "designer:test": "node --test scripts/designer/progetto.test.mjs",
+    "designer:test": "node --test scripts/designer/progetto.test.mjs scripts/designer/occhio.test.mjs",
     "confronto:genera": "node scripts/confronto/genera.mjs",
     "confronto:concorrenti": "node scripts/confronto/concorrenti.mjs",
     "confronto:giuria": "node scripts/confronto/giuria.mjs",

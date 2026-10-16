@@ -24,6 +24,24 @@ export interface Esame {
   promossa: boolean
   /** ossatura in breve (dove stanno titolo, foto, blocchi), per non proporre tavole gemelle */
   firma: string
+  /** misure gratuite per l'imbuto prima del modello con visione (vedi imbuto.ts); non toccano il voto */
+  misure: Misure
+}
+export interface Misure {
+  /** testi che escono dalla tavola */
+  fuori: number
+  /** coppie di testi di gruppi diversi che si sovrappongono */
+  sovrapposti: number
+  /** margine minimo dei testi dal bordo, in multipli del margine base */
+  margine: number
+  /** quota della tavola dove succede qualcosa (0-1) */
+  densita: number
+  /** distanza del baricentro dei pesi visivi dal centro (0 = in equilibrio, 0,5 = tutto in un angolo) */
+  squilibrio: number
+  /** relazione tra le tinte vive */
+  armonia: 'neutra' | 'mono' | 'analoga' | 'complementare' | 'triade' | 'libera'
+  /** contrasto minimo tra i testi letti */
+  contrastoMin: number
 }
 
 const PESI = Object.fromEntries((Object.keys(RUBRICA) as Criterio[]).map(k => [k, RUBRICA[k].peso])) as Record<Criterio, number>
@@ -235,7 +253,43 @@ export function esamina(g: G): Esame {
   for (const [cond, max] of tetti) if (cond) voto = Math.min(voto, max)
   voto = Math.max(0, Math.round(voto))
   const promossa = voto >= SOGLIA
-  return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g) }
+  const misure: Misure = { ...misureLibere(g, texts), densita: 1 - zone.reduce((a, z) => a + z, 0), armonia: armonia(vivi), contrastoMin: lett.length ? Math.min(...lett.map(l => l.contrasto)) : 21 }
+  return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g), misure }
+}
+
+/** Testi fuori tavola o sovrapposti, margine minimo, equilibrio dei pesi visivi. */
+function misureLibere(g: G, texts: Text[]) {
+  const { W, H } = g
+  const boxes = texts.map(textBox)
+  const fuori = boxes.filter(b => b.x < -1 || b.y < -1 || b.x + b.w > W + 1 || b.y + b.h > H + 1).length
+  let sovrapposti = 0
+  for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++)
+    if (group(texts[i].name) !== group(texts[j].name) && obbTouch(corners(texts[i], 0), corners(texts[j], 0))) sovrapposti++
+  const margine = boxes.length ? Math.min(...boxes.map(b => Math.min(b.x, b.y, W - b.x - b.w, H - b.y - b.h))) / Math.max(1, g.m) : 1
+  // peso visivo: area per stacco dal fondo; i fondi pieni non pesano
+  let m = 0, mx = 0, my = 0
+  const pesa = (b: Box, k: number) => { const a = Math.max(0, b.w) * Math.max(0, b.h) * k; m += a; mx += a * (b.x + b.w / 2); my += a * (b.y + b.h / 2) }
+  for (const e of g.els) {
+    if (isText(e)) { pesa(textBox(e), 0.6 + dist(e.color.startsWith('#') && e.color.length === 7 ? e.color : '#000000', g.P.bg)); continue }
+    const b = boxOf(e)
+    if (!b || b.w * b.h > W * H * 0.9 || /grana|fondo|carta|tavola/.test(e.name)) continue
+    if (e.kind === 'image') pesa(b, 0.8)
+    else { const f = fillOf(e); if (f) pesa(b, Math.min(1, dist(f, g.P.bg) * 3)) }
+  }
+  const squilibrio = m ? Math.hypot(mx / m / W - 0.5, my / m / H - 0.5) : 0
+  return { fuori, sovrapposti, margine, squilibrio }
+}
+
+/** Relazione tra le tinte vive (gradi oklch). */
+function armonia(h: number[]): Misure['armonia'] {
+  if (!h.length) return 'neutra'
+  if (h.length === 1) return 'mono'
+  const d = (a: number, b: number) => { const x = Math.abs(a - b) % 360; return x > 180 ? 360 - x : x }
+  const coppie = h.flatMap((a, i) => h.slice(i + 1).map(b => d(a, b)))
+  if (coppie.every(x => x <= 60)) return 'analoga'
+  if (h.length === 2 && coppie[0] >= 150) return 'complementare'
+  if (h.length === 3 && coppie.every(x => x >= 90 && x <= 150)) return 'triade'
+  return 'libera'
 }
 
 /** Zone continue vuote (griglia 16×16), come frazioni della tavola, dalla più grande. */
