@@ -95,6 +95,20 @@ test('schemi degli strumenti: nessun enum o const non stringa (Gemini li rifiuta
   assert.deepEqual(errati, [])
 })
 
+// Anthropic accetta solo chiavi ASCII nelle proprietà: "profondità" faceva rifiutare tutti gli strumenti.
+test('schemi degli strumenti: nomi delle proprietà ASCII (Anthropic li rifiuta)', async () => {
+  const errati: string[] = []
+  const visita = (s: unknown, dove: string) => {
+    if (Array.isArray(s)) return s.forEach((x, i) => visita(x, `${dove}[${i}]`))
+    if (!s || typeof s !== 'object') return
+    const o = s as Record<string, unknown>
+    if (o.properties && typeof o.properties === 'object') for (const k of Object.keys(o.properties)) if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(k)) errati.push(`${dove}.${k}`)
+    for (const [k, v] of Object.entries(o)) visita(v, `${dove}.${k}`)
+  }
+  for (const t of [...CORE_TOOLS, ...SYSTEM_TOOLS]) visita(await zodSchema(t.inputSchema).jsonSchema, t.name)
+  assert.deepEqual(errati, [])
+})
+
 const usage = { inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 5, text: 5, reasoning: 0 } }
 const step = (content: unknown[], unified: 'tool-calls' | 'stop') => ({ content, finishReason: { unified, raw: unified }, usage, warnings: [] })
 
