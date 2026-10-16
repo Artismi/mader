@@ -12,6 +12,7 @@
  */
 import type { LanguageModel, ModelMessage, PrepareStepFunction, StepResult, ToolSet } from 'ai'
 import type { Risk } from './tools'
+import { clearOldToolOutputs, estimateTokens } from './compact'
 
 export type Fase = 'leggere' | 'scrivere' | 'verificare' | 'chiudere'
 
@@ -68,16 +69,43 @@ export interface SteerOptions {
   modelloPerPasso?: (stepNumber: number, fase: Fase) => LanguageModel | undefined
   /** si chiama a ogni passo con la fase (traccia, prove) */
   onFase?: (fase: Fase, stepNumber: number) => void
+  /** L1, profilo medio: gli strumenti attivi seguono la fase (pochi schemi costano meno della cache persa) */
+  perFase?: (fase: Fase) => string[] | undefined
+  /** L1: tetto di contesto in token stimati; oltre, i risultati vecchi si svuotano */
+  contesto?: number
+}
+
+const piano = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+const parole = (t: string) => [...new Set(piano(t).match(/[a-z]{4,}/g) ?? [])].map(w => w.slice(0, 5))
+
+/**
+ * L1: gli strumenti più utili per la fase, al massimo `max`. Conta la pertinenza
+ * con il compito (radici delle parole in nome e descrizione) più un bonus di fase:
+ * in lettura e verifica le letture, in scrittura le scritture.
+ */
+export function toolsForPhase(defs: { name: string; risk: Risk; description: string }[], fase: Fase, o: { max: number; compito: string; always?: string[] }): string[] {
+  const chiave = parole(o.compito)
+  const bonus = (r: Risk) => fase === 'scrivere' ? (r === 'read' ? 0 : 3) : fase === 'leggere' ? (r === 'read' ? 2 : 1) : (r === 'read' ? 3 : 0)
+  const voti = defs.map((d, i) => {
+    const testo = piano(`${d.name.replace(/([A-Z])/g, ' $1')} ${d.description}`)
+    return { n: d.name, v: chiave.filter(w => testo.includes(w)).length * 2 + bonus(d.risk), i }
+  }).filter(x => !o.always?.includes(x.n))
+  const scelti = voti.sort((a, b) => b.v - a.v || a.i - b.i).slice(0, Math.max(0, o.max - (o.always?.length ?? 0))).map(x => x.n)
+  return [...(o.always ?? []).filter(n => defs.some(d => d.name === n)), ...scelti]
 }
 
 export function createPrepareStep(o: SteerOptions): PrepareStepFunction<ToolSet> {
   return ({ stepNumber, steps, messages }) => {
     const fase = phaseOf(steps, o.risks)
     o.onFase?.(fase, stepNumber)
-    const out: { toolChoice?: 'required'; messages?: ModelMessage[]; model?: LanguageModel } = {}
+    const out: { toolChoice?: 'required'; messages?: ModelMessage[]; model?: LanguageModel; activeTools?: string[] } = {}
     if (stepNumber === 0 && o.azione) out.toolChoice = 'required'
+    const attivi = o.perFase?.(fase)
+    if (attivi) out.activeTools = attivi
+    const base = o.contesto && estimateTokens(messages) > o.contesto ? clearOldToolOutputs(messages, 2) : messages
     // al primo passo il promemoria grande c'è già; dopo si aggiunge solo la fase, in coda (la cache resta)
-    if (stepNumber > 0) out.messages = [...messages, { role: 'user', content: phaseNote(fase, o.risks, o.active) }]
+    if (stepNumber > 0) out.messages = [...base, { role: 'user', content: phaseNote(fase, o.risks, attivi ?? o.active) }]
+    else if (base !== messages) out.messages = base
     const m = o.modelloPerPasso?.(stepNumber, fase)
     if (m) out.model = m
     return out

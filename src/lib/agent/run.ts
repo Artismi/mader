@@ -20,12 +20,12 @@
  */
 import { generateText, stepCountIs, type ModelMessage, type StepResult, type ToolSet } from 'ai'
 import type { z } from 'zod'
-import { candidatesFor, noteFailure, type ModelCandidate } from '@/lib/ai/model-registry'
+import { candidatesFor, livelloOf, noteFailure, REGIMI, type Livello, type ModelCandidate } from '@/lib/ai/model-registry'
 import type { AiTask } from '@/lib/ai/model-provider'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef, type ToolGroup } from './tools'
 import { createTrace } from './trace'
 import { createRepairBudget, createToolCallRepair, parseTextToolCalls } from './repair'
-import { createPrepareStep, isActionRequest, risksOf } from './steer'
+import { createPrepareStep, isActionRequest, risksOf, toolsForPhase } from './steer'
 import { checkClosure, provaOf, registroText, type EsitoProva } from './evidence'
 import type { Risk } from './tools'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
@@ -80,6 +80,8 @@ export interface RunAgentInput {
   pagina?: string
   /** A2: modello che esegue i passi dopo il primo (il candidato pianifica); costa meno, rompe la cache tra i due */
   esecutore?: ModelCandidate
+  /** L1: forza il livello di guida ('forte' | 'medio' | 'base'); vuoto = dal registro */
+  livello?: Livello
   /** definizioni al posto di quelle di sistema (prove) */
   defs?: Def[]
   /** modelli al posto del registro (prove) */
@@ -99,6 +101,8 @@ export interface RunAgentResult {
   chiamate: Chiamata[]
   proposte: Proposta[]
   log: string[]
+  /** L1: livello di guida del modello che ha risposto */
+  livello?: Livello
   /** token del modello che ha completato il compito */
   token?: { input: number; cached: number; output: number }
 }
@@ -206,6 +210,13 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     let giro = 0
     // se il chiamante ha già scelto gruppi o strumenti vale la sua scelta; altrimenti ai deboli il sottoinsieme di base
     const activeTools = input.pagina && !input.gruppi?.length && !input.strumenti?.length ? toolsForContext(defs, { strength: c.profile.strength, pathname: input.pagina, always: ['updatePlan'] }) : undefined
+    // L1: il medio è guidato per fasi, con pochi strumenti per fase e il contesto tenuto corto
+    const livello = livelloOf(c, input.livello)
+    const regime = REGIMI[livello]
+    const pool = activeTools ? defs.filter(d => activeTools.includes(d.name)) : defs
+    const perFase = livello === 'medio' && pool.length > regime.strumenti
+      ? (f: Parameters<typeof toolsForPhase>[1]) => toolsForPhase(pool, f, { max: regime.strumenti, compito: input.compito, always: ['updatePlan'] })
+      : undefined
     try {
       while (passi < maxPassi) {
         const r = await generateText({
@@ -219,6 +230,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
             azione: giro === 0 && azione,
             risks,
             active: activeTools,
+            perFase,
+            contesto: Number.isFinite(regime.contesto) ? regime.contesto : undefined,
             modelloPerPasso: input.esecutore ? (n => (n > 0 || giro > 0 ? input.esecutore!.model : undefined)) : undefined,
           }),
           // lo stallo ferma il giro anche se il fornitore ignora l'abort (si controlla tra un passo e l'altro);
@@ -271,7 +284,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         }
         trace.finish({ steps: passi, inputTokens: usage.input, cachedInputTokens: usage.cached, outputTokens: usage.output, prove: `${chiamate.filter(x => x.rischio && x.rischio !== 'read' && x.esito === 'ok').length} scritture ok${riprese ? `, ${riprese} riprese` : ''}` })
         log.push(`${c.label}: ${passi} passi${budget.riuscite ? ` · ${budget.riuscite} riparazioni` : ''}${riprese ? ` · ${riprese} riprese` : ''}`)
-        return { ok: true, testo: r.text.trim(), modello: c.label, passi, chiamate, proposte, log, token: usage }
+        return { ok: true, testo: r.text.trim(), modello: c.label, livello, passi, chiamate, proposte, log, token: usage }
       }
       if (passi >= maxPassi && !stallo && !budget.esaurito) log.push(`${c.label}: passi finiti (${maxPassi}) senza chiudere, passo al modello successivo`)
     } catch (e) {

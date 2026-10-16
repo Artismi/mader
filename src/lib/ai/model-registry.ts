@@ -32,7 +32,25 @@ export interface ModelProfile {
   /** finestra di contesto in token (stima) */
   context: number
   free: boolean
+  /** L1: come lo guida il guscio (dedotto dalla forza; si forza con setLivello) */
+  livello: Livello
 }
+
+/**
+ * L1: profili di capacità del guscio. Il codice decide, il modello fa solo il pezzo che il codice non sa fare:
+ *   - forte: agente libero, tutti gli strumenti, contesto intero (come prima);
+ *   - medio: guidato per fasi, fino a 12 strumenti per fase, contesto ~8k;
+ *   - base: un passo alla volta (il codice chiede strumento e dati, esegue, riassume), 3–5 strumenti, contesto ~3k.
+ */
+export type Livello = 'forte' | 'medio' | 'base'
+export interface Regime { livello: Livello; strumenti: number; contesto: number }
+export const REGIMI: Record<Livello, Regime> = {
+  forte: { livello: 'forte', strumenti: Infinity, contesto: Infinity },
+  medio: { livello: 'medio', strumenti: 12, contesto: 8_000 },
+  base: { livello: 'base', strumenti: 5, contesto: 3_000 },
+}
+const LIVELLO_DA_FORZA: Record<Strength, Livello> = { forte: 'forte', medio: 'medio', debole: 'base' }
+export const isLivello = (v: unknown): v is Livello => v === 'forte' || v === 'medio' || v === 'base'
 
 export interface ModelCandidate {
   /** chiave unica per la quota: "fornitore:modello" */
@@ -69,8 +87,22 @@ export function profileOf(provider: Provider, modelId: string): ModelProfile {
     strength,
     context: claude ? 200_000 : gemini ? 1_000_000 : lite ? 32_000 : 128_000,
     free,
+    livello: LIVELLO_DA_FORZA[strength],
   }
 }
+
+const LIVELLO_KEY = 'ai.livello'
+
+/**
+ * Il livello con cui il guscio guida un candidato: forzato dal chiamante, poi dalle
+ * Impostazioni (per modello, poi per tutti), altrimenti dedotto dal profilo.
+ */
+export function livelloOf(c: { id: string; profile: Pick<ModelProfile, 'livello'> }, forza?: string): Livello {
+  const scelto = [forza, config.get(`${LIVELLO_KEY}:${c.id}`), config.get(LIVELLO_KEY)].find(isLivello)
+  return scelto ?? c.profile.livello
+}
+/** Forza il livello per un modello ("fornitore:modello") o per tutti; '' torna alla deduzione. */
+export function setLivello(v: Livello | '', id?: string) { config.set(id ? `${LIVELLO_KEY}:${id}` : LIVELLO_KEY, v) }
 
 /* ── chiavi e fornitori ────────────────────────────────────────────────── */
 
