@@ -8,6 +8,7 @@
  *   npm run designer:vetrina -- --contenuti caffe,mostra --formati storia
  *   npm run designer:vetrina -- --sistemi eco,orbita --knobs '{"energia":0.9}'
  *   npm run designer:vetrina -- --specializza        stesse tavole senza e con la specifica del brief (fixtures/progetti.json)
+ *   npm run designer:vetrina -- --ibridi              in più un foglio <contenuto>-<formato>-ibridi.jpg con i soli ibridi dell'incrocio (V1)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
@@ -212,6 +213,7 @@ if (args.specializza) {
 
 const report = []
 const tutteCoppie = []
+const diversita = []
 for (const nome of contenuti) {
   const fx = CONTENUTI[nome]
   if (!fx) { console.warn('contenuto sconosciuto:', nome); continue }
@@ -247,6 +249,25 @@ for (const nome of contenuti) {
         info += ` · occhio: ${fin.length} finaliste, ${scartate.length} scartate dal codice, ${g.chiamata ? '1 chiamata' : 'nessuna chiamata'}`
       }
     }
+    // indice di diversità tra le prime 12 (V1): impronte visive e combinazioni di mattoni
+    if (!sistemi && !args.vecchio) {
+      const prime = res.filter(r => r.ok && r.url).slice(0, 12)
+      const dv = await page.evaluate(o => window.designer.diversita(o), { urls: prime.map(r => r.url), mattoni: prime.map(r => r.mattoni ?? [r.sistema]) })
+      diversita.push(dv)
+      info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)})`
+    }
+    // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
+    if (args.ibridi) {
+      const ib = await page.evaluate(job => window.designer.ibridi(job), { content: fx.c, format, photo, over, thumb, seme: Number(args.seme ?? 0) })
+      const intrecci = ib.filter(r => r.mattoni?.some(m => m.startsWith('intreccio:'))).length
+      const its = ib.map(r => ({ url: r.url, label: `${r.sistema}  ${r.esame?.voto ?? ''}`, sub: (r.mattoni ?? []).filter(m => !/^(ossatura|titolo|foto):/.test(m)).map(m => m.split(':')[1]).join(' · ') }))
+      if (its.length) {
+        const sh = await page.evaluate(o => window.designer.sheet(o), { title: `${nome} · ${format} · ibridi promossi: ${ib.length}, con intreccio: ${intrecci}`, items: its, cols: 4, cellW: format === 'orizzontale' ? 420 : 300, ratio: RATIO[format] })
+        fs.writeFileSync(path.join(out, `${nome}-${format}-ibridi.jpg`), Buffer.from(sh.split(',')[1], 'base64'))
+      }
+      info += ` · ibridi: ${ib.length} (intrecci ${intrecci})`
+      if (args.motivi) console.log((await page.evaluate(() => window.ultimiMotivi)).map(m => '    ' + m).join('\n'))
+    }
     const items = res.map(r => ({
       url: r.url, label: `${r.sistema}${r.ok ? (r.esame ? `  ${r.esame.voto} ${r.esame.promossa ? '✓' : '✗ bocciata'}` : '') : '  — scartata'}`,
       sub: r.ok ? (r.esame ? (r.esame.difetti[0] ?? `${r.registro} · ${r.stile} · gesti: ${r.esame.gesti.join(', ')}`) : `${r.registro} · ${r.stile}`) : (r.reasons[0] ?? ''),
@@ -257,6 +278,7 @@ for (const nome of contenuti) {
     const ok = res.filter(r => r.ok).length
     report.push({ contenuto: nome, formato: format, ok, totale: res.length, secondi: (Date.now() - t0) / 1000,
       scarti: res.filter(r => !r.ok).map(r => ({ sistema: r.sistema, motivi: r.reasons.slice(0, 4) })),
+      mattoni: res.slice(0, 12).map(r => r.mattoni ?? [r.sistema]),
       esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, stile: r.stile })),
       tempi: Object.fromEntries(res.map(r => [r.sistema, r.ms])) })
     const voti = res.filter(r => r.esame).map(r => r.esame.voto)
@@ -277,6 +299,11 @@ ${occhio.oc.riga('dopo', dopo)}
   fs.writeFileSync(path.join(out, 'occhio.json'), JSON.stringify({ prima, dopo }, null, 2))
 }
 
+if (diversita.length) {
+  const m = k => diversita.reduce((a, d) => a + d[k], 0) / diversita.length
+  console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)}`)
+  fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), tavole: diversita }, null, 2))
+}
 console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)
 
 /* ── rapporto ──────────────────────────────────────────────────────────── */

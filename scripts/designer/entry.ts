@@ -6,13 +6,14 @@
 import * as fabric from 'fabric'
 import { generateSystem, proposeKnobs, proponi, tintaFoto, SYSTEMS, ammesso, type Knobs } from '@/components/studio/designer/gen'
 import { styleById } from '@/components/studio/designer/styles'
+import { incrocia } from '@/components/studio/designer/gen/incrocio'
 import { renderScene } from '@/components/studio/designer/render'
 import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame'] }
+export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[] }
 
 async function draw(sc: Scene, thumb: number) {
   const el = document.createElement('canvas')
@@ -57,9 +58,56 @@ async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; c
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema] })
   }
   return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri }
+}
+
+/** Gli ibridi dell'incrocio dei mattoni (V1), da soli: per guardarli in un foglio. */
+async function ibridi(job: Job): Promise<Result[]> {
+  const sink: string[] = []
+  ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
+  const seme = (job as { seme?: number }).seme
+  const tinta = await tintaFoto(job.photo)
+  const base = proposeKnobs(job.content, { hasPhoto: !!job.photo, tinta, seme, ampio: 5 })
+  const scene = await incrocia(job.content, job.format, { base, seme, valuta: k => generateSystem(job.content, job.format, k, job.photo, { tentativi: 2 }) })
+  const out: Result[] = []
+  // i motivi più frequenti di scarto e di bocciatura (diagnosi dell'incrocio)
+  const conta = new Map<string, number>()
+  for (const x of sink) { const m = x.replace(/\d+/g, '#').slice(0, 70); conta.set(m, (conta.get(m) ?? 0) + 1) }
+  ;(window as unknown as { ultimiMotivi?: string[] }).ultimiMotivi = [...conta].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([m, n]) => `${n}× ${m}`)
+  for (const sc of scene) {
+    const k = sc.knobs as Knobs, st = styleById(k.stile)
+    out.push({ sistema: sc.label.replace('Ibrido ', ''), ok: true, ms: 0, url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni })
+  }
+  return out
+}
+
+/** Impronta visiva: la tavola ridotta a 12×12 (colore), per misurare quanto le proposte si somigliano. */
+async function impronta(url: string) {
+  const im = new Image(); im.src = url; await im.decode()
+  const cv = document.createElement('canvas'); cv.width = 12; cv.height = 12
+  const c = cv.getContext('2d')!
+  c.drawImage(im, 0, 0, 12, 12)
+  return Array.from(c.getImageData(0, 0, 12, 12).data).filter((_, i) => i % 4 !== 3).map(v => v / 255)
+}
+
+/**
+ * Indice di diversità tra le proposte (0 = tutte uguali): distanza media tra
+ * le impronte visive (anche specchiate: lo specchio non è un'idea nuova) e
+ * distanza media tra le combinazioni di mattoni (Jaccard; un archetipo intero
+ * conta come un mattone solo).
+ */
+async function diversita(o: { urls: string[]; mattoni: string[][] }) {
+  const imp = await Promise.all(o.urls.map(impronta))
+  const specchia = (v: number[]) => v.map((_, i) => { const p = Math.floor(i / 3), x = p % 12, y = Math.floor(p / 12); return v[(y * 12 + 11 - x) * 3 + (i % 3)] })
+  const d = (a: number[], b: number[]) => a.reduce((s, v, i) => s + Math.abs(v - b[i]), 0) / a.length
+  const jac = (a: string[], b: string[]) => { const A = new Set(a), B = new Set(b); const i = [...A].filter(x => B.has(x)).length; return 1 - i / new Set([...a, ...b]).size }
+  let vis = 0, mat = 0, n = 0
+  for (let i = 0; i < imp.length; i++) for (let j = i + 1; j < imp.length; j++) {
+    vis += Math.min(d(imp[i], imp[j]), d(imp[i], specchia(imp[j]))); mat += jac(o.mattoni[i], o.mattoni[j]); n++
+  }
+  return { visiva: n ? vis / n : 0, mattoni: n ? mat / n : 0 }
 }
 
 /** Foglio contatti composto nella pagina: niente dipendenze esterne per le immagini. */
@@ -87,4 +135,4 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
