@@ -14,7 +14,7 @@ import { affinita } from './affinita'
 import { corpoMinimo } from '../core/scala'
 export { corpoMinimo }
 import { carattere, type Carattere } from './carattere'
-import { zoneVuote, vuotiNonProgettati } from './difetti'
+import { zoneVuote, vuotiNonProgettati, testoMancante } from './difetti'
 
 export type { Criterio } from './rubrica'
 export interface Esame {
@@ -130,6 +130,10 @@ function esame(g: G): Esame {
     const k = norm(v.titolo ?? v.valore ?? '')
     if (k && !scritto.includes(k.split(' ').slice(0, 3).join(' '))) { vociPerse++; difetti.push(`manca la voce «${v.titolo ?? v.valore}»`) }
   }
+  // il resto del brief (testo, occhiello, dettagli, numero): saltato o tagliato oltre il 40% delle parole
+  const mancante = testoMancante(g.els, c, g.k.idea?.togli ?? [])
+  for (const f of mancante.saltati.filter(x => /^(testo|occhiello|dettaglio|numero)/.test(x))) { contenuto -= f === 'testo' ? 3 : 1; difetti.push(`testo saltato: ${f}`) }
+  for (const f of mancante.tagliati.filter(x => /^(testo|occhiello|dettaglio)/.test(x))) { contenuto -= 1; difetti.push(`testo tagliato: ${f}`) }
   contenuto = clamp(contenuto - doppia(vociPerse, 3))
 
   /* ── gerarchia: un protagonista chiaro, pochi corpi ── */
@@ -298,6 +302,7 @@ function esame(g: G): Esame {
 /** Quanto pesa ogni nota del critico sul voto (punti su 100). La prima regola che combacia vale. */
 const GRAVITA: [RegExp, number][] = [
   [/^manca il titolo/, 30], [/^manca il brand/, 12], [/^manca l'invito/, 10], [/^manca la voce/, 8],
+  [/^testo saltato: testo/, 14], [/^testo saltato: numero/, 8], [/^testo saltato/, 5], [/^testo tagliato: testo/, 6], [/^testo tagliato/, 3],
   [/si legge a fatica/, 8], [/troppo piccolo per il telefono/, 6],
   [/^gerarchia debole/, 6], [/parole del titolo troppo piccole/, 6], [/frammenti del titolo/, 5], [/troppi corpi/, 3],
   [/quasi allineato/, 3], [/troppi assi/, 3], [/stretto nel suo riquadro/, 3], [/troppo vicini/, 3],

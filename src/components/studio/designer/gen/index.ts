@@ -92,8 +92,11 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
   }
   // il testo non ci sta in nessun tentativo: prima si tolgono le righe meno importanti del messaggio,
   // poi (se non basta) il vivaio passa a un'altra ossatura
-  if (!best && nonCiSta) for (const [livello, [cosa, cc]] of accorciamenti(c).entries()) {
-    for (let attempt = 0; attempt < 2 && !best; attempt++) {
+  // anche quando la tavola regge ma ha perso il testo del brief: una versione accorciata può tenerne di più
+  const perso = !!best?.esame?.difetti.some(d => /^testo (saltato|tagliato): testo/.test(d))
+  if ((!best && nonCiSta) || perso) for (const [livello, [cosa, cc]] of accorciamenti(c).entries()) {
+    let fatta = false
+    for (let attempt = 0; attempt < 2 && !fatta; attempt++) {
       const kk = { ...k, seme: k.seme + (livello * 2 + attempt + 1) * 104729 }
       try {
         const g = makeG(format, style, kk, cc, photo, pix, conColore(o.seq, style, kk))
@@ -104,11 +107,13 @@ export async function generateSystem(c: DesignContent, format: Format, k: Knobs,
         esame.difetti.push(`contenuto accorciato: ${cosa}`)
         esame.voto = Math.max(0, esame.voto - 3 * (livello + 1))
         esame.promossa = esame.voto >= SOGLIA
+        fatta = true
+        if (best && esame.voto <= (best.esame?.voto ?? 0)) continue
         best = { ...sc, els: g.els, knobs: { ...kk }, esame }
         ;(globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: accorciato ${cosa}`)
       } catch { /* come un tentativo fallito */ }
     }
-    if (best) break
+    if (fatta) break
   }
   if (best && !best.esame?.promossa) (globalThis as { __designerSink?: string[] }).__designerSink?.push(`${k.sistema}: bocciata ${best.esame?.voto} — ${best.esame?.difetti.slice(0, 3).join('; ')}`)
   return best
@@ -133,6 +138,8 @@ export function accorciamenti(c: DesignContent): [string, DesignContent][] {
   passo('dettagli in coda', (x.details?.length ?? 0) > 2, y => ({ ...y, details: y.details!.slice(0, 2) }))
   passo('dettagli', !!x.details?.length, y => ({ ...y, details: [] }))
   const frasi = x.body?.match(/[^.!?]+[.!?]+/g)
+  // il testo lungo si accorcia una frase alla volta (dalla fine), non subito alla prima
+  if (frasi) for (let k = frasi.length - 1; k >= 2; k--) passo(`testo a ${k} frasi`, true, y => ({ ...y, body: frasi.slice(0, k).join(' ').trim() }))
   passo('testo alla prima frase', !!frasi && frasi.length > 1 && frasi[0].trim().length < x.body!.trim().length, y => ({ ...y, body: frasi![0].trim() }))
   passo('spiegazioni delle voci', !!x.voci?.some(v => v.testo), y => ({ ...y, voci: y.voci!.map(v => ({ ...v, testo: undefined })) }))
   passo('voci oltre la quarta', (x.voci?.length ?? 0) > 4, y => ({ ...y, voci: y.voci!.slice(0, 4) }))

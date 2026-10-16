@@ -164,7 +164,7 @@ export function testoScena(els: SceneEl[]) {
 
 /**
  * Campi del brief tagliati (righe che finiscono coi puntini, quota di parole sotto il 60%)
- * o saltati (nessuna parola nella tavola). `togli` = campi tolti di proposito dall'idea.
+ * o saltati (meno di un quarto delle parole). `togli` = campi tolti di proposito dall'idea.
  */
 export function testoMancante(els: SceneEl[], c: DesignContent, togli: string[] = []) {
   const visto = new Set(parole(testoScena(els)))
@@ -179,7 +179,8 @@ export function testoMancante(els: SceneEl[], c: DesignContent, togli: string[] 
   for (const [nome, s] of campi) {
     if (!s?.trim()) continue
     const q = quota(s)
-    if (q === 0) saltati.push(nome)
+    // sotto un quarto delle parole il campo non c'è (le poche trovate vengono da altri campi)
+    if (q < 0.25) saltati.push(nome)
     else if (q < 0.6) tagliati.push(nome)
   }
   if (els.some(e => e.kind === 'text' && !e.deco && e.lines.some(l => /…\s*$/.test(l)))) tagliati.push('righe coi puntini')

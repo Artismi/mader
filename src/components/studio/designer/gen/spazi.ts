@@ -16,7 +16,8 @@ import type { SceneEl, Intreccio, Look } from '../types'
 import { inkLine } from '../text'
 import { baseline } from '../core/metriche'
 import { corpoMinimo } from '../core/scala'
-import type { G } from './tools'
+import { type G, txt, sizeForWidth, mix, contrast } from './tools'
+import { sovrapposizioni, zoneVuote, vuotiNonProgettati, boxEl, type Box } from './difetti'
 
 type Text = Extract<SceneEl, { kind: 'text' }>
 type R = { x0: number; y0: number; x1: number; y1: number }
@@ -185,4 +186,107 @@ export function intrecci(g: G): string | null {
     for (const ii of via) annota(g, `intreccio annullato ${ii.tipo}`)
   }
   return null
+}
+
+/* ── segni sulle righe e vuoti non progettati (blocco A di robustezza) ── */
+
+/** Sposta un tracciato SVG (comandi assoluti; i relativi seguono da soli). */
+function spostaPath(d: string, dx: number, dy: number) {
+  const tok = d.match(/[MLHVCSQTAZmlhvcsqtaz]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? []
+  let cmd = '', idx = 0
+  return tok.map(t => {
+    if (/[A-Za-z]/.test(t)) { cmd = t; idx = 0; return t }
+    let v = parseFloat(t)
+    if (cmd === cmd.toUpperCase()) {
+      if (cmd === 'H') v += dx
+      else if (cmd === 'V') v += dy
+      else if (cmd === 'A') { const k = idx % 7; if (k === 5) v += dx; else if (k === 6) v += dy }
+      else v += idx % 2 === 0 ? dx : dy
+    }
+    idx++
+    return String(Math.round(v * 10) / 10)
+  }).join(' ')
+}
+function sposta(e: SceneEl, dx: number, dy: number) {
+  switch (e.kind) {
+    case 'rect': case 'image': case 'ornament': e.x += dx; e.y += dy; break
+    case 'circle': case 'glyph': case 'seal': case 'arcText': e.cx += dx; e.cy += dy; break
+    case 'line': e.x1 += dx; e.x2 += dx; e.y1 += dy; e.y2 += dy; break
+    case 'path': e.d = spostaPath(e.d, dx, dy); break
+  }
+}
+const tocca = (a: Box, b: Box, gap: number) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap
+
+/**
+ * Segni che tagliano in parte una riga (misurati sui riquadri d'inchiostro da `sovrapposizioni`):
+ * il segno si sposta del minimo che lo libera da tutte le righe, restando per metà almeno nella
+ * tavola; se non si può, si toglie. I testi non si muovono (li ha già sistemati `spazi`).
+ */
+export function segniSulleRighe(g: G) {
+  const gap = 6 * g.u
+  for (let giro = 0; giro < 6; giro++) {
+    const o = sovrapposizioni({ W: g.W, H: g.H, u: g.u, els: g.els }).find(x => x.el)
+    if (!o) return
+    const e = o.el!, b = boxEl(e)!
+    const righe = g.els.filter((x): x is Text => x.kind === 'text' && !x.deco).flatMap(t => righeVere(t)).map(r => ({ x: r.x0, y: r.y0, w: r.x1 - r.x0, h: r.y1 - r.y0 }))
+    const prove: [number, number][] = []
+    for (const r of righe.filter(r => tocca(r, b, 0))) prove.push([r.x - gap - (b.x + b.w), 0], [r.x + r.w + gap - b.x, 0], [0, r.y - gap - (b.y + b.h)], [0, r.y + r.h + gap - b.y])
+    const buona = prove.sort((p, q) => Math.hypot(...p) - Math.hypot(...q)).find(([dx, dy]) => {
+      if (Math.hypot(dx, dy) > 0.25 * Math.max(g.W, g.H)) return false
+      const n = { x: b.x + dx, y: b.y + dy, w: b.w, h: b.h }
+      const dentro = Math.max(0, Math.min(n.x + n.w, g.W) - Math.max(n.x, 0)) * Math.max(0, Math.min(n.y + n.h, g.H) - Math.max(n.y, 0))
+      return dentro >= 0.5 * n.w * n.h && !righe.some(r => tocca(r, n, gap * 0.5))
+    })
+    if (buona) { sposta(e, buona[0], buona[1]); annota(g, `mosso ${e.name}`) }
+    else { g.els = g.els.filter(x => x !== e); annota(g, `tolto ${e.name}`) }
+  }
+}
+
+/**
+ * Vuoti non progettati (stesse regole del critico): nel rettangolo libero più grande della
+ * zona si allarga la foto che ci confina, se no entra un elemento del sistema sotto i testi:
+ * una cifra o una lettera gigante nel tono del fondo (numero del brief o iniziale del brand)
+ * o un disco nell'accento. Il riempitivo resta sotto il 19% della tavola (oltre sarebbe un fondo).
+ */
+export function riempiVuoti(g: G) {
+  const sobrio = ['lusso', 'svizzero', 'editoriale'].includes(g.s.registro)
+  const zone = vuotiNonProgettati(zoneVuote({ W: g.W, H: g.H, u: g.u, els: g.els }), { sobrio, voluto: g.k.idea?.gesto === 'vuoto' })
+  const cw = g.W / 16, ch = g.H / 16
+  for (const [n, z] of zone.slice(0, 2).entries()) {
+    const ins = 18 * g.u
+    const r = { x: z.libero.x + ins, y: z.libero.y + ins, w: z.libero.w - 2 * ins, h: z.libero.h - 2 * ins }
+    if (r.w < 0.14 * Math.min(g.W, g.H) || r.h < 0.14 * Math.min(g.W, g.H)) continue
+    // allarga: una foto rettangolare che confina con il vuoto per quasi tutto il lato
+    const foto = g.els.find((e): e is Extract<SceneEl, { kind: 'image' }> => {
+      if (e.kind !== 'image' || e.clipText || e.mask || e.view || (e.shape && e.shape !== 'rect') || (e as Look).intreccio) return false
+      const L = z.libero
+      const vert = Math.min(e.y + e.h, L.y + L.h) - Math.max(e.y, L.y), oriz = Math.min(e.x + e.w, L.x + L.w) - Math.max(e.x, L.x)
+      return ((Math.abs(e.x + e.w - L.x) < cw * 1.2 || Math.abs(L.x + L.w - e.x) < cw * 1.2) && vert >= 0.7 * e.h) || ((Math.abs(e.y + e.h - L.y) < ch * 1.2 || Math.abs(L.y + L.h - e.y) < ch * 1.2) && oriz >= 0.7 * e.w)
+    })
+    if (foto) {
+      const L = { x: z.libero.x + ins, y: z.libero.y + ins, w: z.libero.w - 2 * ins, h: z.libero.h - 2 * ins }
+      const x0 = Math.min(foto.x, L.x), y0 = Math.min(foto.y, L.y), x1 = Math.max(foto.x + foto.w, L.x + L.w), y1 = Math.max(foto.y + foto.h, L.y + L.h)
+      const nuovo = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+      const testi = g.els.filter((e): e is Text => e.kind === 'text' && !e.deco)
+      // la foto allargata non deve finire sotto testi che prima non copriva
+      if (!testi.some(t => { const tb = { x: t.x, y: t.y, w: t.w, h: t.h }; return tocca(tb, nuovo, 0) && !tocca(tb, foto, 0) })) {
+        Object.assign(foto, nuovo); annota(g, `allargato ${foto.name}`); continue
+      }
+    }
+    const primo = g.els.findIndex(e => e.kind === 'text' && !e.deco)
+    const segno = (g.c.numero || '').trim() || (g.c.brand || g.c.title).trim().charAt(0).toUpperCase()
+    const font = g.s.display
+    const size = Math.min(r.h * 0.95, segno ? sizeForWidth(segno, font, r.w * 0.9) : 0)
+    const tono = mix(g.P.bg, g.P.fg, g.P.dark ? 0.16 : 0.1)
+    if (size >= 110 * g.u && size * size * 0.8 < 0.19 * g.W * g.H && (n === 0 ? g.k.seme % 2 === 0 : true)) {
+      const t = txt(g, { name: 'riempitivo', lines: [segno], font, size, x: r.x, y: r.y + (r.h - size) / 2, w: r.w, align: 'center', color: tono, leading: 1, deco: true })
+      g.els = g.els.filter(e => e !== t)
+      g.els.splice(Math.max(0, primo), 0, t)
+    } else {
+      const raggio = Math.min(r.w, r.h) / 2 * 0.86, d = Math.min(raggio, Math.sqrt(0.19 * g.W * g.H) / 2)
+      const fill = contrast(g.P.acc, g.P.bg) >= 1.4 ? g.P.acc : mix(g.P.bg, g.P.fg, 0.2)
+      g.els.splice(Math.max(0, primo), 0, { kind: 'circle', name: 'disco_vuoto', cx: r.x + r.w / 2, cy: r.y + r.h / 2, r: d, fill })
+    }
+    annota(g, 'riempito vuoto')
+  }
 }

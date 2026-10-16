@@ -10,7 +10,7 @@ import { fit, lineWidth, blockHeight, type Fit, type FitOpts } from '../text'
 import { type Knobs, type Rng, rng, hashText } from './knobs'
 import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
-import { spazi, intrecci } from './spazi'
+import { spazi, intrecci, segniSulleRighe, riempiVuoti } from './spazi'
 import { gesto } from './gesto'
 import { conPalette, sorgentePalette } from './risorse/palette'
 import { pixPronta } from '../core/foto'
@@ -143,7 +143,9 @@ function fitScaled(g: G, o: Omit<FitOpts, 'tracking' | 'leading'>, voce: Voce, u
 export function lab(g: G, text: string | undefined, maxW: number, size = 0, lettura = false): Fit | null {
   if (!text?.trim()) return null
   const min = lettura ? g.sc.minLettura : g.sc.minNota
-  return fitScaled(g, { text, font: g.s.label, maxW, maxSize: Math.max(size * g.u, g.sc.note, min), minSize: min, maxLines: 1, upper: true }, 'etichetta', true)
+  const o = { text, font: g.s.label, maxW, maxSize: Math.max(size * g.u, g.sc.note, min), minSize: min, maxLines: 1, upper: true }
+  // un'etichetta lunga (brand di molte parole) va su due righe invece di sparire
+  return fitScaled(g, o, 'etichetta', true) ?? (text.trim().length > 28 ? fitScaled(g, { ...o, maxLines: 2 }, 'etichetta', true) : null)
 }
 /** Testo corrente: parte dal corpo della scala, non scende sotto il minimo di lettura (se non entra, null). */
 export function para(g: G, text: string | undefined, maxW: number, maxLines = 3, size = 0): Fit | null {
@@ -229,7 +231,8 @@ export function infoBlock(g: G, w: number, opts: { kicker?: boolean; body?: bool
   const k = o.kicker ? lab(g, g.c.kicker, w) : null
   // distanze dalla scala: le cose legate più vicine (occhiello e testo) di quelle separate (testo e dettagli)
   if (k) parts.push({ f: k, kind: 'lab', role: 'occhiello', gap: g.sc.spazio(2) })
-  const b = o.body ? para(g, g.c.body, w, opts.bodyLines ?? 3, opts.bodySize ?? 0) : null
+  // un testo lungo ha più righe a disposizione (il corpo scende fino al minimo di lettura) invece di sparire
+  const b = o.body ? para(g, g.c.body, w, opts.bodyLines ?? ((g.c.body?.length ?? 0) > 160 ? 6 : 3), opts.bodySize ?? 0) : null
   if (b) parts.push({ f: b, kind: 'para', role: 'testo', gap: g.sc.spazio(3) })
   const d = o.details ? lab(g, detailsLine(g.c), w) : null
   if (d) parts.push({ f: d, kind: 'lab', role: 'dettagli', gap: g.sc.spazio(2) })
@@ -628,6 +631,9 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   // misure vere riga per riga: margini, contatti e aria tra i testi, corretti dove si può
   const sp = spazi(g)
   if (sp) { discard(g, sp); return null }
+  // segni che tagliano le righe (spostati o tolti) e vuoti non progettati (foto allargata o un elemento del sistema)
+  segniSulleRighe(g)
+  riempiVuoti(g)
   if (!check(g)) return null
   const d = g.s.decor
   return {
