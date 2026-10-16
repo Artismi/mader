@@ -32,6 +32,8 @@ export interface DesignContent {
   /** cosa mostra la foto (per la ricerca): "chicchi di caffè su pietra scura" */
   imageQuery?: string
   imageUrl?: string
+  /** altre foto dello stesso soggetto: il motore le usa a rotazione tra le composizioni (pixel già caricati con loadPix) */
+  immagini?: string[]
   /** specifica di progetto per questo brief (regia o persona): motivi, icone, effetti, look, segni */
   progetto?: Specifica
 }
@@ -106,13 +108,23 @@ export type SceneEl =
       clipText?: { lines: string[]; font: FontSpec; size: number; x: number; y: number; lineHeight: number; tracking: number }
     } & Look)
   /** ornamento generativo del laboratorio in una zona; `under` = trama leggera che può stare sotto i testi */
-  | { kind: 'ornament'; name: string; id: string; x: number; y: number; w: number; h: number; seed: number; opacity: number; under?: boolean; r?: number; pal?: Palette }
+  | { kind: 'ornament'; name: string; id: string; x: number; y: number; w: number; h: number; seed: number; opacity: number; under?: boolean; r?: number; pal?: Palette; /** oggetto 3D (id "3d:<forma>") */ o3d?: Oggetto3D }
   /** glifo vettoriale (set Celestial e forme) centrato in (cx, cy) */
   | { kind: 'glyph'; name: string; path: string; cx: number; cy: number; size: number; color: string; angle?: number; opacity?: number; blend?: GlobalCompositeOperation }
   /** sigillo: anello con testo che gira e un glifo al centro */
   | { kind: 'seal'; name: string; cx: number; cy: number; r: number; text: string; color: string; font: FontSpec; glyph?: string; bg?: string; angle?: number }
 
-export interface Palette { bg: string; ink: string; accent: string; muted: string; surface: string }
+/** Oggetto 3D renderizzato in un'immagine (oggetto3d.ts): forma, materiale, testo o segno estruso. */
+export interface Oggetto3D {
+  forma: 'sfera' | 'toro' | 'cubo' | 'cilindro' | 'disco' | 'capsula' | 'nodo' | 'testo'
+  materiale: 'plastica' | 'cromo' | 'oro' | 'vetro' | 'argilla' | 'olografico'
+  colore: string; colore2?: string
+  /** testo estruso (1–3 caratteri: iniziale del marchio, cifra) e carattere da usare */
+  testo?: string; famiglia?: string
+  inclina?: number; gira?: number; angolo?: number
+}
+
+export interface Palette { bg: string; ink: string; accent: string; muted: string; surface: string; /** sorgente della palette (V5): identità, foto, marchio, armonia */ da?: string }
 
 export interface Scene {
   w: number

@@ -115,9 +115,9 @@ export function generateProceduralPattern(type: ProceduralType, options: Procedu
     const count = Math.floor(density * 80)
     const seed = 42
     for (let i = 0; i < count; i++) {
-      // Deterministic pseudo-random using golden ratio
-      const px = ((i * 0.6180339887 * width) % width)
-      const py = ((i * 0.3819660112 * height) % height)
+      // Deterministic quasi-random (R2 sequence: golden-ratio steps on x and y were collinear)
+      const px = ((((i + 0.5) * 0.7548776662) % 1) * width)
+      const py = ((((i + 0.5) * 0.5698402910) % 1) * height)
       const r = radius * (0.5 + ((i * 137) % 100) / 200)
       const points = (i % 2 === 0) ? 4 : 6
       const starPath = buildStarPath(px, py, r, r * 0.4, points)
@@ -169,8 +169,8 @@ export function generateProceduralPattern(type: ProceduralType, options: Procedu
     // Soft blob noise — organic/art nouveau background texture
     const count = Math.floor(density * 40)
     for (let i = 0; i < count; i++) {
-      const px = (i * 0.6180339887 * width) % width
-      const py = (i * 0.3819660112 * height) % height
+      const px = (((i + 0.5) * 0.7548776662) % 1) * width
+      const py = (((i + 0.5) * 0.5698402910) % 1) * height
       const r = radius * (1 + ((i * 73) % 100) / 50)
       const blobPath = buildBlobPath(px, py, r, i)
       objects.push(new fabric.Path(blobPath, {
@@ -243,8 +243,8 @@ export function generateProceduralPattern(type: ProceduralType, options: Procedu
     // Memphis Group style — mix of triangles, circles, lines, rectangles
     const count = Math.floor(density * 50)
     for (let i = 0; i < count; i++) {
-      const px = (i * 0.6180339887 * width) % width
-      const py = (i * 0.3819660112 * height) % height
+      const px = (((i + 0.5) * 0.7548776662) % 1) * width
+      const py = (((i + 0.5) * 0.5698402910) % 1) * height
       const r = radius * (0.5 + ((i * 97) % 100) / 100)
       const variant = i % 5
 

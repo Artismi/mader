@@ -14,6 +14,8 @@
     "asset:caratteri": "node scripts/asset/caratteri.mjs",
     "designer:vetrina": "node scripts/designer/vetrina.mjs",
     "designer:idee": "node scripts/designer/vetrina.mjs --contenuti caffe,mostra,t_menu,palestra --formati quadrato --occhio --a-secco --idee-modello --out scripts/designer/out/idee-modello",
+    "designer:foto": "node scripts/designer/foto.mjs",
+    "designer:texture": "node scripts/designer/texture.mjs",
     "designer:test": "node --test scripts/designer/progetto.test.mjs scripts/designer/occhio.test.mjs scripts/asset/asset.test.mjs",
     "confronto:genera": "node scripts/confronto/genera.mjs",
     "confronto:concorrenti": "node scripts/confronto/concorrenti.mjs",

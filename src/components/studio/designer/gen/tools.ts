@@ -12,6 +12,9 @@ import { misure, type Misure } from '../core/misure'
 import { scala, rapportoDa, type Scala, type Voce } from '../core/scala'
 import { spazi, intrecci } from './spazi'
 import { gesto } from './gesto'
+import { conPalette, sorgentePalette } from './risorse/palette'
+import { pixPronta } from '../core/foto'
+import { arricchisci } from './risorse'
 import { opticalLeft, topForCaps } from '../core/metriche'
 import { bounce, emphasize } from './forme'
 import { conSpecifica, specializza } from './specializza'
@@ -66,10 +69,18 @@ function palette(s: Style, inverti: boolean): Pal {
   return { bg, fg, acc, acc2: s.bg, sec: mix(fg, bg, 0.3), srf: mix(bg, fg, 0.12), dark: lum(bg) < 0.25 }
 }
 
-export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, photo?: string, pix?: Pix, seq?: Seq): G {
+export function makeG(format: Format, s0: Style, k0: Knobs, c: DesignContent, photo0?: string, pix0?: Pix, seq?: Seq): G {
   const [W, H] = FORMAT_SIZE[format]
+  // foto a rotazione tra le composizioni (solo quelle con i pixel già pronti: servono ai controlli di lettura)
+  let photo = photo0, pix = pix0
+  const altre = (c.immagini ?? []).filter(u => u !== photo0 && pixPronta(u))
+  if (photo0 && altre.length && !seq) {
+    const i = hashText(`${k0.stile}|${k0.seme}|foto`) % (altre.length + 1)
+    if (i > 0) { photo = altre[i - 1]; pix = pixPronta(photo) }
+  }
   // la specifica di progetto del brief orienta decori, foto ed enfasi
-  const { s, k } = conSpecifica(s0, k0, c)
+  // palette generativa (V5) al posto di quella dell'identità, poi la specifica del brief
+  const { s, k } = conSpecifica(conPalette(s0, k0, c, pix), { ...k0, paletteDa: sorgentePalette(k0, c, pix) }, c)
   const ms = misure(format)
   return {
     W, H, u: ms.u, m: ms.m.l, g: ms.gut, T: ms.safe.y, B: ms.safe.y + ms.safe.h, ms, sc: scala(ms, rapportoDa(k.scala), format),
@@ -446,7 +457,8 @@ function under(g: G, upto: number, px: number, py: number): { color: string; bus
       const smp = sampleImage(g, e, px, py)
       res = smp ? { color: smp.color, busy: smp.busy > 0.13 } : { color: res.color, busy: true }
     } else if (e.kind === 'ornament') {
-      if (e.opacity > 0.25 && px >= e.x && py >= e.y && px <= e.x + e.w && py <= e.y + e.h) res = { ...res, busy: true }
+      // le texture in sovrapposizione (tex/lib/cc0) non spostano la luminanza media: non contano come fondo mosso
+      if (e.opacity > 0.25 && !/^(tex|lib|cc0):/.test(e.id) && px >= e.x && py >= e.y && px <= e.x + e.w && py <= e.y + e.h) res = { ...res, busy: true }
     } else if (e.kind === 'path' && e.name === 'puntini') {
       const b = pathBox(e.d)
       if (b && px >= b.x && py >= b.y && px <= b.x + b.w && py <= b.y + b.h) res = { ...res, busy: true }
@@ -458,7 +470,7 @@ function under(g: G, upto: number, px: number, py: number): { color: string; bus
 /** Cosa c'è sotto un punto della tavola composta: colore e se il fondo è mosso. */
 export const sotto = (g: G, x: number, y: number) => under(g, g.els.length, x, y)
 
-function pathBox(d: string): Box | null {
+export function pathBox(d: string): Box | null {
   const xs: number[] = [], ys: number[] = []
   for (const m of d.matchAll(/M\s*(-?[\d.]+)\s+(-?[\d.]+)/g)) { xs.push(+m[1]); ys.push(+m[2]) }
   if (!xs.length) return null
@@ -601,6 +613,8 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   if (g.seq) seqMarks(g)
   // la specifica del brief: segni, icone, effetto del titolo (poi i controlli di sempre)
   specializza(g)
+  // le risorse dello Studio: effetti del catalogo, generatori, 3D; via le forme senza motivo
+  arricchisci(g)
   if (!legible(g)) return null
   grainTop(g)
   // i testi veri e i sigilli stanno sopra la grana: nitidi, come li comporrebbe un tipografo
@@ -618,8 +632,8 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   const d = g.s.decor
   return {
     w: g.W, h: g.H, bg: g.P.bg, els: g.els, layout, style: g.s.id, label,
-    palette: { bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf },
-    finish: { ids: d.finishes, seed: `${g.c.title}|${layout}|${g.k.seme}`, fallback: g.k.grana > 0.05 ? (d.fallback ?? 'grana') : undefined, amount: 20 + g.k.grana * 40 },
+    palette: { bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf, da: g.k.paletteDa },
+    finish: { ids: d.finishes, seed: `${g.c.title}|${layout}|${g.k.seme}`, fallback: g.k.grana > 0.05 && !g.els.some(e => e.kind === 'ornament' && /^(tex|lib|cc0):/.test(e.id)) ? (d.fallback ?? 'grana') : undefined, amount: 20 + g.k.grana * 40 },
     knobs: { ...g.k },
     ...(g.segni?.length ? { mattoni: [g.k.sistema, ...g.segni] } : {}),
   }

@@ -25,6 +25,8 @@ export interface Knobs {
   /** 0 colori pieni → 1 inchiostri che si sovrappongono fuori registro */
   sovrastampa: number
   trattamento: Trattamento
+  /** da dove viene la palette (V5): identità, foto, marchio, armonia; lo decide makeG */
+  paletteDa?: string
   /** fondo nel colore d'accento */
   inverti: boolean
   /** grana e trama di stampa */

@@ -9,12 +9,33 @@ import { styleById } from '@/components/studio/designer/styles'
 import { incrocia } from '@/components/studio/designer/gen/incrocio'
 import { concetti, simulato, type Idea } from '@/components/studio/designer/gen/concetto'
 import { renderScene } from '@/components/studio/designer/render'
-import type { DesignContent, Format, Scene } from '@/components/studio/designer/types'
+import type { DesignContent, Format, Scene, Oggetto3D } from '@/components/studio/designer/types'
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
+import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/campi'
+import { formeTolte, TEXTURE_CC0, registraTextureCC0 } from '@/components/studio/designer/gen/risorse'
+import { TEXTURE_PROCEDURALI, TEXTURE_LIBRERIA } from '@/components/studio/designer/texture'
+import { loadPix } from '@/components/studio/designer/core/foto'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
-export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[] }
+export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
+
+/** Risorse usate dalla scena (per contare la varietà nelle prime 12): palette, effetti, generatori, foto, trattamenti. */
+export interface Risorse { palette: string; fx: string[]; gen: string[]; foto: string[]; trattamento?: string; paletteDa?: string; tex: string[] }
+function risorse(sc: Scene): Risorse {
+  const fx = new Set<string>(), gen = new Set<string>(), foto = new Set<string>(), tex = new Set<string>()
+  for (const el of sc.els) {
+    for (const f of ('fx' in el && el.fx) || []) (/^(gen|proc|campo|trama)/i.test(f.id) ? gen : fx).add(f.variant ? `${f.id}:${f.variant}` : f.id)
+    if (el.kind === 'ornament') (/^(tex|lib|cc0):/.test(el.id) ? tex : gen).add(el.id.replace(/^cc0:.*\//, 'cc0:'))
+    for (const f of ('fx' in el && el.fx) || []) if (f.id === 'textureOverlay' || f.id === 'grunge') tex.add(`${f.id}:${f.variant ?? ''}`)
+    if (el.kind === 'image') { if (el.url) foto.add(el.url.split('/').pop()!.split('?')[0]); if (el.look) fx.add('look:' + el.look) }
+    const g = (el as { gen?: string }).gen
+    if (g) gen.add(g)
+  }
+  if (sc.finish?.fallback) { fx.add('trama:' + sc.finish.fallback); tex.add('trama:' + sc.finish.fallback) }
+  const p = sc.palette
+  return { palette: p ? [p.bg, p.ink, p.accent].join('|') : sc.bg, fx: [...fx], gen: [...gen], foto: [...foto], trattamento: (sc.knobs as Knobs | undefined)?.trattamento, paletteDa: sc.palette?.da, tex: [...tex] }
+}
 
 async function draw(sc: Scene, thumb: number) {
   const el = document.createElement('canvas')
@@ -60,12 +81,14 @@ async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; c
   // le idee dal modello vero (--idee-modello) arrivano già pronte; a secco la chiamata è simulata
   const date = (job as { idee?: Idea[] }).idee
   const idee = (job as { senzaIdee?: boolean }).senzaIdee ? false as const : date ?? await concetti(job.content, { chiedi: simulato(job.content, conta) })
+  await texturePronte
+  await Promise.all((job.content.immagini ?? []).map(u => loadPix(u)))
   const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee })
   const items: Result[] = []
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema] })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc) })
   }
   return { items, candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ')) }
 }
@@ -117,6 +140,21 @@ async function diversita(o: { urls: string[]; mattoni: string[][] }) {
   return { visiva: n ? vis / n : 0, mattoni: n ? mat / n : 0 }
 }
 
+/** Tutti i generatori su una tavola piccola, con il backend che li ha disegnati (foglio --campi). */
+async function campi() {
+  await texturePronte
+  const ids = [...GENERATORI_CAMPO.map(g => `campo:${g}`), 'proc:halftone', 'proc:dot_grid', 'proc:wave_lines', 'proc:zigzag_fill', 'proc:stripe_diagonal', 'proc:crosshatch', 'proc:honeycomb', 'proc:organic_noise', 'proc:perspective_grid', 'proc:circuit_board', 'proc:memphis_mix', 'proc:star_scatter', '3d:sfera', '3d:toro', '3d:cubo', '3d:disco', '3d:capsula', '3d:nodo', '3d:testo', ...TEXTURE_PROCEDURALI.map(t => `tex:${t}`), ...TEXTURE_LIBRERIA.map(t => `lib:${t}`), ...Object.values(TEXTURE_CC0).flat().map(u => `cc0:${u}`)]
+  const out: { url: string; label: string; sub: string }[] = []
+  for (const [i, id] of ids.entries()) {
+    backendCampi.ultimo = /^(tex|lib|cc0):/.test(id) ? 'texture' : id.startsWith('proc:') ? 'fabric' : id.startsWith('3d:') ? 'three webgl' : undefined
+    const forma = id.slice(3) as Oggetto3D['forma'], mat = (['plastica', 'cromo', 'oro', 'vetro', 'argilla', 'olografico', 'plastica'] as const)[i % 7]
+    const pal = { bg: '#f3efe6', ink: '#1d2b4f', accent: '#e4572e', muted: '#8a8a8a', surface: '#e9e2d3' }
+    const sc: Scene = { w: 540, h: 540, bg: pal.bg, palette: pal, els: [{ kind: 'ornament', name: 'campo', id, x: 0, y: 0, w: 540, h: 540, seed: 11 + i * 7, opacity: 0.9, pal, o3d: id.startsWith('3d:') ? { forma, materiale: mat, colore: pal.accent, testo: 'N', famiglia: 'Anton' } : undefined }], layout: 'campi', style: '', label: id }
+    out.push({ url: await draw(sc, 1), label: id.replace(/^cc0:.*\//, 'cc0:'), sub: `${backendCampi.ultimo ?? ''}${id.startsWith('3d:') ? ' · ' + mat : ''}` })
+  }
+  return out
+}
+
 /** Foglio contatti composto nella pagina: niente dipendenze esterne per le immagini. */
 async function sheet(o: { title: string; items: { url?: string; label: string; sub: string }[]; cols: number; cellW: number; ratio: number }) {
   const pad = 24, labelH = 46, cellH = Math.round(o.cellW * o.ratio)
@@ -142,4 +180,7 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   return cv.toDataURL('image/jpeg', 0.86)
 }
 
-;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }
+// superfici CC0 della cache locale (npm run designer:texture), se ci sono
+const texturePronte = registraTextureCC0('http://designer.local/asset-cache/texture/')
+
+;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }

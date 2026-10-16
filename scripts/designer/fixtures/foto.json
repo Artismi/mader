@@ -1,0 +1,80 @@
+{
+  "caffe.jpg": [
+    {
+      "file": "caffe-2.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/X2JNLNHCT9.jpg",
+      "pagina": "https://stocksnap.io/photo/coffee-beans-X2JNLNHCT9",
+      "autore": "Negative Space",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    },
+    {
+      "file": "caffe-3.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/OTQJFKY0L7.jpg",
+      "pagina": "https://stocksnap.io/photo/coffee-beans-OTQJFKY0L7",
+      "autore": "fireskystudios.com",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    },
+    {
+      "file": "caffe-4.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/RGTFS21RRA.jpg",
+      "pagina": "https://stocksnap.io/photo/coffee-beans-RGTFS21RRA",
+      "autore": "Ylanite Koppens",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    }
+  ],
+  "medusa.jpg": [
+    {
+      "file": "medusa-2.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/YV3RBWMPU3.jpg",
+      "pagina": "https://stocksnap.io/photo/jellyfish-underwater-YV3RBWMPU3",
+      "autore": "%u8D1D%u8389%u513F%20NG",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    },
+    {
+      "file": "medusa-3.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/KCUKTUPDC3.jpg",
+      "pagina": "https://stocksnap.io/photo/jellyfish-water-KCUKTUPDC3",
+      "autore": "World Wildlife",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    },
+    {
+      "file": "medusa-4.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/L5GPTOUAN3.jpg",
+      "pagina": "https://stocksnap.io/photo/jellyfish-blue-L5GPTOUAN3",
+      "autore": "Nathalie E. Julien",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    }
+  ],
+  "verdure.jpg": [
+    {
+      "file": "verdure-2.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/F8B73CPSBK.jpg",
+      "pagina": "https://stocksnap.io/photo/fruit-vegetables-F8B73CPSBK",
+      "autore": "Jamie Hamel-Smith",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    },
+    {
+      "file": "verdure-3.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/GYEIFHUP3O.jpg",
+      "pagina": "https://stocksnap.io/photo/peppers-vegetables-GYEIFHUP3O",
+      "autore": "Piotr Lohunko",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    },
+    {
+      "file": "verdure-4.jpg",
+      "url": "https://cdn.stocksnap.io/img-thumbs/960w/9XFUIPUXDB.jpg",
+      "pagina": "https://stocksnap.io/photo/vegetables-food-9XFUIPUXDB",
+      "autore": "Sven Scheuermeier",
+      "fonte": "StockSnap via Openverse",
+      "licenza": "CC0"
+    }
+  ]
+}

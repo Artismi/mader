@@ -11,6 +11,8 @@
  *   npm run designer:idee                           le idee del concetto (C1) da un modello vero (OpenRouter, Claude o Gemini), ripiego a regole
  *   npm run designer:vetrina -- --senza-idee          proposte senza le idee del concetto (C1–C2), per il confronto
  *   npm run designer:vetrina -- --ibridi              in più un foglio <contenuto>-<formato>-ibridi.jpg con i soli ibridi dell'incrocio (V1)
+ *   npm run designer:vetrina -- --campi               foglio campi.jpg con tutti i generatori procedurali e gli oggetti 3D
+ *   npm run designer:vetrina -- --foto-fissa          una sola foto per contenuto (senza: anche quelle di npm run designer:foto, a rotazione)
  *   npm run designer:vetrina -- --occhio --a-secco   imbuto e occhio con il modello simulato: chiamate e token prima e dopo
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
@@ -42,6 +44,8 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
   if (a.startsWith('--')) acc.push([a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : 'true'])
   return acc
 }, []))
+import { famiglia, distanzaPalette, neutriChiari } from './varieta.mjs'
+import { altreFoto } from './foto.mjs'
 const CONTENUTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/contenuti.json'), 'utf8'))
 const contenuti = args.contenuti ? args.contenuti.split(',') : Object.keys(CONTENUTI)
 const formati = (args.formati ?? 'quadrato,verticale,storia,orizzontale').split(',')
@@ -198,6 +202,16 @@ if (args.schede) {
   process.exit(0)
 }
 
+// --campi: un foglio con tutti i generatori (campi, trame, pattern della libreria) e il backend usato
+if (args.campi) {
+  const items = await page.evaluate(() => window.designer.campi())
+  const sh = await page.evaluate(o => window.designer.sheet(o), { title: 'generatori procedurali · campo e trama', items, cols: 6, cellW: 300, ratio: 1 })
+  fs.writeFileSync(path.join(out, 'campi.jpg'), Buffer.from(sh.split(',')[1], 'base64'))
+  console.log(items.map(i => `${i.label} (${i.sub})`).join(' · '), `foglio in ${path.relative(process.cwd(), path.join(out, 'campi.jpg'))}`)
+  await browser.close()
+  process.exit(0)
+}
+
 if (args.specializza) {
   const PROGETTI = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/progetti.json'), 'utf8'))
   const motivi = await page.evaluate(() => window.designer.motivi())
@@ -229,12 +243,16 @@ if (args.specializza) {
 const report = []
 const tutteCoppie = []
 const diversita = []
+const varieta = []
+
 for (const nome of contenuti) {
   const fx = CONTENUTI[nome]
   if (!fx) { console.warn('contenuto sconosciuto:', nome); continue }
   for (const format of formati) {
     const t0 = Date.now()
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
+    // altre foto dello stesso soggetto (npm run designer:foto), a rotazione tra le composizioni
+    if (fx.foto && !args['foto-fissa']) fx.c = { ...fx.c, immagini: altreFoto(fx.foto).map(f => `http://designer.local/fixtures/foto/${f}`) }
     if (MOTIVI_APP && !fx.c.progetto) {
       const testo = [fx.c.brand, fx.c.kicker, fx.c.title, fx.c.body, ...(fx.c.details ?? [])].join(' ')
       fx.c = { ...fx.c, progetto: risolvi(await page.evaluate(t => window.designer.ripiego(t), testo), MOTIVI_APP) }
@@ -281,6 +299,11 @@ for (const nome of contenuti) {
       dv.idee = prime.filter(r => r.knobs?.idea).length
       diversita.push(dv)
       info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)}) · carattere ${dv.carattere.toFixed(1)} · intrecci ${dv.intrecci} · idee ${dv.idee}`
+      // varietà delle risorse nelle prime 12: palette, effetti, generatori, foto, trattamenti
+      const rs = prime.map(r => r.risorse).filter(Boolean), conta = f => new Set(rs.flatMap(f)).size
+      const v = { palette: conta(r => [famiglia(r.palette)]), effetti: conta(r => r.fx), generatori: conta(r => r.gen), foto: conta(r => r.foto), trattamenti: conta(r => r.trattamento ? [r.trattamento] : []), distanza: +distanzaPalette(rs.map(r => r.palette)).toFixed(3), neutri: neutriChiari(rs.map(r => r.palette)), texture: conta(r => r.tex ?? []) }
+      varieta.push({ contenuto: nome, formato: format, ...v, dettaglio: rs })
+      info += ` · palette ${v.palette} effetti ${v.effetti} generatori ${v.generatori} foto ${v.foto} trattamenti ${v.trattamenti} texture ${v.texture}`
     }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
     if (args.ibridi) {
@@ -314,6 +337,9 @@ for (const nome of contenuti) {
     console.log(`${nome.padEnd(12)} ${format.padEnd(12)}${info} ${ok}/${res.length} voti ${voti.join(' ')}  ${((Date.now() - t0) / 1000).toFixed(1)} s${ok < res.length ? '  scartate: ' + res.filter(r => !r.ok).map(r => r.sistema).join(', ') : ''}`)
   }
 }
+const bc = await page.evaluate(() => window.designer.backendCampi())
+if (Object.keys(bc.conta).length) console.log(`Campi generativi: ${Object.entries(bc.conta).map(([b, n]) => `${b} ${n}`).join(', ')} (navigator.gpu ${bc.webgpu ? 'presente' : 'assente: nodi del Lab sul ripiego WebGL2 di three'})`)
+if (Object.keys(bc.formeTolte ?? {}).length) console.log(`Forme senza motivo tolte (tutte le prove): ${Object.entries(bc.formeTolte).map(([n, k]) => `${n} ${k}`).join(', ')}`)
 await browser.close()
 if (occhio) {
   const { prima, dopo } = occhio, x = (prima.tokenImmagine + prima.tokenTesto) / Math.max(1, dopo.tokenImmagine + dopo.tokenTesto)
@@ -329,6 +355,11 @@ if (diversita.length) {
   const m = k => diversita.reduce((a, d) => a + d[k], 0) / diversita.length
   console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)} · carattere ${m('carattere').toFixed(1)} · intrecci ${m('intrecci').toFixed(1)} · idee ${m('idee').toFixed(1)} (per contenuto)`)
   fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), carattere: m('carattere'), intrecci: m('intrecci'), idee: m('idee'), tavole: diversita }, null, 2))
+}
+if (varieta.length) {
+  const m = k => (varieta.reduce((a, d) => a + d[k], 0) / varieta.length).toFixed(1)
+  console.log(`Varietà (prime 12, media per tavola): palette ${m('palette')} · effetti ${m('effetti')} · generatori ${m('generatori')} · foto ${m('foto')} · trattamenti ${m('trattamenti')} · distanza palette ${(varieta.reduce((a, d) => a + d.distanza, 0) / varieta.length).toFixed(3)} · fondi chiari neutri ${m('neutri')} · texture ${m('texture')}`)
+  fs.writeFileSync(path.join(out, 'varieta.json'), JSON.stringify(varieta, null, 2))
 }
 console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)
 
