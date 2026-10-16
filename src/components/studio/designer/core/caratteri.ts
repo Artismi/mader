@@ -54,7 +54,9 @@ const affinita = (a: Personalita, b: Personalita) => TRATTI.reduce((n, t) => n +
 /** Sceglie per affinità con un po' di caso; `peso` aggiunge le regole (abbinamento, sperimentazione). */
 function scegli(r: Rng, list: Carattere[], dir: Personalita, temperatura = 0.12, fuori = 0.12, peso: (c: Carattere) => number = () => 1): Carattere {
   if (r.chance(fuori)) return r.pick(list)
-  const scored = list.map(c => ({ c, w: Math.exp(affinita(c.p, dir) / temperatura) * peso(c) }))
+  let scored = list.map(c => ({ c, w: Math.exp(affinita(c.p, dir) / temperatura) * peso(c) }))
+  // se le regole escludono tutti, conta solo l'affinità
+  if (!scored.some(s => s.w > 0)) scored = list.map(c => ({ c, w: Math.exp(affinita(c.p, dir) / temperatura) }))
   const tot = scored.reduce((a, s) => a + s.w, 0)
   let x = r.next() * tot
   for (const s of scored) { if ((x -= s.w) <= 0) return s.c }
@@ -98,7 +100,7 @@ export function abbina(r: Rng, dir: Personalita, opts: { maiuscolo?: number; spe
   const lab = (dir.tecnico ?? 0) + (dir.sperimentale ?? 0) + s * 0.5 > 1 && mono.length && r.chance(0.6) ? scegli(r, mono, dir, 0.2)
     : forte > 0.8 && stretti.length && r.chance(0.4) ? scegli(r, stretti, dir, 0.2)
       : t.ruoli.includes('etichetta') ? t
-        : scegli(r, etichette.filter(c => c.sans && !c.mono && xCompatibile(c, t)), dir, 0.2, 0.05)
+        : scegli(r, ((l: Carattere[]) => (l.length ? l : etichette))(etichette.filter(c => c.sans && !c.mono && xCompatibile(c, t))), dir, 0.2, 0.05)
   const label: FontSpec = { family: lab.family, weight: pesoVicino(lab, lab.mono ? 500 : 700) }
   // carattere da manifesto: il titolo al massimo peso se è un bastone pesante, altrimenti un bastone pesante affine
   const pesanti = titoli.filter(c => c.sans && !c.mono && c.genere !== 'script' && (maxPeso(c) >= 800 || (c.misure?.spessore ?? 0) >= 0.16 || ['Anton', 'Archivo Black', 'Bebas Neue', 'Bowlby One', 'Rammetto One'].includes(c.family)))
