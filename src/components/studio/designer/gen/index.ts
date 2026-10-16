@@ -33,6 +33,7 @@ import type { Scene as SceneT } from '../types'
 import type { G } from './tools'
 import type { RegistroId } from '../styles'
 import { loadPix } from '../core/foto'
+import { rifinisciPixel, type Pixel } from './pixel'
 
 export * from './knobs'
 export { dimentica as dimenticaMemoria } from './memoria'
@@ -239,7 +240,7 @@ export interface Proposte { scene: Scene[]; candidate: number; /** candidate che
  * altro giro con semi nuovi (al massimo `giri`); in ultimo si completa con le
  * bocciate migliori, segnate come tali.
  */
-export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; idee?: Idea[] | false; onProgress?: (fatte: number, totale: number) => void } = {}): Promise<Proposte> {
+export async function proponi(c: DesignContent, format: Format, o: { photo?: string; n?: number; knobs?: Knobs[]; styleId?: string; seme?: number; sperimentazione?: number; giri?: number; vivaio?: number; ibridi?: boolean; idee?: Idea[] | false; onProgress?: (fatte: number, totale: number) => void; /** la tavola senza testi renderizzata e ridotta: abilita il controllo sui pixel veri */ pixel?: (sc: Scene) => Promise<Pixel> } = {}): Promise<Proposte> {
   const n = o.n ?? 12
   // si genera quattro volte quello che si mostra: il critico sceglie su un vivaio ampio
   const vivaio = o.vivaio ?? n * 4
@@ -271,8 +272,25 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
     // un altro giro prima di accettare doppioni: si ferma solo quando le 12 sono tutte di sistemi diversi
     if (scegli(tutte, n, true, 1).length >= n) break
   }
-  const promosse = scegli(tutte, n, true)
-  const scene = promosse.length >= n ? promosse : [...promosse, ...scegli(tutte.filter(x => !promosse.includes(x)), n - promosse.length, false)]
+  const sceltaDa = (lista: Scene[]) => { const pr = scegli(lista, n, true); return pr.length >= n ? pr : [...pr, ...scegli(lista.filter(x => !pr.includes(x)), n - pr.length, false)] }
+  let scene = sceltaDa(tutte)
+  // leggibilità sui pixel veri (blocco A): le scelte renderizzate senza testi, corrette o scartate;
+  // al posto delle scartate entrano le candidate successive
+  if (o.pixel) {
+    const via = new Set<Scene>(), lette = new Set<Scene>()
+    for (let giro = 0; giro < 4; giro++) {
+      for (const sc of scene) {
+        if (lette.has(sc) || via.has(sc)) continue
+        const r = await rifinisciPixel(sc, o.pixel)
+        if (r.scena) { sc.els = r.scena.els; if (r.correzioni && sc.esame) sc.esame = { ...sc.esame, correzioni: [...sc.esame.correzioni, `leggibilità sui pixel: ${r.correzioni} testi corretti`] }; lette.add(sc) }
+        else via.add(sc)
+      }
+      if (!scene.some(x => via.has(x))) break
+      scene = sceltaDa(tutte.filter(x => !via.has(x)))
+    }
+    scene = scene.filter(x => !via.has(x))
+    scartate += via.size
+  }
   ricorda(scene.map(sc => ({ sistema: (sc.knobs as Knobs | undefined)?.sistema ?? sc.layout, firma: sc.esame?.firma })))
   return { scene, candidate, scartate, promosse: tutte.filter(x => x.esame?.promossa).length, giri: Math.min(giro + 1, maxGiri) }
 }

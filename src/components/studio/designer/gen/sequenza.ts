@@ -17,6 +17,7 @@ import { generateSystem, proposeKnobs, ammesso, SISTEMI_DEL_REGISTRO, SYSTEMS } 
 import { styleById } from '../styles'
 import { affinita } from './affinita'
 import { testoMancante } from './difetti'
+import { rifinisciPixel, type Pixel } from './pixel'
 
 export type RuoloSlide = 'copertina' | 'sezione' | 'testo' | 'dati' | 'citazione' | 'elenco' | 'chiusura'
 export interface SlideIn { ruolo: RuoloSlide; c: DesignContent }
@@ -62,7 +63,7 @@ export function candidatiRuolo(s: SlideIn, registro: string, hasPhoto: boolean):
  * tentativi, perché la scelta vera è tra i sistemi. Le slide che nessun sistema regge restano
  * `null` (la presentazione non le nasconde: il banco le conta).
  */
-export async function presentazione(slides: SlideIn[], format: Format, o: { photo?: string; styleId?: string; seme?: number; perSlide?: number } = {}): Promise<{ slide: SlideOut[]; stile: string }> {
+export async function presentazione(slides: SlideIn[], format: Format, o: { photo?: string; styleId?: string; seme?: number; perSlide?: number; pixel?: (sc: Scene) => Promise<Pixel> } = {}): Promise<{ slide: SlideOut[]; stile: string }> {
   const copertina = slides.find(s => s.ruolo === 'copertina')?.c ?? slides[0].c
   const base: Knobs = proposeKnobs(copertina, { hasPhoto: !!o.photo, styleId: o.styleId, seme: o.seme, sistemi: ['tesi'] })[0]
   const registro = styleById(base.stile).registro
@@ -74,7 +75,7 @@ export async function presentazione(slides: SlideIn[], format: Format, o: { phot
     // la foto solo dove fa da immagine (copertina, chiusura); il resto della sequenza è tipografico
     const photo = s.ruolo === 'copertina' || s.ruolo === 'chiusura' ? o.photo : undefined
     const provati = candidatiRuolo(s, registro, !!photo).filter(x => x !== prima).slice(0, o.perSlide ?? 4)
-    let best: { sc: Scene; sistema: SistemaId; punti: number } | null = null
+    const prove: { sc: Scene; sistema: SistemaId; punti: number }[] = []
     for (const [j, sistema] of provati.entries()) {
       const k: Knobs = {
         ...base, sistema, idea: undefined, intreccio: false,
@@ -87,7 +88,14 @@ export async function presentazione(slides: SlideIn[], format: Format, o: { phot
       // la slide regge il suo testo: un campo saltato pesa più di un sistema ripetuto
       const m = testoMancante(sc.els, c)
       const punti = (sc.esame?.voto ?? 0) + ((sc.esame?.carattere?.carattere ?? 50) - 50) * 0.2 - 8 * (usati.get(sistema) ?? 0) - 15 * m.saltati.length - 6 * m.tagliati.length
-      if (!best || punti > best.punti) best = { sc, sistema, punti }
+      prove.push({ sc, sistema, punti })
+    }
+    // la migliore che regge anche sui pixel veri (corretta se serve)
+    let best: { sc: Scene; sistema: SistemaId; punti: number } | null = null
+    for (const p of prove.sort((a, b) => b.punti - a.punti)) {
+      if (!o.pixel) { best = p; break }
+      const r = await rifinisciPixel(p.sc, o.pixel)
+      if (r.scena) { best = { ...p, sc: r.scena }; break }
     }
     if (best) { usati.set(best.sistema, (usati.get(best.sistema) ?? 0) + 1); prima = best.sistema }
     out.push({ ruolo: s.ruolo, scena: best?.sc ?? null, sistema: best?.sistema, provati })

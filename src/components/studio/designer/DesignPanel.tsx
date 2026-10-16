@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import type { DesignContent, Format, Scene } from './types'
 import { STYLES, inferStyle } from './styles'
 import { findPhoto } from './generate'
-import { renderPreview } from './preview'
+import { renderPreview, sfondoPixel } from './preview'
 import { generateSystem, proposeKnobs, proponi, SISTEMI, TRATTAMENTI, RANGE_KNOBS, rng, type Knobs } from './gen'
 import type { Idea } from './gen/concetto'
 
@@ -140,7 +140,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       setItems(Array.from({ length: N_PROPOSTE }, () => ({ k: ks[0] ?? proposeKnobs(c, { hasPhoto: !!photo })[0], sc: null })))
       setBusy('cerco le idee')
       const concetto = await ideeDelBrief(c)
-      const p = await proponi(c, fmt, { photo, n: N_PROPOSTE, knobs: ks, idee: concetto?.idee, onProgress: (a, b) => gen.current === my && setBusy(`compongo ${a}/${b}`) })
+      const p = await proponi(c, fmt, { pixel: sc => sfondoPixel(sc), photo, n: N_PROPOSTE, knobs: ks, idee: concetto?.idee, onProgress: (a, b) => gen.current === my && setBusy(`compongo ${a}/${b}`) })
       if (gen.current !== my) return
       setBusy('compongo')
       setMsg(`${p.promosse} promosse dal critico su ${p.candidate} candidate · idee ${concetto?.fonte === 'modello' ? `dal modello ${concetto.modello ?? ''}` : 'dalle regole'}.`)

@@ -103,7 +103,7 @@ async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ 
   const idee = (job as { senzaIdee?: boolean }).senzaIdee ? false as const : date ?? await concetti(job.content, { chiedi: simulato(job.content, conta) })
   await texturePronte
   await Promise.all((job.content.immagini ?? []).map(u => loadPix(u)))
-  const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee })
+  const p = await proponi(job.content, job.format, { pixel: (job as { pixel?: boolean }).pixel === false ? undefined : sc => sfondoPixel(sc, 540), photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione, idee })
   const items: Result[] = []
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
@@ -114,12 +114,12 @@ async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ 
 }
 
 /** Una presentazione (blocco A): le slide composte in sequenza, con i difetti misurati di ciascuna. */
-async function sequenza(job: { pres: { brand?: string; slides: ({ ruolo: RuoloSlide } & DesignContent)[] }; format: Format; photo?: string; thumb: number; seme?: number }) {
+async function sequenza(job: { pixel?: boolean; pres: { brand?: string; slides: ({ ruolo: RuoloSlide } & DesignContent)[] }; format: Format; photo?: string; thumb: number; seme?: number }) {
   const sink: string[] = []
   ;(globalThis as { __designerSink?: string[] }).__designerSink = sink
   await texturePronte
   const slides = job.pres.slides.map(({ ruolo, ...c }) => ({ ruolo, c: { brand: job.pres.brand, ...c } as DesignContent }))
-  const r = await presentazione(slides, job.format, { photo: job.photo, seme: job.seme })
+  const r = await presentazione(slides, job.format, { photo: job.photo, seme: job.seme, pixel: job.pixel === false ? undefined : sc => sfondoPixel(sc, 540) })
   const items = []
   for (const [i, s] of r.slide.entries()) {
     if (!s.scena) { items.push({ ruolo: s.ruolo, ok: false, provati: s.provati }); continue }

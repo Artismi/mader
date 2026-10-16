@@ -17,6 +17,7 @@
  *   npm run designer:vetrina -- --schede            difetti per archetipo (P3): out/schede.md e schede.json
  *   npm run designer:vetrina -- --sforzo            prova sotto sforzo dei testi (fixtures/sforzo.json) nei 4 formati: difetti e scarti per caso
  *   npm run designer:vetrina -- --sequenza          presentazioni da 8–15 slide (fixtures/presentazioni.json): foglio della sequenza e difetti per slide
+ *   … --senza-pixel                                  senza il controllo di leggibilità sui pixel veri (per il confronto)
  *   npm run designer:vetrina -- --difetti --contenuti caffe,mostra --formati quadrato   la stessa scheda dei difetti su altri contenuti
  *   OCCHIO_MODELLO=gemini:… npm run designer:vetrina -- --occhio   lo stesso con un modello vero (costa)
  *
@@ -222,7 +223,7 @@ if (args.sequenza) {
   for (const nome of nomi) for (const format of fmts) {
     const t0 = Date.now(), pr = PRES[nome]
     const photo = pr.foto ? `http://designer.local/fixtures/${pr.foto}` : undefined
-    const r = await page.evaluate(job => window.designer.sequenza(job), { pres: pr, format, photo, thumb: Number(args.thumb ?? 0.3), seme: Number(args.seme ?? 0) })
+    const r = await page.evaluate(job => window.designer.sequenza(job), { pres: pr, format, photo, thumb: Number(args.thumb ?? 0.3), seme: Number(args.seme ?? 0), pixel: !args['senza-pixel'] })
     const ok = r.items.filter(x => x.ok), sis = ok.map(x => x.sistema)
     const conta = Object.fromEntries(CLASSI_A.map(k => [k, ok.filter(x => x.difetti?.[k]?.length).length]))
     const doppi = r.items.filter((x, i) => i && x.ok && x.sistema === r.items[i - 1].sistema).length
@@ -246,7 +247,7 @@ if (args.sforzo || args.difetti) {
   for (const nome of contenuti) for (const format of fmts) {
     const fx = TUTTI[nome]
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
-    const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb: Number(args.thumb ?? 0.3), n: Number(args.n ?? 8), seme: Number(args.seme ?? 0), misura: true })
+    const p = await page.evaluate(job => window.designer.proposte(job), { content: fx.c, format, photo, over, thumb: Number(args.thumb ?? 0.3), n: Number(args.n ?? 8), seme: Number(args.seme ?? 0), misura: true, pixel: !args['senza-pixel'] })
     const its = p.items
     const conta = Object.fromEntries(CLASSI_A.map(k => [k, its.filter(r => r.difetti?.[k]?.length).length]))
     const voti = its.map(r => r.esame?.voto ?? 0)

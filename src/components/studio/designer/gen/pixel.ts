@@ -59,3 +59,75 @@ export function lettureVere(sc: Scene, px: Pixel): LetturaRiga[] {
     return campioniRighe(sc, px, t).map((lums, riga) => ({ testo: t.name, riga, big, ...leggiRiga(lums, t.color, big) }))
   })
 }
+
+/* ── correzione ───────────────────────────────────────────────────────── */
+type Rect = Extract<SceneEl, { kind: 'rect' }>
+const contr = (a: string, b: string) => cr(lumHex(a), lumHex(b))
+const annota = (sc: Scene, cosa: string) => { (globalThis as { __designerSink?: string[] }).__designerSink?.push(`${(sc.knobs as { sistema?: string } | undefined)?.sistema ?? sc.layout}: pixel ${cosa}`) }
+
+/** Il colore che regge su tutte le righe del testo sui pixel veri: prima quelli della palette. */
+function coloreCheRegge(sc: Scene, px: Pixel, t: Text, big: boolean) {
+  const p = sc.palette
+  const cand = [...new Set([p?.ink, p?.bg, p?.accent, '#111111', '#ffffff'].filter((c): c is string => !!c && c.startsWith('#') && c !== t.color))]
+  const righe = campioniRighe(sc, px, t)
+  const min = big ? SOGLIA_PIXEL.quotaGrande : SOGLIA_PIXEL.quotaPiccolo
+  return cand.find(c => righe.every(l => leggiRiga(l, c, big).ok >= Math.min(1, min + 0.08)))
+}
+
+/**
+ * Una passata di correzione sui testi che non reggono. Livello 0: il colore del testo
+ * (se un colore della palette regge sui pixel veri), altrimenti un alone per i corpi
+ * grandi e un velo sotto i piccoli; livello 1: fascia piena a tutta larghezza per i
+ * piccoli, alone più spesso per i grandi. Veli, fasce e aloni stanno sotto tutti i testi.
+ */
+function correggi(sc: Scene, px: Pixel, quali: Set<string>, livello: number) {
+  const u = Math.min(sc.w, sc.h) / 1080
+  const els = sc.els.slice()
+  const primo = () => els.findIndex(e => e.kind === 'text' && !e.deco)
+  for (const t0 of testiDaMisurare(sc).filter(t => quali.has(t.name))) {
+    const i = els.indexOf(t0)
+    const t = { ...t0 }
+    els[i] = t
+    const big = grande(t, u)
+    const c = livello === 0 ? coloreCheRegge(sc, px, t, big) : undefined
+    if (c) { annota(sc, `colore ${t.name}`); t.color = c; continue }
+    // il fondo del rimedio: quello che contrasta di più con il testo
+    const fondo = [sc.palette?.bg ?? sc.bg, '#111111', '#ffffff'].filter(x => x.startsWith('#')).sort((a, b) => contr(t.color, b) - contr(t.color, a))[0]
+    if (big) {
+      annota(sc, `alone ${t.name}`)
+      els.splice(primo(), 0, { ...t, name: 'alone', deco: true, color: fondo, stroke: fondo, sw: t.size * (livello ? 0.24 : 0.14), opacity: livello ? 1 : 0.92, chars: undefined, fx: undefined, blend: undefined, intreccio: undefined })
+      continue
+    }
+    const rs = righeVere(t)
+    const x0 = Math.min(...rs.map(r => r.x0)) - 0.45 * t.size, x1 = Math.max(...rs.map(r => r.x1)) + 0.45 * t.size
+    const y0 = Math.min(...rs.map(r => r.y0)) - 0.35 * t.size, y1 = Math.max(...rs.map(r => r.y1)) + 0.35 * t.size
+    const fascia = livello > 0 || x1 - x0 > sc.w * 0.6 || rs.length >= 3
+    const box = fascia ? { x: 0, y: Math.max(0, y0 - 0.2 * t.size), w: sc.w, h: Math.min(sc.h, y1 + 0.2 * t.size) - Math.max(0, y0 - 0.2 * t.size) } : { x: Math.max(0, x0), y: Math.max(0, y0), w: Math.min(sc.w, x1) - Math.max(0, x0), h: Math.min(sc.h, y1) - Math.max(0, y0) }
+    annota(sc, `${fascia ? 'fascia' : 'velo'} ${t.name}`)
+    els.splice(primo(), 0, { kind: 'rect', name: fascia ? 'fascia' : 'velo', ...box, fill: fondo, r: fascia ? 0 : t.size * 0.3, opacity: fascia ? 0.94 : 0.84 } as Rect)
+  }
+  sc.els = els
+}
+
+/**
+ * La tavola letta sui pixel veri e corretta dove serve (al massimo due passate);
+ * `scena` null se dopo le correzioni una riga ancora non regge: la tavola si scarta.
+ * `rendi` = la tavola senza i testi, ridotta (nel browser: `sfondoPixel` di preview.ts).
+ */
+export async function rifinisciPixel(sc0: Scene, rendi: (sc: Scene) => Promise<Pixel>): Promise<{ scena: Scene | null; correzioni: number; motivo?: string }> {
+  const sc: Scene = { ...sc0, els: sc0.els.slice() }
+  let correzioni = 0
+  for (let livello = 0; ; livello++) {
+    const px = await rendi(sc)
+    const sotto = lettureVere(sc, px).filter(sottoSoglia)
+    if (!sotto.length) return { scena: sc, correzioni }
+    if (livello === 2) {
+      const motivo = `illeggibile sui pixel veri: ${sotto[0].testo} (contrasto ${sotto[0].contrasto.toFixed(1)})`
+      annota(sc, `scarto, ${motivo}`)
+      return { scena: null, correzioni, motivo }
+    }
+    const quali = new Set(sotto.map(l => l.testo))
+    correzioni += quali.size
+    correggi(sc, px, quali, livello)
+  }
+}
