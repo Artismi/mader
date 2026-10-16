@@ -87,7 +87,18 @@ function edges(t: Text) {
 }
 const group = (name: string) => (name.includes('#') ? name.split('#')[0] : name)
 
+/** Le texture della tavola (velo in sovrapposizione su tutto) non sono pieni né segni: il critico non le misura. */
+export const isTexture = (e: SceneEl) => e.kind === 'ornament' && /^(tex|lib|cc0):/.test(e.id)
+
 export function esamina(g: G): Esame {
+  const tutti = g.els
+  const tex = tutti.filter(isTexture)
+  if (!tex.length) return esame(g)
+  g.els = tutti.filter(e => !isTexture(e))
+  try { return esame(g) } finally { g.els = [...g.els, ...tex] }
+}
+
+function esame(g: G): Esame {
   const correzioni: string[] = []
   ripara(g, correzioni)
   const difetti: string[] = []

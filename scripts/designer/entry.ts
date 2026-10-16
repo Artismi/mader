@@ -12,26 +12,28 @@ import type { DesignContent, Format, Scene, Oggetto3D } from '@/components/studi
 import { MOTIVI } from '@/components/studio/designer/progetto/vocabolario'
 import { ripiego } from '@/components/studio/designer/progetto/specifica'
 import { backendCampi, GENERATORI_CAMPO } from '@/components/studio/designer/campi'
-import { formeTolte } from '@/components/studio/designer/gen/risorse'
+import { formeTolte, TEXTURE_CC0, registraTextureCC0 } from '@/components/studio/designer/gen/risorse'
+import { TEXTURE_PROCEDURALI, TEXTURE_LIBRERIA } from '@/components/studio/designer/texture'
 import { loadPix } from '@/components/studio/designer/core/foto'
 
 export interface Job { content: DesignContent; format: Format; photo?: string; over?: Partial<Knobs>; sistemi?: Knobs['sistema'][]; thumb: number }
 export interface Result { sistema: string; ok: boolean; ms: number; url?: string; knobs: Knobs; reasons: string[]; layout?: string; stile?: string; coppia?: string; registro?: string; esame?: Scene['esame']; mattoni?: string[]; risorse?: Risorse }
 
 /** Risorse usate dalla scena (per contare la varietà nelle prime 12): palette, effetti, generatori, foto, trattamenti. */
-export interface Risorse { palette: string; fx: string[]; gen: string[]; foto: string[]; trattamento?: string; paletteDa?: string }
+export interface Risorse { palette: string; fx: string[]; gen: string[]; foto: string[]; trattamento?: string; paletteDa?: string; tex: string[] }
 function risorse(sc: Scene): Risorse {
-  const fx = new Set<string>(), gen = new Set<string>(), foto = new Set<string>()
+  const fx = new Set<string>(), gen = new Set<string>(), foto = new Set<string>(), tex = new Set<string>()
   for (const el of sc.els) {
     for (const f of ('fx' in el && el.fx) || []) (/^(gen|proc|campo|trama)/i.test(f.id) ? gen : fx).add(f.variant ? `${f.id}:${f.variant}` : f.id)
-    if (el.kind === 'ornament') gen.add(el.id)
+    if (el.kind === 'ornament') (/^(tex|lib|cc0):/.test(el.id) ? tex : gen).add(el.id.replace(/^cc0:.*\//, 'cc0:'))
+    for (const f of ('fx' in el && el.fx) || []) if (f.id === 'textureOverlay' || f.id === 'grunge') tex.add(`${f.id}:${f.variant ?? ''}`)
     if (el.kind === 'image') { if (el.url) foto.add(el.url.split('/').pop()!.split('?')[0]); if (el.look) fx.add('look:' + el.look) }
     const g = (el as { gen?: string }).gen
     if (g) gen.add(g)
   }
-  if (sc.finish?.fallback) fx.add('trama:' + sc.finish.fallback)
+  if (sc.finish?.fallback) { fx.add('trama:' + sc.finish.fallback); tex.add('trama:' + sc.finish.fallback) }
   const p = sc.palette
-  return { palette: p ? [p.bg, p.ink, p.accent].join('|') : sc.bg, fx: [...fx], gen: [...gen], foto: [...foto], trattamento: (sc.knobs as Knobs | undefined)?.trattamento, paletteDa: sc.palette?.da }
+  return { palette: p ? [p.bg, p.ink, p.accent].join('|') : sc.bg, fx: [...fx], gen: [...gen], foto: [...foto], trattamento: (sc.knobs as Knobs | undefined)?.trattamento, paletteDa: sc.palette?.da, tex: [...tex] }
 }
 
 async function draw(sc: Scene, thumb: number) {
@@ -72,6 +74,7 @@ async function run(job: Job): Promise<Result[]> {
 async function proposte(job: Job & { n?: number }): Promise<{ items: Result[]; candidate: number; promosse: number; giri: number }> {
   ;(globalThis as { __designerSink?: string[] }).__designerSink = []
   const t0 = performance.now()
+  await texturePronte
   // le foto in più devono avere i pixel pronti: il motore le sceglie a rotazione in makeG
   await Promise.all((job.content.immagini ?? []).map(u => loadPix(u)))
   const p = await proponi(job.content, job.format, { photo: job.photo, n: job.n ?? 12, styleId: job.over?.stile, seme: (job as { seme?: number }).seme, sperimentazione: job.over?.sperimentazione })
@@ -133,14 +136,15 @@ async function diversita(o: { urls: string[]; mattoni: string[][] }) {
 
 /** Tutti i generatori su una tavola piccola, con il backend che li ha disegnati (foglio --campi). */
 async function campi() {
-  const ids = [...GENERATORI_CAMPO.map(g => `campo:${g}`), 'proc:halftone', 'proc:dot_grid', 'proc:wave_lines', 'proc:zigzag_fill', 'proc:stripe_diagonal', 'proc:crosshatch', 'proc:honeycomb', 'proc:organic_noise', 'proc:perspective_grid', 'proc:circuit_board', 'proc:memphis_mix', 'proc:star_scatter', '3d:sfera', '3d:toro', '3d:cubo', '3d:disco', '3d:capsula', '3d:nodo', '3d:testo']
+  await texturePronte
+  const ids = [...GENERATORI_CAMPO.map(g => `campo:${g}`), 'proc:halftone', 'proc:dot_grid', 'proc:wave_lines', 'proc:zigzag_fill', 'proc:stripe_diagonal', 'proc:crosshatch', 'proc:honeycomb', 'proc:organic_noise', 'proc:perspective_grid', 'proc:circuit_board', 'proc:memphis_mix', 'proc:star_scatter', '3d:sfera', '3d:toro', '3d:cubo', '3d:disco', '3d:capsula', '3d:nodo', '3d:testo', ...TEXTURE_PROCEDURALI.map(t => `tex:${t}`), ...TEXTURE_LIBRERIA.map(t => `lib:${t}`), ...Object.values(TEXTURE_CC0).flat().map(u => `cc0:${u}`)]
   const out: { url: string; label: string; sub: string }[] = []
   for (const [i, id] of ids.entries()) {
-    backendCampi.ultimo = id.startsWith('proc:') ? 'fabric' : id.startsWith('3d:') ? 'three webgl' : undefined
+    backendCampi.ultimo = /^(tex|lib|cc0):/.test(id) ? 'texture' : id.startsWith('proc:') ? 'fabric' : id.startsWith('3d:') ? 'three webgl' : undefined
     const forma = id.slice(3) as Oggetto3D['forma'], mat = (['plastica', 'cromo', 'oro', 'vetro', 'argilla', 'olografico', 'plastica'] as const)[i % 7]
     const pal = { bg: '#f3efe6', ink: '#1d2b4f', accent: '#e4572e', muted: '#8a8a8a', surface: '#e9e2d3' }
     const sc: Scene = { w: 540, h: 540, bg: pal.bg, palette: pal, els: [{ kind: 'ornament', name: 'campo', id, x: 0, y: 0, w: 540, h: 540, seed: 11 + i * 7, opacity: 0.9, pal, o3d: id.startsWith('3d:') ? { forma, materiale: mat, colore: pal.accent, testo: 'N', famiglia: 'Anton' } : undefined }], layout: 'campi', style: '', label: id }
-    out.push({ url: await draw(sc, 1), label: id, sub: `${backendCampi.ultimo ?? ''}${id.startsWith('3d:') ? ' · ' + mat : ''}` })
+    out.push({ url: await draw(sc, 1), label: id.replace(/^cc0:.*\//, 'cc0:'), sub: `${backendCampi.ultimo ?? ''}${id.startsWith('3d:') ? ' · ' + mat : ''}` })
   }
   return out
 }
@@ -169,5 +173,8 @@ async function sheet(o: { title: string; items: { url?: string; label: string; s
   }
   return cv.toDataURL('image/jpeg', 0.86)
 }
+
+// superfici CC0 della cache locale (npm run designer:texture), se ci sono
+const texturePronte = registraTextureCC0('http://designer.local/asset-cache/texture/')
 
 ;(window as unknown as { designer: unknown }).designer = { run, sheet, proposte, campi, backendCampi: () => ({ ...backendCampi, webgpu: 'gpu' in navigator, formeTolte }), diversita, ibridi, motivi: () => MOTIVI, ripiego, sistemi: (c?: DesignContent, foto?: boolean) => Object.keys(SYSTEMS).filter(id => !c || ammesso(c, id as Knobs['sistema'], !!foto)) }

@@ -8,6 +8,7 @@ import type { SceneEl, FxSpec } from '../../types'
 import { textBox, lum, mix, pathBox, type G } from '../tools'
 import { rng, hashText, type Rng } from '../knobs'
 import { scegliFx, looksPer } from './effetti'
+import ELENCO_CC0 from '../../asset/texture-cc0.json'
 import type { Palette, Oggetto3D } from '../../types'
 
 /** La palette della tavola nella forma degli ornamenti. */
@@ -198,10 +199,58 @@ export function forme(g: G): number {
   return via.length
 }
 
+/* ── 5. texture: la materia viene dal prodotto, dall'idea o dall'umore ──── */
+const TEX_DAL_CONTENUTO: [RegExp, string[]][] = [
+  [/caff|tostat|kraft|sacc|spezi/i, ['tex:cartone', 'tex:carta', 'tex:macchie']], [/ceramic|argill|vas[oi]|terracott/i, ['tex:intonaco', 'tex:pietra', 'cc0:']],
+  [/vinil|disco|club|techno|dj|concert/i, ['tex:plastica', 'tex:inchiostro', 'lib:CRT Scanlines']], [/menu|cucin|ristor|pane|cena|pranzo|verdur|mercat/i, ['tex:tessuto', 'tex:carta', 'cc0:']],
+  [/mostra|arte|museo|galleri|stampa|zine/i, ['tex:carta', 'tex:macchie', 'tex:pieghe']], [/medus|mare|acqua|ghiacc|vetr/i, ['tex:vetro', 'cc0:']],
+  [/palestr|sport|fitness|allenament|pesi/i, ['tex:metallo', 'tex:intonaco', 'cc0:']], [/tech|app|software|digital|dati/i, ['tex:plastica', 'tex:vetro', 'lib:Micro Dots 1024']],
+  [/gioiell|lusso|beauty|profum|marmo/i, ['tex:pietra', 'tex:vetro']], [/viagg|lago|montagn|mappa|lettera|posta/i, ['tex:carta', 'tex:pieghe']],
+]
+const TEX_DAL_REGISTRO: Record<string, string[]> = {
+  artigianale: ['tex:carta', 'tex:cartone', 'tex:tessuto', 'tex:macchie'], retro: ['tex:pieghe', 'tex:carta', 'tex:macchie', 'lib:Analog Fiber'],
+  editoriale: ['tex:carta', 'lib:Analog Fiber', 'tex:pieghe'], lusso: ['tex:pietra', 'tex:vetro', 'cc0:'], tech: ['tex:plastica', 'tex:metallo', 'lib:Micro Dots 1024', 'lib:CRT Scanlines'],
+  notte: ['lib:CRT Scanlines', 'tex:plastica', 'tex:vetro'], avanguardia: ['tex:intonaco', 'tex:inchiostro', 'lib:Cinematic Grain'], pop: ['lib:Micro Dots 1024', 'tex:plastica', 'tex:carta'],
+  infantile: ['tex:carta', 'tex:tessuto'], sportivo: ['tex:metallo', 'tex:intonaco', 'cc0:'], svizzero: ['tex:carta', 'lib:Micro Dots 1024'],
+}
+/** Superfici CC0 in cache locale (npm run designer:texture), per materia; vuoto finché registraTextureCC0 non le trova. */
+export const TEXTURE_CC0: Record<string, string[]> = {}
+
+/** Registra le superfici CC0 presenti nella cache (le assenti restano fuori: si usano le procedurali). */
+export async function registraTextureCC0(base = '/asset-cache/texture/') {
+  for (const [materia, ids] of Object.entries(ELENCO_CC0 as Record<string, string | string[]>)) {
+    if (materia.startsWith('_') || !Array.isArray(ids)) continue
+    const ok = await Promise.all(ids.map(id => fetch(`${base}${id}.jpg`, { method: 'HEAD' }).then(r => r.ok, () => false)))
+    const urls = ids.filter((_, i) => ok[i]).map(id => `${base}${id}.jpg`)
+    if (urls.length) TEXTURE_CC0[materia] = urls
+  }
+  return Object.values(TEXTURE_CC0).flat().length
+}
+
+export function texturePer(g: G, r: Rng): string | null {
+  const testo = [g.c.title, g.c.kicker, g.c.body, g.c.brand, g.c.imageQuery, ...(g.c.details ?? [])].filter(Boolean).join(' ')
+  const dal = TEX_DAL_CONTENUTO.find(([re]) => re.test(testo))?.[1]
+  const lista = dal && r.chance(0.7) ? dal : TEX_DAL_REGISTRO[g.s.registro] ?? ['tex:carta']
+  let id = r.pick(lista)
+  // cc0: una superficie fotografata della materia giusta, se la cache c'è; altrimenti la procedurale
+  if (id === 'cc0:') { const m = Object.entries(TEXTURE_CC0).find(([k]) => lista.some(x => x === `tex:${k}`) || g.s.registro === k)?.[1] ?? Object.values(TEXTURE_CC0).flat(); id = m.length ? `cc0:${r.pick(m)}` : r.pick(lista.filter(x => x !== 'cc0:')) }
+  return id ?? null
+}
+
+function texture(g: G) {
+  const r = rngRisorse(g, 'tex')
+  if (!r.chance(g.s.registro === 'svizzero' ? 0.35 : 0.65)) return
+  const id = texturePer(g, r)
+  if (!id) return
+  const forte = /^(tex:(cartone|intonaco|pietra|pieghe|macchie)|cc0:)/.test(id)
+  g.els.push({ kind: 'ornament', name: 'texture', id, x: 0, y: 0, w: g.W, h: g.H, seed: g.k.seme, opacity: forte ? r.range(0.45, 0.7) : r.range(0.35, 0.55) })
+}
+
 /** Il passaggio delle risorse dello Studio (chiamato da `finish`). */
 export function arricchisci(g: G) {
   forme(g)
   oggetto3d(g)
   generatori(g)
   effetti(g)
+  texture(g)
 }

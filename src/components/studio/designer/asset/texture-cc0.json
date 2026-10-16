@@ -1,0 +1,8 @@
+{
+  "_fonte": "Poly Haven (CC0), diffuse 1k: https://polyhaven.com/a/<id>. Si scaricano con npm run designer:texture in public/asset-cache/texture (fuori da git).",
+  "intonaco": ["clay_plaster", "grey_plaster"],
+  "pietra": ["marble_01", "concrete"],
+  "tessuto": ["denim_fabric", "fabric_leather_01"],
+  "metallo": ["box_profile_metal_sheet", "brushed_concrete"],
+  "carta": ["decrepit_wallpaper"]
+}

@@ -275,9 +275,9 @@ for (const nome of contenuti) {
       info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)})`
       // varietà delle risorse nelle prime 12: palette, effetti, generatori, foto, trattamenti
       const rs = prime.map(r => r.risorse).filter(Boolean), conta = f => new Set(rs.flatMap(f)).size
-      const v = { palette: conta(r => [famiglia(r.palette)]), effetti: conta(r => r.fx), generatori: conta(r => r.gen), foto: conta(r => r.foto), trattamenti: conta(r => r.trattamento ? [r.trattamento] : []), distanza: +distanzaPalette(rs.map(r => r.palette)).toFixed(3), neutri: neutriChiari(rs.map(r => r.palette)) }
+      const v = { palette: conta(r => [famiglia(r.palette)]), effetti: conta(r => r.fx), generatori: conta(r => r.gen), foto: conta(r => r.foto), trattamenti: conta(r => r.trattamento ? [r.trattamento] : []), distanza: +distanzaPalette(rs.map(r => r.palette)).toFixed(3), neutri: neutriChiari(rs.map(r => r.palette)), texture: conta(r => r.tex ?? []) }
       varieta.push({ contenuto: nome, formato: format, ...v, dettaglio: rs })
-      info += ` · palette ${v.palette} effetti ${v.effetti} generatori ${v.generatori} foto ${v.foto} trattamenti ${v.trattamenti}`
+      info += ` · palette ${v.palette} effetti ${v.effetti} generatori ${v.generatori} foto ${v.foto} trattamenti ${v.trattamenti} texture ${v.texture}`
     }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
     if (args.ibridi) {
@@ -332,7 +332,7 @@ if (diversita.length) {
 }
 if (varieta.length) {
   const m = k => (varieta.reduce((a, d) => a + d[k], 0) / varieta.length).toFixed(1)
-  console.log(`Varietà (prime 12, media per tavola): palette ${m('palette')} · effetti ${m('effetti')} · generatori ${m('generatori')} · foto ${m('foto')} · trattamenti ${m('trattamenti')} · distanza palette ${(varieta.reduce((a, d) => a + d.distanza, 0) / varieta.length).toFixed(3)} · fondi chiari neutri ${m('neutri')}`)
+  console.log(`Varietà (prime 12, media per tavola): palette ${m('palette')} · effetti ${m('effetti')} · generatori ${m('generatori')} · foto ${m('foto')} · trattamenti ${m('trattamenti')} · distanza palette ${(varieta.reduce((a, d) => a + d.distanza, 0) / varieta.length).toFixed(3)} · fondi chiari neutri ${m('neutri')} · texture ${m('texture')}`)
   fs.writeFileSync(path.join(out, 'varieta.json'), JSON.stringify(varieta, null, 2))
 }
 console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)

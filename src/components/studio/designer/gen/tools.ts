@@ -454,7 +454,8 @@ function under(g: G, upto: number, px: number, py: number): { color: string; bus
       const smp = sampleImage(g, e, px, py)
       res = smp ? { color: smp.color, busy: smp.busy > 0.13 } : { color: res.color, busy: true }
     } else if (e.kind === 'ornament') {
-      if (e.opacity > 0.25 && px >= e.x && py >= e.y && px <= e.x + e.w && py <= e.y + e.h) res = { ...res, busy: true }
+      // le texture in sovrapposizione (tex/lib/cc0) non spostano la luminanza media: non contano come fondo mosso
+      if (e.opacity > 0.25 && !/^(tex|lib|cc0):/.test(e.id) && px >= e.x && py >= e.y && px <= e.x + e.w && py <= e.y + e.h) res = { ...res, busy: true }
     } else if (e.kind === 'path' && e.name === 'puntini') {
       const b = pathBox(e.d)
       if (b && px >= b.x && py >= b.y && px <= b.x + b.w && py <= b.y + b.h) res = { ...res, busy: true }
@@ -627,7 +628,7 @@ export function finish(g: G, layout: string, label: string, o: { specchio?: bool
   return {
     w: g.W, h: g.H, bg: g.P.bg, els: g.els, layout, style: g.s.id, label,
     palette: { bg: g.P.bg, ink: g.P.fg, accent: g.P.acc, muted: g.P.sec, surface: g.P.srf, da: g.k.paletteDa },
-    finish: { ids: d.finishes, seed: `${g.c.title}|${layout}|${g.k.seme}`, fallback: g.k.grana > 0.05 ? (d.fallback ?? 'grana') : undefined, amount: 20 + g.k.grana * 40 },
+    finish: { ids: d.finishes, seed: `${g.c.title}|${layout}|${g.k.seme}`, fallback: g.k.grana > 0.05 && !g.els.some(e => e.kind === 'ornament' && /^(tex|lib|cc0):/.test(e.id)) ? (d.fallback ?? 'grana') : undefined, amount: 20 + g.k.grana * 40 },
     knobs: { ...g.k },
   }
 }

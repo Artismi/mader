@@ -13,6 +13,7 @@ import { applyFinish } from '../ai/finish'
 import { generateProceduralPattern, type ProceduralType } from '../libraries/procedural-generators'
 import { disegnaCampo } from './campi'
 import { disegnaOggetto3D } from './oggetto3d'
+import { disegnaTexture } from './texture'
 
 type Obj = fabric.FabricObject & { parentBoard?: string; fx?: FxEntry[]; look?: { id: string; amount: number }; adjust?: Record<string, number> }
 
@@ -97,6 +98,8 @@ function withFx(o: Obj, fx?: FxSpec[]) {
   try { applyFx(o) } catch (e) { console.warn('[designer] fx', e) }
 }
 
+const luminanza = (h: string) => { const n = parseInt(h.slice(1, 7), 16); return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255 }
+
 /** Campo o trama di un generatore (campi.ts) o pattern della libreria procedurale, nella sua zona. */
 async function campoObj(el: Extract<SceneEl, { kind: 'ornament' }>, k: number, OX: number, OY: number, sc: Scene): Promise<Obj | null> {
   const [tipo, gen] = el.id.split(':')
@@ -105,6 +108,17 @@ async function campoObj(el: Extract<SceneEl, { kind: 'ornament' }>, k: number, O
   const clip = () => new fabric.Rect({ left: zx, top: zy, width: zw, height: zh, rx: (el.r ?? 0) * k, ry: (el.r ?? 0) * k, originX: 'left', originY: 'top', absolutePositioned: true })
   try {
     let o: Obj
+    if (tipo === 'tex' || tipo === 'lib' || tipo === 'cc0') {
+      // texture in grigi centrata sul grigio medio, in sovrapposizione: materia senza cambiare i colori
+      // fondo chiaro: moltiplica (i rilievi diventano inchiostro); scuro: schermo (diventano luce); medio: sovrapponi
+      const l = luminanza(pal.bg), modo = l > 0.6 ? 'multiply' : l < 0.18 ? 'screen' : 'overlay'
+      const cv = await disegnaTexture(el.id, zw, zh, el.seed, modo)
+      if (!cv) return null
+      o = new fabric.FabricImage(cv, { left: zx, top: zy, originX: 'left', originY: 'top', opacity: el.opacity }) as Obj
+      o.set('globalCompositeOperation', modo)
+      o.clipPath = clip()
+      return o
+    }
     if (tipo === '3d' && el.o3d) {
       const cv = await disegnaOggetto3D(el.o3d, zw, zh)
       o = new fabric.FabricImage(cv, { left: zx, top: zy, originX: 'left', originY: 'top' }) as Obj
@@ -219,7 +233,7 @@ export async function renderScene(canvas: fabric.Canvas, artboard: fabric.Fabric
       continue
     } else if (el.kind === 'ornament') {
       // generatori procedurali (campo, trama) e pattern della libreria: un'immagine ritagliata nella zona
-      if (/^(campo|trama|proc|3d):/.test(el.id)) {
+      if (/^(campo|trama|proc|3d|tex|lib|cc0):/.test(el.id)) {
         const o = await campoObj(el, k, OX, OY, sc)
         if (!o) continue
         o.set('name', name(el.name)); o.parentBoard = boardName
