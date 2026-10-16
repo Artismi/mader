@@ -30,6 +30,7 @@ import { checkClosure, provaOf, registroText, type EsitoProva } from './evidence
 import type { Risk } from './tools'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
 import { CORE_TOOLS } from './core-tools'
+import { runPassoPasso } from './passo'
 import { SYSTEM_TOOLS } from './system-tools'
 import { focusText } from '@/lib/kernel/graph'
 
@@ -80,6 +81,8 @@ export interface RunAgentInput {
   pagina?: string
   /** A2: modello che esegue i passi dopo il primo (il candidato pianifica); costa meno, rompe la cache tra i due */
   esecutore?: ModelCandidate
+  /** L1: da dove parte la cascata: 'leggero' (default) sale ai forti solo se A3 non chiude; 'forte' parte dal migliore */
+  parti?: 'leggero' | 'forte'
   /** L1: forza il livello di guida ('forte' | 'medio' | 'base'); vuoto = dal registro */
   livello?: Livello
   /** definizioni al posto di quelle di sistema (prove) */
@@ -105,6 +108,8 @@ export interface RunAgentResult {
   livello?: Livello
   /** token del modello che ha completato il compito */
   token?: { input: number; cached: number; output: number }
+  /** L1: token spesi da tutti i modelli provati per questo compito */
+  spesa?: { input: number; cached: number; output: number }
 }
 
 /** Tutte le definizioni eseguibili sul server (niente strumenti del canvas: quelli li esegue il widget). */
@@ -182,7 +187,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const contesto = [input.focus ? focusText(input.focus) : '', input.contesto?.trim() ?? ''].filter(Boolean).join('\n\n')
   const prompt = contesto ? `${input.compito}\n\n<contesto>\n${contesto}\n</contesto>` : input.compito
 
-  const lista = input.candidati ?? candidatesFor({ task: input.task ?? 'general', tools: true, preferisci: 'forte' }, { choice: input.modello, riservato: input.riservato })
+  const lista = input.candidati ?? candidatesFor({ task: input.task ?? 'general', tools: true, preferisci: input.parti ?? 'leggero' }, { choice: input.modello, riservato: input.riservato })
   if (!lista.length) {
     return { ok: false, testo: 'Nessun modello con strumenti disponibile: aggiungi ANTHROPIC_API_KEY o GEMINI_API_KEY, oppure collega OpenRouter.', modello: '—', passi: 0, chiamate, proposte, log }
   }
@@ -191,6 +196,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const risks = risksOf(defs)
   const azione = isActionRequest(input.compito)
   let ultimo: { testo: string; modello: string; passi: number; token: RunAgentResult['token'] } | undefined
+  const spesa = { input: 0, cached: 0, output: 0 }
+  const spendi = (u: { input: number; cached: number; output: number }) => { spesa.input += u.input; spesa.cached += u.cached; spesa.output += u.output }
   for (const c of lista) {
     const trace = createTrace(`runAgent ${c.label}`)
     const ac = new AbortController()
@@ -217,6 +224,27 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     const perFase = livello === 'medio' && pool.length > regime.strumenti
       ? (f: Parameters<typeof toolsForPhase>[1]) => toolsForPhase(pool, f, { max: regime.strumenti, compito: input.compito, always: ['updatePlan'] })
       : undefined
+
+    // L1: il base lavora un passo alla volta; sale al candidato successivo solo se A3 non chiude (o per errore)
+    if (livello === 'base') {
+      try {
+        const extra = [contesto ? `<contesto>\n${contesto}\n</contesto>` : '', registro].filter(Boolean).join('\n\n')
+        const p = await runPassoPasso({
+          model: c.model, label: c.label, compito: input.compito, extra, defs: pool, tools, prove: chiamate, risks, azione, maxPassi,
+          strumenti: regime.strumenti, contesto: regime.contesto, now, log: s => log.push(s), fermo: () => stallo, abortSignal: ac.signal,
+        })
+        spendi(p.token)
+        if (p.esito === 'ok') {
+          trace.finish({ steps: p.passi, inputTokens: p.token.input, cachedInputTokens: p.token.cached, outputTokens: p.token.output, prove: `${chiamate.filter(x => x.rischio && x.rischio !== 'read' && x.esito === 'ok').length} scritture ok` })
+          log.push(`${c.label}: un passo alla volta, ${p.passi} passi · ${p.chiamateModello} chiamate`)
+          return { ok: true, testo: p.testo, modello: c.label, livello, passi: p.passi, chiamate, proposte, log, token: p.token, spesa }
+        }
+        if (p.testo) ultimo = { testo: p.testo, modello: c.label, passi: p.passi, token: p.token }
+      } catch (e) {
+        if (!stallo) log.push(`${c.label}: ${noteFailure(c, e)} · ${String((e as Error)?.message ?? e).slice(0, 160)}`)
+      }
+      continue
+    }
     try {
       while (passi < maxPassi) {
         const r = await generateText({
@@ -284,16 +312,19 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         }
         trace.finish({ steps: passi, inputTokens: usage.input, cachedInputTokens: usage.cached, outputTokens: usage.output, prove: `${chiamate.filter(x => x.rischio && x.rischio !== 'read' && x.esito === 'ok').length} scritture ok${riprese ? `, ${riprese} riprese` : ''}` })
         log.push(`${c.label}: ${passi} passi${budget.riuscite ? ` · ${budget.riuscite} riparazioni` : ''}${riprese ? ` · ${riprese} riprese` : ''}`)
-        return { ok: true, testo: r.text.trim(), modello: c.label, livello, passi, chiamate, proposte, log, token: usage }
+        spendi(usage)
+        return { ok: true, testo: r.text.trim(), modello: c.label, livello, passi, chiamate, proposte, log, token: usage, spesa }
       }
       if (passi >= maxPassi && !stallo && !budget.esaurito) log.push(`${c.label}: passi finiti (${maxPassi}) senza chiudere, passo al modello successivo`)
+      spendi(usage)
     } catch (e) {
+      spendi(usage)
       if (stallo) continue
       const kind = noteFailure(c, e)
       log.push(`${c.label}: ${kind} · ${String((e as Error)?.message ?? e).slice(0, 160)}`)
     }
   }
   // nessuno ha chiuso con le prove: si restituisce l'ultima risposta, segnata come non riuscita
-  if (ultimo) return { ok: false, ...ultimo, chiamate, proposte, log }
+  if (ultimo) return { ok: false, ...ultimo, chiamate, proposte, log, spesa }
   return { ok: false, testo: 'Nessun modello è riuscito a completare il compito.', modello: '—', passi: 0, chiamate, proposte, log }
 }

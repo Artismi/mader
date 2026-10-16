@@ -115,3 +115,77 @@ test('il modello riceve il riassunto in testo, non il JSON', async () => {
   assert.equal(out.type, 'text')
   assert.match(String(out.value), /^ok\nmessage: Idea "Dal tornio"/)
 })
+
+/* ── base: un passo alla volta ────────────────────────────────────────── */
+
+const { storia, campiOf } = await import('../../src/lib/agent/passo')
+const { ideas } = await import('../../src/lib/db/index')
+const { z } = await import('zod')
+
+function aGiro(id: string, modelId: string, risposte: ReturnType<typeof step>[], visti?: Record<string, unknown>[]) {
+  let i = 0
+  const model = new MockLanguageModelV3({ modelId: id, doGenerate: async (o: Record<string, unknown>) => { visti?.push(o); return risposte[i++ % risposte.length] as never } })
+  return { id: `mock:${id}`, provider: 'google' as const, modelId, label: id, model, profile: reg.profileOf('google', modelId) }
+}
+
+test('base: ragiona, estrae il JSON, esegue, riassume, chiude con le prove', async () => {
+  const visti: Record<string, unknown>[] = []
+  const m = finto('semplice', 'gemini-flash-lite-latest', [
+    testo('Devo salvare l\'idea: uso createIdea con titolo "Chicchi etiopi".'),
+    testo('```json\n{"strumento": "createIdea", "dati": {"text": "Carosello sui chicchi etiopi", "title": "Chicchi etiopi",},}\n```'),
+    testo('L\'idea è salvata, ho finito.'),
+    testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea \\"Chicchi etiopi\\"."}'),
+  ], visti)
+  const r = await runAgent({ compito: 'Salva come idea un carosello sui chicchi etiopi', candidati: [m] })
+  assert.equal(r.ok, true, r.log.join('\n'))
+  assert.equal(r.livello, 'base')
+  assert.deepEqual(r.chiamate.map(c => [c.strumento, c.esito]), [['createIdea', 'ok']])
+  assert.ok(ideas.getAll().some(i => i.title === 'Chicchi etiopi'))
+  assert.equal(visti.length, 4)
+  // niente function calling e prompt piccoli: il terzo vede il riassunto, non il JSON
+  for (const o of visti) assert.ok(!(o.tools as unknown[] | undefined)?.length)
+  const terzo = JSON.stringify(visti[2].prompt)
+  assert.match(terzo, /Fatto finora/)
+  assert.match(terzo, /createIdea/)
+  assert.ok(terzo.length < 3000 * 4, String(terzo.length))
+  assert.deepEqual(r.spesa, { input: 400, cached: 0, output: 40 })
+})
+
+test('base: una chiamata già leggibile nel ragionamento salta l\'estrazione', async () => {
+  const visti: Record<string, unknown>[] = []
+  const m = finto('diretto', 'gemini-flash-lite-latest', [
+    testo('<tool_call>{"name": "createIdea", "arguments": {"text": "Dal tornio", "title": "Dal tornio"}}</tool_call>'),
+    testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea \\"Dal tornio\\"."}'),
+  ], visti)
+  const r = await runAgent({ compito: 'Salva come idea "Dal tornio"', candidati: [m] })
+  assert.equal(r.ok, true, r.log.join('\n'))
+  assert.equal(visti.length, 3)
+})
+
+test('base: sale di livello solo quando A3 dice che il compito non è chiuso', async () => {
+  const pigro = aGiro('pigro', 'gemini-flash-lite-latest', [testo('Fatto.'), testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea."}')])
+  const bravo = finto('bravo', 'gemini-3-pro', [
+    chiama('createIdea', { text: 'Vasi blu', title: 'Vasi blu' }),
+    testo('Ho salvato l\'idea "Vasi blu".'),
+  ])
+  const r = await runAgent({ compito: 'Salva come idea "Vasi blu"', candidati: [pigro, bravo] })
+  assert.equal(r.ok, true)
+  assert.equal(r.modello, 'bravo')
+  assert.ok(r.log.some(l => /pigro: tre riprese/.test(l)), r.log.join('\n'))
+  assert.ok(r.spesa!.input > r.token!.input)
+})
+
+test('base: dati sbagliati tornano al modello con i campi giusti; storia entro il tetto', async () => {
+  const visti: Record<string, unknown>[] = []
+  const m = finto('distratto', 'gemini-flash-lite-latest', [
+    testo('uso createIdea'), testo('{"strumento": "createIdea", "dati": {"titolo": 3}}'),
+    testo('riprovo'), testo('{"strumento": "createIdea", "dati": {"text": "Brocche", "title": "Brocche"}}'),
+    testo('fine'), testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea \\"Brocche\\"."}'),
+  ], visti)
+  const r = await runAgent({ compito: 'Salva come idea "Brocche"', candidati: [m] })
+  assert.equal(r.ok, true, r.log.join('\n'))
+  assert.match(JSON.stringify(visti[2].prompt), /dati per createIdea non vanno/)
+  assert.match(campiOf(z.object({ a: z.string(), b: z.number().optional() })), /^a, b\?$/)
+  const s = storia([{ breve: '1. x → ok', pieno: '1. x ' + 'y'.repeat(500) }, { breve: '2. z → ok', pieno: '2. z dettagli' }], 100)
+  assert.equal(s, '1. x → ok\n2. z dettagli')
+})
