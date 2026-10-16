@@ -7,7 +7,7 @@
 import type { Scene } from '../types'
 import {
   type G, put, U, txt, lab, para, display, putLab, putPara, putDisplay, infoBlock, photo, treat, printMarks, regMark, ticker,
-  dotField, finish, keyword, stackLines, accentChars, sizeForWidth, detailsLine, ctaText, mix, alpha, readable, darker, lighter, words, up, lum,
+  dotField, finish, keyword, stackLines, accentChars, sizeForWidth, detailsLine, ctaText, mix, alpha, readable, darker, lighter, words, up, lum, discard,
 } from './tools'
 import { lineWidth } from '../text'
 
@@ -588,11 +588,14 @@ export function ritaglio(g: G): Scene | null {
   const info = infoBlock(g, side ? (W - 2 * m) * 0.42 : (W - 2 * m) * 0.7, { kicker: false })
   const top = T + headH + U(g, 44)
   const maxH = H - top - info.h - U(g, 70) - m
-  const st = stack(g, g.c.title, W - 2 * m, Math.min(maxH, H * (0.5 + 0.25 * k.scala)), g.portrait ? 4 : g.landscape ? 2 : 3)
-  if (!s.impactSans && st.sizes.some(z => z < 60 * g.u)) return null
+  // le lettere sono la foto: occupano lo spazio che resta (con poco, la fascia scura restava un vuoto)
+  const st = stack(g, g.c.title, W - 2 * m, Math.min(maxH, H * (0.62 + 0.25 * k.scala)), g.portrait ? 4 : g.landscape ? 2 : 3)
+  if (!s.impactSans && st.sizes.some(z => z < 60 * g.u)) return discard(g, 'lettere troppo sottili per la foto'), null
   const y0 = top + Math.max(0, (maxH - st.h) * 0.45)
   // passo 2: fondo scuro su tutta la tavola (o una fascia larga se lo stile è chiaro)
-  const bandTop = P.dark ? 0 : y0 - U(g, 60), bandH = P.dark ? H : st.h + U(g, 120)
+  // la fascia non sale sulla testata né scende sulle informazioni: sopra un fondo misto non si leggono
+  const bandTop = P.dark ? 0 : Math.max(y0 - U(g, 60), T + headH + U(g, 16))
+  const bandH = P.dark ? H : Math.min(y0 + st.h + U(g, 60), B - info.h - U(g, 16)) - bandTop
   put(g, { kind: 'rect', name: 'fondo_lettere', x: 0, y: bandTop, w: W, h: bandH, fill: dark })
   // passo 3: per ogni riga: ombra piena fuori registro, foto dentro le lettere, filo chiaro sul bordo
   const view = { x: m, y: y0, w: W - 2 * m, h: st.h }
@@ -612,9 +615,9 @@ export function ritaglio(g: G): Scene | null {
   const headBg = P.dark ? dark : P.bg
   const headFg = readable(headBg, [P.fg, light, '#111111'])
   if (brand) putLab(g, 'brand', brand, m, T, headFg)
-  if (kick) putLab(g, 'occhiello', kick, W - m - kick.w, m, readable(headBg, [P.acc, headFg], 3))
+  if (kick) putLab(g, 'occhiello', kick, W - m - kick.w, T, readable(headBg, [P.acc, headFg], 3.6))
   const infoBg = P.dark ? dark : P.bg
-  info.place(m, B - info.h, { fg: readable(infoBg, [P.fg, light, '#111111']), sec: readable(infoBg, [P.sec, P.fg], 3), acc: readable(infoBg, [P.acc, P.fg], 3) })
+  info.place(m, B - info.h, { fg: readable(infoBg, [P.fg, light, '#111111']), sec: readable(infoBg, [P.sec, P.fg], 3), acc: readable(infoBg, [P.acc, P.fg], 3.6) })
   if (k.densita > 0.55) put(g, { kind: 'glyph', name: 'stella', path: r.pick(s.decor.glyphs), cx: W - m - U(g, 46), cy: B - U(g, 46), size: U(g, 70), color: readable(infoBg, [P.acc, P.fg], 2) })
   return finish(g, 'ritaglio', 'Foto nelle lettere')
 }

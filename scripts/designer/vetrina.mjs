@@ -138,7 +138,7 @@ if (args.schede) {
     const photo = fx.foto ? `http://designer.local/fixtures/${fx.foto}` : undefined
     // come il vivaio dello Studio: solo i sistemi ammessi per questo contenuto (niente slide, niente esclusi per tema)
     const tutti = await page.evaluate(([c, f]) => window.designer.sistemi(c, f), [fx.c, !!photo])
-    const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi: sistemi ?? tutti, primo: true, thumb: 0.08, seme: Number(args.seme ?? 0) })
+    const res = await page.evaluate(job => window.designer.run(job), { content: fx.c, format, photo, over, sistemi: sistemi ? sistemi.filter(x => tutti.includes(x)) : tutti, primo: true, thumb: 0.08, seme: Number(args.seme ?? 0) })
     for (const r of res) {
       const s = (S[r.sistema] ??= { prove: 0, scartate: 0, voti: [], classi: Object.fromEntries(Object.keys(CLASSI).map(k => [k, 0])), correzioni: 0, motivi: {} })
       s.prove++

@@ -153,6 +153,8 @@ export function esamina(g: G): Esame {
   /* ── respiro: i testi non toccano i bordi dei loro riquadri ── */
   let respiro = 10, stretti = 0, vicini = 0
   const fondi = g.els.map((e, i) => ({ e, i, b: boxOf(e) })).filter(x => x.b && (x.e.kind === 'rect' || x.e.kind === 'image' || x.e.kind === 'circle') && fillOf(x.e) !== null || x.e.kind === 'image')
+    // la foto dentro le lettere ha il riquadro del testo stesso: non è un fondo che lo contiene
+    .filter(x => !(x.e.kind === 'image' && x.e.clipText))
   for (const t of texts) {
     if (t.angle) continue
     const tb = textBox(t), idx = g.els.indexOf(t)
