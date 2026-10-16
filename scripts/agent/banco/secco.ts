@@ -21,7 +21,7 @@ export const COPIONI: Record<string, Copione> = {
   'piano-approva': { chiamate: [], risposta: 'Fatto!' },
 }
 
-const MODELLI: Record<Livello, string> = { forte: 'gemini-3-pro', medio: 'gemini-flash-latest', base: 'gemini-flash-lite-latest' }
+const MODELLI: Record<Livello, string> = { forte: 'gemini-3-pro', medio: 'gemini-flash-latest', base: 'llama-3.2-3b-instruct' }
 const stima = (x: unknown) => Math.ceil((JSON.stringify(x) ?? '').length / 4)
 
 function passo(content: unknown[], unified: 'tool-calls' | 'stop', input: number) {

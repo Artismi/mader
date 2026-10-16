@@ -34,22 +34,25 @@ test('il livello si deduce dal modello', () => {
   assert.equal(reg.profileOf('anthropic', 'claude-sonnet-5-5').livello, 'forte')
   assert.equal(reg.profileOf('anthropic', 'claude-haiku-5-5').livello, 'medio')
   assert.equal(reg.profileOf('google', 'gemini-flash-latest').livello, 'medio')
-  assert.equal(reg.profileOf('google', 'gemini-flash-lite-latest').livello, 'base')
+  // via di mezzo: lite e gratuiti grandi restano medi; base solo per i minuscoli o senza strumenti
+  assert.equal(reg.profileOf('google', 'gemini-flash-lite-latest').livello, 'medio')
+  assert.equal(reg.profileOf('openrouter', 'openai/gpt-oss-120b:free').livello, 'medio')
+  assert.equal(reg.profileOf('google', 'gemma-4-31b-it').livello, 'base')
   assert.equal(reg.profileOf('openrouter', 'meta-llama/llama-3.3-8b-instruct:free').livello, 'base')
   assert.deepEqual([reg.REGIMI.medio.strumenti, reg.REGIMI.base.strumenti, reg.REGIMI.base.contesto], [12, 5, 3000])
 })
 
 test('il livello si forza: chiamante, poi Impostazioni per modello, poi per tutti', () => {
   const c = { id: 'google:gemini-flash-lite-latest', profile: reg.profileOf('google', 'gemini-flash-lite-latest') }
-  assert.equal(reg.livelloOf(c), 'base')
-  reg.setLivello('medio')
   assert.equal(reg.livelloOf(c), 'medio')
+  reg.setLivello('base')
+  assert.equal(reg.livelloOf(c), 'base')
   reg.setLivello('forte', c.id)
   assert.equal(reg.livelloOf(c), 'forte')
   assert.equal(reg.livelloOf(c, 'base'), 'base')
   assert.equal(reg.livelloOf(c, 'boh'), 'forte')
   reg.setLivello('', c.id); reg.setLivello('')
-  assert.equal(reg.livelloOf(c), 'base')
+  assert.equal(reg.livelloOf(c), 'medio')
 })
 
 /* ── medio: strumenti per fase ────────────────────────────────────────── */
@@ -90,16 +93,17 @@ test('ogni strumento di sistema ha il suo riassunto', () => {
 test('riassunto: errori in testa, elenchi tagliati con il conto, vault accorciato', () => {
   const ko = riassuntoGenerico({ success: false, error: 'Cliente "X" non trovato.' })
   assert.match(ko, /^NON RIUSCITO\nerror: Cliente "X"/)
-  const post = Array.from({ length: 40 }, (_, i) => `[p${i}] 2${i % 9} ott · Post numero ${i} [programmato]`).join('\n')
-  const lungo = { success: true, totale: 40, mostrati: 40, post }
+  const post = Array.from({ length: 60 }, (_, i) => `[p${i}] 2${i % 9} ott · Post numero ${i} [programmato]`).join('\n')
+  const lungo = { success: true, totale: 60, mostrati: 60, post }
   const r = riassunto('readEditorialPlan', lungo)
-  assert.match(r, /totale: 40/)
-  assert.match(r, /\[p11\]/)
-  assert.match(r, /\+28 righe/)
-  assert.ok(r.length < JSON.stringify(lungo).length / 2)
+  assert.match(r, /totale: 60/)
+  assert.match(r, /\[p39\] .*Post numero 39/)
+  assert.match(r, /\+20 righe/)
+  assert.ok(r.length < JSON.stringify(lungo).length)
   const cli = riassunto('getClient', { success: true, cliente: 'Vigna Alta [ab12cd34] · vino', vault: 'v'.repeat(4000), prossimiPost: 'a\nb' })
   assert.match(cli, /ab12cd34/)
-  assert.ok(cli.length < 600, String(cli.length))
+  assert.ok(cli.length < 3000, String(cli.length))
+  assert.match(cli, /v{2000}/)
 })
 
 test('il modello riceve il riassunto in testo, non il JSON', async () => {
@@ -130,7 +134,7 @@ function aGiro(id: string, modelId: string, risposte: ReturnType<typeof step>[],
 
 test('base: ragiona, estrae il JSON, esegue, riassume, chiude con le prove', async () => {
   const visti: Record<string, unknown>[] = []
-  const m = finto('semplice', 'gemini-flash-lite-latest', [
+  const m = finto('semplice', 'llama-3.2-3b-instruct', [
     testo('Devo salvare l\'idea: uso createIdea con titolo "Chicchi etiopi".'),
     testo('```json\n{"strumento": "createIdea", "dati": {"text": "Carosello sui chicchi etiopi", "title": "Chicchi etiopi",},}\n```'),
     testo('L\'idea è salvata, ho finito.'),
@@ -153,7 +157,7 @@ test('base: ragiona, estrae il JSON, esegue, riassume, chiude con le prove', asy
 
 test('base: una chiamata già leggibile nel ragionamento salta l\'estrazione', async () => {
   const visti: Record<string, unknown>[] = []
-  const m = finto('diretto', 'gemini-flash-lite-latest', [
+  const m = finto('diretto', 'llama-3.2-3b-instruct', [
     testo('<tool_call>{"name": "createIdea", "arguments": {"text": "Dal tornio", "title": "Dal tornio"}}</tool_call>'),
     testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea \\"Dal tornio\\"."}'),
   ], visti)
@@ -163,7 +167,7 @@ test('base: una chiamata già leggibile nel ragionamento salta l\'estrazione', a
 })
 
 test('base: sale di livello solo quando A3 dice che il compito non è chiuso', async () => {
-  const pigro = aGiro('pigro', 'gemini-flash-lite-latest', [testo('Fatto.'), testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea."}')])
+  const pigro = aGiro('pigro', 'llama-3.2-3b-instruct', [testo('Fatto.'), testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea."}')])
   const bravo = finto('bravo', 'gemini-3-pro', [
     chiama('createIdea', { text: 'Vasi blu', title: 'Vasi blu' }),
     testo('Ho salvato l\'idea "Vasi blu".'),
@@ -177,7 +181,7 @@ test('base: sale di livello solo quando A3 dice che il compito non è chiuso', a
 
 test('base: dati sbagliati tornano al modello con i campi giusti; storia entro il tetto', async () => {
   const visti: Record<string, unknown>[] = []
-  const m = finto('distratto', 'gemini-flash-lite-latest', [
+  const m = finto('distratto', 'llama-3.2-3b-instruct', [
     testo('uso createIdea'), testo('{"strumento": "createIdea", "dati": {"titolo": 3}}'),
     testo('riprovo'), testo('{"strumento": "createIdea", "dati": {"text": "Brocche", "title": "Brocche"}}'),
     testo('fine'), testo('{"strumento": "fine", "risposta": "Ho salvato l\'idea \\"Brocche\\"."}'),

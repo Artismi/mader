@@ -49,7 +49,9 @@ export const REGIMI: Record<Livello, Regime> = {
   medio: { livello: 'medio', strumenti: 12, contesto: 8_000 },
   base: { livello: 'base', strumenti: 5, contesto: 3_000 },
 }
-const LIVELLO_DA_FORZA: Record<Strength, Livello> = { forte: 'forte', medio: 'medio', debole: 'base' }
+// una via di mezzo: il predefinito è il medio; il base solo per chi davvero non regge di più
+// (senza strumenti nativi, o taglie minuscole: ≤9B, nano)
+const minuscolo = (id: string) => /gemma|(^|[-_/.:])([1-9](\.\d)?b|nano)(?=$|[-_/.:])/.test(id)
 export const isLivello = (v: unknown): v is Livello => v === 'forte' || v === 'medio' || v === 'base'
 
 export interface ModelCandidate {
@@ -87,7 +89,7 @@ export function profileOf(provider: Provider, modelId: string): ModelProfile {
     strength,
     context: claude ? 200_000 : gemini ? 1_000_000 : lite ? 32_000 : 128_000,
     free,
-    livello: LIVELLO_DA_FORZA[strength],
+    livello: strength === 'forte' ? 'forte' : minuscolo(id) ? 'base' : 'medio',
   }
 }
 
