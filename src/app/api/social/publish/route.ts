@@ -1,37 +1,44 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { socialPosts } from '@/lib/db'
+import { lintCaption } from '@/lib/ai/instagram/caption'
 
 export async function POST(req: Request) {
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
-
         const { channel, content, subject, clientId } = await req.json()
         if (!channel || !content) {
             return NextResponse.json({ error: 'channel e content sono obbligatori' }, { status: 400 })
         }
 
-        // Salva il post social nel database
-        const { data: post, error: sbError } = await supabase
-            .from('social_posts')
-            .insert({
-                user_id: user.id,
-                client_id: clientId || null,
+        // Gate Instagram: una caption con FAIL (es. oltre 5 hashtag, oltre 2200 caratteri)
+        // non parte. I WARN restano una decisione dell'utente, già vista in anteprima.
+        if (channel === 'instagram') {
+            const lint = lintCaption(content)
+            const fails = lint.checks.filter(c => c.status === 'FAIL')
+            if (fails.length > 0) {
+                return NextResponse.json({
+                    error: 'La caption Instagram non passa il linter',
+                    fails: fails.map(f => `${f.label}: ${f.detail}`),
+                }, { status: 422 })
+            }
+        }
+
+        // Salva il post social nel database locale
+        let postId: string | undefined
+        try {
+            postId = socialPosts.create({
+                client_id: clientId || undefined,
                 content,
-                subject: subject || null,
+                subject: subject || undefined,
                 platforms: [channel],
                 status: 'publishing',
             })
-            .select()
-            .single()
-
-        if (sbError) {
-            console.error('[Social Publish DB Error]', sbError)
+        } catch (dbErr) {
+            console.error('[Social Publish DB Error]', dbErr)
             // Continua comunque — il salvataggio DB non blocca la pubblicazione
         }
 
         // ─── Bridge verso n8n ─────────────────────────────────────────────────
+        let ok = true
         const n8nWebhook = process.env.N8N_SOCIAL_WEBHOOK_URL
         if (n8nWebhook) {
             try {
@@ -46,27 +53,24 @@ export async function POST(req: Request) {
                         content,
                         subject,
                         clientId,
-                        postId: post?.id,
+                        postId,
                     }),
                 })
 
                 if (!res.ok) {
+                    ok = false
                     console.error('[n8n webhook error]', await res.text())
                 }
             } catch (n8nErr) {
+                ok = false
                 console.error('[n8n fetch error]', n8nErr)
             }
         }
 
-        // Aggiorna status post a published
-        if (post?.id) {
-            await supabase
-                .from('social_posts')
-                .update({ status: 'published', published_at: new Date().toISOString() })
-                .eq('id', post.id)
-        }
+        if (postId) socialPosts.updateStatus(postId, ok ? 'published' : 'failed')
+        if (!ok) return NextResponse.json({ error: 'Invio a n8n fallito', postId }, { status: 502 })
 
-        return NextResponse.json({ ok: true, postId: post?.id })
+        return NextResponse.json({ ok: true, postId })
     } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return NextResponse.json({ error: msg }, { status: 500 })

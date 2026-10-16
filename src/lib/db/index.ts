@@ -754,6 +754,7 @@ export interface EditorialPost {
   editorial_status: 'idea' | 'bozza' | 'approvato' | 'programmato' | 'pubblicato'
   scheduled_at?: string
   published_at?: string
+  metadata?: Record<string, unknown>
   created_at: string
 }
 
@@ -775,13 +776,19 @@ export const editorialPosts = {
       ORDER BY ep.created_at DESC
     `).all() as Record<string, unknown>[]).map(parseEditorialPost),
 
+  getById: (id: string): EditorialPost | undefined => {
+    const r = db.prepare('SELECT * FROM editorial_posts WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    return r ? parseEditorialPost(r) : undefined
+  },
+
   create: (data: Omit<EditorialPost, 'id' | 'created_at' | 'client_name'>): EditorialPost => {
     const id = randomUUID()
     db.prepare(`
-      INSERT INTO editorial_posts (id, plan_id, client_id, idea_id, title, content, channels, editorial_status, scheduled_at, published_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO editorial_posts (id, plan_id, client_id, idea_id, title, content, channels, editorial_status, scheduled_at, published_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, n(data.plan_id), data.client_id, n(data.idea_id), n(data.title), n(data.content),
-      JSON.stringify(data.channels), data.editorial_status, n(data.scheduled_at), n(data.published_at))
+      JSON.stringify(data.channels), data.editorial_status, n(data.scheduled_at), n(data.published_at),
+      JSON.stringify(data.metadata ?? {}))
     return editorialPosts.getByClient(data.client_id).find(p => p.id === id)!
   },
 
@@ -793,6 +800,7 @@ export const editorialPosts = {
   update: (id: string, data: Partial<EditorialPost>): void => {
     const row: Record<string, unknown> = { ...data }
     if (row.channels) row.channels = JSON.stringify(row.channels)
+    if (row.metadata) row.metadata = JSON.stringify(row.metadata)
     const fields = Object.keys(row).filter(k => !['id', 'created_at', 'client_name'].includes(k))
     if (!fields.length) return
     db.prepare(`UPDATE editorial_posts SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`)
@@ -803,7 +811,38 @@ export const editorialPosts = {
 }
 
 function parseEditorialPost(r: Record<string, unknown>): EditorialPost {
-  return { ...r, channels: parseJSON(r.channels as string, []) } as unknown as EditorialPost
+  return { ...r, channels: parseJSON(r.channels as string, []), metadata: parseJSON(r.metadata as string, {}) } as unknown as EditorialPost
+}
+
+// ─── SOCIAL POSTS (Finestra di Pubblicazione) ─────────────────────────────────
+
+export interface SocialPost {
+  id: string
+  client_id?: string
+  content: string
+  subject?: string
+  platforms: string[]
+  status: 'draft' | 'publishing' | 'published' | 'failed'
+  external_ids: Record<string, string>
+  scheduled_at?: string
+  published_at?: string
+  created_at: string
+}
+
+export const socialPosts = {
+  create: (data: { client_id?: string; content: string; subject?: string; platforms: string[]; status?: SocialPost['status'] }): string => {
+    const id = randomUUID()
+    db.prepare(`
+      INSERT INTO social_posts (id, client_id, content, subject, platforms, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, n(data.client_id), data.content, n(data.subject), JSON.stringify(data.platforms), data.status ?? 'draft')
+    return id
+  },
+
+  updateStatus: (id: string, status: SocialPost['status']): void => {
+    db.prepare(`UPDATE social_posts SET status = ?, published_at = CASE WHEN ? = 'published' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE published_at END WHERE id = ?`)
+      .run(status, status, id)
+  },
 }
 
 // ─── POST ANALYTICS ───────────────────────────────────────────────────────────

@@ -1,48 +1,40 @@
 import * as aiSdk from 'ai'
 import { convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type UIMessageStreamWriter } from 'ai'
-import { tool } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
-import { skills, config, tasks, clients, ideas, quotes } from '@/lib/db'
-import { searchVault, initVaultWatcher, saveMemory } from '@/lib/vault'
+import { skills, config } from '@/lib/db'
+import { messageText, routeOnDemandSkills } from '@/lib/ai/skill-router'
+import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@/lib/agent/tools'
+import { toolsForContext } from '@/lib/agent/run'
+import { createTrace } from '@/lib/agent/trace'
+import { createToolCallRepair } from '@/lib/agent/repair'
+import { createPrepareStep, isActionRequest, risksOf } from '@/lib/agent/steer'
+import { checkClosure, proveFromSteps } from '@/lib/agent/evidence'
+import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
+import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
+import { SYSTEM_TOOLS } from '@/lib/agent/system-tools'
+import { CORE_TOOLS } from '@/lib/agent/core-tools'
+import { initVaultWatcher } from '@/lib/vault'
 import { DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { graphicLibraryPrompt } from '@/lib/ai/graphic-library'
 import { buildContext } from '@/lib/ai/context'
 import { designOpSchema, designOpsToolDescription, VISUAL_SOURCE_HELP, VISUAL_TREATMENTS } from '@/lib/design/design-ops-spec'
 import { FINISH_IDS, RECIPES } from '@/lib/design/compose-recipes'
-import { getOpenRouterKey, resolveModel } from '@/lib/ai/model-provider'
+import { getOpenRouterKey } from '@/lib/ai/model-provider'
+import { pickModel, resolveModel } from '@/lib/ai/model-registry'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
+import { focusText } from '@/lib/kernel/graph'
 
-export const maxDuration = 30
+export const maxDuration = 120 // lavori in più passi e regia dello Studio
 
 // Inizializza vault watcher se non già attivo
 initVaultWatcher()
 
-const taskSchema = z.object({
-  title: z.string().describe("Il nome dell'incarico"),
-  clientId: z.string().optional().describe('ID cliente se menzionato'),
-  category: z.enum(['design', 'dev', 'bando', 'social', 'finanze', 'general']),
-  deadlinePattern: z.string().describe('Data YYYY-MM-DD'),
-})
 
-const DAY_MAP: Record<string, number> = {
-  lunedi: 1, lun: 1, monday: 1, martedi: 2, mar: 2, tuesday: 2,
-  mercoledi: 3, mer: 3, wednesday: 3, giovedi: 4, gio: 4, thursday: 4,
-  venerdi: 5, ven: 5, friday: 5, sabato: 6, sab: 6, saturday: 6,
-  domenica: 0, dom: 0, sunday: 0,
-}
 
-const recurringSchema = z.object({
-  title: z.string(),
-  days: z.array(z.string()),
-  startHour: z.number().int().min(0).max(23),
-  endHour: z.number().int().min(1).max(24),
-  startDate: z.string(),
-  endDate: z.string(),
-})
 
 // ── Schema ausiliari canvas tools ──────────────────────────────────────────
 // z.array(z.any()) non genera il campo "items" richiesto da Gemini — usiamo
@@ -154,11 +146,6 @@ const canvasUpdateSchema = z.object({
 
 
 // ── composeDesign: l'AI descrive, lo Studio impagina ───────────────────────
-/** Modelli abbastanza bravi da impaginare a coordinate (createDesignBoards). */
-function isStrongDesignModel(label: string) {
-  if (/:free\b/i.test(label)) return false
-  return /claude-(sonnet|opus|fable)|gpt-5|gpt-4\.1|\bo3\b|gemini-(2\.5|3)-pro|grok-4/i.test(label)
-}
 
 const COMPOSE_ONLY_NOTE = `
 
@@ -599,7 +586,7 @@ function buildCrewStreamResponse(
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action } = body
+    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action, pathname, focus } = body
 
     // ── RESUME ACTION ────────────────────────────────────────────────────────
     if (action === 'resume') {
@@ -624,9 +611,8 @@ export async function POST(req: Request) {
 
     // 1. ASSEMBLE CONTEXT (Cervello Logic)
     const lastUserMsg = [...messages].reverse().find((m: { role: string }) => m.role === 'user')
-    const userQuery = typeof lastUserMsg?.content === 'string'
-      ? lastUserMsg.content
-      : (lastUserMsg?.content as { text?: string }[])?.[0]?.text || ''
+    // UIMessage v6 porta il testo in `parts`, non in `content`
+    const userQuery = messageText(lastUserMsg)
 
     const ctx = await buildContext(userQuery, {
       clientOverride: clientOverride ?? undefined,
@@ -701,299 +687,65 @@ export async function POST(req: Request) {
     }
     // ── END CREW DISPATCHER ──────────────────────────────────────────────────
 
-    // 2. SYSTEM PROMPT (CO-STAR Framework)
+    // 2. GUSCIO AGENTE (docs/guscio-agente.md): prompt stabile + promemoria, strumenti con rischio
     const architecture = config.get('architecture') || DEFAULT_ARCHITECTURE
     const allActiveSkills = skills.getActive()
-    
-    // Trigger-Based Injection: filtriamo gli Handbook di design per evitare Instruction Fatigue.
-    // Ma se la query è creativa, forziamo l'inclusione degli Handbook DIC per garantire la qualità.
+
+    // Le parole chiave scelgono solo il modello (forte per la grafica, economico per il resto);
+    // istruzioni e strumenti non cambiano più con la domanda.
     const creativeKeywords = ['post', 'design', 'canvas', 'poster', 'slide', 'immagine', 'grafica', 'logo', 'layout', 'brand'];
     const isCreativeQuery = creativeKeywords.some(k => userQuery.toLowerCase().includes(k));
 
-    const filteredSkills = allActiveSkills.filter(s => {
-      // Le skill core (non handbook, non DIC operativi) sono sempre incluse
-      if (!s.slug.startsWith('design-') && !s.slug.startsWith('dic-skill-') && s.slug !== 'dic-tribunale') return true;
-      
-      // Se è una query creativa, gli Handbook DIC sono fondamentali
-      if (isCreativeQuery) return true;
-
-      // Altrimenti seguiamo i trigger specifici
-      const triggers = s.triggers || [];
-      const hasTrigger = triggers.some(t => userQuery.toLowerCase().includes(t.toLowerCase()));
-      return hasTrigger;
-    })
-
-    const skillsBlock = filteredSkills.map(s => s.content).filter(Boolean).join('\n\n---\n\n')
-
-    const SYSTEM_PROMPT = [
-      architecture,
-      ctx.snapshot,
-      canvasSnapshot
-        ? `\n\n---\n${canvasSnapshot}\n\nUsa gli ID sopra esatti in updateCanvasElements (testi, colori, posizioni) ed editDesign (allinea, distribuisci, pathfinder, offset/sticker, ripetizioni, fusioni, testo curvo, maschere, ricolora, palette, livelli, esporta). Per modifiche chirurgiche NON usare clearBoard.\n---`
-        : '',
-      isCreativeQuery
-        ? '## Grafiche\nPer creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Usa createDesignBoards solo per posizionamenti manuali puntuali, anche se le istruzioni sotto dicono altro. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo, aggiungi interventi decorativi coerenti e consegna anche l\'adattamento in formato storia.'
-        : '',
-      graphicLibraryPrompt(),
-      '## Skill disponibili — istruzioni operative',
-      skillsBlock,
-      ctx.clientVaults.length > 0
-        ? `\n\n---\n${ctx.clientVaults.join('\n\n---\n')}\n---`
-        : '',
-      ctx.activatedFiles.length > 0
-        ? `\n\n---\n${ctx.activatedFiles.join('\n\n---\n')}\n---`
-        : '',
-      ctx.ragChunks.length > 0
-        ? `\n\n---\n## Dal vault (Riferimenti rilevanti)\n${ctx.ragChunks.join('\n\n---\n')}\n---`
-        : '',
-      ctx.memories.length > 0
-        ? `\n\n---\n## Ricordo (Fatti persistenti)\n${ctx.memories.map(m => m.content).join('\n')}\n---`
-        : '',
-    ].filter(Boolean).join('\n\n')
-    const modelMessages = await convertToModelMessages(messages)
+    // Dieta del prompt: tutte le skill stanno nell'indice stabile e si caricano con loadSkill.
+    // Nel promemoria entrano intere solo quelle scelte dal router (ig-*: trigger recenti, pagina,
+    // strumenti usati) e quelle con un trigger a parola intera nella domanda, entro un tetto.
+    const onDemand = routeOnDemandSkills({ skills: allActiveSkills, messages, pathname })
+    const injectedOnDemand = new Set(onDemand.inject.map(s => s.slug))
+    const { active: activeSkills, altre: otherSkills } = selectActiveSkills({ skills: allActiveSkills, query: userQuery, routed: injectedOnDemand })
 
     // Le richieste grafiche (o fatte con il canvas aperto) vanno al modello forte,
     // il resto a quello economico
     const task = isCreativeQuery || canvasSnapshot ? 'design' : 'general'
-    const { model, label: modelLabel } = resolveModel(modelId, task)
+    // Registro dei modelli: scelta della chat o delle Impostazioni, poi gli altri fornitori;
+    // servono gli strumenti nativi (niente Gemma qui), si saltano i modelli senza quota
+    // in chat gli strumenti devono partire davvero: dentro il fornitore si preferisce il modello più forte
+    const { model, label: modelLabel, profile } = pickModel({ task, tools: true, preferisci: 'forte' }, { choice: modelId })
     // I modelli piccoli o gratuiti impaginano male a coordinate: per loro solo composeDesign,
     // dove lo Studio fa griglia, foto, effetti e tipografia da sé
-    const lowLevelDesign = isStrongDesignModel(modelLabel)
-    console.log(`[ai] richiesta ${task} → ${modelLabel}${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
+    const lowLevelDesign = profile.strength === 'forte'
+    console.log(`[ai] richiesta ${task} → ${modelLabel} (${profile.strength})${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
-    // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
-    const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
+    const trace = createTrace(modelLabel)
+    const d = <S extends z.ZodTypeAny>(def: AgentToolDef<S>) => def as unknown as AgentToolDef<z.ZodTypeAny>
+    const defs: AgentToolDef<z.ZodTypeAny>[] = [
+        ...CORE_TOOLS,
 
-    const result = tracedStreamText({
-      model,
-      system: lowLevelDesign ? SYSTEM_PROMPT : SYSTEM_PROMPT + COMPOSE_ONLY_NOTE,
-      messages: modelMessages,
-      stopWhen: stepCountIs(10), // Permette loop multipli Thought -> Tool -> Thought
-      // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: 'canvas-ai-agent',
-        metadata: {
-          modelId: modelLabel,
-          hasCanvas: !!canvasSnapshot,
-        },
-      },
-      tools: {
-        createTask: tool({
-          description: 'Crea un nuovo incarico nel sistema.',
-          inputSchema: taskSchema,
-          execute: async ({ title, category, deadlinePattern, clientId }: z.infer<typeof taskSchema>) => {
-            let parsedDate = new Date()
-            parsedDate.setDate(parsedDate.getDate() + 1)
-            try {
-              const d = new Date(deadlinePattern)
-              if (!isNaN(d.getTime())) parsedDate = d
-            } catch { /* usa default */ }
-
-            tasks.create({
-              client_id: clientId,
-              title,
-              type: category,
-              category: 'task',
-              status: 'todo',
-              deadline: parsedDate.toISOString(),
-            })
-
-            return {
-              success: true,
-              message: `Incarico "${title}" creato per il ${parsedDate.toLocaleDateString('it-IT')}.`,
+        d({ name: 'loadSkill', group: 'piano', risk: 'read',
+          description: 'Carica le istruzioni complete di una skill del catalogo "Skill a richiesta". Chiamalo appena la richiesta tocca quella competenza, poi segui le istruzioni restituite.',
+          inputSchema: z.object({ slug: z.string().describe('Slug esatto dal catalogo, es. "ig-reel"') }),
+          execute: async ({ slug }) => {
+            const skill = allActiveSkills.find(s => s.slug === slug)
+            if (!skill?.content) {
+              return { success: false, message: `Skill "${slug}" non trovata. Disponibili: ${allActiveSkills.map(s => s.slug).join(', ')}` }
             }
+            // ig-human è il filtro finale di ogni nodo ig-*: lo consegno insieme
+            const human = slug.startsWith('ig-') && slug !== 'ig-human' && !injectedOnDemand.has('ig-human')
+              ? allActiveSkills.find(s => s.slug === 'ig-human')?.content
+              : undefined
+            return { success: true, instructions: human ? `${skill.content}\n\n---\n\n${human}` : skill.content }
           },
-        }),
-
-        createRecurringEngagement: tool({
-          description: 'Crea slot ricorrenti per impegni fissi settimanali.',
-          inputSchema: recurringSchema,
-          execute: async ({ title, days, startHour, endHour, startDate, endDate }: z.infer<typeof recurringSchema>) => {
-            const targetDays = days
-              .map(d => DAY_MAP[d.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')])
-              .filter((d): d is number => d !== undefined)
-
-            if (targetDays.length === 0) return { success: false, message: 'Giorni non riconosciuti' }
-
-            const durationMinutes = (endHour - startHour) * 60
-            const start = new Date(startDate)
-            const end = new Date(endDate)
-            let count = 0
-
-            for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-              if (targetDays.includes(d.getDay())) {
-                const deadline = new Date(d)
-                deadline.setHours(startHour, 0, 0, 0)
-                tasks.create({
-                  title,
-                  type: 'general',
-                  category: 'engagement',
-                  status: 'todo',
-                  deadline: deadline.toISOString(),
-                  duration_minutes: durationMinutes,
-                })
-                count++
-              }
-            }
-
-            return {
-              success: true,
-              message: `Creati ${count} slot "${title}" (${startHour}:00–${endHour}:00) dal ${startDate} al ${endDate}.`,
-            }
-          },
-        }),
-
-        readTasks: tool({
-          description: 'Legge gli incarichi dal sistema con filtri opzionali.',
-          inputSchema: z.object({
-            status: z.enum(['todo', 'in_progress', 'done', 'all']).optional(),
-            category: z.string().optional(),
-            clientId: z.string().optional(),
-            limit: z.number().int().min(1).max(20).optional(),
-          }),
-          execute: async ({ status, category, clientId, limit }) => {
-            const allTasks = tasks.getAll({
-              status: status === 'all' ? undefined : status,
-              category,
-              limit: limit || 10,
-            })
-            if (allTasks.length === 0) return { success: true, message: 'Nessun task trovato.' }
-            const formatted = allTasks.map(t => {
-              const d = t.deadline ? new Date(t.deadline).toLocaleDateString('it-IT') : 'senza scadenza'
-              return `[${t.id.slice(0, 8)}] ${t.title} — ${t.client_name || '—'} → ${d} [${t.status}]`
-            }).join('\n')
-            return { success: true, tasks: formatted }
-          },
-        }),
-
-        updateTaskStatus: tool({
-          description: 'Aggiorna lo stato di un incarico esistente.',
-          inputSchema: z.object({
-            taskId: z.string().describe('ID parziale del task (almeno 8 caratteri)'),
-            newStatus: z.enum(['todo', 'in_progress', 'done']),
-          }),
-          execute: async ({ taskId, newStatus }) => {
-            const allTasks = tasks.getAll({ limit: 100 })
-            const match = allTasks.find(t => t.id.startsWith(taskId))
-            if (!match) return { success: false, message: `Task ${taskId} non trovato.` }
-            tasks.update(match.id, { status: newStatus })
-            return { success: true, message: `Task "${match.title}" aggiornato a ${newStatus}.` }
-          },
-        }),
-
-        createIdea: tool({
-          description: 'Cattura una nuova idea creativa nel sistema.',
-          inputSchema: z.object({
-            text: z.string().describe("Il contenuto dell'idea"),
-            title: z.string().optional(),
-            clientId: z.string().optional(),
-            platforms: z.array(z.string()).optional(),
-          }),
-          execute: async ({ text, title, clientId, platforms }) => {
-            const idea = ideas.create({
-              client_id: clientId,
-              text,
-              title,
-              platforms: platforms || [],
-              idea_status: 'nuova',
-              assigned: false,
-              output_links: []
-            })
-            return { success: true, message: `Idea "${title || text.slice(0, 20)}" salvata con successo.`, id: idea.id }
-          }
-        }),
-
-        searchClient: tool({
-          description: 'Cerca un cliente nel vault per recuperare dettagli brand o progetto.',
-          inputSchema: z.object({ name: z.string() }),
-          execute: async ({ name }) => {
-            const allClients = clients.getAll()
-            const matches = allClients.filter(c => c.name.toLowerCase().includes(name.toLowerCase()))
-            if (matches.length === 0) return { success: false, message: `Nessun cliente trovato per "${name}"` }
-            return {
-              success: true,
-              clients: matches.map(c => `[${c.id.slice(0, 8)}] ${c.name} (${c.sector || 'settore non specificato'})`).join('\n')
-            }
-          }
-        }),
-
-        remember: tool({
-          description: 'Memorizza un fatto persistente o una preferenza del cliente nel sistema (Memory).',
-          inputSchema: z.object({
-            content: z.string().describe('Il fatto da ricordare'),
-            contextType: z.enum(['client', 'global']).default('global'),
-            contextId: z.string().optional(),
-          }),
-          execute: async ({ content, contextType, contextId }) => {
-            await saveMemory(content, contextType, contextId)
-            return { success: true, message: `Ricordato: "${content}"` }
-          },
-        }),
-
-        createFinancialDocument: tool({
-          description: 'Crea un preventivo o una fattura nel sistema basandosi sui dettagli forniti dal cliente o discussi.',
-          inputSchema: z.object({
-            type: z.enum(['preventivo', 'fattura']),
-            clientId: z.string().describe('ID del cliente'),
-            title: z.string().describe('Oggetto del documento (es. "Sviluppo sito web")'),
-            items: z.array(z.object({
-              desc: z.string(),
-              qty: z.number().min(1).default(1),
-              unitPrice: z.number().min(0)
-            })).describe('Elenco delle voci di spesa dettagliate'),
-            notes: z.string().optional().describe('Note aggiuntive, scadenze o termini di pagamento'),
-          }),
-          execute: async ({ type, clientId, title, items, notes }) => {
-            const client = clients.getById(clientId)
-            if (!client) return { success: false, message: 'Cliente non trovato. Usa searchClient per trovare l\'ID corretto.' }
-            
-            const doc = quotes.create({
-              client_id: clientId,
-              client_name: client.name,
-              title,
-              number: quotes.nextNumber(type),
-              type,
-              status: 'bozza',
-              items: items.map(i => ({ desc: i.desc, qty: i.qty, unit_price: i.unitPrice })),
-              total: items.reduce((s, i) => s + i.qty * i.unitPrice, 0),
-              notes,
-              issued_at: new Date().toISOString().split('T')[0],
-            })
-            
-            return {
-              success: true,
-              message: `${type === 'preventivo' ? 'Preventivo' : 'Fattura'} #${doc.number} per "${title}" creato e salvato in Bozza.`,
-              id: doc.id
-            }
-          }
-        }),
-
-        generateAIImage: tool({
-          description: 'Genera un\'immagine tramite prompt testuale fotografico o illustrazione. Restituisce un URL da usare nel tool createDesignBoards o updateCanvasElements.',
-          inputSchema: z.object({
-            prompt: z.string().describe('Il prompt in inglese dettagliato per l\'immagine (soggetto + stile + illuminazione + mood).')
-          }),
-          execute: async ({ prompt }) => {
-            const seed = Math.floor(Math.random() * 999999999);
-            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?seed=${seed}&width=1080&height=1080&nologo=true`;
-            return {
-              success: true,
-              imageUrl: url,
-            };
-          }
         }),
 
         // Canvas tools: hanno execute stub per permettere il chaining multi-step
         // (stopWhen: stepCountIs). L'esecuzione reale avviene client-side via handleAICommand;
         // il server ritorna solo una conferma immediata.
-        composeDesign: tool({
+        d({ name: 'composeDesign', group: 'studio', risk: 'write',
           description: composeToolDescription(),
           inputSchema: z.object({ boards: z.array(composeBoardSchema).min(1) }),
           execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
         }),
 
-        ...(lowLevelDesign ? { createDesignBoards: tool({
+        ...(lowLevelDesign ? [d({ name: 'createDesignBoards', group: 'studio', risk: 'write',
           description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
 Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
@@ -1039,9 +791,9 @@ QUANTITÀ BOARD:
             success: true,
             rendered: boards?.length ?? 0,
           }),
-        }) } : {}),
+        })] : []),
 
-        updateCanvasElements: tool({
+        d({ name: 'updateCanvasElements', group: 'studio', risk: 'write',
           description: 'Modifica coordinate, testi, font, colori ecc. in elementi esistenti del canvas.',
           inputSchema: z.object({
             updates: z.array(canvasUpdateSchema).describe(
@@ -1054,13 +806,13 @@ QUANTITÀ BOARD:
           }),
         }),
 
-        editDesign: tool({
+        d({ name: 'editDesign', group: 'studio', risk: 'write',
           description: designOpsToolDescription,
           inputSchema: z.object({ ops: z.array(designOpSchema).min(1) }),
           execute: async ({ ops }) => ({ success: true, ops: ops.length }),
         }),
 
-        clearBoard: tool({
+        d({ name: 'clearBoard', group: 'studio', risk: 'destructive',
           description: 'Elimina tutti gli elementi e svuota le tavole (o l\'intera area visiva).',
           inputSchema: z.object({
             boardName: z.string().optional()
@@ -1068,7 +820,7 @@ QUANTITÀ BOARD:
           execute: async () => ({ success: true }),
         }),
 
-        deleteElements: tool({
+        d({ name: 'deleteElements', group: 'studio', risk: 'destructive',
           description: 'Elimina solo gli elementi specificati dal canvas (usando i loro ID).',
           inputSchema: z.object({
             ids: z.array(z.string())
@@ -1076,7 +828,7 @@ QUANTITÀ BOARD:
           execute: async ({ ids }) => ({ success: true, deleted: ids?.length ?? 0 }),
         }),
 
-        getCanvasState: tool({
+        d({ name: 'getCanvasState', group: 'studio', risk: 'read',
           description: 'Legge lo stato attuale del canvas con tutti gli elementi (ID, tipo, posizione, testo, colore). Usa questo tool per vedere cosa c\'è sul canvas prima di fare modifiche.',
           inputSchema: z.object({}),
           execute: async () => ({
@@ -1085,7 +837,7 @@ QUANTITÀ BOARD:
           }),
         }),
 
-        generateConceptualSchema: tool({
+        d({ name: 'generateConceptualSchema', group: 'documenti', risk: 'write',
           description: 'Genera uno schema concettuale visivo strutturato (nodi, connessioni, gruppi, etichette) a partire da una descrizione testuale, e lo carica nel canvas come SVG editabile con layer nominati.',
           inputSchema: z.object({
             prompt: z.string().describe('Descrizione dello schema da generare. Può essere un concetto, un sistema, un processo, una mappa mentale, un flusso.'),
@@ -1113,7 +865,7 @@ QUANTITÀ BOARD:
           },
         }),
 
-        generateOfficeDocument: tool({
+        d({ name: 'generateOfficeDocument', group: 'documenti', risk: 'write',
           description: [
             'Genera un file Office SCARICABILE (Excel .xlsx, Word .docx o PowerPoint .pptx).',
             'USA QUESTO TOOL SOLO quando l\'utente chiede ESPLICITAMENTE un file da scaricare:',
@@ -1144,6 +896,64 @@ QUANTITÀ BOARD:
             }
           },
         }),
+      ...SYSTEM_TOOLS,
+    ]
+
+    const system = stableSystem({
+      architecture,
+      toolGuide: toolGuide(defs),
+      // la libreria di forme serve solo a chi impagina a coordinate
+      graphicLibrary: lowLevelDesign ? graphicLibraryPrompt() : undefined,
+      skills: allActiveSkills,
+      modelNote: lowLevelDesign ? undefined : COMPOSE_ONLY_NOTE.trim(),
+    })
+    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills })
+
+    // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
+    const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {
+      const { model: cheap } = resolveModel(modelId, 'general')
+      const { text: summary } = await aiSdk.generateText({ model: cheap, system: SUMMARY_PROMPT, prompt: text, maxRetries: 1 })
+      return summary
+    })
+    const modelMessages = withReminder(compacted.messages, reminder)
+
+    const activeTools = toolsForContext(defs, { strength: profile.strength, pathname, always: ['loadSkill', 'getCanvasState', 'composeDesign', 'editDesign', 'updateCanvasElements'] })
+
+    // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
+    const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
+
+    const result = tracedStreamText({
+      model,
+      system,
+      messages: modelMessages,
+      stopWhen: stepCountIs(24), // lavori in più fasi: piano, letture, scritture, verifica
+      // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: 'canvas-ai-agent',
+        metadata: {
+          modelId: modelLabel,
+          hasCanvas: !!canvasSnapshot,
+        },
+      },
+      tools: buildToolSet(defs, trace, createRepeatGuard()),
+      // A1: nome con prefisso o JSON rotto si ripara a regole invece di fallire
+      experimental_repairToolCall: createToolCallRepair(undefined, s => console.log(`[agente] ${modelLabel}: ${s}`)),
+      // ai modelli deboli un sottoinsieme fisso di strumenti per la pagina aperta
+      activeTools: activeTools as never,
+      // A2: strumento obbligatorio al primo passo se la richiesta è un'azione; fase nel promemoria
+      prepareStep: createPrepareStep({ azione: messages[messages.length - 1]?.role === 'user' && isActionRequest(userQuery), risks: risksOf(defs), active: activeTools }),
+      onFinish: ({ steps, totalUsage, text }) => {
+        // A3 in chat: in streaming non si riprende il giro; la traccia segna le chiusure senza prove
+        const motivi = checkClosure({ prove: proveFromSteps(steps as never, risksOf(defs)), testo: text, azione: isActionRequest(userQuery) })
+        trace.finish({
+          prove: motivi.length ? `SENZA PROVE: ${motivi[0]}` : undefined,
+          steps: steps.length,
+          inputTokens: totalUsage.inputTokens,
+          cachedInputTokens: totalUsage.cachedInputTokens,
+          outputTokens: totalUsage.outputTokens,
+          compacted: compacted.note,
+        })
       },
     })
 

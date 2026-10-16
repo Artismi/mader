@@ -1,11 +1,11 @@
-import { google } from '@/lib/ai/google'
-import { generateObject } from 'ai'
+import { generateObjectWith } from '@/lib/ai/model-registry'
 import { z } from 'zod'
 import path from 'path'
 import fs from 'fs/promises'
 import os from 'os'
 
-const model = google('gemini-2.5-flash')
+// il modello lo sceglie il registro (chiavi presenti, scelta dell'utente, quota)
+const NEED = { task: 'general' as const }
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -119,8 +119,7 @@ const NUM_FORMATS: Record<string, string> = {
 // ── Excel generator ───────────────────────────────────────────────────────────
 
 async function generateExcel(prompt: string): Promise<{ buffer: Buffer; title: string; preview_text: string }> {
-  const { object } = await generateObject({
-    model,
+  const { object } = await generateObjectWith(NEED, {
     schema: ExcelDocSchema,
     prompt: `Genera un documento Excel professionale e strutturato per questa richiesta.
 
@@ -269,8 +268,7 @@ Richiesta: ${prompt}`,
 // ── Word generator ────────────────────────────────────────────────────────────
 
 async function generateWord(prompt: string): Promise<{ buffer: Buffer; title: string; preview_text: string }> {
-  const { object } = await generateObject({
-    model,
+  const { object } = await generateObjectWith(NEED, {
     schema: WordDocSchema,
     prompt: `Genera un documento Word ben strutturato e professionale per questa richiesta.
 Includi titoli di sezione chiari e paragrafi informativi con linguaggio professionale italiano.
@@ -330,8 +328,7 @@ Richiesta: ${prompt}`,
 // ── PowerPoint generator ──────────────────────────────────────────────────────
 
 async function generatePowerPoint(prompt: string): Promise<{ buffer: Buffer; title: string; preview_text: string }> {
-  const { object } = await generateObject({
-    model,
+  const { object } = await generateObjectWith(NEED, {
     schema: PptDocSchema,
     prompt: `Genera una presentazione PowerPoint professionale per questa richiesta.
 Includi: slide di titolo, slides di contenuto con bullet points incisivi, slide conclusiva con call-to-action.

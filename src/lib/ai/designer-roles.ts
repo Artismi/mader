@@ -33,9 +33,9 @@ export const analisiSchema = z.object({
 })
 export type Analisi = z.infer<typeof analisiSchema>
 
-export async function analista(brief: string, opts: { riservato?: boolean } = {}) {
+export async function analista(brief: string, opts: { riservato?: boolean; choice?: string } = {}) {
   return eseguiRuolo({
-    ruolo: 'analista', riservato: opts.riservato, schema: analisiSchema, temperature: 0.3,
+    ruolo: 'analista', riservato: opts.riservato, choice: opts.choice, schema: analisiSchema, temperature: 0.3,
     system: `Sei l'analista di uno studio grafico. Dal brief estrai solo informazioni vere e presenti: non inventare prezzi, date, numeri o caratteristiche. ${LINGUA}\n\n${rubricaPerPrompt('analista')}\n\n${SOLO_JSON}`,
     prompt: `Brief:\n"""${brief}"""\n\nRestituisci: {"brand": "solo il nome del marchio, corto (es. 'Tostatura Nera', non 'Torrefazione Tostatura Nera di Bologna'), o vuoto", "settore": "…", "prodotto": "…", "pubblico": "…", "tono": ["2-4 aggettivi"], "fatti": ["frasi brevi e vere, dalla più importante"], "numeri": ["numeri, date, prezzi, misure presenti nel brief, scritti come nel brief"], "azione": "cosa deve fare chi guarda", "foto": "soggetto generico da cercare in un archivio fotografico, 3-6 parole: materia, luce, ambiente (es. 'chicchi di caffè tostati su pietra scura'); niente nomi di brand, confezioni o loghi; vuoto se non serve"}\nIl pubblico va dedotto dal contenuto se non è scritto (es. 'appassionati di caffè di specialità').`,
     verifica: a => tutti(
@@ -81,10 +81,10 @@ function controllaTesti(t: Omit<Testi, 'titoli'> & { titoli?: Testi['titoli'] },
   )
 }
 
-export async function copywriter(brief: string, an: Analisi, opts: { riservato?: boolean } = {}) {
+export async function copywriter(brief: string, an: Analisi, opts: { riservato?: boolean; choice?: string } = {}) {
   const fonte = `${brief} ${an.numeri.join(' ')}`
   return eseguiRuolo({
-    ruolo: 'copywriter', riservato: opts.riservato, schema: testiSchema, temperature: 0.8,
+    ruolo: 'copywriter', riservato: opts.riservato, choice: opts.choice, schema: testiSchema, temperature: 0.8,
     system: `Sei il copywriter di uno studio grafico: scrivi testi brevi, concreti, con un'immagine precisa, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti.\n\n${rubricaPerPrompt('copywriter')}\n\n${SOLO_JSON}`,
     prompt: `Analisi del brief:\n${JSON.stringify(an)}\n\nScrivi i testi di una grafica social. Regole:
 - 3 titoli DAVVERO diversi (massimo ${BUDGET.titolo} caratteri): uno descrittivo, uno evocativo, uno con un gioco di parole o un contrasto. Per ognuno la parola chiave da evidenziare ("enfasi"): UNA parola che compare nel titolo.
@@ -109,9 +109,9 @@ export const scalettaSchema = z.object({
 })
 export type Scaletta = z.infer<typeof scalettaSchema>
 
-export async function regista(an: Analisi, n: number | 'auto', opts: { riservato?: boolean } = {}) {
+export async function regista(an: Analisi, n: number | 'auto', opts: { riservato?: boolean; choice?: string } = {}) {
   return eseguiRuolo({
-    ruolo: 'regista', riservato: opts.riservato, schema: scalettaSchema, temperature: 0.6,
+    ruolo: 'regista', riservato: opts.riservato, choice: opts.choice, schema: scalettaSchema, temperature: 0.6,
     system: `Sei il regista dei caroselli di uno studio grafico: trasformi un contenuto in un discorso a slide, con un inizio che aggancia, uno sviluppo e una chiusura con un invito. ${LINGUA} ${SOLO_JSON}`,
     prompt: `Analisi:\n${JSON.stringify(an)}\n\nScegli l'arco (${ARCHI.join(', ')}) e componi ${n === 'auto' ? 'da 4 a 7' : n} slide.
 Ruoli possibili: copertina (la prima, aggancia), apertura (la tesi), punto (un argomento), dato (un numero protagonista, solo se c'è nei fatti), citazione, confronto, elenco, immagine (foto piena, poco testo), chiusura (l'ultima, invito all'azione).
@@ -136,10 +136,10 @@ export const testiSlideSchema = z.object({
   })),
 })
 
-export async function copywriterSlide(brief: string, an: Analisi, sc: Scaletta, opts: { riservato?: boolean } = {}) {
+export async function copywriterSlide(brief: string, an: Analisi, sc: Scaletta, opts: { riservato?: boolean; choice?: string } = {}) {
   const fonte = `${brief} ${an.numeri.join(' ')}`
   return eseguiRuolo({
-    ruolo: 'copywriter', riservato: opts.riservato, schema: testiSlideSchema, temperature: 0.8,
+    ruolo: 'copywriter', riservato: opts.riservato, choice: opts.choice, schema: testiSlideSchema, temperature: 0.8,
     system: `Sei il copywriter di uno studio grafico: scrivi i testi di un carosello, una slide alla volta, brevi e concreti, che si leggono in un secondo su un telefono. ${LINGUA} Usa solo i fatti forniti.\n\n${rubricaPerPrompt('copywriter')}\n\n${SOLO_JSON}`,
     prompt: `Analisi:\n${JSON.stringify(an)}\n\nScaletta (${sc.arco}):\n${sc.slides.map((s, i) => `${i + 1}. ${s.ruolo}: ${s.idea}`).join('\n')}\n\nPer OGNI slide, nello stesso ordine (${sc.slides.length} slide):
 - titolo: massimo ${BUDGET.titolo} caratteri in copertina, ${BUDGET.titoloInterno} nelle altre; "enfasi" = parola del titolo da evidenziare.
@@ -176,9 +176,9 @@ const MENU = () => [
   '', 'REGOLATORI (intervalli 0-1): scala (quanto è grande il titolo), energia (diagonali, sfalsamenti), densita (quanti elementi), sovrastampa (inchiostri fuori registro), grana (trama di stampa).',
 ].join('\n')
 
-export async function direttore(an: Analisi, haFoto: boolean, opts: { riservato?: boolean } = {}) {
+export async function direttore(an: Analisi, haFoto: boolean, opts: { riservato?: boolean; choice?: string } = {}) {
   return eseguiRuolo({
-    ruolo: 'direttore', riservato: opts.riservato, schema: direzioniSchema, temperature: 0.9,
+    ruolo: 'direttore', riservato: opts.riservato, choice: opts.choice, schema: direzioniSchema, temperature: 0.9,
     system: `Sei il direttore creativo di uno studio grafico con carattere. Scegli sei direzioni visive diverse tra loro, adatte al contenuto e al tono, solo dalle voci del menu: la varietà nasce qui, prima della selezione.\n\n${rubricaPerPrompt('direttore')}\n\n${SOLO_JSON}`,
     prompt: `${MENU()}\n\nContenuto:\n${JSON.stringify(an)}\nFoto disponibile: ${haFoto ? 'sì' : 'no'}.\n\nProponi 6 direzioni: due coerenti e sicure, due più audaci, due inaspettate ma sensate (da un registro vicino). Sei sistemi tutti diversi, di famiglie diverse (tipografici, collage, geometrici, digitali, fotografici). ${haFoto ? '' : 'Niente sistemi che richiedono la foto.'}
 Formato: {"direzioni": [{"sistema": "id", "stile": "id", "trattamento": "id", "inverti": false, "regolatori": {"scala": [0.5, 0.8], "energia": [0.2, 0.5], "densita": [0.4, 0.7], "sovrastampa": [0.2, 0.5], "grana": [0.3, 0.6]}, "perche": "una frase"}]}`,
@@ -203,8 +203,35 @@ export interface Regia {
   log: Record<string, Giro[]>
 }
 
+/**
+ * Quello che il sistema sa del cliente, letto con gli strumenti del guscio
+ * (solo lettura): scheda e vault (brand, tono), piano editoriale delle prossime
+ * settimane (per non ripetere temi già in calendario), memoria pertinente.
+ */
+export async function contestoSistema(cliente: string, brief: string, now = new Date()): Promise<{ testo: string; cliente?: string }> {
+  const { getClient, readEditorialPlan, searchMemory } = await import('@/lib/agent/system-tools')
+  const scheda = await getClient.execute({ cliente }) as Record<string, unknown>
+  if (scheda.success === false) return { testo: '' }
+  const dal = now.toISOString().slice(0, 10)
+  const al = new Date(now.getTime() + 28 * 864e5).toISOString().slice(0, 10)
+  const [piano, memoria] = await Promise.all([
+    readEditorialPlan.execute({ cliente, dal, al, stato: 'tutti', limite: 12 }) as Promise<Record<string, unknown>>,
+    (searchMemory.execute({ query: `${cliente} ${brief}`.slice(0, 300) }) as Promise<Record<string, unknown>>).catch(() => ({} as Record<string, unknown>)),
+  ])
+  const testo = [
+    `Cliente: ${scheda.cliente}`,
+    scheda.vault && scheda.vault !== 'vault vuoto' ? `Brand e note (vault):\n${String(scheda.vault).slice(0, 2500)}` : '',
+    piano.post && piano.post !== 'Nessun post con questi filtri.' ? `Già nel piano editoriale (non ripetere questi temi):\n${piano.post}` : '',
+    memoria.ricordi && memoria.ricordi !== 'nessun ricordo pertinente' ? `Preferenze ricordate:\n${memoria.ricordi}` : '',
+  ].filter(Boolean).join('\n\n')
+  return { testo, cliente: String(scheda.cliente) }
+}
+
 /** Brief → analisi → (scaletta) → testi → direzioni. 3 chiamate per una grafica, 4 per un carosello (più le correzioni). */
-export async function regia(brief: string, opts: { slides?: number | 'auto'; haFoto?: boolean; riservato?: boolean } = {}): Promise<Regia> {
+export async function regia(brief: string, opts: { slides?: number | 'auto'; haFoto?: boolean; riservato?: boolean; choice?: string; cliente?: string } = {}): Promise<Regia & { contesto?: string }> {
+  // con un cliente, la regia lavora sui dati veri del sistema e non solo sul brief
+  const ctx = opts.cliente ? await contestoSistema(opts.cliente, brief) : { testo: '' }
+  if (ctx.testo) brief = `${brief}\n\nDal sistema di Creative OS (dati veri, usali; non inventarne altri):\n${ctx.testo}`
   const log: Record<string, Giro[]> = {}, modelli: Record<string, string> = {}
   const a = await analista(brief, opts); log.analista = a.log; modelli.analista = a.modello
   const haFoto = opts.haFoto ?? !!a.valore.foto
@@ -218,5 +245,5 @@ export async function regia(brief: string, opts: { slides?: number | 'auto'; haF
     out.testi = t.valore
   }
   const d = await direttore(a.valore, haFoto, opts); log.direttore = d.log; modelli.direttore = d.modello
-  return { ...(out as Regia), direzioni: d.valore.direzioni, modelli, log }
+  return { ...(out as Regia), direzioni: d.valore.direzioni, modelli, log, ...(ctx.testo ? { contesto: ctx.testo } : {}) }
 }

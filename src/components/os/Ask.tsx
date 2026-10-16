@@ -31,6 +31,10 @@ export function Ask({ onClose }: { onClose: () => void }) {
   const s = useOs.getState()
   const here = current(s), node = s.nodes[here.ref]
 
+  // azioni del nucleo (K1): le stesse che usano pulsanti e assistente
+  const [actions, setActions] = useState<{ id: string; title: string; domain: string; risk: string }[]>([])
+  useEffect(() => { fetch('/api/kernel/actions').then(r => r.json()).then(setActions).catch(() => setActions([])) }, [])
+
   useEffect(() => { input.current?.focus() }, [])
   useEffect(() => {
     if (!q.trim()) { setResults([]); return }
@@ -57,7 +61,26 @@ export function Ask({ onClose }: { onClose: () => void }) {
     ...LEGACY.filter(([l, , words]) => needle && (l + ' ' + words).toLowerCase().includes(needle)).map(([l, href, , icon]) => ({ t: l, m: 'vista completa ↗', icon, run: () => { location.href = href } })),
   ]
   const found: Item[] = results.map(n => ({ t: n.title, m: [KIND_LABEL[n.kind], n.sub].filter(Boolean).join(' · '), icon: KIND_ICON[n.kind] ?? 'file', run: () => open(n.ref) }))
-  const items = [...suggestions, ...sections, ...found]
+
+  // "Fallo nel sistema": l'assistente esegue la frase scritta con le azioni del nucleo (/api/ai/agent)
+  const doIt = (compito: string) => {
+    const st = useOs.getState()
+    st.say('Ci lavoro…')
+    fetch('/api/ai/agent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compito, focus: here.ref && !here.ref.startsWith('list:') ? here.ref : undefined, maxPassi: 10 }) })
+      .then(r => r.json())
+      .then((j: { ok?: boolean; testo?: string; error?: string; proposte?: { strumento: string }[] }) => {
+        if (j.error) { st.say(j.error, true); return }
+        st.say(`${j.testo ?? 'Fatto.'}${j.proposte?.length ? ` · da confermare: ${j.proposte.map(p => p.strumento).join(', ')}` : ''}`, !j.ok)
+      })
+      .catch(e => st.say(String(e), true))
+  }
+  const words = needle.split(/\s+/).filter(w => w.length > 2)
+  const acts: Item[] = needle
+    ? actions.filter(a => words.some(w => `${a.title} ${a.id}`.toLowerCase().includes(w))).slice(0, 4)
+      .map(a => ({ t: a.title, m: `azione · l'assistente la fa con «${q.trim()}»`, icon: 'spark', run: () => doIt(`${a.title}: ${q.trim()}`) }))
+    : []
+  if (q.trim().split(/\s+/).length >= 3) acts.push({ t: `Fallo nel sistema: «${q.trim()}»`, m: 'l\'assistente usa le azioni del sistema; ciò che va confermato resta in sospeso', icon: 'spark', run: () => doIt(q.trim()) })
+  const items = [...suggestions, ...sections, ...found, ...acts]
 
   const pick = (i: number) => { const it = items[i]; if (!it) return; onClose(); it.run() }
   const onKey = (e: React.KeyboardEvent) => {

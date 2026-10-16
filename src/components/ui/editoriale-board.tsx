@@ -276,6 +276,15 @@ export function EditorialeBoard({ clients, initialPosts, initialMetrics, globalC
                               </span>
                             ))}
                           </div>
+                          {post.metadata?.circuit === 'instagram' && (
+                            <p className="text-[9px] text-white/40 mb-2 font-mono">
+                              {[
+                                String(post.metadata.format ?? ''),
+                                post.metadata.hookFormula ? `hook ${String(post.metadata.hookFormula)}` : '',
+                                typeof post.metadata.humanScore === 'number' ? `human ${post.metadata.humanScore} ${String(post.metadata.humanVerdict ?? '')}` : '',
+                              ].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
                           {post.scheduled_at && (
                             <p className="text-[9px] text-white/20 mb-2">
                               📅 {new Date(post.scheduled_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}

@@ -1,23 +1,16 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { tasks, ideas, clients, subtasks, skills, config, designProjects, briefs, milestones, deliverables } from '@/lib/db'
+import { subtasks, skills, config, designProjects, briefs, milestones, deliverables } from '@/lib/db'
+import { runActionOrThrow } from '@/lib/kernel'
 import { saveMemory } from '@/lib/vault'
 import type { BriefStatus, MilestoneStatus, DeliverableStatus, DeliverableType } from '@/lib/db'
-import { getDriveClient, createClientVault } from '@/lib/google/drive'
+
+// Le azioni su incarichi, idee e clienti passano dal nucleo (src/lib/kernel, K1):
+// la stessa implementazione usata dalla chat, da runAgent, dal guscio /os e da Ctrl+K.
 
 export async function addIdea(text: string, clientId?: string, title?: string, platforms?: string[]) {
-  ideas.create({
-    text: text.trim(),
-    client_id: clientId || undefined,
-    title: title?.trim() || undefined,
-    description: undefined,
-    platforms: platforms || [],
-    idea_status: 'idea',
-    assigned: false,
-    task_id: undefined,
-    output_links: [],
-  })
+  await runActionOrThrow('idea.create', { text, clientId: clientId || undefined, title, platforms: platforms || [], status: 'idea' })
   revalidatePath('/idee')
 }
 
@@ -27,14 +20,7 @@ export async function addTask(data: {
   type: string
   deadline?: string
 }) {
-  tasks.create({
-    title: data.title.trim(),
-    type: data.type,
-    category: 'task',
-    status: 'todo',
-    client_id: data.client_id || undefined,
-    deadline: data.deadline ? new Date(data.deadline).toISOString() : undefined,
-  })
+  await runActionOrThrow('task.create', { title: data.title, clientId: data.client_id || undefined, category: data.type, deadlinePattern: data.deadline || undefined })
   revalidatePath('/incarichi')
 }
 
@@ -43,32 +29,17 @@ export async function addClient(data: {
   email?: string
   sector?: string
 }) {
-  const newClient = clients.create({
-    name: data.name.trim(),
-    email: data.email?.trim() || undefined,
-    sector: data.sector || undefined,
-    category: 'cliente',
-    vault_path: `/_CLIENTI/${data.name.trim()}/`,
-  })
-
-  try {
-    const drive = await getDriveClient()
-    const { folderId } = await createClientVault(drive, data.name.trim())
-    clients.update(newClient.id, { drive_folder_id: folderId })
-  } catch (driveError: unknown) {
-    console.error('[Drive Automation Error]', driveError)
-  }
-
+  await runActionOrThrow('client.create', data)
   revalidatePath('/clienti')
 }
 
 export async function updateTaskStatus(taskId: string, status: string) {
-  tasks.update(taskId, { status })
+  await runActionOrThrow('task.update', { taskId, status })
   revalidatePath('/incarichi')
 }
 
 export async function deleteTask(taskId: string) {
-  tasks.delete(taskId)
+  await runActionOrThrow('task.delete', { taskId })
   revalidatePath('/incarichi')
 }
 
@@ -83,7 +54,8 @@ export async function updateTask(
     status?: string
   }
 ) {
-  tasks.update(taskId, data as Parameters<typeof tasks.update>[1])
+  const { client_id, ...rest } = data
+  await runActionOrThrow('task.update', { taskId, ...rest, ...(client_id !== undefined ? { clientId: client_id } : {}) })
   revalidatePath('/incarichi')
 }
 
@@ -99,15 +71,7 @@ export async function duplicateTask(data: {
   client_id: string | null
   duration_minutes?: number
 }) {
-  tasks.create({
-    title: data.title,
-    type: data.type,
-    category: data.category,
-    status: 'todo',
-    client_id: data.client_id || undefined,
-    deadline: data.deadline,
-    duration_minutes: data.duration_minutes || 60,
-  })
+  await runActionOrThrow('task.create', { title: data.title, category: data.type, kind: data.category, deadlinePattern: data.deadline, clientId: data.client_id || undefined, durationMinutes: data.duration_minutes || 60 })
   revalidatePath('/incarichi')
 }
 
@@ -148,7 +112,7 @@ export async function updateClient(clientId: string, data: {
   canvas_state?: string
   vault_md_content?: string
 }) {
-  clients.update(clientId, data)
+  await runActionOrThrow('client.update', { cliente: clientId, ...data })
   revalidatePath('/clienti')
 }
 
@@ -160,12 +124,12 @@ export async function updateIdea(ideaId: string, data: {
   description?: string
   title?: string
 }) {
-  ideas.update(ideaId, data)
+  await runActionOrThrow('idea.update', { id: ideaId, ...data })
   revalidatePath('/idee')
 }
 
 export async function deleteIdea(ideaId: string) {
-  ideas.delete(ideaId)
+  await runActionOrThrow('idea.delete', { id: ideaId })
   revalidatePath('/idee')
   revalidatePath('/')
 }

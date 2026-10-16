@@ -1,7 +1,3 @@
-import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@/lib/ai/google'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import type { LanguageModel } from 'ai'
 import { config, tokens } from '@/lib/db'
 
 // ── Fornitore dei modelli AI ─────────────────────────────────────────────────
@@ -39,29 +35,7 @@ export function setOpenRouterModel(task: AiTask, modelId: string): void {
   config.set(CONFIG_KEYS[task], modelId.trim())
 }
 
-/**
- * Sceglie il modello per una richiesta.
- * - 'openrouter' (o nessuna scelta con OpenRouter collegato) → modello dell'utente per il task
- * - 'gemini' / 'claude' → chiavi d'ambiente del portale, come prima
- */
-export function resolveModel(choice: string | undefined, task: AiTask): { model: LanguageModel; label: string } {
-  const orKey = getOpenRouterKey()
-
-  if (orKey && (choice === 'openrouter' || !choice)) {
-    const modelId = getOpenRouterModels()[task]
-    const openrouter = createOpenRouter({
-      apiKey: orKey,
-      compatibility: 'strict',
-      headers: { 'X-Title': 'Creative OS' },
-    })
-    return { model: openrouter.chat(modelId), label: `openrouter:${modelId}` }
-  }
-
-  if (choice === 'gemini') {
-    return { model: google('gemini-2.5-flash'), label: 'gemini-2.5-flash' }
-  }
-  return { model: anthropic('claude-sonnet-5-5'), label: 'claude-sonnet-5-5' }
-}
+// La scelta del modello per compito sta in model-registry.ts (resolveModel, pickModel).
 
 // ── PKCE in attesa ───────────────────────────────────────────────────────────
 // Il login può partire in Electron e finire nel browser di sistema (dove il

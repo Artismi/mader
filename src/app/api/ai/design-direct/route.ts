@@ -7,17 +7,18 @@ import { regia } from '@/lib/ai/designer-roles'
  * controlli della maestra. I modelli si scelgono da soli (Gemini, poi
  * OpenRouter) e si passa al successivo quando uno finisce la quota.
  *
- * POST { brief, slides?: number | 'auto', haFoto?: boolean, riservato?: boolean }
+ * POST { brief, slides?: number | 'auto', haFoto?: boolean, riservato?: boolean, cliente?: string, modelId?: string }
+ * Con `cliente` la regia legge scheda, piano editoriale e memoria dal sistema.
  */
 export const maxDuration = 120
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({})) as { brief?: string; slides?: number | 'auto'; haFoto?: boolean; riservato?: boolean }
+  const body = await req.json().catch(() => ({})) as { brief?: string; slides?: number | 'auto'; haFoto?: boolean; riservato?: boolean; cliente?: string; modelId?: string }
   const brief = String(body.brief ?? '').trim()
   if (brief.length < 10) return NextResponse.json({ error: 'Scrivi un brief di almeno qualche parola.' }, { status: 400 })
   const slides = body.slides === 'auto' ? 'auto' : Math.max(1, Math.min(10, Number(body.slides) || 1))
   try {
-    const r = await regia(brief, { slides, haFoto: body.haFoto, riservato: !!body.riservato })
+    const r = await regia(brief, { slides, haFoto: body.haFoto, riservato: !!body.riservato, cliente: body.cliente?.trim() || undefined, choice: body.modelId })
     // charset esplicito: alcuni client (PowerShell) altrimenti leggono male gli accenti
     return NextResponse.json(r, { headers: { 'Content-Type': 'application/json; charset=utf-8' } })
   } catch (e) {

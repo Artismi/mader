@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS editorial_posts (
   editorial_status TEXT NOT NULL DEFAULT 'idea',  -- 'idea'|'bozza'|'approvato'|'programmato'|'pubblicato'
   scheduled_at     TEXT,
   published_at     TEXT,
+  metadata         TEXT NOT NULL DEFAULT '{}',    -- JSON: formato, formula hook, punteggi IG
   created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 

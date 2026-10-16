@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { generateText } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-import { editorialPosts, messages, quotes, tasks } from '@/lib/db'
+import { generateTextWith } from '@/lib/ai/model-registry'
+import { messages, quotes } from '@/lib/db'
+import { actorLabel, describe, runAction, timeline } from '@/lib/kernel'
 import { clientOfRef, getList, getNode, linkOrigin, quoteFor, search } from '@/lib/os/graph'
 import { googleStatus } from '@/lib/google/auth'
 import { sendMail } from '@/lib/google/gmail'
@@ -29,7 +29,10 @@ export async function GET(req: Request) {
     }
     if (u.searchParams.has('ref')) {
       const n = await getNode(u.searchParams.get('ref')!)
-      return n ? NextResponse.json(n) : NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+      if (!n) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+      // linea del tempo (K2): azioni dell'utente e dell'IA sul nodo, sui nodi nati da lui e, per un cliente, a suo nome
+      const storia = timeline(n.ref, { limit: 12 }).map(e => ({ at: e.at, who: actorLabel(e.actor), what: describe(e), ref: e.ref !== n.ref ? e.ref ?? undefined : undefined }))
+      return NextResponse.json({ ...n, storia })
     }
     if (u.searchParams.has('q')) return NextResponse.json(search(u.searchParams.get('q')!))
     if (u.searchParams.has('google')) return NextResponse.json(googleStatus())
@@ -78,11 +81,9 @@ export async function POST(req: Request) {
 
   if (body.action === 'draft') {
     if (!m) return NextResponse.json({ error: 'Mail non trovata' }, { status: 404 })
-    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Manca ANTHROPIC_API_KEY in .env.local' }, { status: 400 })
     const plain = (m.content || '').replace(/<[^>]+>/g, ' ').slice(0, 4000)
     try {
-      const { text } = await generateText({
-        model: anthropic('claude-haiku-5-5'),
+      const { text } = await generateTextWith({ task: 'general', preferisci: 'leggero' }, {
         system: 'Sei l’assistente di un designer freelance italiano. Scrivi bozze di risposta brevi, cordiali e concrete, in italiano, senza firma e senza inventare prezzi o date non presenti. Se ti chiedono un appuntamento, proponi di concordare un orario.',
         prompt: `Mail di ${m.sender_name ?? m.sender_id}, oggetto "${m.subject ?? ''}":\n\n${plain}\n\nScrivi la bozza di risposta.`,
       })
@@ -97,25 +98,24 @@ export async function POST(req: Request) {
     const title = String(body.title ?? '').trim()
     if (!title) return NextResponse.json({ error: 'Dai un nome al task' }, { status: 400 })
     const client = body.fromRef ? clientOfRef(body.fromRef) : undefined
-    const t = tasks.create({ client_id: client?.id, title, type: 'general', category: 'task', deadline: body.deadline ?? undefined, status: 'todo' })
-    if (body.fromRef) linkOrigin(body.fromRef, 'task', t.id)
-    return NextResponse.json({ ref: `task:${t.id}` })
+    // stessa azione del pulsante e dell'assistente (nucleo, K1)
+    const r = await runAction<{ id: string }>('task.create', { title, clientId: client?.id, category: 'general', deadlinePattern: body.deadline ?? undefined }, { actor: 'user', origin: body.fromRef })
+    if (!r.ok) return NextResponse.json({ error: r.errors.join(' ') }, { status: 400 })
+    return NextResponse.json({ ref: `task:${r.output.id}` })
   }
 
   if (body.action === 'done') {
-    const id = String(body.ref ?? '').replace(/^task:/, '')
-    if (!tasks.getById(id)) return NextResponse.json({ error: 'Task non trovato' }, { status: 404 })
-    tasks.update(id, { status: 'done' })
+    const r = await runAction('task.set_status', { taskId: String(body.ref ?? ''), newStatus: 'done' }, { actor: 'user' })
+    if (!r.ok) return NextResponse.json({ error: 'Task non trovato' }, { status: 404 })
     return NextResponse.json({ ok: true })
   }
 
   // Un contenuto social avanza di un passo (idea → bozza → approvato → programmato → pubblicato)
   if (body.action === 'post-status') {
-    const id = String(body.ref ?? '').replace(/^post:/, '')
     const allowed = ['bozza', 'approvato', 'programmato', 'pubblicato']
     if (!allowed.includes(body.status)) return NextResponse.json({ error: 'Stato non valido' }, { status: 400 })
-    if (!editorialPosts.getAll().some(p => p.id === id)) return NextResponse.json({ error: 'Contenuto non trovato' }, { status: 404 })
-    editorialPosts.updateStatus(id, body.status, body.status === 'pubblicato' ? { published_at: new Date().toISOString() } : undefined)
+    const r = await runAction('post.set_status', { ref: String(body.ref ?? ''), status: body.status }, { actor: 'user' })
+    if (!r.ok) return NextResponse.json({ error: 'Contenuto non trovato' }, { status: 404 })
     return NextResponse.json({ ok: true })
   }
 

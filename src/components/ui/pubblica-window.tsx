@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Send, Eye, ChevronDown, X, Check, Loader2, Instagram, Facebook, MessageCircle, Mail, Globe } from 'lucide-react'
+import { Send, Eye, ChevronDown, X, Check, Loader2, Instagram, Facebook, MessageCircle, Mail, Globe, Sparkles } from 'lucide-react'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ const CHANNELS = [
         icon: Instagram,
         color: 'from-purple-500 to-pink-500',
         maxChars: 2200,
-        hint: 'Caption ottimizzata · hashtag in fondo · emoji consentite',
+        hint: 'Caption: 125 car. visibili prima del "...altro" · una sola richiesta · max 5 hashtag',
         placeholder: (text: string) => text,
     },
     {
@@ -67,6 +67,20 @@ interface Client {
     name: string
 }
 
+// Risultato di /api/instagram/lab action "polish" (vedi src/lib/ai/instagram/index.ts)
+interface IgPolish {
+    human: { text: string; changes: unknown[]; flags: { id: string; name: string; fix: string }[] }
+    score: { before: { humanScore: number }; after: { humanScore: number; verdict: string; weakest: string } }
+    caption: {
+        feedWindow: string
+        truncated: boolean
+        verdict: 'READY' | 'REVIEW' | 'FIX'
+        checks: { id: string; status: 'PASS' | 'WARN' | 'FAIL'; label: string; detail: string }[]
+    }
+}
+
+const STATUS_COLOR = { PASS: 'text-green-600', WARN: 'text-amber-600', FAIL: 'text-red-600' } as const
+
 interface Props {
     clients: Client[]
 }
@@ -83,6 +97,10 @@ export function PubblicaWindow({ clients }: Props) {
     const [publishing, setPublishing] = useState<Record<string, boolean>>({})
     const [published, setPublished] = useState<Record<string, boolean>>({})
     const [previewOpen, setPreviewOpen] = useState(false)
+    const [igKeywords, setIgKeywords] = useState('')
+    const [igLab, setIgLab] = useState<IgPolish | null>(null)
+    const [igLoading, setIgLoading] = useState(false)
+    const [publishError, setPublishError] = useState<Record<string, string>>({})
 
     const selectedClient = clients.find(c => c.id === clientId)
 
@@ -102,15 +120,31 @@ export function PubblicaWindow({ clients }: Props) {
                 if (ch.maxChars > 0 && adapted.length > ch.maxChars) {
                     adapted = adapted.slice(0, ch.maxChars - 3) + '...'
                 }
-                // Instagram: sposta hashtag in fondo se non ci sono già
-                if (ch.id === 'instagram' && !body.includes('#')) {
-                    adapted += '\n\n#creatività #social #content'
-                }
                 generated[ch.id] = previews[ch.id] ?? adapted
             }
         }
         setPreviews(generated)
         setPreviewOpen(true)
+    }
+
+    // Circuito Instagram: umanizza → human score → linter caption (calcolo locale)
+    const analyzeInstagram = async () => {
+        setIgLoading(true)
+        try {
+            const res = await fetch('/api/instagram/lab', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'polish',
+                    text: previews.instagram || body,
+                    keywords: igKeywords.split(',').map(k => k.trim()).filter(Boolean),
+                }),
+            })
+            const data = await res.json()
+            setIgLab(data.ok ? data.data as IgPolish : null)
+        } finally {
+            setIgLoading(false)
+        }
     }
 
     const confirmChannel = (channelId: string) => {
@@ -121,8 +155,9 @@ export function PubblicaWindow({ clients }: Props) {
         const toPublish = selectedChannels.filter(id => confirmed[id])
         for (const channelId of toPublish) {
             setPublishing(prev => ({ ...prev, [channelId]: true }))
+            setPublishError(prev => ({ ...prev, [channelId]: '' }))
             try {
-                await fetch('/api/social/publish', {
+                const res = await fetch('/api/social/publish', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -132,6 +167,11 @@ export function PubblicaWindow({ clients }: Props) {
                         clientId,
                     }),
                 })
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}))
+                    setPublishError(prev => ({ ...prev, [channelId]: [data.error, ...(data.fails ?? [])].filter(Boolean).join(' · ') || 'Errore di pubblicazione' }))
+                    continue
+                }
                 setPublished(prev => ({ ...prev, [channelId]: true }))
             } finally {
                 setPublishing(prev => ({ ...prev, [channelId]: false }))
@@ -303,6 +343,72 @@ export function PubblicaWindow({ clients }: Props) {
                                 className="w-full p-4 text-sm text-primary leading-relaxed resize-none focus:outline-none bg-white min-h-[120px]"
                                 rows={6}
                             />
+
+                            {publishError[ch.id] && (
+                                <div className="px-4 py-2 text-[11px] text-red-600 bg-red-50 border-t border-red-100">{publishError[ch.id]}</div>
+                            )}
+
+                            {/* Laboratorio Instagram */}
+                            {ch.id === 'instagram' && (
+                                <div className="border-t border-border px-4 py-3 space-y-2 bg-gray-50/60">
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={igKeywords}
+                                            onChange={e => setIgKeywords(e.target.value)}
+                                            placeholder="Termini di ricerca, separati da virgola"
+                                            className="flex-1 min-w-0 border border-border rounded-lg px-2 py-1 text-[11px] bg-white focus:outline-none"
+                                        />
+                                        <button
+                                            onClick={analyzeInstagram}
+                                            disabled={igLoading || !(previews.instagram || body).trim()}
+                                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-40"
+                                        >
+                                            {igLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                            Analizza
+                                        </button>
+                                    </div>
+
+                                    {igLab && (
+                                        <>
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-primary/40">Cosa mostra il feed</p>
+                                            <div className="rounded-lg border border-border bg-white p-2 text-[11px] text-primary whitespace-pre-wrap">
+                                                {igLab.caption.feedWindow}
+                                                {igLab.caption.truncated && <span className="text-primary/40"> ... altro</span>}
+                                            </div>
+                                            <ul className="space-y-0.5">
+                                                {igLab.caption.checks.map(c => (
+                                                    <li key={c.id} className="text-[11px] leading-snug">
+                                                        <span className={`font-mono font-bold ${STATUS_COLOR[c.status]}`}>{c.status}</span>{' '}
+                                                        <span className="font-semibold">{c.label}</span>{' '}
+                                                        <span className="text-primary/50">{c.detail}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            <p className="text-[11px]">
+                                                <span className="font-semibold">Human score</span>{' '}
+                                                {igLab.score.before.humanScore.toFixed(1)} → {igLab.score.after.humanScore.toFixed(1)}{' '}
+                                                <span className={igLab.score.after.verdict === 'PASS' ? 'text-green-600 font-bold' : 'text-amber-600 font-bold'}>{igLab.score.after.verdict}</span>
+                                                <span className="text-primary/40"> · punto debole: {igLab.score.after.weakest}</span>
+                                            </p>
+                                            {igLab.human.flags.length > 0 && (
+                                                <ul className="space-y-0.5">
+                                                    {igLab.human.flags.map(f => (
+                                                        <li key={f.id} className="text-[11px] text-amber-700">⚑ {f.name}: <span className="text-primary/50">{f.fix}</span></li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            {igLab.human.text !== (previews.instagram || body).trim() && (
+                                                <button
+                                                    onClick={() => { setPreviews(prev => ({ ...prev, instagram: igLab.human.text })); setIgLab(null) }}
+                                                    className="text-[11px] font-semibold text-accent hover:underline"
+                                                >
+                                                    Applica testo umanizzato ({igLab.human.changes.length} modifiche)
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Contatore */}
                             {ch.maxChars > 0 && (

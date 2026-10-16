@@ -8,7 +8,7 @@
  * dal vivo, senza altre chiamate all'IA. Senza IA: esempi e campi a mano.
  */
 import React, { useRef, useState } from 'react'
-import { Plus, RefreshCw, Sparkles, WandSparkles, X } from 'lucide-react'
+import { Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DesignContent, Format, Scene } from './types'
 import { STYLES, inferStyle } from './styles'
@@ -86,6 +86,9 @@ const stileNome = (id: string) => STYLES.find(s => s.id === id)?.name ?? id
 
 export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void; onClose: () => void }) {
   const [brief, setBrief] = useState('')
+  const [cliente, setCliente] = useState('')
+  const [istruzione, setIstruzione] = useState('')
+  const [esito, setEsito] = useState<string | null>(null)
   const [f, setF] = useState<Form>(EMPTY)
   const [format, setFormat] = useState<Format>('quadrato')
   const [titoli, setTitoli] = useState<{ testo: string; enfasi: string }[]>([])
@@ -159,7 +162,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
   async function fromBrief() {
     setBusy('regia'); setMsg(null)
     try {
-      const r = await fetch('/api/ai/design-direct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brief, slides: 1 }) })
+      const r = await fetch('/api/ai/design-direct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brief, slides: 1, cliente: cliente.trim() || undefined }) })
       const j = await r.json() as Regia & { error?: string }
       if (!r.ok || j.error) throw new Error(j.error ?? `errore ${r.status}`)
       const t = j.testi
@@ -170,6 +173,27 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       setMsg((e as Error).message)
     } finally {
       setBusy(b => (b === 'regia' ? null : b))
+    }
+  }
+
+  /** "Fallo nel sistema": il guscio agente (/api/ai/agent) salva nel piano, crea incarichi, ecc. con i testi di questa grafica. */
+  async function nelSistema() {
+    setBusy('sistema'); setEsito(null)
+    try {
+      const contesto = JSON.stringify({ cliente: cliente.trim() || undefined, brief: brief.trim() || undefined, formato: format, ...toContent(f) }, null, 1)
+      const r = await fetch('/api/ai/agent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ compito: istruzione, contesto, gruppi: ['social', 'lavoro', 'clienti', 'idee', 'memoria'], maxPassi: 10 }),
+      })
+      const j = await r.json() as { ok?: boolean; testo?: string; error?: string; proposte?: { strumento: string }[]; modello?: string }
+      if (j.error) throw new Error(j.error)
+      const prop = j.proposte?.length ? ` Da confermare: ${j.proposte.map(p => p.strumento).join(', ')}.` : ''
+      setEsito(`${j.testo ?? ''}${prop}${j.modello ? ` (${j.modello})` : ''}`.trim())
+      if (j.ok) setIstruzione('')
+    } catch (e) {
+      setEsito((e as Error).message)
+    } finally {
+      setBusy(b => (b === 'sistema' ? null : b))
     }
   }
 
@@ -185,6 +209,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       </div>
 
       {/* 1. brief → regia dell'IA */}
+      <Field label="Cliente (facoltativo: la regia legge brand, piano e memoria)" value={cliente} onChange={setCliente} placeholder="Nome del cliente in Creative OS" />
       <Field label="Brief" value={brief} onChange={setBrief} area placeholder="Es. Tostatura Nera di Bologna lancia il blend Notte Etiope: 250 g, Etiopia Guji, note di cacao e frutti rossi. Post per Instagram." />
       <div className="flex items-center gap-1">
         <Btn primary onClick={fromBrief} disabled={brief.trim().length < 10 || !!busy} title="L'IA scrive i testi e sceglie sei direzioni; lo Studio compone un vivaio e il critico sceglie le 12 migliori">
@@ -271,6 +296,19 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
         </div>
       )}
       {msg && <p className="text-[10px] text-amber-300/90">{msg}</p>}
+
+      {/* 5. nel sistema: il guscio agente usa i testi di questa grafica */}
+      {f.title && (
+        <div className="flex flex-col gap-1 pt-2 border-t border-white/5">
+          <Field label="Nel sistema" value={istruzione} onChange={setIstruzione} placeholder="Es. salvala come bozza nel piano di Tostatura Nera per venerdì alle 18" />
+          <div className="flex items-center gap-1">
+            <Btn onClick={nelSistema} disabled={istruzione.trim().length < 5 || !!busy} title="L'assistente salva nel piano editoriale, crea incarichi o idee usando i testi di questa grafica; le azioni delicate restano da confermare">
+              <Send className="w-3 h-3" />{busy === 'sistema' ? 'Lavoro nel sistema…' : 'Fallo nel sistema'}
+            </Btn>
+          </div>
+          {esito && <p className="text-[10px] text-white/70 whitespace-pre-wrap">{esito}</p>}
+        </div>
+      )}
     </div>
   )
 }

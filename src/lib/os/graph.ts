@@ -5,6 +5,7 @@
  */
 import { clients, designProjects, editorialPosts, ideas, memoryLinks, messages, quotes, tasks, type Client, type EditorialPost, type Message, type Quote } from '@/lib/db'
 import { upcomingEvents, type CalEvent } from '@/lib/google/calendar'
+import { actorLabel, changesSince, describe } from '@/lib/kernel/events'
 
 export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea' | 'event' | 'post'
 
@@ -38,6 +39,7 @@ export interface NodeDetail extends NodeSummary {
   href?: string          // per i nodi che si aprono in una vista legacy (es. canvas)
   legacy?: string        // vista completa precedente, finché la sezione non è rifatta del tutto
   origin?: NodeSummary   // traccia: da cosa è nato questo nodo
+  storia?: { at: string; who: string; what: string; ref?: string }[]   // linea del tempo (K2), aggiunta dalla route
   done?: boolean
   events?: { ref: string; title: string; start: string; end: string; allDay: boolean }[]   // per l'anello del giorno
   next?: { label: string; status: string }   // prossimo passo di stato (post editoriali)
@@ -176,6 +178,21 @@ const openQuotes = () => quotes.getAll().filter(q => q.status === 'bozza' || q.s
 const activePosts = () => editorialPosts.getAll().filter(p => p.editorial_status !== 'pubblicato')
 
 // ───────── elenchi (le sezioni della ghiera) ─────────
+const KINDS: Kind[] = ['client', 'task', 'design', 'quote', 'idea', 'post']
+/** "Cosa è cambiato da ieri" (K2): l'ultima modifica per nodo, dell'utente o dell'IA. */
+function recentChanges(): NodeSummary[] {
+  const seen = new Set<string>()
+  const out: NodeSummary[] = []
+  for (const e of changesSince(new Date(Date.now() - 864e5).toISOString(), { limit: 60 })) {
+    const kind = e.ref?.split(':')[0] as Kind
+    if (!e.ref || !KINDS.includes(kind) || seen.has(e.ref)) continue
+    seen.add(e.ref)
+    out.push({ ref: e.ref, kind, title: describe(e), sub: actorLabel(e.actor), when: new Date(e.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) })
+    if (out.length === 5) break
+  }
+  return out
+}
+
 export async function getList(id: string): Promise<NodeDetail> {
   const cm = clientMap()
   const base = { ref: `list:${id}`, kind: 'list' as const, sats: [], petals: [] }
@@ -186,11 +203,12 @@ export async function getList(id: string): Promise<NodeDetail> {
       const late = [...openTasks().map(taskSummary), ...activePosts().map(postSummary), ...openQuotes().map(quoteSummary)].filter(t => t.urgent)
       const hero = pending[0] ?? late[0]
       const rest = [...pending.slice(1, 4), ...late.slice(hero && hero.kind !== 'mail' ? 1 : 0, 3)]
+      const changed = recentChanges()
       const today = (await upcomingEvents(1)).filter(e => sameDay(new Date(e.start), new Date()))
       return { ...base, title: pending.length || late.length ? 'Buongiorno' : 'Tutto in ordine', sub: '',
         events: today.map(e => ({ ref: `event:${e.id}`, title: e.title, start: e.start, end: e.end, allDay: e.allDay })),
         lead: pending.length ? `${pending.length === 1 ? 'Una persona aspetta' : `${pending.length} persone aspettano`} una tua risposta.` : 'Nessuno aspetta risposte: puoi concentrarti sul lavoro creativo.',
-        groups: [['__hero', hero ? [hero] : []], ['Poi', rest], ['Ripresi di recente', designProjects.getAll().slice(0, 2).map(d => designSummary(d, cm))]] }
+        groups: [['__hero', hero ? [hero] : []], ['Poi', rest], ...(changed.length ? [['Cambiato da ieri', changed] as [string, NodeSummary[]]] : []), ['Ripresi di recente', designProjects.getAll().slice(0, 2).map(d => designSummary(d, cm))]] }
     }
     case 'messaggi': {
       const mails = rankedMails(cm)
