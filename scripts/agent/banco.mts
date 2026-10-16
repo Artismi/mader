@@ -77,6 +77,10 @@ async function figlio(modello: string, out: string, soloCompiti?: string[], paus
 /* ── processo padre: un figlio per modello, poi il rapporto ───────────── */
 async function padre() {
   loadEnv(opt('env'))
+  // senza --env: .env.local e OpenRouter collegato, anche da un worktree (scripts/ai/chiavi.mjs)
+  await (await import('../ai/chiavi.mjs')).caricaChiavi(path.join(QUI, '..', '..'))
+  // conti del giorno e memoria delle risposte condivisi tra i figli (ognuno ha il suo database)
+  process.env.CREATIVE_OS_AI_DIR ??= path.join(QUI, '..', '..', 'data', 'ai-vie')
   process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'banco-elenco-')), 'x.db')
   const { tokens } = await import('../../src/lib/db/index')
   if (process.env.OPENROUTER_API_KEY) tokens.upsert({ provider: 'openrouter', provider_token: process.env.OPENROUTER_API_KEY } as never)

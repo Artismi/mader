@@ -21,7 +21,8 @@ const CONFIG_KEYS: Record<AiTask, string> = {
 }
 
 export function getOpenRouterKey(): string | null {
-  return tokens.get(OPENROUTER_PROVIDER)?.provider_token ?? null
+  // script e banco: la chiave può arrivare dall'ambiente (mai stampata)
+  return tokens.get(OPENROUTER_PROVIDER)?.provider_token ?? process.env.OPENROUTER_API_KEY ?? null
 }
 
 export function getOpenRouterModels(): Record<AiTask, string> {

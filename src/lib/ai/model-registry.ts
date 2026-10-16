@@ -18,6 +18,7 @@ import { google } from '@/lib/ai/google'
 import { config } from '@/lib/db'
 import { getOpenRouterKey, getOpenRouterModels, type AiTask } from '@/lib/ai/model-provider'
 import { idState, markRetired, refreshStaleCatalogs, type IdState } from '@/lib/ai/model-catalog'
+import { avvolgi, soloGratis, vieGratuite, type ViaGratuita } from '@/lib/ai/vie-gratuite'
 
 export type Provider = 'openrouter' | 'anthropic' | 'google'
 export type Strength = 'forte' | 'medio' | 'debole'
@@ -145,10 +146,20 @@ export function choiceToProvider(choice?: string): Provider | undefined {
 }
 
 function instantiate(provider: Provider, modelId: string): LanguageModel {
+  // ritmo, tentativi e memoria su disco (vie-gratuite.ts)
+  return avvolgi(rawModel(provider, modelId), `${provider}:${modelId}`)
+}
+function rawModel(provider: Provider, modelId: string): LanguageModel {
   if (provider === 'anthropic') return anthropic(modelId)
   if (provider === 'google') return google(modelId)
   const or = createOpenRouter({ apiKey: getOpenRouterKey() ?? '', compatibility: 'strict', headers: { 'X-Title': 'Creative OS' } })
   return or.chat(modelId)
+}
+
+/** Profilo di una via gratuita: le capacità provate sostituiscono la deduzione dal nome. */
+function profileOfVia(v: ViaGratuita): ModelProfile {
+  const p = profileOf(v.provider, v.modelId)
+  return { ...p, tools: v.tools, structured: v.structured, vision: v.vision, strength: v.forza, free: true }
 }
 
 /* ── quota e errori (prima in roles.ts) ───────────────────────────────── */
@@ -229,7 +240,24 @@ export function candidatesFor(need: Need, opts: PickOptions = {}): ModelCandidat
   const out: ModelCandidate[] = []
   const providers = providerOrder(keys, first)
   if (!opts.keys) refreshStaleCatalogs(providers)
-  for (const provider of providers) {
+  // solo gratis: le vie gratuite in ordine di preferenza; la scelta della chat mette avanti il suo fornitore
+  const gratis = soloGratis()
+  if (gratis) {
+    const vie = vieGratuite(need.task).filter(v => providers.includes(v.provider))
+    vie.sort((a, b) => (first ? Number(b.provider === first) - Number(a.provider === first) : 0))
+    for (const v of vie) {
+      if (opts.riservato && v.provider === 'google') continue
+      const profile = profileOfVia(v)
+      if (need.tools && !profile.tools) continue
+      if (need.vision && !profile.vision) continue
+      if (need.structured && !profile.structured) continue
+      const id = `${v.provider}:${v.modelId}`
+      if (idState(v.provider, v.modelId) === 'ritirato') continue
+      if (!opts.includeExhausted && isExhausted(id)) continue
+      out.push({ id, provider: v.provider, modelId: v.modelId, label: v.provider === 'openrouter' ? `openrouter:${v.modelId}` : v.modelId, profile, model: instantiate(v.provider, v.modelId) })
+    }
+  }
+  for (const provider of gratis ? [] : providers) {
     // Google gratuito usa i contenuti per migliorare i prodotti: escluso per i lavori riservati
     if (opts.riservato && provider === 'google') continue
     for (const modelId of modelsFor(provider, need.task)) {
@@ -258,6 +286,7 @@ export function pickModel(need: Need, opts: PickOptions = {}): ModelCandidate {
   if (list.length) return list[0]
   const any = candidatesFor(need, { ...opts, includeExhausted: true })
   if (any.length) return any[0]
+  if (soloGratis()) throw new Error('Nessun modello gratuito disponibile: serve GEMINI_API_KEY in .env.local o OpenRouter collegato nelle Impostazioni (oppure spegni "solo gratis").')
   throw new Error('Nessun modello disponibile: aggiungi ANTHROPIC_API_KEY o GEMINI_API_KEY in .env.local, oppure collega OpenRouter nelle Impostazioni.')
 }
 
@@ -273,6 +302,7 @@ export function registrySummary() {
   return {
     chiavi: keys,
     preferito: preferredProvider() ?? 'automatico',
+    soloGratis: soloGratis(),
     modelli: (['design', 'general'] as AiTask[]).map(task => ({
       task,
       ordine: candidatesFor({ task }, { includeExhausted: true }).map(c => ({ id: c.id, ...c.profile, inPausa: isExhausted(c.id) })),

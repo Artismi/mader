@@ -11,6 +11,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 
 process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'registro-')), 'test.db')
+process.env.CREATIVE_OS_SOLO_GRATIS = '0' // qui si prova il registro completo; le vie gratuite in vie-gratuite.test.mts
 
 const reg = await import('../../src/lib/ai/model-registry')
 const { runAgent, toolsForContext, serverToolDefs } = await import('../../src/lib/agent/run')
