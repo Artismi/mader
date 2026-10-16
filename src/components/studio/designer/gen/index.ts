@@ -264,7 +264,9 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
 const punteggio = (sc: Scene) => {
   const v = sc.esame?.voto ?? 0
   const cur = curiosita((sc.knobs as Knobs | undefined)?.sistema ?? sc.layout, sc.esame?.firma)
-  return v + (v >= ECCELLENTE ? cur : cur * 0.4)
+  // il carattere (C4) sposta l'ordine: una tavola determinata batte una corretta e generica
+  const car = sc.esame?.carattere?.carattere ?? 50
+  return v + (v >= ECCELLENTE ? cur : cur * 0.4) + (car - 50) * 0.3
 }
 
 /** Il sistema per la selezione: un ibrido vale come l'archetipo del suo scheletro (stessa ossatura, stessa idea di pagina). */

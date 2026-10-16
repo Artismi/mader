@@ -253,8 +253,9 @@ for (const nome of contenuti) {
     if (!sistemi && !args.vecchio) {
       const prime = res.filter(r => r.ok && r.url).slice(0, 12)
       const dv = await page.evaluate(o => window.designer.diversita(o), { urls: prime.map(r => r.url), mattoni: prime.map(r => r.mattoni ?? [r.sistema]) })
+      dv.carattere = prime.reduce((a, r) => a + (r.esame?.carattere?.carattere ?? 0), 0) / Math.max(1, prime.length)
       diversita.push(dv)
-      info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)})`
+      info += ` · diversità ${dv.visiva.toFixed(3)} (mattoni ${dv.mattoni.toFixed(2)}) · carattere ${dv.carattere.toFixed(1)}`
     }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
     if (args.ibridi) {
@@ -279,7 +280,7 @@ for (const nome of contenuti) {
     report.push({ contenuto: nome, formato: format, ok, totale: res.length, secondi: (Date.now() - t0) / 1000,
       scarti: res.filter(r => !r.ok).map(r => ({ sistema: r.sistema, motivi: r.reasons.slice(0, 4) })),
       mattoni: res.slice(0, 12).map(r => r.mattoni ?? [r.sistema]),
-      esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, stile: r.stile })),
+      esami: res.filter(r => r.ok && r.esame).map(r => ({ sistema: r.sistema, voto: r.esame.voto, promossa: r.esame.promossa, criteri: r.esame.criteri, difetti: r.esame.difetti, gesti: r.esame.gesti, correzioni: r.esame.correzioni, firma: r.esame.firma, carattere: r.esame.carattere, stile: r.stile })),
       tempi: Object.fromEntries(res.map(r => [r.sistema, r.ms])) })
     const voti = res.filter(r => r.esame).map(r => r.esame.voto)
     const coppie = new Set(res.slice(0, 12).filter(r => r.ok && r.coppia).map(r => r.coppia))
@@ -301,8 +302,8 @@ ${occhio.oc.riga('dopo', dopo)}
 
 if (diversita.length) {
   const m = k => diversita.reduce((a, d) => a + d[k], 0) / diversita.length
-  console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)}`)
-  fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), tavole: diversita }, null, 2))
+  console.log(`Indice di diversità (prime 12, media): visiva ${m('visiva').toFixed(3)} · mattoni ${m('mattoni').toFixed(2)} · carattere ${m('carattere').toFixed(1)}`)
+  fs.writeFileSync(path.join(out, 'diversita.json'), JSON.stringify({ visiva: m('visiva'), mattoni: m('mattoni'), carattere: m('carattere'), tavole: diversita }, null, 2))
 }
 console.log(`Coppie di font diverse (prime 12 per tavola): ${new Set(tutteCoppie).size} in tutto`)
 

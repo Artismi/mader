@@ -13,6 +13,7 @@ import { type Criterio, RUBRICA, SOGLIA, ECCELLENTE } from './rubrica'
 import { affinita } from './affinita'
 import { corpoMinimo } from '../core/scala'
 export { corpoMinimo }
+import { carattere, type Carattere } from './carattere'
 
 export type { Criterio } from './rubrica'
 export interface Esame {
@@ -29,6 +30,8 @@ export interface Esame {
   firma: string
   /** misure gratuite per l'imbuto prima del modello con visione (vedi imbuto.ts); non toccano il voto */
   misure: Misure
+  /** carattere autoriale (C4, carattere.ts): non tocca il voto, pesa nella scelta delle proposte */
+  carattere?: Carattere
 }
 export interface Misure {
   /** testi che escono dalla tavola */
@@ -275,7 +278,7 @@ export function esamina(g: G): Esame {
   voto = Math.max(0, Math.round(voto))
   const promossa = voto >= SOGLIA
   const misure: Misure = { ...misureLibere(g, texts), densita: 1 - zone.reduce((a, z) => a + z, 0), armonia: armonia(vivi), contrastoMin: lett.length ? Math.min(...lett.map(l => l.contrasto)) : 21 }
-  return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g), misure }
+  return { voto, criteri, difetti, gesti, correzioni, promossa, firma: firma(g), misure, carattere: carattere(g) }
 }
 
 /** Quanto pesa ogni nota del critico sul voto (punti su 100). La prima regola che combacia vale. */
