@@ -3,10 +3,11 @@ import path from 'path'
 import fs from 'fs'
 import { config } from '@/lib/db'
 import { db } from '@/lib/db/client'
+import { dentroVault } from '@/lib/vault/percorso'
 
 function resolveSafe(vaultPath: string, relative: string) {
   const abs = path.resolve(vaultPath, relative)
-  if (!abs.startsWith(path.resolve(vaultPath))) throw new Error('Accesso negato')
+  if (!dentroVault(abs, vaultPath)) throw new Error('Accesso negato')
   return abs
 }
 

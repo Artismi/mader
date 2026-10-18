@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import { config } from '@/lib/db'
 import { db } from '@/lib/db/client'
+import { dentroVault } from '@/lib/vault/percorso'
 
 const SUPPORTED_EXTS = new Set(['md', 'txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'])
 
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
     const absolutePath = path.resolve(vaultPath, relativePath)
 
     // Security check: must stay within vault
-    if (!absolutePath.startsWith(path.resolve(vaultPath))) {
+    if (!dentroVault(absolutePath, vaultPath)) {
       return NextResponse.json({ error: 'Accesso negato al di fuori del vault' }, { status: 403 })
     }
 

@@ -1,6 +1,7 @@
 import { tasks, clients, messages, bookings, contextInstructions } from '@/lib/db'
 import { searchVault, searchMemories } from '@/lib/vault'
 import { readFileSync } from 'fs'
+import { dentroVault } from '@/lib/vault/percorso'
 
 export interface OperativeContext {
   snapshot: string
@@ -174,7 +175,7 @@ export async function buildContext(userQuery: string, options?: ContextOptions):
       for (const f of options.extraFiles) {
         try {
           const abs = resolve(vaultPath, f.path)
-          if (!abs.startsWith(resolve(vaultPath))) continue  // sicurezza: restare nel vault
+          if (!dentroVault(abs, vaultPath)) continue  // sicurezza: restare nel vault
           const content = readFileSync(abs, 'utf-8')
           if (!content.trim()) continue
           const label = f.path.split(/[\\/]/).pop() || f.path

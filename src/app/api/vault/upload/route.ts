@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import path from 'path'
 import fs from 'fs'
 import { config } from '@/lib/db'
+import { dentroVault } from '@/lib/vault/percorso'
 
 const ALLOWED_EXTS = new Set(['.md', '.txt', '.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'])
 
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
     if (!files.length) return NextResponse.json({ error: 'Nessun file ricevuto' }, { status: 400 })
 
     const destDir = path.resolve(vaultPath, targetDir)
-    if (!destDir.startsWith(path.resolve(vaultPath))) {
+    if (!dentroVault(destDir, vaultPath)) {
       return NextResponse.json({ error: 'Accesso negato' }, { status: 403 })
     }
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })

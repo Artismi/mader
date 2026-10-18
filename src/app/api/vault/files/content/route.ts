@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import path from 'path'
 import fs from 'fs'
 import { config } from '@/lib/db'
+import { dentroVault } from '@/lib/vault/percorso'
 
 export async function GET(req: Request) {
   try {
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
     const absolutePath = path.resolve(vaultPath, relativePath)
 
     // Security check: must stay within vault
-    if (!absolutePath.startsWith(path.resolve(vaultPath))) {
+    if (!dentroVault(absolutePath, vaultPath)) {
       return NextResponse.json({ error: 'Accesso negato al di fuori del vault' }, { status: 403 })
     }
 

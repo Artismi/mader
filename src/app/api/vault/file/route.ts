@@ -1,6 +1,7 @@
 import path from 'path'
 import fs from 'fs'
 import { config } from '@/lib/db'
+import { dentroVault } from '@/lib/vault/percorso'
 
 const MIME: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
     if (!relativePath)  return new Response('Percorso mancante',     { status: 400 })
 
     const absolute = path.resolve(vaultPath, relativePath)
-    if (!absolute.startsWith(path.resolve(vaultPath)))
+    if (!dentroVault(absolute, vaultPath))
       return new Response('Accesso negato', { status: 403 })
     if (!fs.existsSync(absolute) || fs.statSync(absolute).isDirectory())
       return new Response('File non trovato', { status: 404 })
@@ -93,7 +94,7 @@ export async function PUT(req: Request) {
     if (!relativePath)  return new Response('Percorso mancante',     { status: 400 })
 
     const absolute = path.resolve(vaultPath, relativePath)
-    if (!absolute.startsWith(path.resolve(vaultPath)))
+    if (!dentroVault(absolute, vaultPath))
       return new Response('Accesso negato', { status: 403 })
 
     const { content } = await req.json()
