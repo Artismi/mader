@@ -117,7 +117,7 @@ async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ 
     const st = styleById(k.stile)
     items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), impronta: improntaLayout(programmaDa(sc), (sc.palette?.bg ? lumi(sc.palette.bg) : 1) < 0.35), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
   }
-  return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, esempi: { ...opzE.conta, usati: [...new Set(opzE.usati)] }, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ') || x.startsWith('esempi ')) }
+  return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, esempi: { ...opzE.conta, usati: [...new Set(opzE.usati)] }, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ') || x.startsWith('esempi ') || x.includes(': pixel ')) }
 }
 
 /** G2 da solo: i programmi dagli esempi (simulati) resi con le identità del vivaio, tutte le candidate con voto e difetti. */
