@@ -8,7 +8,7 @@ import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@
 import { toolsForContext } from '@/lib/agent/run'
 import { createTrace } from '@/lib/agent/trace'
 import { createToolCallRepair } from '@/lib/agent/repair'
-import { createPrepareStep, isActionRequest, risksOf } from '@/lib/agent/steer'
+import { createPrepareStep, isActionTurn, risksOf } from '@/lib/agent/steer'
 import { checkClosure, proveFromSteps } from '@/lib/agent/evidence'
 import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
 import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
@@ -930,10 +930,21 @@ QUANTITÀ BOARD:
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
 
-    const result = tracedStreamText({
+    const risks = risksOf(defs)
+    const tools = buildToolSet(defs, trace, createRepeatGuard())
+    // "vai", "ok", "sì" dopo una risposta dell'assistente approvano la proposta: è un'azione
+    const lastIsUser = messages[messages.length - 1]?.role === 'user'
+    const azione = lastIsUser && isActionTurn(userQuery, messages.slice(0, -1).some((m: { role: string }) => m.role === 'assistant'))
+    const onError = (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[ai] errore da ${modelLabel}:`, msg)
+      return `${msg} (modello: ${modelLabel})`
+    }
+
+    const giro = (msgs: aiSdk.ModelMessage[], obbligo: boolean) => tracedStreamText({
       model,
       system,
-      messages: modelMessages,
+      messages: msgs,
       stopWhen: stepCountIs(24), // lavori in più fasi: piano, letture, scritture, verifica
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
       experimental_telemetry: {
@@ -944,35 +955,50 @@ QUANTITÀ BOARD:
           hasCanvas: !!canvasSnapshot,
         },
       },
-      tools: buildToolSet(defs, trace, createRepeatGuard()),
+      tools,
       // A1: nome con prefisso o JSON rotto si ripara a regole invece di fallire
       experimental_repairToolCall: createToolCallRepair(undefined, s => console.log(`[agente] ${modelLabel}: ${s}`)),
       // ai modelli deboli un sottoinsieme fisso di strumenti per la pagina aperta
       activeTools: activeTools as never,
-      // A2: strumento obbligatorio al primo passo se la richiesta è un'azione; fase nel promemoria
-      prepareStep: createPrepareStep({ azione: messages[messages.length - 1]?.role === 'user' && isActionRequest(userQuery), risks: risksOf(defs), active: activeTools }),
-      onFinish: ({ steps, totalUsage, text }) => {
-        // A3 in chat: in streaming non si riprende il giro; la traccia segna le chiusure senza prove
-        const motivi = checkClosure({ prove: proveFromSteps(steps as never, risksOf(defs)), testo: text, azione: isActionRequest(userQuery) })
+      // A2: con un'azione lo strumento è obbligatorio finché non c'è una scrittura (al massimo 4 passi)
+      prepareStep: createPrepareStep({ azione: obbligo, insisti: 4, risks, active: activeTools }),
+    })
+
+    const stream = createUIMessageStream({
+      onError,
+      execute: async ({ writer }) => {
+        const primo = giro(modelMessages, azione)
+        writer.merge(primo.toUIMessageStream({ sendFinish: false, onError }))
+        let steps = [...(await primo.steps)]
+        let text = await primo.text
+        let usage = await primo.totalUsage
+        // A3 in chat: un'azione chiusa con un annuncio ("Procedo con…") o una promessa senza
+        // scritture viene respinta una volta, e il modello riprende con lo strumento obbligatorio
+        const motivi = checkClosure({ prove: proveFromSteps(steps as never, risks), testo: text, azione })
+        if (azione && motivi.length && !proveFromSteps(steps as never, risks).some(p => p.rischio !== 'read' && p.esito === 'ok')) {
+          console.log(`[agente] ${modelLabel}: risposta respinta (${motivi[0]}), secondo giro`)
+          const risposta = (await primo.response).messages
+          const secondo = giro([...modelMessages, ...risposta, { role: 'user', content: `<promemoria>Risposta respinta: ${motivi[0]}.</promemoria>` }], true)
+          writer.merge(secondo.toUIMessageStream({ sendStart: false, onError }))
+          steps = [...steps, ...(await secondo.steps)]
+          text = await secondo.text
+          const u = await secondo.totalUsage
+          usage = { ...usage, inputTokens: (usage.inputTokens ?? 0) + (u.inputTokens ?? 0), outputTokens: (usage.outputTokens ?? 0) + (u.outputTokens ?? 0), cachedInputTokens: (usage.cachedInputTokens ?? 0) + (u.cachedInputTokens ?? 0) }
+        } else {
+          writer.write({ type: 'finish' })
+        }
+        const fine = checkClosure({ prove: proveFromSteps(steps as never, risks), testo: text, azione })
         trace.finish({
-          prove: motivi.length ? `SENZA PROVE: ${motivi[0]}` : undefined,
+          prove: fine.length ? `SENZA PROVE: ${fine[0]}` : undefined,
           steps: steps.length,
-          inputTokens: totalUsage.inputTokens,
-          cachedInputTokens: totalUsage.cachedInputTokens,
-          outputTokens: totalUsage.outputTokens,
+          inputTokens: usage.inputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          outputTokens: usage.outputTokens,
           compacted: compacted.note,
         })
       },
     })
-
-    return result.toUIMessageStreamResponse({
-      // l'errore in chat dice anche quale modello ha fallito
-      onError: (err) => {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.error(`[ai] errore da ${modelLabel}:`, msg)
-        return `${msg} (modello: ${modelLabel})`
-      },
-    })
+    return createUIMessageStreamResponse({ stream })
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

@@ -427,3 +427,34 @@ test('runAgent: se nessuno chiude con le prove restituisce l\'ultima risposta co
   assert.equal(r.testo, 'Ho salvato la nota.')
   assert.equal(r.modello, 'solo')
 })
+
+/* ── chat dal vivo: "vai" approva, l'annuncio senza azione si respinge ── */
+
+test('isApproval / isActionTurn: "vai", "ok", "sì procedi" dopo una proposta sono azioni', () => {
+  for (const t of ['vai', 'Ok', 'sì, procedi!', 'va bene fallo', 'procedi', '[Soggetto: LoopAI]\nvai pure']) assert.equal(steer.isApproval(t), true, t)
+  for (const t of ['vai a vedere il piano e dimmi cosa manca', 'ok ma cambia il titolo', 'no', 'ciao', '']) assert.equal(steer.isApproval(t), false, t)
+  assert.equal(steer.isActionTurn('vai', true), true)
+  assert.equal(steer.isActionTurn('vai', false), false)
+  assert.equal(steer.isActionTurn('crea un incarico', false), true)
+})
+
+test('prepareStep con insisti: lo strumento resta obbligatorio finché non c\'è una scrittura', async () => {
+  const risks = { leggi: 'read', scrivi: 'write' } as const
+  const prep = steer.createPrepareStep({ azione: true, insisti: 4, risks })
+  const msgs = [{ role: 'user', content: 'vai' }] as never[]
+  const s = (toolName: string) => ({ toolCalls: [], toolResults: [{ toolName, output: { success: true } }] }) as never
+  assert.equal((await prep({ stepNumber: 1, steps: [s('leggi')], messages: msgs } as never))!.toolChoice, 'required')
+  assert.equal((await prep({ stepNumber: 2, steps: [s('leggi'), s('scrivi')], messages: msgs } as never))!.toolChoice, undefined)
+  assert.equal((await prep({ stepNumber: 4, steps: [s('leggi')], messages: msgs } as never))!.toolChoice, undefined)
+})
+
+test('A3: "Procedo con…" o "Sei d\'accordo?" senza scritture su un\'azione è respinto', async () => {
+  const { checkClosure } = await import('../../src/lib/agent/evidence')
+  for (const testo of ['Procedo con la creazione della grafica: titolo in alto, foto sotto.', 'Ecco il piano. Sei d\'accordo?', 'Posso procedere?']) {
+    const m = checkClosure({ prove: [], testo, azione: true })
+    assert.ok(m.some(x => /senza fare nulla/.test(x)), testo)
+  }
+  // con la scrittura fatta, l'annuncio non conta; senza azione nemmeno
+  assert.equal(checkClosure({ prove: [{ strumento: 'updateCanvasElements', rischio: 'write', input: {}, esito: 'ok' }], testo: 'Procedo anche con il resto?', azione: true }).length, 0)
+  assert.equal(checkClosure({ prove: [], testo: 'Procedo così: prima il titolo. Va bene?', azione: false }).length, 0)
+})
