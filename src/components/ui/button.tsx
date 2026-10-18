@@ -5,20 +5,20 @@ import { cn } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
 
 const buttonVariants = cva(
-    "inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+    "cos-btn disabled:pointer-events-none",
     {
         variants: {
             variant: {
-                primary: "bg-violet-600 hover:bg-violet-700 text-white",
-                secondary: "border border-violet-200 text-violet-700 hover:bg-violet-50",
-                ghost: "hover:bg-violet-50 hover:text-violet-700 text-slate-600",
-                danger: "bg-red-600 text-white hover:bg-red-700",
+                primary: "cos-btn-primary",
+                secondary: "cos-btn-secondary",
+                ghost: "cos-btn-ghost",
+                danger: "cos-btn-danger",
             },
             size: {
-                default: "h-10 px-4 py-2",
-                sm: "h-9 px-3 text-xs",
-                lg: "h-11 px-8",
-                icon: "h-10 w-10",
+                default: "",
+                sm: "cos-btn-sm",
+                lg: "cos-btn-lg",
+                icon: "cos-btn-icon",
             },
         },
         defaultVariants: {
@@ -45,7 +45,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                 disabled={isLoading || props.disabled}
                 {...props}
             >
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
                 {children}
             </Comp>
         )

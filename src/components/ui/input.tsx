@@ -11,24 +11,24 @@ export interface InputProps
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
     ({ className, type, label, error, leftIcon, ...props }, ref) => {
         return (
-            <div className="w-full space-y-1">
+            <div className="w-full space-y-1.5">
                 {label && (
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <label className="cos-kicker block pl-4">
                         {label}
                     </label>
                 )}
                 <div className="relative">
                     {leftIcon && (
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-ink-3">
                             {leftIcon}
                         </div>
                     )}
                     <input
                         type={type}
                         className={cn(
-                            "flex w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-shadow disabled:cursor-not-allowed disabled:opacity-50",
-                            leftIcon && "pl-10",
-                            error && "border-red-400 focus:ring-red-400",
+                            "cos-field flex disabled:cursor-not-allowed disabled:opacity-50",
+                            leftIcon && "pl-11",
+                            error && "!shadow-[inset_0_0_0_1.5px_var(--cos-err)]",
                             className
                         )}
                         ref={ref}
@@ -36,7 +36,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                     />
                 </div>
                 {error && (
-                    <p className="text-xs text-red-600">{error}</p>
+                    <p className="pl-4 text-xs text-[var(--cos-err)]" role="alert">{error}</p>
                 )}
             </div>
         )

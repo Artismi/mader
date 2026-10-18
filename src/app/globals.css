@@ -1,102 +1,377 @@
 @import "tailwindcss";
+@import "fontsource-space-mono/400.css";
+@import "fontsource-space-mono/700.css";
 
+/*
+ * Creative OS — sistema "Carta".
+ * Un solo linguaggio per tutta l'app, ricavato dal guscio /os: carta calda, inchiostro, un arancio vivo,
+ * cerchi concentrici, etichette in monospazio. Descrizione completa in docs/ux/sistema-carta.md.
+ *
+ * 1. token semantici (--cos-*)        → li usano os.css, i componenti nuovi e le classi .cos-*
+ * 2. rampe di colore "piegate"        → 50-200 e 800-950 sono tinte chiare, 300-700 sono leggibili (AA) su carta:
+ *                                       così sia il codice scritto per il tema scuro (text-violet-400, bg-violet-950/40)
+ *                                       sia quello scritto per il chiaro (text-violet-700, bg-violet-50) cade giusto.
+ * 3. la palette di Tailwind punta alle rampe: white = inchiostro, black = carta (l'interfaccia era scura su bianco trasparente).
+ */
 :root {
-  --cos-primary: #1A1A2E;
-  --cos-accent: #7C3AED;
-  --cos-surface: #F8F7FF;
-  --cos-border: rgba(196, 181, 253, 0.4);
-  --cos-ext-bg: #0F0F1A;
+  /* superfici */
+  --cos-bg: #eeebe4;        /* il tavolo */
+  --cos-surface: #fbfaf7;   /* la pagina: colonna larga ma non infinita, margini generosi */
+.cos-page { max-width: 1120px; margin: 0 auto; padding: 40px 48px 72px; display: flex; flex-direction: column; gap: 32px; }
+.cos-page.is-narrow { max-width: 760px; }
+@media (max-width: 640px) { .cos-page { padding: 24px 18px 56px; gap: 24px; } }
+.cos-section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 
-  --background: #0F0F1A;
-  --foreground: #F8F7FF;
-  
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --paper-bg: rgba(248, 247, 255, 0.95);
+/* il foglio */
+  --cos-sunk: #e8e4dc;      /* incavi, campi, righe al passaggio */
+  --cos-line: #dad3c7;      /* filetti */
+  --cos-line-strong: #b9b0a1;
+  /* inchiostri — tutti AA su carta e sul tavolo */
+  --cos-ink: #17150f;       /* 16.9:1 */
+  --cos-t2: #4b463e;        /* 7.9:1 */
+  --cos-t3: #6e675b;        /* 4.7:1 sul tavolo */
+  /* l'arancio: --cos-hot per segni e riempimenti grandi, --cos-hot-ink per testo piccolo */
+  --cos-hot: #ff4f1f;
+  --cos-hot-ink: #c13a10;
+  --cos-hot-soft: #ffe5da;
+  --cos-ok: #1d6f47;
+  --cos-err: #b02a1f;
+
+  /* tipografia */
+  --cos-font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --cos-font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --cos-font-mono: "Space Mono", ui-monospace, Consolas, monospace;
+  /* scala 1.25: 11 · 13 · 15 · 18 · 23 · 29 · 36 · 45 */
+
+  /* ritmo: base 4, passi 4 8 12 16 24 32 48 64 */
+  --cos-r-sm: 12px; --cos-r-md: 20px; --cos-r-lg: 30px; --cos-r-xl: 40px;
+  --cos-shadow-1: 0 0 0 1px var(--cos-line), 0 6px 14px -8px rgba(23,21,15,.25);
+  --cos-shadow-2: 0 0 0 1px var(--cos-line), 0 40px 80px -50px rgba(23,21,15,.45);
+  --cos-ease: cubic-bezier(.2,.8,.2,1);
+  --cos-spring: cubic-bezier(.34,1.4,.64,1);
+
+  /* compatibilità con i nomi vecchi */
+  --cos-primary: var(--cos-ink);
+  --cos-accent: var(--cos-hot-ink);
+  --cos-border: var(--cos-line);
+  --cos-ext-bg: var(--cos-bg);
+  --background: var(--cos-bg);
+  --foreground: var(--cos-ink);
+  --glass-bg: rgba(251,250,247,.86);
+  --glass-border: var(--cos-line);
+  --paper-bg: var(--cos-surface);
+
+  /* rampe piegate (generate: testo 300-700 ≥ 4.5:1 su carta) */
+  --cos-hot-50: #f8eee9;
+  --cos-hot-100: #f4e3db;
+  --cos-hot-200: #edccc0;
+  --cos-hot-300: #c13a10;
+  --cos-hot-400: #c13a10;
+  --cos-hot-500: #e8461a;
+  --cos-hot-600: #c13a10;
+  --cos-hot-700: #8e2f10;
+  --cos-hot-800: #efd4c9;
+  --cos-hot-900: #f4e3db;
+  --cos-hot-950: #f7ede7;
+  --cos-info-50: #edf1f0;
+  --cos-info-100: #dfe8e9;
+  --cos-info-200: #c2d6da;
+  --cos-info-300: #0f6380;
+  --cos-info-400: #0f6380;
+  --cos-info-500: #1781a6;
+  --cos-info-600: #0f6380;
+  --cos-info-700: #114c5e;
+  --cos-info-800: #ccdcdf;
+  --cos-info-900: #dfe8e9;
+  --cos-info-950: #eaefef;
+  --cos-ok-50: #eef2ec;
+  --cos-ok-100: #e0e9e2;
+  --cos-ok-200: #c6d9cd;
+  --cos-ok-300: #1d6f47;
+  --cos-ok-400: #1d6f47;
+  --cos-ok-500: #24945d;
+  --cos-ok-600: #1d6f47;
+  --cos-ok-700: #1b5436;
+  --cos-ok-800: #cfded4;
+  --cos-ok-900: #e0e9e2;
+  --cos-ok-950: #ebf0eb;
+  --cos-warn-50: #f4f0e8;
+  --cos-warn-100: #ede6d9;
+  --cos-warn-200: #dfd2bc;
+  --cos-warn-300: #865400;
+  --cos-warn-400: #865400;
+  --cos-warn-500: #c98a12;
+  --cos-warn-600: #865400;
+  --cos-warn-700: #654105;
+  --cos-warn-800: #e4d9c6;
+  --cos-warn-900: #ede6d9;
+  --cos-warn-950: #f3eee6;
+  --cos-err-50: #f7eeea;
+  --cos-err-100: #f2e1dd;
+  --cos-err-200: #e9c8c3;
+  --cos-err-300: #b02a1f;
+  --cos-err-400: #b02a1f;
+  --cos-err-500: #d93a2b;
+  --cos-err-600: #b02a1f;
+  --cos-err-700: #82241a;
+  --cos-err-800: #ecd0cc;
+  --cos-err-900: #f2e1dd;
+  --cos-err-950: #f6ebe8;
+  --cos-warm-50: #f7f5f0;
+  --cos-warm-100: #eeebe4;
+  --cos-warm-200: #ddd7cc;
+  --cos-warm-300: #7a7366;
+  --cos-warm-400: #6e675b;
+  --cos-warm-500: #6b6458;
+  --cos-warm-600: #575146;
+  --cos-warm-700: #47413a;
+  --cos-warm-800: #2e2a24;
+  --cos-warm-900: #1f1c17;
+  --cos-warm-950: #17150f;
 }
 
 @theme inline {
-  --color-primary: var(--cos-primary);
-  --color-accent: var(--cos-accent);
+  --color-white: var(--cos-ink);
+  --color-black: var(--cos-surface);
+  --color-primary: var(--cos-ink);
+  --color-accent: var(--cos-hot-ink);
   --color-surface: var(--cos-surface);
-  --color-border: var(--cos-border);
-  --color-ext-bg: var(--cos-ext-bg);
+  --color-border: var(--cos-line);
+  --color-ext-bg: var(--cos-bg);
+  --color-background: var(--cos-bg);
+  --color-foreground: var(--cos-ink);
+  /* nomi semantici per il codice nuovo: bg-paper, text-ink, text-ink-3, border-line, bg-hot… */
+  --color-paper: var(--cos-surface);
+  --color-desk: var(--cos-bg);
+  --color-sunk: var(--cos-sunk);
+  --color-line: var(--cos-line);
+  --color-ink: var(--cos-ink);
+  --color-ink-2: var(--cos-t2);
+  --color-ink-3: var(--cos-t3);
+  --color-hot: var(--cos-hot);
+  --color-hot-ink: var(--cos-hot-ink);
+  --color-hot-soft: var(--cos-hot-soft);
 
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-serif: 'Georgia', 'Times New Roman', serif;
-  --font-mono: var(--font-geist-mono);
-  
-  --shadow-desk: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
-  --shadow-paper: 
-    0 1px 1px rgba(0,0,0,0.05), 
-    0 2px 2px rgba(0,0,0,0.05), 
-    0 4px 4px rgba(0,0,0,0.05), 
-    0 8px 8px rgba(0,0,0,0.05),
-    0 16px 16px rgba(0,0,0,0.05);
+  --font-sans: var(--cos-font-text);
+  --font-display: var(--cos-font-display);
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-mono: var(--cos-font-mono);
+
+  --shadow-desk: var(--cos-shadow-2);
+  --shadow-paper: var(--cos-shadow-1);
+
+  /* violet · purple · indigo · fuchsia · pink · orange → hot */
+  --color-violet-50: var(--cos-hot-50); --color-violet-100: var(--cos-hot-100); --color-violet-200: var(--cos-hot-200); --color-violet-300: var(--cos-hot-300); --color-violet-400: var(--cos-hot-400); --color-violet-500: var(--cos-hot-500); --color-violet-600: var(--cos-hot-600); --color-violet-700: var(--cos-hot-700); --color-violet-800: var(--cos-hot-800); --color-violet-900: var(--cos-hot-900); --color-violet-950: var(--cos-hot-950);
+  --color-purple-50: var(--cos-hot-50); --color-purple-100: var(--cos-hot-100); --color-purple-200: var(--cos-hot-200); --color-purple-300: var(--cos-hot-300); --color-purple-400: var(--cos-hot-400); --color-purple-500: var(--cos-hot-500); --color-purple-600: var(--cos-hot-600); --color-purple-700: var(--cos-hot-700); --color-purple-800: var(--cos-hot-800); --color-purple-900: var(--cos-hot-900); --color-purple-950: var(--cos-hot-950);
+  --color-indigo-50: var(--cos-hot-50); --color-indigo-100: var(--cos-hot-100); --color-indigo-200: var(--cos-hot-200); --color-indigo-300: var(--cos-hot-300); --color-indigo-400: var(--cos-hot-400); --color-indigo-500: var(--cos-hot-500); --color-indigo-600: var(--cos-hot-600); --color-indigo-700: var(--cos-hot-700); --color-indigo-800: var(--cos-hot-800); --color-indigo-900: var(--cos-hot-900); --color-indigo-950: var(--cos-hot-950);
+  --color-fuchsia-50: var(--cos-hot-50); --color-fuchsia-100: var(--cos-hot-100); --color-fuchsia-200: var(--cos-hot-200); --color-fuchsia-300: var(--cos-hot-300); --color-fuchsia-400: var(--cos-hot-400); --color-fuchsia-500: var(--cos-hot-500); --color-fuchsia-600: var(--cos-hot-600); --color-fuchsia-700: var(--cos-hot-700); --color-fuchsia-800: var(--cos-hot-800); --color-fuchsia-900: var(--cos-hot-900); --color-fuchsia-950: var(--cos-hot-950);
+  --color-pink-50: var(--cos-hot-50); --color-pink-100: var(--cos-hot-100); --color-pink-200: var(--cos-hot-200); --color-pink-300: var(--cos-hot-300); --color-pink-400: var(--cos-hot-400); --color-pink-500: var(--cos-hot-500); --color-pink-600: var(--cos-hot-600); --color-pink-700: var(--cos-hot-700); --color-pink-800: var(--cos-hot-800); --color-pink-900: var(--cos-hot-900); --color-pink-950: var(--cos-hot-950);
+  --color-orange-50: var(--cos-hot-50); --color-orange-100: var(--cos-hot-100); --color-orange-200: var(--cos-hot-200); --color-orange-300: var(--cos-hot-300); --color-orange-400: var(--cos-hot-400); --color-orange-500: var(--cos-hot-500); --color-orange-600: var(--cos-hot-600); --color-orange-700: var(--cos-hot-700); --color-orange-800: var(--cos-hot-800); --color-orange-900: var(--cos-hot-900); --color-orange-950: var(--cos-hot-950);
+  /* sky · blue · cyan · teal → info */
+  --color-sky-50: var(--cos-info-50); --color-sky-100: var(--cos-info-100); --color-sky-200: var(--cos-info-200); --color-sky-300: var(--cos-info-300); --color-sky-400: var(--cos-info-400); --color-sky-500: var(--cos-info-500); --color-sky-600: var(--cos-info-600); --color-sky-700: var(--cos-info-700); --color-sky-800: var(--cos-info-800); --color-sky-900: var(--cos-info-900); --color-sky-950: var(--cos-info-950);
+  --color-blue-50: var(--cos-info-50); --color-blue-100: var(--cos-info-100); --color-blue-200: var(--cos-info-200); --color-blue-300: var(--cos-info-300); --color-blue-400: var(--cos-info-400); --color-blue-500: var(--cos-info-500); --color-blue-600: var(--cos-info-600); --color-blue-700: var(--cos-info-700); --color-blue-800: var(--cos-info-800); --color-blue-900: var(--cos-info-900); --color-blue-950: var(--cos-info-950);
+  --color-cyan-50: var(--cos-info-50); --color-cyan-100: var(--cos-info-100); --color-cyan-200: var(--cos-info-200); --color-cyan-300: var(--cos-info-300); --color-cyan-400: var(--cos-info-400); --color-cyan-500: var(--cos-info-500); --color-cyan-600: var(--cos-info-600); --color-cyan-700: var(--cos-info-700); --color-cyan-800: var(--cos-info-800); --color-cyan-900: var(--cos-info-900); --color-cyan-950: var(--cos-info-950);
+  --color-teal-50: var(--cos-info-50); --color-teal-100: var(--cos-info-100); --color-teal-200: var(--cos-info-200); --color-teal-300: var(--cos-info-300); --color-teal-400: var(--cos-info-400); --color-teal-500: var(--cos-info-500); --color-teal-600: var(--cos-info-600); --color-teal-700: var(--cos-info-700); --color-teal-800: var(--cos-info-800); --color-teal-900: var(--cos-info-900); --color-teal-950: var(--cos-info-950);
+  /* emerald · green · lime → ok */
+  --color-emerald-50: var(--cos-ok-50); --color-emerald-100: var(--cos-ok-100); --color-emerald-200: var(--cos-ok-200); --color-emerald-300: var(--cos-ok-300); --color-emerald-400: var(--cos-ok-400); --color-emerald-500: var(--cos-ok-500); --color-emerald-600: var(--cos-ok-600); --color-emerald-700: var(--cos-ok-700); --color-emerald-800: var(--cos-ok-800); --color-emerald-900: var(--cos-ok-900); --color-emerald-950: var(--cos-ok-950);
+  --color-green-50: var(--cos-ok-50); --color-green-100: var(--cos-ok-100); --color-green-200: var(--cos-ok-200); --color-green-300: var(--cos-ok-300); --color-green-400: var(--cos-ok-400); --color-green-500: var(--cos-ok-500); --color-green-600: var(--cos-ok-600); --color-green-700: var(--cos-ok-700); --color-green-800: var(--cos-ok-800); --color-green-900: var(--cos-ok-900); --color-green-950: var(--cos-ok-950);
+  --color-lime-50: var(--cos-ok-50); --color-lime-100: var(--cos-ok-100); --color-lime-200: var(--cos-ok-200); --color-lime-300: var(--cos-ok-300); --color-lime-400: var(--cos-ok-400); --color-lime-500: var(--cos-ok-500); --color-lime-600: var(--cos-ok-600); --color-lime-700: var(--cos-ok-700); --color-lime-800: var(--cos-ok-800); --color-lime-900: var(--cos-ok-900); --color-lime-950: var(--cos-ok-950);
+  /* amber · yellow → warn */
+  --color-amber-50: var(--cos-warn-50); --color-amber-100: var(--cos-warn-100); --color-amber-200: var(--cos-warn-200); --color-amber-300: var(--cos-warn-300); --color-amber-400: var(--cos-warn-400); --color-amber-500: var(--cos-warn-500); --color-amber-600: var(--cos-warn-600); --color-amber-700: var(--cos-warn-700); --color-amber-800: var(--cos-warn-800); --color-amber-900: var(--cos-warn-900); --color-amber-950: var(--cos-warn-950);
+  --color-yellow-50: var(--cos-warn-50); --color-yellow-100: var(--cos-warn-100); --color-yellow-200: var(--cos-warn-200); --color-yellow-300: var(--cos-warn-300); --color-yellow-400: var(--cos-warn-400); --color-yellow-500: var(--cos-warn-500); --color-yellow-600: var(--cos-warn-600); --color-yellow-700: var(--cos-warn-700); --color-yellow-800: var(--cos-warn-800); --color-yellow-900: var(--cos-warn-900); --color-yellow-950: var(--cos-warn-950);
+  /* red · rose → err */
+  --color-red-50: var(--cos-err-50); --color-red-100: var(--cos-err-100); --color-red-200: var(--cos-err-200); --color-red-300: var(--cos-err-300); --color-red-400: var(--cos-err-400); --color-red-500: var(--cos-err-500); --color-red-600: var(--cos-err-600); --color-red-700: var(--cos-err-700); --color-red-800: var(--cos-err-800); --color-red-900: var(--cos-err-900); --color-red-950: var(--cos-err-950);
+  --color-rose-50: var(--cos-err-50); --color-rose-100: var(--cos-err-100); --color-rose-200: var(--cos-err-200); --color-rose-300: var(--cos-err-300); --color-rose-400: var(--cos-err-400); --color-rose-500: var(--cos-err-500); --color-rose-600: var(--cos-err-600); --color-rose-700: var(--cos-err-700); --color-rose-800: var(--cos-err-800); --color-rose-900: var(--cos-err-900); --color-rose-950: var(--cos-err-950);
+  /* gray · zinc · neutral · stone · slate → warm */
+  --color-gray-50: var(--cos-warm-50); --color-gray-100: var(--cos-warm-100); --color-gray-200: var(--cos-warm-200); --color-gray-300: var(--cos-warm-300); --color-gray-400: var(--cos-warm-400); --color-gray-500: var(--cos-warm-500); --color-gray-600: var(--cos-warm-600); --color-gray-700: var(--cos-warm-700); --color-gray-800: var(--cos-warm-800); --color-gray-900: var(--cos-warm-900); --color-gray-950: var(--cos-warm-950);
+  --color-zinc-50: var(--cos-warm-50); --color-zinc-100: var(--cos-warm-100); --color-zinc-200: var(--cos-warm-200); --color-zinc-300: var(--cos-warm-300); --color-zinc-400: var(--cos-warm-400); --color-zinc-500: var(--cos-warm-500); --color-zinc-600: var(--cos-warm-600); --color-zinc-700: var(--cos-warm-700); --color-zinc-800: var(--cos-warm-800); --color-zinc-900: var(--cos-warm-900); --color-zinc-950: var(--cos-warm-950);
+  --color-neutral-50: var(--cos-warm-50); --color-neutral-100: var(--cos-warm-100); --color-neutral-200: var(--cos-warm-200); --color-neutral-300: var(--cos-warm-300); --color-neutral-400: var(--cos-warm-400); --color-neutral-500: var(--cos-warm-500); --color-neutral-600: var(--cos-warm-600); --color-neutral-700: var(--cos-warm-700); --color-neutral-800: var(--cos-warm-800); --color-neutral-900: var(--cos-warm-900); --color-neutral-950: var(--cos-warm-950);
+  --color-stone-50: var(--cos-warm-50); --color-stone-100: var(--cos-warm-100); --color-stone-200: var(--cos-warm-200); --color-stone-300: var(--cos-warm-300); --color-stone-400: var(--cos-warm-400); --color-stone-500: var(--cos-warm-500); --color-stone-600: var(--cos-warm-600); --color-stone-700: var(--cos-warm-700); --color-stone-800: var(--cos-warm-800); --color-stone-900: var(--cos-warm-900); --color-stone-950: var(--cos-warm-950);
+  --color-slate-50: var(--cos-warm-50); --color-slate-100: var(--cos-warm-100); --color-slate-200: var(--cos-warm-200); --color-slate-300: var(--cos-warm-300); --color-slate-400: var(--cos-warm-400); --color-slate-500: var(--cos-warm-500); --color-slate-600: var(--cos-warm-600); --color-slate-700: var(--cos-warm-700); --color-slate-800: var(--cos-warm-800); --color-slate-900: var(--cos-warm-900); --color-slate-950: var(--cos-warm-950);
 }
 
+/* ───────────────────────── base ───────────────────────── */
+
+html { background: var(--cos-bg); }
+body {
+  background: var(--cos-bg);
+  color: var(--cos-t2);
+  font-family: var(--cos-font-text);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4 { color: var(--cos-ink); font-family: var(--cos-font-display); letter-spacing: -.015em; text-wrap: balance; }
+h1 { letter-spacing: -.03em; }
+::selection { background: var(--cos-hot-soft); color: var(--cos-ink); }
+:focus-visible { outline: 2px solid var(--cos-hot-ink); outline-offset: 3px; }
+input::placeholder, textarea::placeholder { color: var(--cos-t3); opacity: 1; }
+* { scrollbar-width: thin; scrollbar-color: var(--cos-line-strong) transparent; }
+
+/* ─────────── ponte dal vecchio tema scuro ───────────
+ * L'interfaccia storica è scritta come testo bianco su fondo nero. Con white = inchiostro quasi tutto torna da solo;
+ * qui si sistemano i casi che il colore da solo non risolve. */
+
+/* i grigi ottenuti con la trasparenza scendevano sotto il 3:1: si agganciano alla scala a tre inchiostri */
+.text-white\/10, .text-white\/15, .text-white\/20, .text-white\/25, .text-white\/30, .text-white\/35, .text-white\/40,
+.text-white\/45, .text-white\/50, .text-white\/55, .text-white\/60 { color: var(--cos-t3); }
+.text-white\/65, .text-white\/70, .text-white\/75, .text-white\/80, .text-white\/85, .text-white\/90 { color: var(--cos-t2); }
+
+/* bianco pieno: nel vecchio chiaro era il foglio, nel vecchio scuro il pulsante "inverso" */
+.bg-white { background-color: var(--cos-surface); }
+.bg-white.text-black, .bg-white.text-zinc-900, .bg-white.text-neutral-900 { background-color: var(--cos-ink); color: var(--cos-surface); }
+.text-black { color: var(--cos-ink); }
+
+/* testo su riempimenti pieni: carta sui toni scuri, inchiostro sui vivi */
+.text-white:is(.bg-accent, .bg-primary, .bg-black, .bg-violet-600, .bg-violet-700, .bg-purple-600, .bg-purple-700, .bg-indigo-600,
+  .bg-blue-600, .bg-blue-700, .bg-sky-600, .bg-emerald-600, .bg-emerald-700, .bg-green-600, .bg-red-600, .bg-red-700, .bg-rose-600) { color: var(--cos-surface); }
+.text-white:is(.bg-violet-500, .bg-purple-500, .bg-blue-500, .bg-sky-500, .bg-emerald-500, .bg-green-500, .bg-red-500, .bg-amber-500, .bg-orange-500) { color: var(--cos-ink); }
+.bg-accent:is(.text-black, .text-primary) { color: var(--cos-surface); }
+
+/* le etichette urlate (maiuscolo + spaziatura larga) diventano le etichette in monospazio del guscio */
+.uppercase:is(.tracking-widest, .tracking-wider, .tracking-\[0\.2em\], .tracking-\[0\.3em\], .tracking-\[0\.25em\], .tracking-\[0\.15em\]) {
+  font-family: var(--cos-font-mono); font-weight: 400; letter-spacing: .08em;
+}
+.uppercase.font-black:not(h1, h2) { font-family: var(--cos-font-mono); font-weight: 700; letter-spacing: .06em; }
+/* sotto i 10px non si legge: minimo di sistema */
+.text-\[7px\], .text-\[8px\], .text-\[9px\] { font-size: 10px; }
+/* il nero 900 del vecchio tema era troppo pesante sulla carta */
+h1.font-black, h2.font-black { font-weight: 800; }
+
+/* finestre modali storiche (velo + foglio bianco): stesso raggio e ombra dei fogli del guscio */
+.fixed.inset-0 > :is(.bg-white, [class*="bg-[#"]):is(.rounded-xl, .rounded-2xl, .rounded-3xl) { border-radius: var(--cos-r-lg); box-shadow: var(--cos-shadow-2); border-color: transparent; }
+.fixed.inset-0:is(.bg-black\/40, .bg-black\/50, .bg-black\/60, .bg-black\/70, .bg-black\/80) { background-color: rgba(238,235,228,.72); }
+
+/* fondi esadecimali del tema scuro → tavolo, foglio, incavo, filetto */
+.bg-\[\#050505\], .bg-\[\#060606\], .bg-\[\#070707\], .bg-\[\#070709\], .bg-\[\#080808\], .bg-\[\#08080a\], .bg-\[\#090909\], .bg-\[\#0a0a0a\], .bg-\[\#0a0a0c\], .bg-\[\#0b0b0b\], .bg-\[\#0c0c0c\], .bg-\[\#0c0c0e\], .bg-\[\#0d0d0d\] { background-color: var(--cos-bg); }
+.bg-\[\#070707\]\/80, .bg-\[\#080808\]\/80, .bg-\[\#0d0d0d\]\/80 { background-color: color-mix(in oklab, var(--cos-bg) 80%, transparent); }
+.bg-\[\#080808\]\/60 { background-color: color-mix(in oklab, var(--cos-bg) 60%, transparent); }
+.bg-\[\#090909\]\/20 { background-color: color-mix(in oklab, var(--cos-bg) 20%, transparent); }
+.bg-\[\#090909\]\/40, .hover\:bg-\[\#090909\]\/40:hover { background-color: color-mix(in oklab, var(--cos-bg) 40%, transparent); }
+.bg-\[\#090909\]\/90 { background-color: color-mix(in oklab, var(--cos-bg) 90%, transparent); }
+.bg-\[\#090909\]\/95 { background-color: color-mix(in oklab, var(--cos-bg) 95%, transparent); }
+.bg-\[\#0F0F1A\], .bg-\[\#0d0d10\], .bg-\[\#111115\], .bg-\[\#111\], .bg-\[\#141414\], .bg-\[\#1a1a1a\], .bg-\[\#1a1a2e\], .bg-\[\#1e1e1e\] { background-color: var(--cos-surface); }
+.bg-\[\#0F0F1A\]\/90, .bg-\[\#111\]\/90 { background-color: color-mix(in oklab, var(--cos-surface) 90%, transparent); }
+.bg-\[\#111\]\/95, .bg-\[\#141414\]\/95 { background-color: color-mix(in oklab, var(--cos-surface) 95%, transparent); }
+.bg-\[\#141414\]\/60 { background-color: color-mix(in oklab, var(--cos-surface) 60%, transparent); }
+.bg-\[\#141414\]\/85 { background-color: color-mix(in oklab, var(--cos-surface) 85%, transparent); }
+.bg-\[\#141414\]\/96 { background-color: color-mix(in oklab, var(--cos-surface) 96%, transparent); }
+.bg-\[\#141414\]\/97 { background-color: color-mix(in oklab, var(--cos-surface) 97%, transparent); }
+.bg-\[\#141414\]\/98, .bg-\[\#1a1a1a\]\/98 { background-color: color-mix(in oklab, var(--cos-surface) 98%, transparent); }
+.bg-\[\#141414\]\/99 { background-color: color-mix(in oklab, var(--cos-surface) 99%, transparent); }
+.border-\[\#090909\], .border-\[\#2a2a2a\], .border-\[\#444\], .hover\:border-\[\#444\]:hover { border-color: var(--cos-line); }
+.hover\:bg-\[\#1a1a1a\]\/80:hover { background-color: color-mix(in oklab, var(--cos-surface) 80%, transparent); }
+.text-\[\#666\], .text-\[\#888\] { color: var(--cos-t3); }
+.text-\[\#a0a0a0\], .text-\[\#aaa\] { color: var(--cos-t2); }
+
+/* ───────────────────────── superfici storiche ───────────────────────── */
+
+/* il tavolo: gli stessi cerchi concentrici della ghiera del guscio */
 .desk-surface {
-  background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%);
   position: relative;
-  overflow: hidden;
+  background: repeating-radial-gradient(circle at 0 0, transparent 0 63px, rgba(23,21,15,.04) 64px, transparent 65px), var(--cos-bg);
 }
-
-.desk-surface::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.05;
-  pointer-events: none;
-}
-
 .glass-card {
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-desk);
+  border: 1px solid var(--cos-line);
+  border-radius: var(--cos-r-lg);
+  box-shadow: 0 30px 60px -40px rgba(23,21,15,.35);
 }
-
 .paper-sheet {
-  background: var(--paper-bg);
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paperNoise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paperNoise)' opacity='0.02'/%3E%3C/svg%3E");
-  color: var(--cos-primary);
-  box-shadow: var(--shadow-paper);
-  border-radius: 8px;
   position: relative;
-  border: 1px solid rgba(0,0,0,0.05);
+  background: var(--cos-surface);
+  color: var(--cos-ink);
+  border-radius: var(--cos-r-md);
+  box-shadow: var(--cos-shadow-1);
+}
+.hover-lift { transition: transform .3s var(--cos-spring), box-shadow .2s; }
+.hover-lift:hover { transform: translateY(-2px); box-shadow: 0 0 0 1.5px var(--cos-ink), 0 18px 36px -22px rgba(23,21,15,.45); z-index: 50; }
+
+@layer components {
+/* ───────────────────────── primitive .cos-* ───────────────────────── */
+
+/* etichetta: la voce del sistema, sempre in monospazio */
+.cos-kicker { font: 400 11px/1.3 var(--cos-font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--cos-t3); }
+.cos-title { font: 700 clamp(29px, 3.2vw, 40px)/1.06 var(--cos-font-display); letter-spacing: -.03em; color: var(--cos-ink); }
+.cos-lead { font-size: 16px; line-height: 1.55; color: var(--cos-t2); max-width: 62ch; }
+
+/* il foglio */
+.cos-card { position: relative; background: var(--cos-surface); border-radius: var(--cos-r-lg); box-shadow: 0 0 0 1px var(--cos-line); transition: box-shadow .2s, transform .3s var(--cos-spring); }
+.cos-card.is-link:hover, a.cos-card:hover { box-shadow: 0 0 0 1.5px var(--cos-ink), 0 18px 36px -24px rgba(23,21,15,.45); }
+
+/* Il dettaglio di bottega: i segni di taglio. Ai quattro angoli del foglio attivo compaiono i crocini
+ * della tipografia, come su una tavola pronta per la stampa. Solo al passaggio e al focus: non sono decoro fisso. */
+.cos-crop { --crop: var(--cos-hot); }
+.cos-crop::before {
+  content: ""; position: absolute; inset: -9px; pointer-events: none; opacity: 0; transition: opacity .2s, inset .3s var(--cos-ease);
+  background:
+    linear-gradient(var(--crop), var(--crop)) 0 0 / 10px 1.5px, linear-gradient(var(--crop), var(--crop)) 0 0 / 1.5px 10px,
+    linear-gradient(var(--crop), var(--crop)) 100% 0 / 10px 1.5px, linear-gradient(var(--crop), var(--crop)) 100% 0 / 1.5px 10px,
+    linear-gradient(var(--crop), var(--crop)) 0 100% / 10px 1.5px, linear-gradient(var(--crop), var(--crop)) 0 100% / 1.5px 10px,
+    linear-gradient(var(--crop), var(--crop)) 100% 100% / 10px 1.5px, linear-gradient(var(--crop), var(--crop)) 100% 100% / 1.5px 10px;
+  background-repeat: no-repeat;
+}
+.cos-crop:hover::before, .cos-crop:focus-within::before { opacity: 1; inset: -6px; }
+
+/* pulsanti: pillole. primario = inchiostro con il bollo arancio, come nel guscio */
+.cos-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 44px; padding: 0 20px; border-radius: 999px; font: 600 14px/1 var(--cos-font-text);
+  white-space: nowrap; cursor: pointer; transition: transform .25s var(--cos-spring), box-shadow .2s, background .2s, opacity .2s; }
+.cos-btn:disabled, .cos-btn[aria-disabled=true] { opacity: .45; cursor: default; transform: none; }
+.cos-btn-primary { background: var(--cos-ink); color: var(--cos-surface); box-shadow: 0 10px 24px -14px rgba(23,21,15,.6); }
+.cos-btn-primary:not(:disabled):hover { transform: translateY(-1px); }
+.cos-btn-primary .cos-dot { width: 28px; height: 28px; margin-left: -12px; border-radius: 50%; background: var(--cos-hot); color: var(--cos-ink); display: grid; place-items: center; transition: transform .3s var(--cos-spring); }
+.cos-btn-primary:hover .cos-dot { transform: rotate(-12deg) scale(1.06); }
+.cos-btn-secondary { background: var(--cos-surface); color: var(--cos-ink); box-shadow: inset 0 0 0 1.5px var(--cos-line); }
+.cos-btn-secondary:not(:disabled):hover { box-shadow: inset 0 0 0 1.5px var(--cos-ink); }
+.cos-btn-ghost { color: var(--cos-t2); }
+.cos-btn-ghost:not(:disabled):hover { background: var(--cos-sunk); color: var(--cos-ink); }
+.cos-btn-danger { background: var(--cos-surface); color: var(--cos-err); box-shadow: inset 0 0 0 1.5px currentColor; }
+.cos-btn-danger:not(:disabled):hover { background: #f6ebe8; }
+.cos-btn-sm { height: 34px; padding: 0 14px; font-size: 13px; }
+.cos-btn-lg { height: 54px; padding: 0 26px; font-size: 15px; }
+.cos-btn-icon { width: 44px; padding: 0; }
+.cos-btn-sm.cos-btn-icon { width: 34px; }
+
+/* campi */
+.cos-field { width: 100%; height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--cos-surface); color: var(--cos-ink); font: inherit; font-size: 14px;
+  box-shadow: inset 0 0 0 1px var(--cos-line); outline: none; transition: box-shadow .2s; }
+textarea.cos-field { height: auto; padding: 12px 16px; border-radius: var(--cos-r-md); line-height: 1.5; }
+.cos-field:hover { box-shadow: inset 0 0 0 1px var(--cos-line-strong); }
+.cos-field:focus, .cos-field:focus-visible { box-shadow: inset 0 0 0 1.5px var(--cos-ink), 0 0 0 4px var(--cos-hot-soft); outline: none; }
+.cos-field[aria-invalid=true] { box-shadow: inset 0 0 0 1.5px var(--cos-err); }
+
+/* bollini di stato */
+.cos-badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; border-radius: 999px; font: 600 12px/1 var(--cos-font-text); white-space: nowrap; background: var(--cos-sunk); color: var(--cos-t2); }
+.cos-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.cos-badge.is-hot { background: var(--cos-hot-soft); color: var(--cos-hot-ink); }
+.cos-badge.is-ok { background: #e0e9e2; color: var(--cos-ok); }
+.cos-badge.is-err { background: #f2e1dd; color: var(--cos-err); }
+.cos-badge.is-plain::before { display: none; }
+
+/* stati: vuoto, caricamento, errore */
+.cos-empty { display: grid; justify-items: center; gap: 10px; padding: 48px 24px; text-align: center; color: var(--cos-t3); }
+.cos-empty .cos-ring { width: 64px; height: 64px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--cos-line), 0 0 0 10px rgba(23,21,15,.025), 0 0 0 20px rgba(23,21,15,.02); display: grid; place-items: center; color: var(--cos-t3); }
+.cos-empty b { color: var(--cos-ink); font: 600 16px var(--cos-font-display); }
+.cos-error { display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: var(--cos-r-md); background: #f6ebe8; color: var(--cos-err); font-size: 14px; }
+
+/* caricamento: un segno di registro che gira, il mirino della stampa */
+.cos-reg { position: relative; width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--cos-ink); animation: cos-spin 1.4s linear infinite; }
+.cos-reg::before, .cos-reg::after { content: ""; position: absolute; background: var(--cos-ink); }
+.cos-reg::before { left: 50%; top: -5px; bottom: -5px; width: 1.5px; margin-left: -.75px; }
+.cos-reg::after { top: 50%; left: -5px; right: -5px; height: 1.5px; margin-top: -.75px; background: linear-gradient(90deg, var(--cos-ink) 0 35%, var(--cos-hot) 35% 65%, var(--cos-ink) 65%); }
+.cos-loading { display: grid; justify-items: center; gap: 14px; padding: 80px 0; font: 11px var(--cos-font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--cos-t3); }
+@keyframes cos-spin { to { transform: rotate(360deg); } }
 }
 
-.hover-lift {
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
-}
+/* ───────────────────────── movimento ───────────────────────── */
 
-.hover-lift:hover {
-  transform: translateY(-2px) scale(1.01);
-  box-shadow: 0 15px 35px -12px rgba(0, 0, 0, 0.3);
-  z-index: 50;
-}
+@keyframes slideInRight { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeInScale { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes slideInUp { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.cos-enter { animation: slideInUp .4s var(--cos-ease) both; }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-@keyframes slideInRight {
-  from { transform: translateX(110%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
-}
-
-@keyframes fadeInScale {
-  from { transform: scale(0.95); opacity: 0; }
-  to   { transform: scale(1);    opacity: 1; }
-}
-
-@keyframes slideInUp {
-  from { transform: translateY(8px); opacity: 0; }
-  to   { transform: translateY(0);   opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
