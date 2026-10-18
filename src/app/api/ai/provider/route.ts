@@ -8,6 +8,7 @@ import {
   setOpenRouterModel,
   type AiTask,
 } from '@/lib/ai/model-provider'
+import { cassaforteAttiva, salvaChiave } from '@/lib/ai/chiavi'
 
 // Stato del fornitore AI per la UI: mai la chiave, solo se è collegato,
 // i modelli scelti, i crediti rimasti e i modelli gratuiti disponibili.
@@ -74,5 +75,6 @@ export async function POST(req: Request) {
 
 export async function DELETE() {
   tokens.remove(OPENROUTER_PROVIDER)
+  if (cassaforteAttiva()) salvaChiave('openrouter', '')
   return NextResponse.json({ connected: false })
 }

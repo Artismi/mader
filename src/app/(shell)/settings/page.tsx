@@ -5,6 +5,7 @@ import { LogOut, User, Sparkles, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
+import { ModelKeysCard } from "@/components/settings/model-keys-card";
 
 export default async function SettingsPage() {
     const online = supabaseConfigurato();
@@ -29,6 +30,9 @@ export default async function SettingsPage() {
                     <p className="text-sm text-ink-2">Nessun account online collegato: i dati restano su questo computer.</p>
                 )}
             </section>
+
+            {/* Modelli: chiavi dell'utente, cifrate */}
+            <ModelKeysCard />
 
             {/* Modelli AI (OpenRouter) */}
             <Suspense fallback={<div className="cos-card cos-loading"><span className="cos-reg" />Carico i modelli</div>}>

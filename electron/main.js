@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, globalShortcut, ipcMain, session, Menu, utilityProcess, dialog } = require('electron')
+const { app, BrowserWindow, shell, globalShortcut, ipcMain, session, Menu, utilityProcess, dialog, safeStorage } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const fs = require('fs')
@@ -176,6 +176,24 @@ function findFreePort() {
   })
 }
 
+// Chiave maestra della cassaforte delle chiavi (src/lib/ai/chiavi.ts): 32 byte casuali,
+// conservati cifrati con safeStorage (DPAPI su Windows, Portachiavi su macOS).
+// Se non si decifra (portachiavi cambiato) il file resta com'è e le chiavi vanno reinserite.
+function chiaveMaestra() {
+  if (!safeStorage.isEncryptionAvailable()) return null
+  const file = path.join(app.getPath('userData'), 'cassaforte.bin')
+  try {
+    if (fs.existsSync(file)) return safeStorage.decryptString(fs.readFileSync(file))
+    const k = crypto.randomBytes(32).toString('hex')
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, safeStorage.encryptString(k))
+    return k
+  } catch (err) {
+    console.error('[chiavi] cassaforte non disponibile:', err.message)
+    return null
+  }
+}
+
 async function startNextServer() {
   if (isDev) {
     // In dev, Next.js è già avviato da concurrently — aspettiamo solo
@@ -188,6 +206,7 @@ async function startNextServer() {
   // Server Next.js standalone copiato fuori dall'asar (resources/server):
   // gira nel Node incorporato in Electron, senza Node installato sul computer
   const serverDir = path.join(process.resourcesPath, 'server')
+  const maestra = chiaveMaestra()
   nextServer = utilityProcess.fork(path.join(serverDir, 'server.js'), [], {
     cwd: serverDir,
     serviceName: 'Creative OS server',
@@ -202,6 +221,7 @@ async function startNextServer() {
       VAULT_PATH: path.join(app.getPath('userData'), 'vault'),
       CREATIVE_OS_ORIGIN: ORIGIN,
       CREATIVE_OS_TOKEN: SESSION_TOKEN,
+      ...(maestra ? { CREATIVE_OS_CHIAVE_MAESTRA: maestra } : {}),
       NEXT_TELEMETRY_DISABLED: '1',
     },
   })

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { tokens } from '@/lib/db'
-import { OPENROUTER_PROVIDER, takePendingPkce } from '@/lib/ai/model-provider'
+import { takePendingPkce } from '@/lib/ai/model-provider'
+import { salvaChiaveOpenRouterOAuth } from '@/lib/ai/chiavi'
 
 // Ritorno da OpenRouter: scambia il codice con la chiave API dell'utente
-// e la salva in user_tokens. Non arriva mai al client.
+// e la salva cifrata nella cassaforte (in sviluppo in user_tokens). Non arriva mai al client.
 
 function externalPage(ok: boolean): Response {
   const title = ok ? 'OpenRouter collegato' : 'Collegamento non riuscito'
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const { key } = await exchange.json() as { key?: string }
     if (!key) return done(false)
 
-    tokens.upsert({ provider: OPENROUTER_PROVIDER, provider_token: key })
+    salvaChiaveOpenRouterOAuth(key)
     return done(true)
   } catch (err) {
     console.error('[openrouter] errore callback:', err)

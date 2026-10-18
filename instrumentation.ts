@@ -19,6 +19,15 @@
 export async function register() {
   // Esegui solo nel runtime Node.js (non in Edge runtime)
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
+
+  // Chiavi dei modelli salvate nella cassaforte → process.env (src/lib/ai/chiavi.ts)
+  try {
+    const { applicaChiavi } = await import('@/lib/ai/chiavi')
+    applicaChiavi()
+  } catch (err) {
+    console.error('[chiavi] impossibile applicare le chiavi salvate:', err instanceof Error ? err.message : err)
+  }
+
   if (process.env.CREATIVE_OS_TELEMETRIA !== '1') return
 
   const { NodeSDK } = await import('@opentelemetry/sdk-node')
