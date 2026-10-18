@@ -78,7 +78,7 @@ async function figlio(modello: string, out: string, soloCompiti?: string[], paus
 async function padre() {
   loadEnv(opt('env'))
   // senza --env: .env.local e OpenRouter collegato, anche da un worktree (scripts/ai/chiavi.mjs)
-  await (await import('../ai/chiavi.mjs')).caricaChiavi(path.join(QUI, '..', '..'))
+  await (await import('../ai/chiavi.mjs')).caricaChiavi()
   // conti del giorno e memoria delle risposte condivisi tra i figli (ognuno ha il suo database)
   process.env.CREATIVE_OS_AI_DIR ??= path.join(QUI, '..', '..', 'data', 'ai-vie')
   process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'banco-elenco-')), 'x.db')

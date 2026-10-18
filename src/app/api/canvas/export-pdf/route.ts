@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     const pdfBytes = await pdf.save()
 
-    return new Response(pdfBytes, {
+    return new Response(new Uint8Array(pdfBytes), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': 'attachment; filename="progetto.pdf"',

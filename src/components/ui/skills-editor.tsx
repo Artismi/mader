@@ -7,8 +7,8 @@ import { ChevronDown, ChevronRight, Sparkles, ToggleLeft, ToggleRight, Save, Loa
 interface Skill {
     slug: string
     name: string
-    description: string
-    content: string
+    description?: string
+    content?: string
     triggers: string[]
     active: boolean
     sort_order: number
@@ -36,8 +36,8 @@ export function SkillsEditor({ initialSkills, initialArchitecture }: Props) {
             await upsertSkill({
                 slug: skill.slug,
                 name: skill.name,
-                description: skill.description,
-                content: skill.content,
+                description: skill.description ?? '',
+                content: skill.content ?? '',
                 triggers: skill.triggers,
                 active: skill.active,
                 sort_order: skill.sort_order,

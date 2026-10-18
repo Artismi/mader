@@ -16,6 +16,8 @@ interface ArtboardBundle {
   content: string
   rows: any[]
   palette: string[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  symbols?: any[]
 }
 
 interface UniversalLaunchHubProps {
@@ -378,7 +380,7 @@ export function UniversalLaunchHub({ data, animationTracks: animTracksProp, onCl
       .replace(/\*(.*?)\*/g, '<strong class="font-black">$1</strong>')
       .replace(/_(.*?)_/g, '<em class="italic">$1</em>')
       .replace(/~(.*?)~/g, '<span class="line-through">$1</span>')
-      .replace(/```(.*?)```/gs, '<code class="bg-black/5 px-1 rounded font-mono text-[11px]">$1</code>')
+      .replace(/```([\s\S]*?)```/g, '<code class="bg-black/5 px-1 rounded font-mono text-[11px]">$1</code>')
       .split('\n').map((line, i) => <div key={i} dangerouslySetInnerHTML={{ __html: line || '&nbsp;' }} />)
   }
 
