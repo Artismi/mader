@@ -3,6 +3,7 @@ import { google } from 'googleapis'
 import { tokens, messages } from '@/lib/db'
 import { googleAuth } from '@/lib/google/auth'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseConfigurato } from '@/lib/supabase/config'
 
 function decodeBase64(data: string): string {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8')
@@ -36,7 +37,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   try {
     let accessToken = tokens.get('google')?.provider_token
-    if (!accessToken) {
+    if (!accessToken && supabaseConfigurato()) {
       const supabase = await createClient()
       const { data: { session } } = await supabase.auth.getSession()
       accessToken = session?.provider_token ?? undefined

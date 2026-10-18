@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sendMail, type MailPayload } from '@/lib/google/gmail'
 import { googleAuth } from '@/lib/google/auth'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseConfigurato } from '@/lib/supabase/config'
 
 export async function POST(req: Request) {
   try {
@@ -14,9 +15,11 @@ export async function POST(req: Request) {
     // senza token in SQLite si prova con la sessione Supabase (vecchio login)
     let fallback: string | undefined
     if (!googleAuth()) {
-      const supabase = await createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      fallback = session?.provider_token ?? undefined
+      if (supabaseConfigurato()) {
+        const supabase = await createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        fallback = session?.provider_token ?? undefined
+      }
       if (!fallback) return NextResponse.json({ error: 'Google non collegato: accedi di nuovo con Google' }, { status: 401 })
     }
 

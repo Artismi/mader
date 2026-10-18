@@ -1,12 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
+import { supabaseConfigurato } from "@/lib/supabase/config";
 import { LogOut, User, Sparkles, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 
 export default async function SettingsPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const online = supabaseConfigurato();
+    const user = online
+        ? (await (await createClient()).auth.getUser()).data.user
+        : null;
 
     return (
         <div className="space-y-6 max-w-2xl">
@@ -20,11 +23,15 @@ export default async function SettingsPage() {
                 <h2 className="font-semibold text-primary flex items-center gap-2">
                     <User className="w-4 h-4" /> Profilo
                 </h2>
-                <div className="text-sm text-primary/70 space-y-1">
-                    <p><span className="font-medium text-primary">Email:</span> {user?.email}</p>
-                    <p><span className="font-medium text-primary">Provider:</span> Google</p>
-                    <p><span className="font-medium text-primary">ID:</span> <span className="font-mono text-xs">{user?.id}</span></p>
-                </div>
+                {online ? (
+                    <div className="text-sm text-primary/70 space-y-1">
+                        <p><span className="font-medium text-primary">Email:</span> {user?.email}</p>
+                        <p><span className="font-medium text-primary">Provider:</span> Google</p>
+                        <p><span className="font-medium text-primary">ID:</span> <span className="font-mono text-xs">{user?.id}</span></p>
+                    </div>
+                ) : (
+                    <p className="text-sm text-primary/70">Nessun account online collegato: i dati restano su questo computer.</p>
+                )}
             </div>
 
             {/* Modelli AI (OpenRouter) */}
@@ -51,7 +58,7 @@ export default async function SettingsPage() {
             </Link>
 
             {/* Logout */}
-            <div className="bg-white rounded-xl border border-border p-6">
+            {online && <div className="bg-white rounded-xl border border-border p-6">
                 <h2 className="font-semibold text-primary flex items-center gap-2 mb-4">
                     <LogOut className="w-4 h-4" /> Sessione
                 </h2>
@@ -63,7 +70,7 @@ export default async function SettingsPage() {
                         Disconnetti account
                     </button>
                 </form>
-            </div>
+            </div>}
         </div>
     );
 }

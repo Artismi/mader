@@ -2,6 +2,7 @@ import { google } from 'googleapis'
 import { tokens } from '@/lib/db'
 import { googleAuth } from '@/lib/google/auth'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseConfigurato } from '@/lib/supabase/config'
 
 export async function POST(req: Request) {
     try {
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
         }
 
         let accessToken = tokens.get('google')?.provider_token
-        if (!accessToken) {
+        if (!accessToken && supabaseConfigurato()) {
             const supabase = await createClient()
             const { data: { session } } = await supabase.auth.getSession()
             accessToken = session?.provider_token ?? undefined
