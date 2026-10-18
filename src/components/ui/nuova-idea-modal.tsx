@@ -80,7 +80,7 @@ export function NuovaIdeaModal() {
   return (
     <>
       <Button variant="secondary" size="sm" className="rounded-full" onClick={() => setOpen(true)}>
-        <Plus className="w-4 h-4 mr-2" /> Idea
+        <Plus className="w-4 h-4" /> Idea
       </Button>
 
       {open && (

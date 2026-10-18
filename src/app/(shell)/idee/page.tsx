@@ -2,6 +2,7 @@ import { Lightbulb } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { NuovaIdeaModal } from "@/components/ui/nuova-idea-modal";
 import { IdeaBoard } from "@/components/ui/idea-board";
+import { PageHeader, EmptyState } from "@/components/ui/page-header";
 
 export default async function IdeePage() {
     const supabase = await createClient();
@@ -18,20 +19,18 @@ export default async function IdeePage() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-primary">Idee</h1>
-                    <p className="mt-2 text-sm text-primary/70">Cattura e organizza le tue idee creative.</p>
-                </div>
-                <NuovaIdeaModal />
-            </div>
+        <div className="cos-page">
+            <PageHeader
+                kicker={`${ideas.length} ${ideas.length === 1 ? 'idea' : 'idee'}`}
+                title="Idee"
+                lead="Cattura e organizza le tue idee creative."
+                actions={<NuovaIdeaModal />}
+            />
 
             {ideas.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-primary/40">
-                    <Lightbulb className="w-12 h-12 mb-4 opacity-20" />
-                    <p className="text-sm italic">Nessuna idea ancora. Premi + per aggiungerne una.</p>
-                </div>
+                <EmptyState icon={<Lightbulb className="h-6 w-6" strokeWidth={1.5} />} title="Il quaderno è vuoto">
+                    Annota la prima idea con «+ Idea»: anche mezza frase basta, la sviluppi dopo.
+                </EmptyState>
             ) : (
                 <IdeaBoard ideas={ideas} />
             )}
