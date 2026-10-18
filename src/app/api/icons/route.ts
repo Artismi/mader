@@ -13,7 +13,7 @@ import type { IconifyJSON } from '@iconify/types'
 import fs from 'fs'
 import path from 'path'
 
-export const SETS: Record<string, { label: string; color: boolean; license: string }> = {
+const SETS: Record<string, { label: string; color: boolean; license: string }> = {
   ph: { label: 'Phosphor', color: false, license: 'MIT' },
   tabler: { label: 'Tabler', color: false, license: 'MIT' },
   'game-icons': { label: 'Game Icons', color: false, license: 'CC BY 3.0 — game-icons.net' },
