@@ -14,7 +14,7 @@ const TABS = [
 
 export function StudioTabs({ activeTab }: { activeTab: string }) {
   return (
-    <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 shadow-inner">
+    <div className="flex rounded-full bg-sunk p-1">
       {TABS.map((tab) => {
         const isActive = activeTab === tab.id
         const Icon = tab.icon
@@ -22,11 +22,12 @@ export function StudioTabs({ activeTab }: { activeTab: string }) {
           <Link
             key={tab.id}
             href={`/studio?tab=${tab.id}`}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-              isActive 
-                ? "bg-white/10 text-white border border-white/10 shadow-sm" 
-                : "text-white/20 hover:text-white/40"
+              "flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors",
+              isActive
+                ? "bg-ink text-paper"
+                : "text-ink-2 hover:bg-paper hover:text-ink"
             )}
           >
             <Icon className="w-3.5 h-3.5" />
