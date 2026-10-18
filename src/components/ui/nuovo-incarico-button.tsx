@@ -10,8 +10,8 @@ export function NuovoIncaricoButton() {
     return (
         <>
             <Button variant="primary" onClick={() => setOpen(true)}>
-                <Plus className="-ml-0.5 mr-1.5 h-5 w-5" />
-                Nuovo Incarico
+                <span className="cos-dot"><Plus className="h-4 w-4" strokeWidth={2.25} /></span>
+                Nuovo incarico
             </Button>
             <TaskFormModal open={open} onClose={() => setOpen(false)} />
         </>

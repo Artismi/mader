@@ -2,7 +2,7 @@ import { Search, Filter, MoreHorizontal } from "lucide-react";
 import { tasks } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { PageHeader, EmptyState } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { NuovoIncaricoButton } from "@/components/ui/nuovo-incarico-button";
 
@@ -18,64 +18,63 @@ export default async function IncarichiPage() {
     return <Badge variant="default">Da Iniziare</Badge>
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Incarichi</h1>
-          <p className="mt-2 text-sm text-primary/70">Gestisci i tuoi progetti attivi, scadenze e pianificazioni.</p>
-        </div>
-        <NuovoIncaricoButton />
-      </div>
+  const isLate = (task: { status: string; deadline?: string }) =>
+    !!task.deadline && new Date(task.deadline).getTime() < new Date().getTime() && task.status !== 'done'
 
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-surface p-4 rounded-lg border border-border shadow-sm">
-        <div className="relative w-full sm:max-w-xs flex items-center">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-5 w-5 text-primary/50" />
-          </div>
-          <Input type="text" className="pl-10" placeholder="Cerca per titolo o cliente..." />
+  return (
+    <div className="cos-page">
+      <PageHeader
+        kicker={`${allTasks.length} ${allTasks.length === 1 ? 'incarico' : 'incarichi'}`}
+        title="Incarichi"
+        lead="Progetti attivi, scadenze e pianificazione."
+        actions={<NuovoIncaricoButton />}
+      />
+
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="w-full sm:max-w-sm">
+          <Input type="text" leftIcon={<Search className="h-4 w-4" />} placeholder="Cerca per titolo o cliente…" aria-label="Cerca incarichi" />
         </div>
-        <Button variant="secondary" className="w-full sm:w-auto text-primary/70">
-          <Filter className="-ml-0.5 mr-1.5 h-4 w-4" />
-          Filtri Attivi: Nessuno
+        <Button variant="ghost" size="sm" className="self-start sm:self-auto">
+          <Filter className="h-4 w-4" />
+          Filtri: nessuno
         </Button>
       </div>
 
-      <Card className="overflow-hidden">
-        <ul role="list" className="divide-y divide-border">
-          {allTasks.length === 0 ? (
-            <div className="p-8 text-center text-primary/60 italic">Nessun incarico presente nel sistema.</div>
-          ) : (
-            allTasks.map((task) => (
-              <li key={task.id} className="relative flex items-center space-x-4 px-4 py-4 sm:px-6 hover:bg-black/5 cursor-pointer transition-colors">
+      <section aria-label="Elenco incarichi">
+        {allTasks.length === 0 ? (
+          <EmptyState icon={<Search className="h-5 w-5" />} title="Ancora nessun incarico">
+            Crea il primo con «Nuovo incarico»: lo ritrovi qui e nel guscio.
+          </EmptyState>
+        ) : (
+          <ul role="list" className="-mx-3">
+            {allTasks.map((task) => (
+              <li key={task.id} className="group relative flex items-center gap-4 rounded-full px-3 py-2.5 transition-colors hover:bg-sunk">
+                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sunk font-display text-[13px] font-bold text-ink transition-colors group-hover:bg-paper">
+                  {(task.client_name || task.title || '?').slice(0, 2).toUpperCase()}
+                </span>
                 <div className="min-w-0 flex-auto">
                   <div className="flex items-center gap-x-3">
-                    <h2 className="min-w-0 text-sm font-semibold leading-6 text-primary">
-                      <a href={`/incarichi/${task.id}`} className="flex gap-x-2">
+                    <h2 className="min-w-0 text-[15px] font-semibold leading-6 text-ink">
+                      <a href={`/incarichi/${task.id}`} className="flex gap-x-2 focus-visible:outline-none">
                         <span className="truncate">{task.title}</span>
-                        <span className="absolute inset-0" />
+                        <span className="absolute inset-0 rounded-full group-has-[:focus-visible]:outline group-has-[:focus-visible]:outline-2 group-has-[:focus-visible]:outline-offset-2 group-has-[:focus-visible]:outline-[var(--cos-hot-ink)]" />
                       </a>
                     </h2>
                     {getBadgeStatus(task.status, task.deadline)}
                   </div>
-                  <div className="mt-1 flex items-center gap-x-2 text-xs leading-5 text-primary/60">
-                    <p className="truncate">Cliente: <span className="font-medium text-primary">{task.client_name || '—'}</span></p>
-                    <svg viewBox="0 0 2 2" className="h-0.5 w-0.5 fill-current"><circle cx={1} cy={1} r={1} /></svg>
-                    <p className="truncate">Scadenza: <span className={`font-medium ${task.deadline && new Date(task.deadline).getTime() < new Date().getTime() && task.status !== 'done' ? 'text-red-600' : 'text-primary'}`}>
-                      {task.deadline ? new Date(task.deadline).toLocaleDateString('it-IT') : 'N/D'}
-                    </span></p>
-                    <svg viewBox="0 0 2 2" className="h-0.5 w-0.5 fill-current"><circle cx={1} cy={1} r={1} /></svg>
-                    <p className="truncate">Tipo: <span className="font-medium uppercase text-primary text-[10px] tracking-wider">{task.type}</span></p>
-                  </div>
+                  <p className="mt-0.5 truncate text-[13px] text-ink-3">
+                    {task.client_name || 'Senza cliente'}<span aria-hidden> · </span><span className="font-mono text-[11px] uppercase tracking-[0.06em]">{task.type}</span>
+                  </p>
                 </div>
-                <div className="flex shrink-0 items-center justify-end">
-                  <MoreHorizontal className="h-5 w-5 text-primary/40" />
-                </div>
+                <span className={`shrink-0 font-mono text-[12px] ${isLate(task) ? 'text-[var(--cos-err)]' : 'text-ink-3'}`}>
+                  {task.deadline ? new Date(task.deadline).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '—'}
+                </span>
+                <MoreHorizontal className="hidden h-5 w-5 shrink-0 text-ink-3 sm:block" aria-hidden />
               </li>
-            ))
-          )}
-        </ul>
-      </Card>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }
