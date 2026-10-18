@@ -48,6 +48,7 @@ function scan(dir, rel) {
 const serverDir = path.join(resources, 'server')
 if (!fs.existsSync(path.join(serverDir, 'server.js'))) trovati.push('server/server.js MANCANTE')
 if (!fs.existsSync(path.join(serverDir, 'node_modules', 'next', 'package.json'))) trovati.push('server/node_modules/next MANCANTE')
+if (!fs.existsSync(path.join(serverDir, 'node_modules', 'next', 'dist', 'compiled', 'next-server', 'app-route-turbo.runtime.prod.js'))) trovati.push('runtime delle route API di Next MANCANTE')
 else scan(serverDir, '')
 
 console.log(`[verifica] app.asar: ${voci.length} voci; server: ${nServer} voci`)

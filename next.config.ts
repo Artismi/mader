@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pptxgenjs'],
   // Il tracciamento segue process.cwd() e trascinerebbe nello standalone tutto il
   // progetto: chiavi, dati, cartelle di lavoro. public/ lo copia prepara-pacchetto.
+  // Il runtime delle route API non viene tracciato in automatico (Next 16 + Turbopack):
+  // senza, nel pacchetto ogni /api/* risponde 500
+  outputFileTracingIncludes: {
+    '*': ['./node_modules/next/dist/compiled/next-server/*.runtime.prod.js'],
+  },
   outputFileTracingExcludes: {
     '*': [
       './.env*', './data/**', './data-prova/**', './.claude/**', './scratch/**', './vault/**',
