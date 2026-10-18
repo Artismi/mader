@@ -286,7 +286,6 @@ import { childrenOf, installArtboards, boardOf } from './arrange/artboards'
 import { ArrangeBar, ExportMenu } from './arrange/ArrangeBar'
 import { boardLabel, boardToDataURL, listBoards } from './arrange/export'
 import { TextCurveControl } from './text/TextCurveControl'
-import { makeLiveShape, DEFAULT_POLYGON, DEFAULT_STAR } from './vector/shapes'
 import { runPathOp } from './vector/pathfinder'
 import { pathDoubleClick } from './vector/direct-select'
 import { describeCanvas, runDesignOps } from './ai/design-ops'
@@ -313,6 +312,11 @@ function inspOf(canvas: fabric.Canvas, obj: fabric.FabricObject) {
   return { x: Math.round(r.left - o.x), y: Math.round(r.top - o.y), w: Math.round(obj.getScaledWidth()), h: Math.round(obj.getScaledHeight()), r: Math.round(obj.angle || 0) }
 }
 import { cutout } from './compose/cutout'
+import { installSelection, selectAll, cycleSelection, selectBoard, pickable } from './editor/selection'
+import { boxFrom, makeShape, placeTopLeft, constrain45, anchorsInScene, splitLine, splitPolyline, CLICK_PX, DEFAULT_SIZE, type ShapeTool } from './editor/draw'
+import { snapMoving } from './editor/snap'
+import { flipSelection, lockSelection, hideSelection, zoomBy, zoomTo, toggleTextStyle } from './editor/commands'
+import { copySelection, cutSelection, pasteClip, duplicateSelection, deleteSelection, type Clip } from './editor/clipboard'
 import type { ComposeBoard } from '@/lib/design/compose-spec'
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -329,6 +333,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const drawingLine = useRef(false)
   const lineStart = useRef<{ x: number; y: number } | null>(null)
   const tempLine = useRef<ArrowLine | null>(null)
+  // forma che si sta disegnando trascinando: punto di partenza e anteprima
+  const shapeDrag = useRef<{ tool: ShapeTool; x: number; y: number; preview: fabric.FabricObject | null } | null>(null)
   const snapRef = useRef(false)
   const moveRaf = useRef<number | null>(null)
   const zoomRaf = useRef<number | null>(null)
@@ -410,7 +416,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // Inspector (position/size/rotation of selected object)
   const [insp, setInsp] = useState<{ x: number; y: number; w: number; h: number; r: number } | null>(null)
   // Clipboard
-  const clipboardRef = useRef<fabric.FabricObject | null>(null)
+  const clipboardRef = useRef<Clip | null>(null)
   // Dropdown trigger refs (for DropdownPortal positioning)
   const artboardBtnRef = useRef<HTMLButtonElement | null>(null)
   const exportBtnRef = useRef<HTMLButtonElement | null>(null)
@@ -696,6 +702,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const detachFx = attachFx(canvas)   // effetti su qualsiasi oggetto, ricostruiti da JSON/annulla
     const detachFonts = watchCanvasFonts(canvas)   // ogni testo carica il suo carattere
     const detachBoards = installArtboards(canvas)   // le tavole tagliano il contenuto e lo portano con sé
+    const detachSelection = installSelection(canvas)   // il vuoto delle tavole è vuoto, Ctrl+clic nei gruppi
     ;(canvas as any)._springIntegrator = springIntegratorRef.current
     ;(canvasRef.current as any)._fabric = canvas
 
@@ -915,7 +922,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         setSel({ ...D, ...base, type: 'line', hasStartArrow: obj.hasStartArrow, hasEndArrow: obj.hasEndArrow, isConnector: obj.isConnector } as SelState)
       } else if (obj.type === 'image') {
         setSel({ ...D, ...base, type: 'image' } as SelState)
-      } else if (obj.type === 'activeSelection') {
+      } else if (obj.type === 'activeSelection' || obj.type === 'activeselection' || (obj instanceof fabric.Group && !(obj as any).isClipMask)) {
         setSel({ ...D, ...base, type: 'group' } as SelState)
       } else {
         setSel({ ...D, ...base, type: 'shape' } as SelState)
@@ -940,44 +947,32 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     }
     canvas.on('object:scaling', throttledTransform)
     canvas.on('object:rotating', throttledTransform)
+    // Maiusc durante la rotazione: scatti di 15°
+    canvas.on('object:rotating', e => {
+      if (!(e.e as MouseEvent)?.shiftKey) return
+      e.target.rotate(Math.round((e.target.angle || 0) / 15) * 15); e.target.setCoords()
+    })
+    // le misure seguono frecce, allinea, valori e annulla
+    canvas.on('object:modified', refreshInsp)
+    canvas.on('history:restored' as never, () => setInsp(null))
+    // maniglie come in Illustrator e Figma: libere, Maiusc per le proporzioni
+    canvas.uniformScaling = false
 
     // Connector update + smart guides + snap-to-grid on move
     canvas.on('object:moving', e => {
       const moved = e.target as any
-      if (!moved.objId) return
 
-      // Snap to grid (Sync for UX precision)
-      if (snapGridRef.current && gridSizeRef.current) {
-        const gs = gridSizeRef.current
-        moved.set({ left: Math.round((moved.left || 0) / gs) * gs, top: Math.round((moved.top || 0) / gs) * gs })
+      // aggancio a griglia, oggetti e tavole (anche con più oggetti selezionati);
+      // le tavole no: il loro contenuto le segue con lo spostamento del mouse
+      if (!moved.isArtboard) {
+        const newGuides = snapMoving(canvas, moved, snapGridRef.current ? gridSizeRef.current : 0)
+        setGuides(prev => (prev.length === 0 && newGuides.length === 0 ? prev : newGuides))
       }
-
-      // Fabric schedules its own render on object:moving — no manual call needed
+      if (!moved.objId) return
 
       // Throttle heavy logic with RAF (Forward-only lock, no cancellation)
       if (moveRaf.current) return
       moveRaf.current = requestAnimationFrame(() => {
-        // Smart alignment guides
-        const GUIDE_T = 6
-        const mc = moved.getCenterPoint(), ml = moved.left || 0, mt = moved.top || 0
-        const mw = moved.getScaledWidth(), mh = moved.getScaledHeight()
-        const newGuides: { x?: number; y?: number }[] = []
-
-        const allObjs = canvas.getObjects().filter(o => o.selectable && o !== moved && !(o as any).isArtboard)
-
-        allObjs.forEach((obj: any) => {
-          const oc = obj.getCenterPoint(), ol = obj.left || 0, ot = obj.top || 0
-          const ow = obj.getScaledWidth(), oh = obj.getScaledHeight()
-          const xPairs = [[mc.x, oc.x], [ml, ol], [ml + mw, ol + ow], [mc.x, ol], [mc.x, ol + ow]]
-          xPairs.forEach(([a, b]) => { if (Math.abs(a - b) < GUIDE_T) newGuides.push({ x: b }) })
-          const yPairs = [[mc.y, oc.y], [mt, ot], [mt + mh, ot + oh], [mc.y, ot], [mc.y, ot + oh]]
-          yPairs.forEach(([a, b]) => { if (Math.abs(a - b) < GUIDE_T) newGuides.push({ y: b }) })
-        })
-        // Skip React update when guides unchanged (avoids re-render at 60fps during normal drag)
-        setGuides(prev => {
-          if (prev.length === 0 && newGuides.length === 0) return prev
-          return newGuides
-        })
 
         // Update ArrowLine connectors
         canvas.getObjects().forEach(obj => {
@@ -1111,10 +1106,16 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     // Keyboard shortcuts
     const onKey = (e: KeyboardEvent) => {
-      const tag = (document.activeElement as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-
       const activeObj = canvas.getActiveObject() as any
+      const mod = e.ctrlKey || e.metaKey
+      // mentre si scrive in un testo: Ctrl+B / I / U sulle lettere selezionate
+      if (activeObj?.isEditing && mod && !e.altKey && ['KeyB', 'KeyI', 'KeyU'].includes(e.code)) {
+        e.preventDefault()
+        toggleTextStyle(canvas, e.code === 'KeyB' ? 'bold' : e.code === 'KeyI' ? 'italic' : 'underline'); return
+      }
+      const tag = (document.activeElement as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable) return
+
       if (activeObj?.isEditing) {
         // Allow Enter to exit editing if desired, otherwise let Fabric handle it
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -1123,44 +1124,49 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         }
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        if (e.altKey) { undo(); return } // Ctrl+Alt+Z as Undo (Alternative)
-        if (e.shiftKey) { redo(); return } // Ctrl+Shift+Z as Redo
-        undo(); return // Ctrl+Z as Undo
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { redo(); return }
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); triggerSave(); return }
-      // Ctrl+A — select all
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      // con Maiusc e.key è 'Z': si confronta il tasto fisico
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
         e.preventDefault()
-        const objs = canvas.getObjects().filter(o => o.selectable !== false)
-        if (objs.length === 1) canvas.setActiveObject(objs[0])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else if (objs.length > 1) canvas.setActiveObject(new (fabric as any).ActiveSelection(objs, { canvas }))
-        canvas.requestRenderAll(); return
-      }
-      // Ctrl+C — copy
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        const a = canvas.getActiveObject(); if (!a) return
-        a.clone().then(cl => { clipboardRef.current = cl }); return
-      }
-      // Ctrl+V — paste
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-        if (!clipboardRef.current) return
-        clipboardRef.current.clone().then(cl => {
-          cl.set({ left: (cl.left || 0) + 20, top: (cl.top || 0) + 20, evented: true })
-          getObjId(cl); canvas.add(cl); canvas.setActiveObject(cl); canvas.requestRenderAll()
-          clipboardRef.current = cl // allow repeated pastes
-        }); return
-      }
-      // Ctrl+D — duplicate
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
-        e.preventDefault()
-        const a = canvas.getActiveObject()
-        if (a) a.clone().then(cl => { cl.set({ left: (a.left || 0) + 20, top: (a.top || 0) + 20 }); getObjId(cl); canvas.add(cl); canvas.setActiveObject(cl) })
+        if (e.shiftKey) redo(); else undo()
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); redo(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); triggerSave(); return }
+      // Ctrl+A — select all
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') { e.preventDefault(); selectAll(canvas); return }
+      // Tab / Maiusc+Tab: oggetto successivo / precedente
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); cycleSelection(canvas, e.shiftKey ? -1 : 1); return }
+      // Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+D: più oggetti diventano oggetti separati
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyC' && !e.shiftKey && !e.altKey) {
+        copySelection(canvas).then(cl => { if (cl) clipboardRef.current = cl }); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyX') {
+        e.preventDefault()
+        cutSelection(canvas).then(cl => { if (cl) clipboardRef.current = cl }); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyV' && !e.shiftKey) {
+        pasteClip(canvas, clipboardRef.current); return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyD' && !e.shiftKey) {
+        e.preventDefault()
+        duplicateSelection(canvas); return
+      }
       // Ctrl+0 — fit to screen
+      // zoom da tastiera: Ctrl+più, Ctrl+meno, Ctrl+1 al 100%
+      if (mod && ['Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract', 'Digit1', 'Numpad1'].includes(e.code)) {
+        e.preventDefault()
+        const z = e.code.endsWith('1') ? zoomTo(canvas, 1) : zoomBy(canvas, e.code === 'Equal' || e.code === 'NumpadAdd' ? 1.25 : 0.8)
+        setZoom(z); updateArtboardBadges(); return
+      }
+      // testo selezionato: grassetto, corsivo, sottolineato
+      if (mod && !e.altKey && !e.shiftKey && ['KeyB', 'KeyI', 'KeyU'].includes(e.code) && toggleTextStyle(canvas, e.code === 'KeyB' ? 'bold' : e.code === 'KeyI' ? 'italic' : 'underline')) { e.preventDefault(); return }
+      // blocca e nascondi (si annullano dai livelli)
+      if (mod && e.shiftKey && e.code === 'KeyL') { e.preventDefault(); lockSelection(canvas); refreshLayers(); return }
+      if (mod && e.shiftKey && e.code === 'KeyH') { e.preventDefault(); hideSelection(canvas); refreshLayers(); return }
+      // Maiusc+H / Maiusc+V: capovolgi
+      if (e.shiftKey && !mod && !e.altKey && (e.code === 'KeyH' || e.code === 'KeyV') && canvas.getActiveObject()) {
+        e.preventDefault(); flipSelection(canvas, e.code === 'KeyH' ? 'x' : 'y'); return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === '0') {
         e.preventDefault()
         fitToArtboards(); return
@@ -1174,23 +1180,23 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (bzEditRef.current) { exitBzEdit(); return }
         if (toolRef.current === 'pen') { finalizePenPath(); return }
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const objs = canvas.getActiveObjects()
-        if (objs.length) { objs.forEach(o => canvas.remove(o)); canvas.discardActiveObject(); canvas.requestRenderAll() }
-        return
-      }
+      if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelection(canvas); return }
       if (e.key === '[' && (e.ctrlKey || e.metaKey)) { layerSendToBack(); e.preventDefault(); return }
       if (e.key === ']' && (e.ctrlKey || e.metaKey)) { layerBringToFront(); e.preventDefault(); return }
       if (e.key === '[') { layerMoveDown(); e.preventDefault(); return }
       if (e.key === ']') { layerMoveUp(); e.preventDefault(); return }
       if (e.key === 'Escape') {
+        if (toolRef.current === 'pen' && penAnchors.current.length) { cancelPen(); return }
         if (activePoly.current) { canvas.remove(activePoly.current); activePoly.current = null; penPointsAbs.current = [] }
         canvas.discardActiveObject(); canvas.requestRenderAll(); return
       }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'g') { setShowGrid(p => !p); return }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { setSnapGrid(p => !p); return }
       // Space — enter grab/pan mode (cursor feedback)
       if (e.key === ' ' && !spaceDown.current) {
         spaceDown.current = true
+        // con Spazio premuto il mouse sposta solo la vista, mai gli oggetti
+        canvas.skipTargetFind = true; canvas.selection = false
         if (canvasContainerRef.current) canvasContainerRef.current.style.cursor = 'grab'
         e.preventDefault(); return
       }
@@ -1222,9 +1228,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           })
         } else {
           // Default artboard if totally empty
-          restoring(async () => { addArtboard(1080, 1080, 'Social Square', 'social') })
+          // lo stato di partenza entra nella cronologia: il primo gesto si può annullare
+          restoring(async () => { addArtboard(1080, 1080, 'Social Square', 'social') }).then(() => pushHistory(true))
           fitToArtboards()
-          pushHistory(true)
         }
       } else {
         cleanupOrphanedLabels(canvas)
@@ -1236,6 +1242,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         spaceDown.current = false
+        canvas.skipTargetFind = !['select', 'scissors'].includes(toolRef.current); canvas.selection = toolRef.current === 'select'
         if (canvasContainerRef.current) canvasContainerRef.current.style.cursor = ''
       }
     }
@@ -1354,6 +1361,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       detachFx()
       detachFonts()
       detachBoards()
+      detachSelection()
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
       resizeObserver.disconnect()
@@ -1483,9 +1491,15 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // ── Tool effect ───────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = fabricRef.current; if (!canvas) return
+    // lasciando la penna, il tracciato in corso si chiude (o sparisce se ha un punto solo)
+    if (toolRef.current === 'pen' && tool !== 'pen' && (penAnchors.current.length || penFabricPath.current)) {
+      if (penAnchors.current.length >= 2) finalizePenPath(true); else cancelPen()
+    }
     toolRef.current = tool
     canvas.isDrawingMode = false
     canvas.selection = tool === 'select'
+    // con gli strumenti di disegno il mouse non deve prendere e trascinare gli oggetti sotto
+    canvas.skipTargetFind = !['select', 'scissors'].includes(tool)
     canvas.defaultCursor = 'default'
 
     if (tool === 'pencil') {
@@ -1615,10 +1629,12 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const fp = opt.target as fabric.Path
       const stored = (fp as any)._bzAnchors as BzAnchor[] | undefined
       if (!stored || stored.length < 2) return
-      const hit = closestOnBzPath(stored, p.x, p.y)
-      if (hit.dist > 30) return           // too far from path
-      const [leftA, rightA] = splitBzPath(stored, hit)
-      const props = { stroke: (fp.stroke as string) || '#ffffff', strokeWidth: fp.strokeWidth || 2, fill: 'transparent', selectable: true, evented: true, objectCaching: false, lockScalingX: true, lockScalingY: true }
+      // i punti sono nelle coordinate del tracciato: il tracciato può essere stato spostato o scalato
+      const anchors = anchorsInScene(fp, stored)
+      const hit = closestOnBzPath(anchors, p.x, p.y)
+      if (hit.dist > 30 / canvas.getZoom()) return           // troppo lontano dal tracciato
+      const [leftA, rightA] = splitBzPath(anchors, hit)
+      const props = { stroke: (fp.stroke as string) || '#ffffff', strokeWidth: fp.strokeWidth || 2, fill: 'transparent', selectable: true, evented: true, objectCaching: false }
       const pathL = new fabric.Path(anchorsToBzPath(leftA), props)
       const pathR = new fabric.Path(anchorsToBzPath(rightA), props)
         ; (pathL as any)._bzAnchors = leftA; getObjId(pathL)
@@ -1627,15 +1643,23 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       canvas.setActiveObject(pathR); canvas.renderAll()
       pushHistory(); return
     }
-    // Scissors on polyline (legacy)
+    // forbici su una linea: due linee che si toccano nel punto del taglio
+    if (t === 'scissors' && opt.target instanceof ArrowLine) {
+      const parts = splitLine(opt.target, p, 30 / canvas.getZoom())
+      if (!parts) return
+      const at = canvas.getObjects().indexOf(opt.target)
+      canvas.remove(opt.target)
+      parts.forEach((l, i) => { getObjId(l); canvas.insertAt(at + i, l) })
+      canvas.setActiveObject(parts[1]); canvas.requestRenderAll(); return
+    }
+    // forbici su una polilinea: si taglia al vertice più vicino
     if (t === 'scissors' && opt.target?.type === 'polyline') {
-      const poly = opt.target as any, pts = poly.get('points') as { x: number; y: number }[]
-      if (pts.length > 2) {
-        const mid = Math.floor(pts.length / 2)
-        const p2 = new fabric.Polyline(pts.slice(mid), { left: poly.left, top: poly.top, stroke: poly.stroke, strokeWidth: poly.strokeWidth, fill: 'transparent' })
-        getObjId(p2); poly.set({ points: pts.slice(0, mid + 1) }); canvas.add(p2); canvas.renderAll()
-      }
-      return
+      const parts = splitPolyline(opt.target as fabric.Polyline, p)
+      if (!parts) return
+      const at = canvas.getObjects().indexOf(opt.target)
+      canvas.remove(opt.target)
+      parts.forEach((l, i) => { getObjId(l); canvas.insertAt(at + i, l) })
+      canvas.requestRenderAll(); return
     }
 
     // ── Pen tool — bezier path builder ───────────────────────────────────
@@ -1654,6 +1678,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         fill: inkAt(canvas, p.x, p.y), fontSize: 28, fontFamily: 'Inter',
         editable: true, textAlign: 'left'
       })
+      placeTopLeft(txt, p)   // il testo comincia dove si è cliccato
       canvas.add(txt)
       canvas.setActiveObject(txt)
       // Slight delay to ensure focus after React render cycle
@@ -1665,18 +1690,10 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       setTool('select')
       return
     }
-    if (t === 'rect') {
-      const r = new fabric.Rect({ left: p.x, top: p.y, width: 200, height: 200, fill: SHAPE_FILL, strokeWidth: 0, rx: 0, ry: 0 })
-      canvas.add(r); canvas.setActiveObject(r); setTool('select'); return
-    }
-    if (t === 'circle') {
-      const el = new fabric.Ellipse({ left: p.x, top: p.y, rx: 100, ry: 100, fill: SHAPE_FILL, strokeWidth: 0 })
-      canvas.add(el); canvas.setActiveObject(el); setTool('select'); return
-    }
-    if (t === 'polygon' || t === 'star') {
-      // forma viva: lati, punte e arrotondamento si cambiano poi dal pannello Vettoriale
-      const sh = makeLiveShape(t === 'star' ? DEFAULT_STAR : DEFAULT_POLYGON, { x: p.x, y: p.y }, { fill: SHAPE_FILL })
-      canvas.add(sh); canvas.setActiveObject(sh); setTool('select'); return
+    if (t === 'rect' || t === 'circle' || t === 'polygon' || t === 'star') {
+      // la forma nasce al rilascio: trascinando se ne decide la misura, un clic dà quella standard
+      shapeDrag.current = { tool: t, x: p.x, y: p.y, preview: null }
+      return
     }
     if (t === 'line') {
       const snap = findSnapPoint(canvas, p.x, p.y)
@@ -1697,7 +1714,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           reader.onload = e => {
             fabric.Image.fromURL(e.target?.result as string, { crossOrigin: 'anonymous' }).then(img => {
               if (img.width! > canvas.width! * 0.5) img.scaleToWidth(canvas.width! * 0.5)
-              img.set({ left: p.x, top: p.y }); canvas.add(img); canvas.setActiveObject(img)
+              placeTopLeft(img, p); canvas.add(img); canvas.setActiveObject(img)
             })
           }
           reader.readAsDataURL(file)
@@ -1708,7 +1725,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   }
 
   function eraseAt(canvas: fabric.Canvas, p: fabric.Point) {
-    const remove = canvas.getObjects().filter(o => o.selectable !== false && o.evented !== false && o.containsPoint(p))
+    const remove = canvas.getObjects().filter(o => !(o as any).isArtboard && !o.excludeFromExport && o.selectable !== false && o.evented !== false && o.containsPoint(p))
     remove.forEach(o => canvas.remove(o)); if (remove.length) canvas.requestRenderAll()
   }
 
@@ -1734,7 +1751,18 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       renderPenPreview(canvas, p.x, p.y)
       return
     }
-    if (drawingLine.current && tempLine.current) { tempLine.current.set({ x2: p.x, y2: p.y }); tempLine.current.setCoords(); canvas.requestRenderAll() }
+    const sd = shapeDrag.current
+    if (sd) {
+      const me = opt.e as MouseEvent
+      if (!sd.preview && Math.hypot(p.x - sd.x, p.y - sd.y) * canvas.getZoom() < CLICK_PX) return
+      if (sd.preview) canvas.remove(sd.preview)
+      sd.preview = makeShape(sd.tool, boxFrom(sd, p, { shift: me.shiftKey, alt: me.altKey }), { fill: SHAPE_FILL, opacity: 0.6, selectable: false, evented: false, excludeFromExport: true })
+      canvas.add(sd.preview); canvas.requestRenderAll(); return
+    }
+    if (drawingLine.current && tempLine.current) {
+      const q = (opt.e as MouseEvent).shiftKey && lineStart.current ? constrain45(lineStart.current, p) : p
+      tempLine.current.set({ x2: q.x, y2: q.y }); tempLine.current.setCoords(); canvas.requestRenderAll()
+    }
   }
 
   function handleUp(canvas: fabric.Canvas, opt: fabric.TPointerEventInfo<fabric.TPointerEvent>) {
@@ -1744,7 +1772,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       canvas.remove(lassoLine.current); lassoLine.current = null
       const pts = lassoPoints.current
       if (pts.length > 2) {
-        const sel = canvas.getObjects().filter(o => o.selectable !== false && pointInPoly(o.getCenterPoint(), pts))
+        const sel = pickable(canvas).filter(o => pointInPoly(o.getCenterPoint(), pts))
         if (sel.length === 1) canvas.setActiveObject(sel[0])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         else if (sel.length > 1) canvas.setActiveObject(new (fabric as any).ActiveSelection(sel, { canvas }))
@@ -1756,10 +1784,23 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       penDragging.current = false; penDragStart.current = null
       return
     }
+    const sd = shapeDrag.current
+    if (sd) {
+      shapeDrag.current = null
+      const me = opt.e as MouseEvent
+      if (sd.preview) canvas.remove(sd.preview)
+      const box = sd.preview
+        ? boxFrom(sd, p, { shift: me.shiftKey, alt: me.altKey })
+        : { left: sd.x, top: sd.y, w: DEFAULT_SIZE, h: DEFAULT_SIZE }
+      const sh = makeShape(sd.tool, box, { fill: SHAPE_FILL })
+      getObjId(sh); canvas.add(sh); canvas.setActiveObject(sh); canvas.requestRenderAll()
+      setTool('select'); return
+    }
     if (drawingLine.current && tempLine.current) {
       const line = tempLine.current
-      const snap = findSnapPoint(canvas, p.x, p.y, line.startObjId || undefined)
-      const ex = snap ? snap.x : p.x, ey = snap ? snap.y : p.y
+      const q = (opt.e as MouseEvent).shiftKey && lineStart.current ? constrain45(lineStart.current, p) : p
+      const snap = (opt.e as MouseEvent).shiftKey ? null : findSnapPoint(canvas, q.x, q.y, line.startObjId || undefined)
+      const ex = snap ? snap.x : q.x, ey = snap ? snap.y : q.y
       const start = lineStart.current!, d = Math.hypot(ex - start.x, ey - start.y)
       if (d < 5) { canvas.remove(line) }
       else { line.set({ x2: ex, y2: ey, selectable: true, evented: true, excludeFromExport: false, endObjId: snap ? snap.objId : null }); line.setCoords(); canvas.setActiveObject(line); canvas.fire('object:modified', { target: line }) }
@@ -1780,22 +1821,30 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     canvas.requestRenderAll()
   }
 
-  function finalizePenPath() {
+  /** Esc con la penna: il tracciato in corso sparisce */
+  function cancelPen() {
+    const canvas = fabricRef.current
+    if (canvas && penFabricPath.current) { canvas.remove(penFabricPath.current); canvas.requestRenderAll() }
+    penFabricPath.current = null
+    penAnchors.current = []; penDragging.current = false; penDragStart.current = null
+  }
+
+  function finalizePenPath(keepTool = false) {
     const canvas = fabricRef.current; if (!canvas) return
     if (penFabricPath.current) { canvas.remove(penFabricPath.current); penFabricPath.current = null }
     const anchors = penAnchors.current
     if (anchors.length >= 2) {
       const d = anchorsToBzPath(anchors)
+      // i punti restano nelle coordinate del tracciato: si può spostare e scalare liberamente
       const fp = new fabric.Path(d, {
         stroke: inkAt(canvas, anchors[0].x, anchors[0].y), strokeWidth: 2, fill: 'transparent',
         selectable: true, evented: true, objectCaching: false,
-        lockScalingX: true, lockScalingY: true,
       })
         ; (fp as any)._bzAnchors = anchors.map(a => ({ ...a }))
       getObjId(fp); canvas.add(fp); canvas.setActiveObject(fp); pushHistory()
     }
     penAnchors.current = []; penDragging.current = false; penDragStart.current = null
-    setTool('select')
+    if (!keepTool) setTool('select')
   }
 
   // ── Bezier edit overlay ───────────────────────────────────────────────────
@@ -4355,7 +4404,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
                   <div className="w-4 h-4 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
                     <Layers className="w-2.5 h-2.5 text-white/40 group-hover:text-accent transition-colors" />
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-tighter text-white/60 cursor-default select-none group-hover:text-white transition-colors">
+                  <span onMouseDown={() => { if (fabricRef.current) selectBoard(fabricRef.current, badge.id) }} title="Seleziona la tavola"
+                    className="text-[9px] font-black uppercase tracking-tighter text-white/60 cursor-pointer select-none group-hover:text-white transition-colors">
                     {badge.id.replace('artboard_', '')}
                   </span>
                 </div>
@@ -4464,9 +4514,9 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           {([
             ['Grid', showGrid, () => setShowGrid(p => !p), 'G'],
             ['Snap', snapGrid, () => setSnapGrid(p => !p), 'S'],
-            ['Ruler', showRulers, () => setShowRulers(p => !p), 'R'],
-            ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), 'E'],
-            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), 'O'],
+            ['Ruler', showRulers, () => setShowRulers(p => !p), ''],
+            ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), ''],
+            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), ''],
             ['Gravity', gravityEnabled, () => setGravityEnabled(p => !p), ''],
           ] as [string, boolean, () => void, string][]).map(([label, active, toggle, key]) => (
             <button key={label} onClick={toggle} title={key ? `${label} [${key}]` : label}
@@ -4605,12 +4655,8 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       )}
       {ctxMenu && typeof document !== 'undefined' && createPortal(
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y}
-          onDuplicate={() => {
-            const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return
-            obj.clone().then((cl: fabric.FabricObject) => { cl.set({ left: (cl.left || 0) + 20, top: (cl.top || 0) + 20 }); canvas!.add(cl); canvas!.setActiveObject(cl) })
-            setCtxMenu(null)
-          }}
-          onDelete={() => { const canvas = fabricRef.current, obj = canvas?.getActiveObject(); if (!obj) return; canvas!.remove(obj); setCtxMenu(null) }}
+          onDuplicate={() => { if (fabricRef.current) duplicateSelection(fabricRef.current); setCtxMenu(null) }}
+          onDelete={() => { if (fabricRef.current) deleteSelection(fabricRef.current); setCtxMenu(null) }}
           onBringForward={() => { layerMoveUp(); setCtxMenu(null) }}
           onSendBackward={() => { layerMoveDown(); setCtxMenu(null) }}
           onBringToFront={() => { layerBringToFront(); setCtxMenu(null) }}
@@ -4778,13 +4824,29 @@ function PropSection({ label, summary, children, defaultOpen = false }: {
 }
 
 // Input compatto per il panel
+/**
+ * Campo numerico da programma di grafica: si scrive liberamente (anche "-" o vuoto),
+ * il valore si applica con Invio o uscendo dal campo, Esc torna al valore di prima.
+ */
 function PI({ label, value, onChange, min, max, className }:
   { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; className?: string }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft === null) return
+    const v = parseFloat(draft.replace(',', '.'))
+    setDraft(null)
+    if (Number.isFinite(v) && v !== value) onChange(Math.max(min ?? -Infinity, Math.min(max ?? Infinity, v)))
+  }
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[7px] font-black uppercase tracking-widest text-white/20">{label}</span>
-      <input type="number" value={value} min={min} max={max}
-        onChange={e => onChange(parseInt(e.target.value) || 0)}
+      <input type="number" value={draft ?? value} min={min} max={max} aria-label={label}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur() }
+          if (e.key === 'Escape') { setDraft(null); (e.target as HTMLInputElement).blur() }
+        }}
         className={cn('h-7 px-2 bg-white/[0.04] border border-white/[0.07] rounded-lg text-[11px] font-bold text-white/70 text-center focus:outline-none focus:border-accent/40 transition-colors', className)}
       />
     </div>
@@ -4906,9 +4968,14 @@ function PropertiesPanel(props: PanelProps) {
 
   const inspUpdate = (prop: string, val: number) => {
     const canvas = fabricRef.current; const obj = canvas?.getActiveObject(); if (!obj) return
-    if (prop === 'width') { obj.scaleX = (val || 1) / obj.width!; obj.setCoords() }
-    else if (prop === 'height') { obj.scaleY = (val || 1) / obj.height!; obj.setCoords() }
-    else if (prop === 'angle') { obj.set({ angle: val }); obj.setCoords() }
+    if (prop === 'width' || prop === 'height') {
+      // la misura comprende il bordo (come getScaledWidth); l'angolo in alto a sinistra resta fermo
+      const tl = obj.getPointByOrigin('left', 'top'), sw = obj.strokeUniform ? 0 : (obj.strokeWidth || 0)
+      if (prop === 'width') obj.scaleX = Math.max(1, val) / Math.max(1, obj.width! + sw)
+      else obj.scaleY = Math.max(1, val) / Math.max(1, obj.height! + sw)
+      obj.setPositionByOrigin(tl, 'left', 'top')
+    }
+    else if (prop === 'angle') { obj.rotate(val) }
     else {
       // X/Y sono misurati dalla tavola: si sposta l'oggetto della differenza
       const cur = inspOf(canvas!, obj)
@@ -5058,9 +5125,17 @@ function PropertiesPanel(props: PanelProps) {
               )}
 
               {/* Gruppo */}
-              {propTab === 'group' && sel.type === 'group' && (
-                <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v / 100 })} />
-              )}
+              {propTab === 'group' && sel.type === 'group' && (() => {
+                const c = props.fabricRef.current, a = c?.getActiveObject()
+                const isAS = a instanceof fabric.ActiveSelection
+                return (<div className="space-y-3">
+                  <SR label="Opacità" value={sel.opacity} min={0} max={100} onChange={v => props.onApplyShape({ opacity: v / 100 })} />
+                  {c && <button onClick={() => (isAS ? groupSelection(c) : ungroupSelection(c))}
+                    className="w-full h-7 rounded-lg border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/[0.05]">
+                    {isAS ? 'Raggruppa · Ctrl+G' : 'Separa · Ctrl+Maiusc+G'}
+                  </button>}
+                </div>)
+              })()}
 
               {/* Effetti: filtri pronti, regolazioni, effetti a pila (motore fx, valido per ogni oggetto) */}
               {propTab === 'fx' && hasSelection && (

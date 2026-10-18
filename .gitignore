@@ -72,3 +72,4 @@ ts-error.txt
 /.asset-cache/
 /scripts/archivio/cache/
 /scripts/archivio/out/
+.tela-test/
