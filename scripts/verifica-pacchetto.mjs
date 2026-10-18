@@ -33,7 +33,7 @@ const vietato = (rel) => {
 
 const trovati = []
 const asarFile = path.join(resources, 'app.asar')
-const voci = asar.listPackage(asarFile).map((f) => f.replace(/\/g, '/'))
+const voci = asar.listPackage(asarFile).map((f) => f.split(path.sep).join('/'))
 for (const f of voci) if (vietato(f)) trovati.push(`app.asar${f}`)
 
 let nServer = 0
@@ -47,11 +47,12 @@ function scan(dir, rel) {
 }
 const serverDir = path.join(resources, 'server')
 if (!fs.existsSync(path.join(serverDir, 'server.js'))) trovati.push('server/server.js MANCANTE')
+if (!fs.existsSync(path.join(serverDir, 'node_modules', 'next', 'package.json'))) trovati.push('server/node_modules/next MANCANTE')
 else scan(serverDir, '')
 
 console.log(`[verifica] app.asar: ${voci.length} voci; server: ${nServer} voci`)
 if (trovati.length) {
-  console.error('[verifica] FILE VIETATI NEL PACCHETTO:\n  ' + trovati.slice(0, 50).join('\n  '))
+  console.error('[verifica] PROBLEMI NEL PACCHETTO:\n  ' + trovati.slice(0, 50).join('\n  '))
   process.exit(1)
 }
 console.log('[verifica] ok: niente .env, data/, data-prova/, .claude/, scratch/, vault/, graphify-out/, zip né asset non verificati')
