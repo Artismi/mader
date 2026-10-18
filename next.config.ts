@@ -12,6 +12,8 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Server autonomo in .next/standalone: è quello che Electron avvia nel pacchetto
+  output: 'standalone',
   images: {
     unoptimized: true, // necessario per Electron (no image optimization server)
   },
