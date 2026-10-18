@@ -11,6 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 const TOKEN_HEADER = 'x-creative-os-token'
 
 const SCRIVE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+const OAUTH_ESTERNO = new Set(['/api/auth/openrouter/start', '/api/auth/openrouter/callback'])
 
 function stessoValore(a: string, b: string): boolean {
   if (a.length !== b.length) return false
@@ -26,7 +27,10 @@ function hostDi(origin: string): string | null {
 
 export function proxy(request: NextRequest) {
   const token = process.env.CREATIVE_OS_TOKEN
-  if (token && !stessoValore(request.headers.get(TOKEN_HEADER) ?? '', token)) {
+  // l'OAuth di OpenRouter parte e finisce nel browser di sistema, che non ha il token:
+  // solo GET, e lo scambio regge sul code_verifier PKCE salvato nel database locale
+  const oauthEsterno = request.method === 'GET' && OAUTH_ESTERNO.has(request.nextUrl.pathname)
+  if (token && !oauthEsterno && !stessoValore(request.headers.get(TOKEN_HEADER) ?? '', token)) {
     return new NextResponse('Non autorizzato', { status: 401 })
   }
 
