@@ -458,3 +458,17 @@ test('A3: "Procedo con…" o "Sei d\'accordo?" senza scritture su un\'azione è 
   assert.equal(checkClosure({ prove: [{ strumento: 'updateCanvasElements', rischio: 'write', input: {}, esito: 'ok' }], testo: 'Procedo anche con il resto?', azione: true }).length, 0)
   assert.equal(checkClosure({ prove: [], testo: 'Procedo così: prima il titolo. Va bene?', azione: false }).length, 0)
 })
+
+test('FOREIGN KEY: ID cliente corto, tra parentesi o maiuscolo si risolve nel database; sconosciuto dà un errore chiaro', async () => {
+  const db = await import('../../src/lib/db/index')
+  const c = db.clients.create({ name: 'Bicicleria FK' } as never)
+  const corto = c.id.slice(0, 8)
+  for (const ref of [corto, `[${corto}]`, corto.toUpperCase(), c.id]) {
+    const i = db.ideas.create({ client_id: ref, text: 'film partecipativo', platforms: [], idea_status: 'nuova', assigned: false, output_links: [] } as never)
+    assert.equal(db.ideas.getAll().find(x => x.id === i.id)?.client_id, c.id, ref)
+  }
+  const p = db.editorialPosts.create({ client_id: corto, title: 'prova', channels: ['instagram'], editorial_status: 'bozza' } as never)
+  assert.equal(p.client_id, c.id)
+  assert.throws(() => db.ideas.create({ client_id: 'ffffffff', text: 'x', platforms: [], idea_status: 'nuova', assigned: false, output_links: [] } as never), /non esiste: cercalo con searchClient/)
+  assert.equal(db.idCliente(''), null)
+})

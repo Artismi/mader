@@ -13,6 +13,22 @@ export { db } from './client'
 import type { SQLInputValue } from 'node:sqlite'
 const n = (v: string | number | bigint | null | undefined): SQLInputValue => v ?? null
 
+/**
+ * ID cliente completo da un riferimento qualunque: completo, corto come lo mostrano
+ * gli strumenti ("2eef1ee9", "[2eef1ee9]"), con maiuscole. Vuoto → null. Sconosciuto →
+ * errore chiaro, mai un "FOREIGN KEY constraint failed" muto.
+ */
+export function idCliente(v: string | null | undefined): string | null {
+  if (v == null || !String(v).trim()) return null
+  const ref = String(v).trim().replace(/^\[|\]$/g, '').trim()
+  if (db.prepare('SELECT 1 FROM clients WHERE id = ?').get(ref)) return ref
+  const simili = db.prepare('SELECT id FROM clients WHERE lower(id) LIKE ?').all(`${ref.toLowerCase()}%`) as { id: string }[]
+  if (simili.length === 1) return simili[0].id
+  throw new Error(simili.length > 1
+    ? `l'ID cliente "${v}" è ambiguo: usa l'ID completo (searchClient)`
+    : `il cliente "${v}" non esiste: cercalo con searchClient e usa l'ID che restituisce`)
+}
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
 export interface Client {
@@ -229,7 +245,7 @@ export const tasks = {
     db.prepare(`
       INSERT INTO tasks (id, client_id, title, type, category, deadline, status, duration_minutes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, n(data.client_id), data.title, data.type, data.category,
+    `).run(id, idCliente(data.client_id), data.title, data.type, data.category,
       n(data.deadline), data.status, n(data.duration_minutes))
     return tasks.getById(id)!
   },
@@ -262,7 +278,7 @@ export const ideas = {
     db.prepare(`
       INSERT INTO ideas (id, client_id, text, title, description, platforms, idea_status, assigned, task_id, output_links)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, n(data.client_id), data.text, n(data.title), n(data.description),
+    `).run(id, idCliente(data.client_id), data.text, n(data.title), n(data.description),
       JSON.stringify(data.platforms), data.idea_status, data.assigned ? 1 : 0,
       n(data.task_id), JSON.stringify(data.output_links))
     return parseIdea(db.prepare('SELECT * FROM ideas WHERE id = ?').get(id) as Record<string, unknown>)
@@ -480,7 +496,7 @@ export const designProjects = {
         updated_at   = excluded.updated_at
     `).run(
       id,
-      n(data.client_id),
+      idCliente(data.client_id),
       n(data.brief_id),
       data.name,
       data.type || 'board',
@@ -783,13 +799,14 @@ export const editorialPosts = {
 
   create: (data: Omit<EditorialPost, 'id' | 'created_at' | 'client_name'>): EditorialPost => {
     const id = randomUUID()
+    const cid = idCliente(data.client_id)
     db.prepare(`
       INSERT INTO editorial_posts (id, plan_id, client_id, idea_id, title, content, channels, editorial_status, scheduled_at, published_at, metadata)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, n(data.plan_id), data.client_id, n(data.idea_id), n(data.title), n(data.content),
+    `).run(id, n(data.plan_id), cid, n(data.idea_id), n(data.title), n(data.content),
       JSON.stringify(data.channels), data.editorial_status, n(data.scheduled_at), n(data.published_at),
       JSON.stringify(data.metadata ?? {}))
-    return editorialPosts.getByClient(data.client_id).find(p => p.id === id)!
+    return editorialPosts.getByClient(cid!).find(p => p.id === id)!
   },
 
   updateStatus: (id: string, status: EditorialPost['editorial_status'], extra?: { scheduled_at?: string; published_at?: string }): void => {
@@ -835,7 +852,7 @@ export const socialPosts = {
     db.prepare(`
       INSERT INTO social_posts (id, client_id, content, subject, platforms, status)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, n(data.client_id), data.content, n(data.subject), JSON.stringify(data.platforms), data.status ?? 'draft')
+    `).run(id, idCliente(data.client_id), data.content, n(data.subject), JSON.stringify(data.platforms), data.status ?? 'draft')
     return id
   },
 
@@ -929,7 +946,7 @@ export const quotes = {
       INSERT INTO quotes (id, client_id, client_name, title, number, type, status, items, total, notes,
         canva_doc_url, drive_pdf_url, gmail_thread_id, issued_at, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, n(data.client_id), data.client_name, data.title, data.number, data.type || 'preventivo',
+    `).run(id, idCliente(data.client_id), data.client_name, data.title, data.number, data.type || 'preventivo',
       data.status, JSON.stringify(data.items), data.total, n(data.notes),
       n(data.canva_doc_url), n(data.drive_pdf_url), n(data.gmail_thread_id),
       n(data.issued_at), n(data.expires_at))
