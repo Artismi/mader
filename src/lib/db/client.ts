@@ -81,6 +81,10 @@ function initDb(): DatabaseSync {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_design_projects_client ON design_projects(client_id)`)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_design_projects_updated ON design_projects(updated_at DESC)`)
 
+  // Tabelle aggiunte dopo lo schema base: servono anche a un database nuovo
+  // creato dal pacchetto, non solo al ricaricamento a caldo in sviluppo
+  runLiveMigrations(db)
+
   // Dati di default al primo avvio
   seedDefaults(db)
 
