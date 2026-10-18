@@ -137,6 +137,8 @@ export interface ReminderParts {
   otherSkills?: string[]
   /** scritture sul canvas del turno prima che lo stato vero non conferma (canvas-checks) */
   verifica?: string
+  /** cliente del turno (cliente-attivo) */
+  cliente?: string
 }
 
 /** Il promemoria della richiesta: solo le sezioni che hanno contenuto. */
@@ -149,6 +151,7 @@ export function reminderText(r: ReminderParts): string {
     `Data: ${date} (${iso}, ${dayBand(r.now)})`,
     r.pathname ? `Pagina aperta: ${r.pathname}` : '',
     r.focus ?? '',
+    r.cliente ?? '',
     situazione ? `## Situazione\n${situazione}` : '',
     r.ctx.clientVaults.length ? r.ctx.clientVaults.join('\n\n') : '',
     r.ctx.activatedFiles.length ? r.ctx.activatedFiles.join('\n\n') : '',

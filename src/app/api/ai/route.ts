@@ -2,7 +2,8 @@ import * as aiSdk from 'ai'
 import { convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type UIMessageStreamWriter } from 'ai'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
-import { skills, config } from '@/lib/db'
+import { skills, config, clients } from '@/lib/db'
+import { clienteDelTurno, clienteVietato, notaCliente, senzaPrefissi } from '@/lib/agent/cliente-attivo'
 import { messageText, routeOnDemandSkills } from '@/lib/ai/skill-router'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@/lib/agent/tools'
 import { toolsForContext } from '@/lib/agent/run'
@@ -602,7 +603,7 @@ function scrittureCanvasPrecedenti(messages: { role: string; parts?: { type: str
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action, pathname, focus } = body
+    const { messages, modelId, canvasSnapshot, clientOverride, clienteSelezionato, extraVaultFiles, action, pathname, focus } = body
 
     // ── RESUME ACTION ────────────────────────────────────────────────────────
     if (action === 'resume') {
@@ -630,8 +631,14 @@ export async function POST(req: Request) {
     // UIMessage v6 porta il testo in `parts`, non in `content`
     const userQuery = messageText(lastUserMsg)
 
-    const ctx = await buildContext(userQuery, {
-      clientOverride: clientOverride ?? undefined,
+    // cliente del turno: lo decide la conversazione ("nessun cliente", "progetto nuovo", un nome),
+    // non il cliente selezionato nell'app, che resta un suggerimento
+    const sceltaCliente = clienteDelTurno(
+      messages.filter((m: { role: string }) => m.role === 'user').map((m: Parameters<typeof messageText>[0]) => messageText(m)),
+      clients.getAll().map(c => c.name),
+    )
+    const ctx = await buildContext(senzaPrefissi(userQuery), {
+      clientOverride: sceltaCliente.stato === 'nessuno' ? 'none' : sceltaCliente.stato === 'cliente' ? sceltaCliente.nome : clientOverride ?? undefined,
       extraFiles: Array.isArray(extraVaultFiles) ? extraVaultFiles : undefined,
     })
 
@@ -948,7 +955,7 @@ QUANTITÀ BOARD:
     })
     // le scritture sul canvas dichiarate al turno prima si cercano nello stato vero di adesso
     const verifica = notaVerifica(verificaCanvas(scrittureCanvasPrecedenti(messages), canvasSnapshot))
-    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills, verifica })
+    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills, verifica, cliente: notaCliente(sceltaCliente, typeof clienteSelezionato === 'string' ? clienteSelezionato : undefined) })
 
     // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
     const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {
@@ -964,7 +971,11 @@ QUANTITÀ BOARD:
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
 
     const risks = risksOf(defs)
-    const tools = buildToolSet(defs, trace, createRepeatGuard())
+    // con "nessun cliente" nessuno strumento riceve un cliente
+    const conCliente = (def: AgentToolDef<z.ZodTypeAny>): AgentToolDef<z.ZodTypeAny> => ({
+      ...def, execute: (i: unknown) => { const no = clienteVietato(sceltaCliente, i); return no ? { success: false, error: no } : def.execute(i) },
+    })
+    const tools = buildToolSet(defs.map(conCliente), trace, createRepeatGuard())
     // "vai", "ok", "sì" dopo una risposta dell'assistente approvano la proposta: è un'azione
     const lastIsUser = messages[messages.length - 1]?.role === 'user'
     const azione = lastIsUser && isActionTurn(userQuery, messages.slice(0, -1).some((m: { role: string }) => m.role === 'assistant'))

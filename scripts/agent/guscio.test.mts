@@ -472,3 +472,20 @@ test('FOREIGN KEY: ID cliente corto, tra parentesi o maiuscolo si risolve nel da
   assert.throws(() => db.ideas.create({ client_id: 'ffffffff', text: 'x', platforms: [], idea_status: 'nuova', assigned: false, output_links: [] } as never), /non esiste: cercalo con searchClient/)
   assert.equal(db.idCliente(''), null)
 })
+
+test('cliente del turno: "nessun cliente" e progetto nuovo azzerano, il cliente selezionato resta un suggerimento', async () => {
+  const ca = await import('../../src/lib/agent/cliente-attivo')
+  const nomi = ['Bicicleria', 'mossetto']
+  // la storia parla di Bicicleria, poi l'utente cambia progetto
+  assert.deepEqual(ca.clienteDelTurno(['[Soggetto: Bicicleria]\nfammi un post per Bicicleria', 'nessun cliente, è un progetto nuovo: LoopAI, film partecipativo', 'vai'], nomi), { stato: 'nessuno', motivo: 'nessun cliente' })
+  assert.equal(ca.clienteDelTurno(['questo non è per Bicicleria: LoopAI'], nomi).stato, 'nessuno')
+  assert.deepEqual(ca.clienteDelTurno(['nessun cliente', 'ora torniamo a Bicicleria'], nomi), { stato: 'cliente', nome: 'Bicicleria' })
+  // il prefisso [Soggetto: …] non è una parola dell'utente
+  assert.deepEqual(ca.clienteDelTurno(['[Soggetto: Bicicleria]\ncrea una grafica per LoopAI'], nomi), { stato: 'auto' })
+  assert.match(ca.notaCliente({ stato: 'auto' }, 'Bicicleria'), /non si attribuisce a un cliente/)
+  assert.equal(ca.notaCliente({ stato: 'auto' }), '')
+  const no = { stato: 'nessuno', motivo: 'nessun cliente' } as const
+  assert.match(ca.clienteVietato(no, { text: 'idea', clientId: '2eef1ee9' })!, /senza clientId/)
+  assert.equal(ca.clienteVietato(no, { text: 'idea' }), undefined)
+  assert.equal(ca.clienteVietato({ stato: 'auto' }, { clientId: 'x' }), undefined)
+})

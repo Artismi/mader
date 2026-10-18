@@ -649,7 +649,9 @@ export function AIChatWidget() {
 
         // Prefisso visibile nella chat (verrà rimosso in display)
         const prefixParts: string[] = [];
-        if (resolvedClient) prefixParts.push(`[Soggetto: ${resolvedClient.name}]`);
+        // il soggetto entra nel messaggio solo se scelto a mano: il cliente selezionato nell'app
+        // (modalità automatica) è un suggerimento e non si attacca a ogni messaggio
+        if (resolvedClient && clientSetting !== 'auto') prefixParts.push(`[Soggetto: ${resolvedClient.name}]`);
         if (extraFiles.length > 0) prefixParts.push(`[File: ${extraFiles.map(f => f.name).join(', ')}]`);
         const textToSend = prefixParts.length > 0
             ? `${prefixParts.join(' ')}\n${input}`
@@ -663,6 +665,7 @@ export function AIChatWidget() {
                     modelId: selectedModel,
                     canvasSnapshot: canvasSnapshot ?? undefined,
                     clientOverride: clientOverrideValue,
+                    clienteSelezionato: clientSetting === 'auto' ? resolvedClient?.name : undefined,
                     extraVaultFiles: extraFiles.map(f => ({ path: f.path, note: f.note || undefined })),
                     sessionId: activeSessionId,
                     pathname,
