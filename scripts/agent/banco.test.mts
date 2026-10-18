@@ -1,5 +1,5 @@
 /**
- * Il banco di prova G6 regge: 20 compiti, verifiche che distinguono il giusto
+ * Il banco di prova G6 regge: 23 compiti, verifiche che distinguono il giusto
  * dallo sbagliato, esecuzione con un modello finto. Database temporaneo.
  *   npm run test:agente
  */
@@ -27,10 +27,10 @@ function finto(risposte: ReturnType<typeof step>[]) {
 }
 const compito = (id: string) => COMPITI.find(c => c.id === id)!
 
-test('20 compiti, ID unici, tutte le aree', () => {
-  assert.equal(COMPITI.length, 20)
-  assert.equal(new Set(COMPITI.map(c => c.id)).size, 20)
-  assert.deepEqual([...new Set(COMPITI.map(c => c.area))].sort(), ['clienti', 'grafiche', 'idee', 'incarichi', 'memoria', 'piano', 'sicurezza'])
+test('23 compiti, ID unici, tutte le aree', () => {
+  assert.equal(COMPITI.length, 23)
+  assert.equal(new Set(COMPITI.map(c => c.id)).size, 23)
+  assert.deepEqual([...new Set(COMPITI.map(c => c.area))].sort(), ['chat', 'clienti', 'grafiche', 'idee', 'incarichi', 'memoria', 'piano', 'sicurezza'])
 })
 
 test('idea-salva: passa se il modello salva l\'idea con il cliente giusto', async () => {
@@ -64,4 +64,56 @@ test('verifiche di testo: tono del cliente', () => {
   const base = { ok: true, modello: 'x', passi: 1, chiamate: [], proposte: [], log: [] }
   assert.equal(compito('cli-tono').verifica({ ...base, testo: 'Notturno e diretto, con ironia.' }, s).ok, true)
   assert.equal(compito('cli-tono').verifica({ ...base, testo: 'Professionale e cordiale.' }, s).ok, false)
+})
+
+/* ── chat dal vivo ─────────────────────────────────────────────────────── */
+
+const chiamata = (nome: string, dati: unknown, id = '1') => step([{ type: 'tool-call', toolCallId: id, toolName: nome, input: JSON.stringify(dati) }], 'tool-calls')
+
+test('chat-vai: "vai" dopo una proposta obbliga lo strumento; il piano ripetuto non passa', async () => {
+  const scelte: unknown[] = []
+  const buono = finto([chiamata('createIdea', { title: 'Smalti al buio', text: 'Reel con le tazze che brillano al buio', clientId: 'Terra Mossa', platforms: ['instagram'] }), step([{ type: 'text', text: 'Idea salvata.' }], 'stop')])
+  const gen = buono.model.doGenerate.bind(buono.model)
+  buono.model.doGenerate = (async (o: { toolChoice?: unknown }) => { scelte.push(o.toolChoice); return gen(o as never) }) as never
+  const c = compito('chat-vai')
+  const r = await runAgent({ compito: c.compito, contesto: c.contesto, dopoProposta: c.dopoProposta, candidati: [buono] })
+  assert.equal(c.verifica(r, s).ok, true, c.verifica(r, s).motivo)
+  assert.deepEqual(scelte[0], { type: 'required' })
+  // il modello che ripropone il piano non salva nulla: il compito fallisce (e A3 lo segnala)
+  const pigro = finto([step([{ type: 'text', text: 'Procedo con il salvataggio di "Bozze notturne". Sei d\'accordo?' }], 'stop')])
+  const r2 = await runAgent({ compito: 'vai', contesto: 'Assistente: salvo l\'idea "Bozze notturne"?', dopoProposta: true, candidati: [pigro] })
+  assert.ok(!ideas.getAll().some(i => /bozze notturne/i.test(i.title ?? '')))
+  assert.equal(r2.ok, false)
+})
+
+test('chat-nessun-cliente: il cliente passato per abitudine viene respinto, l\'idea resta senza cliente', async () => {
+  const m = finto([
+    chiamata('createIdea', { title: 'LoopAI', text: 'Film partecipativo girato con il pubblico', clientId: 'Tostatura Nera' }),
+    chiamata('createIdea', { title: 'LoopAI', text: 'Film partecipativo girato con il pubblico' }, '2'),
+    step([{ type: 'text', text: 'Idea LoopAI salvata senza cliente.' }], 'stop'),
+  ])
+  const c = compito('chat-nessun-cliente')
+  const r = await runAgent({ compito: c.compito, candidati: [m] })
+  assert.equal(c.verifica(r, s).ok, true, c.verifica(r, s).motivo)
+  assert.ok(r.chiamate.some(x => x.esito === 'respinta' && /non è di un cliente/.test(x.motivo ?? '')))
+})
+
+test('chat-grafica: comporre a mano non passa', () => {
+  const c = compito('chat-grafica')
+  const finta = (strumenti: string[]) => ({ ok: true, testo: '', modello: 'x', passi: 1, chiamate: strumenti.map(st => ({ strumento: st, input: {}, esito: 'ok' as const })), proposte: [], log: [] })
+  assert.equal(c.verifica(finta(['createDesignBoards']), s).ok, false)
+  assert.equal(c.verifica(finta(['directDesign']), s).ok, true)
+  assert.equal(c.verifica(finta([]), s).ok, false)
+})
+
+test('quota esaurita simulata: il primo modello ha finito la quota del giorno, il compito passa al successivo', async () => {
+  reg.resetExhausted()
+  const finita = new MockLanguageModelV3({ modelId: 'finito', doGenerate: async () => { throw Object.assign(new Error('quota del giorno finita per google:gemini-flash-latest (limite 250 per-day)'), { statusCode: 429 }) } })
+  const primo = { id: 'google:finito', provider: 'google' as const, modelId: 'finito', label: 'finito', model: finita, profile: reg.profileOf('google', 'gemini-flash-latest') }
+  const secondo = finto([chiamata('createIdea', { title: 'Ricambi in vetrina', text: 'Post sui ricambi', clientId: 'Terra Mossa' }), step([{ type: 'text', text: 'Salvata.' }], 'stop')])
+  const r = await runAgent({ compito: 'Salva un\'idea per Terra Mossa: "Ricambi in vetrina".', candidati: [primo, secondo] })
+  assert.equal(r.ok, true, r.log.join(' | '))
+  assert.equal(r.modello, 'finto')
+  assert.ok(reg.isExhausted('google:finito'))
+  reg.resetExhausted()
 })
