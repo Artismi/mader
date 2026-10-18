@@ -97,6 +97,9 @@ function scriviConti(c: Conti) { try { fs.writeFileSync(path.join(cartella(), 'q
 /** Chiamate usate oggi per gruppo (UTC, come i fornitori). */
 export function contiDelGiorno(): Record<string, number> { return leggiConti().conti }
 
+/** Chiamate che restano oggi a una via: a zero si salta senza nemmeno provarla. */
+export function restantiOggi(via: ViaGratuita): number { return Math.max(0, via.alGiorno - (leggiConti().conti[via.gruppo] ?? 0)) }
+
 const finestre = new Map<string, number[]>()
 const dormi = (ms: number) => new Promise(r => setTimeout(r, ms))
 

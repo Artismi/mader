@@ -21,7 +21,7 @@ import { buildContext } from '@/lib/ai/context'
 import { designOpSchema, designOpsToolDescription, VISUAL_SOURCE_HELP, VISUAL_TREATMENTS } from '@/lib/design/design-ops-spec'
 import { FINISH_IDS, RECIPES } from '@/lib/design/compose-recipes'
 import { getOpenRouterKey } from '@/lib/ai/model-provider'
-import { pickModel, resolveModel } from '@/lib/ai/model-registry'
+import { candidatesFor, catenaModelli, pickModel, resolveModel } from '@/lib/ai/model-registry'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
@@ -709,7 +709,15 @@ export async function POST(req: Request) {
     // Registro dei modelli: scelta della chat o delle Impostazioni, poi gli altri fornitori;
     // servono gli strumenti nativi (niente Gemma qui), si saltano i modelli senza quota
     // in chat gli strumenti devono partire davvero: dentro il fornitore si preferisce il modello più forte
-    const { model, label: modelLabel, profile } = pickModel({ task, tools: true, preferisci: 'forte' }, { choice: modelId })
+    // Catena: su quota, errore o risposta vuota si passa al candidato successivo (stesso ordine,
+    // stessa scelta "solo gratis"); se cadono tutti l'errore arriva in chat con i motivi
+    const need = { task, tools: true, preferisci: 'forte' } as const
+    const candidati = candidatesFor(need, { choice: modelId })
+    if (!candidati.length) candidati.push(pickModel(need, { choice: modelId }))
+    const { label: modelLabel, profile } = candidati[0]
+    const model = candidati.length > 1
+      ? catenaModelli(candidati, { onCambio: (da, motivo) => console.log(`[ai] ${da} non risponde (${motivo}): passo al successivo`) })
+      : candidati[0].model
     // I modelli piccoli o gratuiti impaginano male a coordinate: per loro solo composeDesign,
     // dove lo Studio fa griglia, foto, effetti e tipografia da sé
     const lowLevelDesign = profile.strength === 'forte'
