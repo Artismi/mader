@@ -44,10 +44,10 @@ export function DeskDock() {
 
   return (
     <nav
-      className="shrink-0 border-t border-white/[0.07] bg-[#060606] py-1.5"
+      className="shrink-0 px-2 pb-2 pt-1.5"
       aria-label="Accesso rapido sezioni"
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-center gap-0.5 overflow-x-auto overflow-y-hidden px-2 scrollbar-hide sm:gap-1">
+      <div className="mx-auto flex w-fit max-w-full items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-full bg-paper p-1.5 shadow-[var(--cos-shadow-1)] scrollbar-hide sm:gap-1">
         {dockItems.map((item) => {
           const isActive =
             item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
@@ -60,27 +60,25 @@ export function DeskDock() {
               onClick={() => navigate(item.href)}
               title={item.label}
               className={cn(
-                'group flex shrink-0 flex-col items-center justify-center rounded-xl px-2 py-1.5 sm:w-[4.25rem] sm:px-0',
-                'transition-colors duration-150 active:scale-[0.97]',
-                isActive
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/40 hover:bg-white/[0.06] hover:text-white/85',
+                'group flex shrink-0 items-center gap-2 rounded-full p-1 pr-1 transition-[background,box-shadow] duration-200 active:scale-[0.97]',
+                isActive ? 'bg-ink pr-4 text-paper' : 'text-ink-2 hover:bg-sunk hover:text-ink',
               )}
             >
               {isLoading ? (
-                <span className="h-5 w-5 rounded-full border-2 border-white/20 border-t-white/75 animate-spin" />
+                <span className="grid h-9 w-9 place-items-center"><span className="cos-reg !h-4 !w-4" /></span>
               ) : (
                 <item.icon
                   className={cn(
-                    'h-[1.15rem] w-[1.15rem] sm:h-5 sm:w-5',
-                    isActive ? 'scale-105' : '',
+                    'box-content h-[18px] w-[18px] shrink-0 rounded-full p-[9px] transition-colors',
+                    isActive ? 'bg-hot text-ink' : '',
                   )}
+                  strokeWidth={1.75}
                 />
               )}
               <span
                 className={cn(
-                  'mt-0.5 max-w-[4.5rem] truncate text-[6px] font-black uppercase tracking-wider sm:mt-1 sm:max-w-none sm:text-[7px] sm:tracking-[0.14em]',
-                  isActive || isLoading ? 'text-white/90' : 'text-white/35 group-hover:text-white/55',
+                  'whitespace-nowrap text-[13px] font-semibold',
+                  isActive ? 'block' : 'sr-only',
                 )}
               >
                 {item.label}

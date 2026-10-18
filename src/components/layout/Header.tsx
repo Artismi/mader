@@ -94,12 +94,12 @@ export function Header() {
   return (
     <>
       <header
-        className="shrink-0 z-30 flex h-11 items-center gap-2 border-b border-white/[0.08] bg-[#070708]/95 px-2 backdrop-blur-md sm:gap-3 sm:px-4"
+        className="shrink-0 z-30 flex h-16 items-center gap-2 px-3 sm:gap-3 sm:px-4"
         role="banner"
       >
         <button
           type="button"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-paper text-ink shadow-[inset_0_0_0_1.5px_var(--cos-line)] transition-shadow hover:shadow-[inset_0_0_0_1.5px_var(--cos-ink)]"
           onClick={() => setMobileOpen(true)}
           aria-label="Apri menu navigazione"
         >
@@ -107,11 +107,9 @@ export function Header() {
         </button>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-bold tracking-tight text-white/90">
-            Creative OS
-          </p>
-          <p className="hidden truncate text-[10px] font-medium uppercase tracking-widest text-white/35 sm:block">
-            {pathname === "/" ? "Oggi" : pathname.replace(/^\//, "") || "—"}
+          <p className="cos-kicker hidden truncate sm:block">Creative OS</p>
+          <p className="truncate font-display text-[15px] font-semibold capitalize leading-tight text-ink">
+            {pathname === "/" ? "Oggi" : pathname.replace(/^\//, "").split("/")[0] || "—"}
           </p>
         </div>
 
@@ -122,10 +120,10 @@ export function Header() {
             aria-pressed={isVaultOpen}
             onClick={toggleVault}
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
               isVaultOpen
-                ? "bg-accent/20 text-accent"
-                : "text-white/45 hover:bg-white/10 hover:text-white",
+                ? "bg-ink text-paper"
+                : "text-ink-2 hover:bg-sunk hover:text-ink",
             )}
           >
             <FolderOpen className="h-4 w-4" />
@@ -136,10 +134,10 @@ export function Header() {
             aria-pressed={isCoPilotOpen}
             onClick={toggleCoPilot}
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              "flex h-10 w-10 items-center justify-center rounded-full transition-colors",
               isCoPilotOpen
-                ? "bg-accent/20 text-accent"
-                : "text-white/45 hover:bg-white/10 hover:text-white",
+                ? "bg-ink text-hot"
+                : "text-ink-2 hover:bg-sunk hover:text-ink",
             )}
           >
             <Sparkles className="h-4 w-4" />
@@ -148,7 +146,7 @@ export function Header() {
             type="button"
             onClick={handleLogout}
             title="Esci"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-sunk hover:text-ink"
           >
             <LogOut className="h-4 w-4" />
           </button>
@@ -157,7 +155,7 @@ export function Header() {
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[200] bg-desk/70 backdrop-blur-[6px]"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -165,12 +163,12 @@ export function Header() {
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-[201] flex w-[min(20rem,100vw)] max-w-full flex-col border-r border-white/10 bg-[#0c0c0f] transition-transform duration-300 ease-in-out",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-2 left-2 z-[201] flex w-[min(20rem,calc(100vw-16px))] max-w-full flex-col overflow-hidden rounded-[30px] bg-paper shadow-[var(--cos-shadow-2)] transition-transform duration-300 ease-[var(--cos-ease)]",
+          mobileOpen ? "translate-x-0" : "-translate-x-[110%]",
         )}
       >
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-4">
-          <span className="text-base font-bold text-white">Menu</span>
+          <span className="font-display text-lg font-bold text-ink">Menu</span>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
@@ -188,7 +186,7 @@ export function Header() {
           <div className="space-y-5">
             {sections.map((section) => (
               <div key={section.label}>
-                <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-widest text-white/25">
+                <p className="cos-kicker mb-1.5 px-3">
                   {section.label}
                 </p>
                 <ul className="space-y-0.5">
@@ -199,16 +197,16 @@ export function Header() {
                         <Link
                           href={item.href}
                           className={cn(
-                            "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                            "flex min-w-0 items-center gap-3 rounded-full px-3 py-2 text-sm font-medium transition-colors",
                             active
-                              ? "bg-accent/15 text-white"
-                              : "text-white/50 hover:bg-white/5 hover:text-white",
+                              ? "bg-ink text-paper"
+                              : "text-ink-2 hover:bg-sunk hover:text-ink",
                           )}
                         >
                           <item.icon
                             className={cn(
                               "h-4 w-4 shrink-0",
-                              active ? "text-accent" : "",
+                              active ? "text-hot" : "",
                             )}
                           />
                           <span className="min-w-0 truncate">{item.name}</span>

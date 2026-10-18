@@ -102,26 +102,26 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="h-full flex flex-col relative overflow-hidden bg-[#050505]">
+    <div className="h-full flex flex-col relative overflow-hidden desk-surface">
       <Header />
 
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         
         {/* LEFT DOCK: VAULT */}
         <div className={cn(
-          "h-full transition-all duration-200 ease-in-out border-r border-white/5 bg-[#090909] overflow-hidden",
-          isVaultOpen ? "w-64" : "w-0"
+          "h-full transition-all duration-300 ease-[var(--cos-ease)] overflow-hidden",
+          isVaultOpen ? "w-64 pl-3" : "w-0"
         )}>
-          <div className="w-64 h-full"> {/* Inner wrapper to prevent squishing during trans */}
+          <div className="w-[244px] h-full overflow-hidden rounded-[30px] bg-paper shadow-[0_0_0_1px_var(--cos-line)]"> {/* Inner wrapper to prevent squishing during trans */}
             <StudioAssetSidebar client={selectedClient} />
           </div>
         </div>
 
         {/* CENTER: MAIN WORKSPACE */}
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <main className="relative mx-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[28px] bg-paper shadow-[var(--cos-shadow-2)] sm:mx-3 sm:rounded-[40px]">
           {zoomFeedback !== null && (
-            <div className="pointer-events-none absolute left-1/2 top-3 z-[100] -translate-x-1/2 rounded-xl border border-white/10 bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-xl">
-              <span className="text-[10px] font-black uppercase tracking-widest text-white">
+            <div className="pointer-events-none absolute left-1/2 top-3 z-[100] -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-paper shadow-lg">
+              <span className="cos-kicker !text-paper">
                 Zoom {Math.round(zoomFeedback * 100)}%
               </span>
             </div>
@@ -134,16 +134,16 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
 
         {/* RIGHT DOCK: CO-PILOT */}
         <div className={cn(
-          "h-full transition-all duration-200 ease-in-out border-l border-white/5 bg-[#090909] overflow-hidden",
-          isCoPilotOpen ? "w-[400px]" : "w-0"
+          "h-full transition-all duration-300 ease-[var(--cos-ease)] overflow-hidden",
+          isCoPilotOpen ? "w-[412px] pr-3" : "w-0"
         )}>
-          <div className="flex h-full w-[400px] flex-col">
-            <div className="flex shrink-0 items-center justify-between border-b border-white/5 bg-white/[0.02] px-3 py-2">
+          <div className="flex h-full w-[400px] flex-col overflow-hidden rounded-[30px] bg-paper shadow-[0_0_0_1px_var(--cos-line)]">
+            <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3">
                <div className="flex items-center gap-2">
                  <Sparkles className="h-3.5 w-3.5 text-accent" />
-                 <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Co-Pilot</span>
+                 <span className="cos-kicker">Co-Pilot</span>
                </div>
-               <button type="button" onClick={() => setCoPilotOpen(false)} className="rounded-lg p-1.5 text-white/30 transition-colors hover:bg-white/10 hover:text-white" aria-label="Chiudi pannello AI">
+               <button type="button" onClick={() => setCoPilotOpen(false)} className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-sunk hover:text-ink" aria-label="Chiudi pannello AI">
                  <X className="h-4 w-4" />
                </button>
             </div>
@@ -179,23 +179,23 @@ function CoPilotFloat({ open, setOpen }: { open: boolean; setOpen: (v: boolean) 
           onClick={() => setOpen(true)}
           title="Co-Pilot AI"
           aria-label="Apri il Co-Pilot"
-          className="fixed right-0 top-1/2 z-[300] flex h-20 w-9 -translate-y-1/2 items-center justify-center rounded-l-2xl bg-[#111] text-accent shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-all hover:w-11"
+          className="fixed right-0 top-1/2 z-[300] flex h-20 w-9 -translate-y-1/2 items-center justify-center rounded-l-full bg-ink text-hot shadow-[0_10px_24px_-14px_rgba(23,21,15,.6)] transition-all hover:w-11"
         >
           <Sparkles className="h-4 w-4" />
         </button>
       )}
       <div
         className={cn(
-          'fixed right-0 top-0 z-[300] flex h-full w-[400px] max-w-[100vw] flex-col border-l border-white/10 bg-[#090909] shadow-2xl transition-transform duration-200',
-          open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
+          'fixed bottom-2 right-2 top-2 z-[300] flex w-[400px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-[30px] bg-paper shadow-[var(--cos-shadow-2)] transition-transform duration-300 ease-[var(--cos-ease)]',
+          open ? 'translate-x-0' : 'pointer-events-none translate-x-[110%]',
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-white/5 bg-white/[0.02] px-3 py-2">
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 text-accent" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Co-Pilot</span>
+            <span className="cos-kicker">Co-Pilot</span>
           </div>
-          <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-white/30 transition-colors hover:bg-white/10 hover:text-white" aria-label="Chiudi pannello AI">
+          <button type="button" onClick={() => setOpen(false)} className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-sunk hover:text-ink" aria-label="Chiudi pannello AI">
             <X className="h-4 w-4" />
           </button>
         </div>
