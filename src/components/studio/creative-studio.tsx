@@ -694,7 +694,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const canvas = new fabric.Canvas(canvasRef.current, {
       width: canvasContainerRef.current?.clientWidth || containerRef.current.clientWidth || 800,
       height: canvasContainerRef.current?.clientHeight || containerRef.current.clientHeight || 600,
-      backgroundColor: '#050505',
+      backgroundColor: '#e8e4dc', // tavolo Carta (--cos-sunk)
       preserveObjectStacking: true,
       selection: true,
     })
@@ -6334,7 +6334,7 @@ function Rulers({ zoom, canvas }: { zoom: number; canvas: fabric.Canvas | null }
           ))}
         </svg>
       </div>
-      <div className="absolute top-12 left-0 z-[19] pointer-events-none" style={{ width: SIZE, height: SIZE, backgroundColor: '#0d0d0d', borderRight: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }} />
+      <div className="absolute top-12 left-0 z-[19] pointer-events-none" style={{ width: SIZE, height: SIZE, backgroundColor: 'var(--cos-sunk)', borderRight: '1px solid var(--cos-line)', borderBottom: '1px solid var(--cos-line)' }} />
     </>
   )
 }
