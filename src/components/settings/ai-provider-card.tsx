@@ -107,24 +107,24 @@ export function AiProviderCard() {
   const outcome = params.get('openrouter')
 
   return (
-    <div className="bg-white rounded-xl border border-border p-6 space-y-4">
+    <section className="cos-card space-y-5 p-6 sm:p-7">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-primary flex items-center gap-2">
-          <Bot className="w-4 h-4" /> Modelli AI
+        <h2 className="cos-kicker flex items-center gap-2">
+          <Bot className="h-3.5 w-3.5" aria-hidden /> Modelli AI
         </h2>
         {state?.connected && (
-          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+          <span className="cos-badge is-ok">
             OpenRouter collegato
           </span>
         )}
       </div>
 
       {outcome === 'error' && (
-        <p className="text-sm text-red-600">Collegamento a OpenRouter non riuscito. Riprova.</p>
+        <p className="cos-error" role="alert">Collegamento a OpenRouter non riuscito. Riprova.</p>
       )}
 
       {!state ? (
-        <Loader2 className="w-4 h-4 animate-spin text-primary/40" />
+        <span className="cos-reg !h-5 !w-5" aria-label="Caricamento" />
       ) : !state.connected ? (
         <div className="space-y-3">
           <p className="text-sm text-primary/70">
@@ -133,7 +133,7 @@ export function AiProviderCard() {
           </p>
           <button
             onClick={connect}
-            className="text-sm font-medium px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90 transition-opacity flex items-center gap-2"
+            className="cos-btn cos-btn-primary"
           >
             {waiting && <Loader2 className="w-4 h-4 animate-spin" />}
             {waiting ? 'Riapri il browser' : 'Collega OpenRouter'}
@@ -159,11 +159,11 @@ export function AiProviderCard() {
             const known = SUGGESTED[task].some(m => m.id === draft[task]) || free.some(m => m.id === draft[task])
             return (
               <div key={task} className="space-y-1.5">
-                <span className="block text-xs font-medium text-primary">{TASK_LABEL[task]}</span>
+                <span className="cos-kicker block pl-4">{TASK_LABEL[task]}</span>
                 <select
                   value={known ? draft[task] : CUSTOM}
                   onChange={e => setDraft(d => ({ ...d, [task]: e.target.value === CUSTOM ? '' : e.target.value }))}
-                  className="w-full text-sm text-primary px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:border-accent/60 cursor-pointer"
+                  className="cos-field cursor-pointer"
                 >
                   <optgroup label="Consigliati (a pagamento, con i tuoi crediti)">
                     {SUGGESTED[task].map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -180,7 +180,7 @@ export function AiProviderCard() {
                     value={draft[task]}
                     onChange={e => setDraft(d => ({ ...d, [task]: e.target.value }))}
                     placeholder="es. openai/gpt-5.5"
-                    className="w-full text-sm font-mono text-primary px-3 py-2 rounded-lg border border-border bg-white placeholder:text-primary/30 focus:outline-none focus:border-accent/60"
+                    className="cos-field font-mono"
                   />
                 )}
               </div>
@@ -191,20 +191,20 @@ export function AiProviderCard() {
             <button
               onClick={saveModels}
               disabled={saving}
-              className="text-sm font-medium px-4 py-2 rounded-lg bg-primary text-white hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
+              className="cos-btn cos-btn-primary"
             >
               {saved ? <Check className="w-4 h-4" /> : saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Salva modelli
             </button>
             <button
               onClick={disconnect}
-              className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors flex items-center gap-1.5"
+              className="cos-btn cos-btn-ghost cos-btn-sm !text-[var(--cos-err)]"
             >
               <Unplug className="w-4 h-4" /> Scollega
             </button>
           </div>
         </div>
       )}
-    </div>
+    </section>
   )
 }

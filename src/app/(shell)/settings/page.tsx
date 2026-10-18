@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { LogOut, User, Sparkles, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -9,61 +10,47 @@ export default async function SettingsPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     return (
-        <div className="space-y-6 max-w-2xl">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-primary">Impostazioni</h1>
-                <p className="mt-2 text-sm text-primary/70">Account e preferenze.</p>
-            </div>
+        <div className="cos-page is-narrow">
+            <PageHeader kicker="Creative OS" title="Impostazioni" lead="Account, modelli e preferenze." />
 
             {/* Profilo */}
-            <div className="bg-white rounded-xl border border-border p-6 space-y-4">
-                <h2 className="font-semibold text-primary flex items-center gap-2">
-                    <User className="w-4 h-4" /> Profilo
-                </h2>
-                <div className="text-sm text-primary/70 space-y-1">
-                    <p><span className="font-medium text-primary">Email:</span> {user?.email}</p>
-                    <p><span className="font-medium text-primary">Provider:</span> Google</p>
-                    <p><span className="font-medium text-primary">ID:</span> <span className="font-mono text-xs">{user?.id}</span></p>
-                </div>
-            </div>
+            <section className="cos-card p-6 sm:p-7">
+                <h2 className="cos-kicker mb-4 flex items-center gap-2"><User className="h-3.5 w-3.5" aria-hidden /> Profilo</h2>
+                <dl className="grid grid-cols-[6rem_1fr] gap-x-4 gap-y-2 text-sm">
+                    <dt className="text-ink-3">Email</dt><dd className="min-w-0 truncate text-ink">{user?.email || '—'}</dd>
+                    <dt className="text-ink-3">Accesso</dt><dd className="text-ink">Google</dd>
+                    <dt className="text-ink-3">ID</dt><dd className="min-w-0 truncate font-mono text-xs leading-5 text-ink-2">{user?.id || '—'}</dd>
+                </dl>
+            </section>
 
             {/* Modelli AI (OpenRouter) */}
-            <Suspense fallback={null}>
+            <Suspense fallback={<div className="cos-card cos-loading"><span className="cos-reg" />Carico i modelli</div>}>
                 <AiProviderCard />
             </Suspense>
 
             {/* AI */}
-            <Link href="/settings/skills" className="block">
-                <div className="bg-white rounded-xl border border-border p-6 hover:border-accent/40 hover:shadow-sm transition-all">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 bg-accent/10 rounded-xl flex items-center justify-center">
-                                <Sparkles className="w-4 h-4 text-accent" />
-                            </div>
-                            <div>
-                                <h2 className="font-semibold text-primary text-sm">Skill & Architettura AI</h2>
-                                <p className="text-xs text-primary/50 mt-0.5">Personalizza il comportamento del Co-Pilot</p>
-                            </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-primary/30" />
+            <Link href="/settings/skills" className="cos-card cos-crop group flex items-center justify-between gap-4 p-6 sm:p-7">
+                <div className="flex items-center gap-4">
+                    <span className="grid h-11 w-11 place-items-center rounded-full bg-ink text-hot">
+                        <Sparkles className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div>
+                        <h2 className="text-[15px] font-semibold text-ink">Skill e architettura AI</h2>
+                        <p className="mt-0.5 text-[13px] text-ink-3">Personalizza il comportamento del Co-Pilot</p>
                     </div>
                 </div>
+                <ChevronRight className="h-5 w-5 text-ink-3 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
             </Link>
 
             {/* Logout */}
-            <div className="bg-white rounded-xl border border-border p-6">
-                <h2 className="font-semibold text-primary flex items-center gap-2 mb-4">
-                    <LogOut className="w-4 h-4" /> Sessione
-                </h2>
+            <section className="cos-card p-6 sm:p-7">
+                <h2 className="cos-kicker mb-4 flex items-center gap-2"><LogOut className="h-3.5 w-3.5" aria-hidden /> Sessione</h2>
                 <form action="/auth/signout" method="POST">
-                    <button
-                        type="submit"
-                        className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
-                    >
+                    <button type="submit" className="cos-btn cos-btn-danger cos-btn-sm">
                         Disconnetti account
                     </button>
                 </form>
-            </div>
+            </section>
         </div>
     );
 }
