@@ -2329,7 +2329,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
         reapplyAllEffects(obj, latestProps)
         obj.set('dirty', true)
-        canvas.requestRenderAll()
+        canvas?.requestRenderAll()
 
         setSel(prev => ({ ...prev, fxProps: latestProps }))
         effectRafRef.current = null
@@ -2533,18 +2533,18 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const gridColumns = 12
 
       // Build flat shape lookup map once
-      const SHAPE_MAP: Record<string, string> = {}
+      const SHAPE_MAP: Record<string, string | undefined> = {}
       Object.values(SHAPE_LIBRARY).forEach((items: any[]) => {
         items.forEach(item => { if (item.name && item.path) SHAPE_MAP[item.name] = item.path })
       })
       PRO_ASSETS.forEach(asset => { SHAPE_MAP[asset.name] = asset.path; SHAPE_MAP[asset.id] = asset.path })
       // Ricerca tollerante del nome: maiuscole, spazi, trattini e punti non contano
       const normShape = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '')
-      const SHAPE_NORM: Record<string, string> = {}
+      const SHAPE_NORM: Record<string, string | undefined> = {}
       Object.entries(SHAPE_MAP).forEach(([k, v]) => { SHAPE_NORM[normShape(k)] = v })
       const findShape = (id: string) => SHAPE_MAP[id] || SHAPE_NORM[normShape(id)] || ''
 
-      const deferredImages: Array<{ artboardName: string; boardW: number; boardH: number; el: any }> = []
+      const deferredImages: Array<{ artboardName: string | undefined; boardW: number; boardH: number; el: any }> = []
 
       // ── AAA DESIGN GUARDRAILS ──
       const getLuminance = (hex: string) => {
@@ -2805,7 +2805,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         if (!allAbs.length) return
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         allAbs.forEach(ab => {
-          const b = ab.getBoundingRect(false)
+          const b = ab.getBoundingRect()
           minX = Math.min(minX, b.left); minY = Math.min(minY, b.top); maxX = Math.max(maxX, b.left + b.width); maxY = Math.max(maxY, b.top + b.height)
         })
         const cw = maxX - minX, ch = maxY - minY
@@ -2827,7 +2827,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
         const objCenter = obj.getCenterPoint()
         return canvas.getObjects().find(o => {
           if (!(o as any).isArtboard) return false
-          const b = o.getBoundingRect(false)
+          const b = o.getBoundingRect()
           return objCenter.x >= b.left && objCenter.x <= b.left + b.width &&
             objCenter.y >= b.top && objCenter.y <= b.top + b.height
         })
@@ -3478,7 +3478,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
     // 2. Process each artboard sequentially (due to viewport transform reset for high-res)
     for (const artboard of artboards) {
-      const b = artboard.getBoundingRect(false)
+      const b = artboard.getBoundingRect()
       const bg = (artboard as any).fill || '#ffffff'
 
       // Reset viewport for clean screenshot capture
@@ -3502,7 +3502,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       const inside = all.filter(o => {
         const oName = o.name || o.get('name') as string | undefined
         if (o === artboard || isArtboardObj(o) || oName?.startsWith('label_')) return false
-        const ob = o.getBoundingRect(false)
+        const ob = o.getBoundingRect()
         const cx = ob.left + ob.width / 2
         const cy = ob.top + ob.height / 2
         return (
@@ -3513,13 +3513,13 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
 
       // Sort by reading order (Y then X)
       inside.sort((a, b) => {
-        const ar = a.getBoundingRect(false), br = b.getBoundingRect(false)
+        const ar = a.getBoundingRect(), br = b.getBoundingRect()
         if (Math.abs(ar.top - br.top) > 15) return ar.top - br.top
         return ar.left - br.left
       })
 
       const rows = inside.map(o => {
-        const ob = o.getBoundingRect(false)
+        const ob = o.getBoundingRect()
         let fillColor = (o as any).fill
         if (fillColor && typeof fillColor === 'object') fillColor = '#888888'
         fillColor = fillColor || '#333333'
@@ -3583,7 +3583,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     // Build artboard rect map (canvas pixel coords, no zoom) for video export
     const artboardRects: Record<string, { left: number; top: number; width: number; height: number }> = {}
     artboards.forEach(ab => {
-      const b2 = ab.getBoundingRect(false)
+      const b2 = ab.getBoundingRect()
       const id = (ab as any).objId || ab.name || ab.get('name') as string
       artboardRects[id] = { left: b2.left, top: b2.top, width: b2.width, height: b2.height }
     })
@@ -5219,7 +5219,7 @@ function ToolGroup({ tools, cur, onChange }: {
   cur: Tool; onChange: (t: Tool) => void
 }) {
   const [open, setOpen] = React.useState(false)
-  const timer = React.useRef<ReturnType<typeof setTimeout>>()
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const enter = () => { clearTimeout(timer.current); setOpen(true) }
   const leave = () => { timer.current = setTimeout(() => setOpen(false), 180) }
   const active = tools.find(x => x.t === cur)
@@ -5251,7 +5251,7 @@ function ToolGroup({ tools, cur, onChange }: {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ArtboardBtn({ onAdd }: { onAdd: (w: number, h: number, name: string, type: any) => void }) {
   const [open, setOpen] = React.useState(false)
-  const timer = React.useRef<ReturnType<typeof setTimeout>>()
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const enter = () => { clearTimeout(timer.current); setOpen(true) }
   const leave = () => { timer.current = setTimeout(() => setOpen(false), 200) }
   return (
@@ -5341,7 +5341,7 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
 }) {
   const fontBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const fxBtnRef = React.useRef<HTMLButtonElement | null>(null)
-  const paraTimer = React.useRef<ReturnType<typeof setTimeout>>()
+  const paraTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [showPara, setShowPara] = React.useState(false)
   const ib = (a: boolean) => cn('w-9 h-9 flex items-center justify-center rounded-lg transition-colors border-2 border-transparent', a ? 'bg-accent text-black' : 'text-white/40 hover:bg-white/10 hover:text-white')
   const PS = [{ l: 'H1', sz: 48, fw: 'bold' as const }, { l: 'H2', sz: 32, fw: 'bold' as const }, { l: 'H3', sz: 24, fw: 'bold' as const }, { l: 'CP', sz: 16, fw: 'normal' as const }, { l: 'C', sz: 12, fw: 'normal' as const }]
@@ -5418,7 +5418,7 @@ function TextBar({ sel, onApply, onLink, showFP, setShowFP, showFX, setShowFX, o
 function ShapeBar({ sel, onApply, onShadow, onGrad, onPreset, onUpdate, showFX, setShowFX, onBoolean, onBindTextToPath }: {
   sel: SelState; onApply: (p: Partial<fabric.Object>) => void; onShadow: (u: Partial<SelState>) => void
   onGrad: (c: string[], a?: number) => void; onPreset: (p: any) => void; onUpdate: (evt: string, p: string, v: any) => void; showFX: boolean; setShowFX: (v: boolean) => void
-  onBoolean: (op: 'union' | 'subtract' | 'intersect') => void; onBindTextToPath: void
+  onBoolean: (op: 'union' | 'subtract' | 'intersect') => void; onBindTextToPath: () => void
 }) {
   const fxBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const bmBtnRef = React.useRef<HTMLButtonElement | null>(null)

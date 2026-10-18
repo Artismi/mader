@@ -495,6 +495,7 @@ fabric.classRegistry.setClass(LiquidMetalFilter, 'LiquidMetalFilter')
  * Simulates phosphor masks, electron beam focus, and physical tube distortion.
  */
 export class AdvancedCRTFilter extends fabric.filters.BaseFilter<'AdvancedCRTFilter'> {
+  declare _persistenceTexture?: WebGLTexture | null
   static type = 'AdvancedCRT'
   static uniformLocations = [
     'uMode', 'uMaskScale', 'uMaskIntensity', 'uScanlineIntensity', 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseConfigurato } from '@/lib/supabase/config'
 import { google } from 'googleapis'
 import { messages, clientChannels, tokens } from '@/lib/db'
 import { googleAuth } from '@/lib/google/auth'
@@ -17,7 +18,7 @@ export async function GET() {
 
     // Fallback: token da Supabase session
     let accessToken = tokenData?.provider_token
-    if (!accessToken) {
+    if (!accessToken && supabaseConfigurato()) {
       const supabase = await createClient()
       const { data: { session } } = await supabase.auth.getSession()
       accessToken = session?.provider_token ?? undefined

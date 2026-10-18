@@ -29,6 +29,7 @@ import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
 import { focusText } from '@/lib/kernel/graph'
+import { internalOrigin } from '@/lib/app-origin'
 
 export const maxDuration = 120 // lavori in più passi e regia dello Studio
 
@@ -673,7 +674,7 @@ export async function POST(req: Request) {
     // Richieste Excel/Word/PowerPoint → Next.js /api/ai/office (genera il file).
     if (needsOfficePipeline(userQuery)) {
       try {
-        const officeRes = await fetch('http://127.0.0.1:3000/api/ai/office', {
+        const officeRes = await fetch(`${internalOrigin()}/api/ai/office`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: userQuery, doc_type: 'auto' }),
@@ -890,7 +891,7 @@ QUANTITÀ BOARD:
           }),
           execute: async ({ prompt }) => {
             try {
-              const res = await fetch('http://127.0.0.1:3000/api/ai/schema', {
+              const res = await fetch(`${internalOrigin()}/api/ai/schema`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt }),
@@ -929,7 +930,7 @@ QUANTITÀ BOARD:
           }),
           execute: async ({ prompt, doc_type }) => {
             try {
-              const res = await fetch('http://127.0.0.1:3000/api/ai/office', {
+              const res = await fetch(`${internalOrigin()}/api/ai/office`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, doc_type }),

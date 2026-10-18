@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { RootShell } from "@/components/layout/RootShell";
 
+// App desktop con database locale: ogni pagina si genera alla richiesta.
+// Statiche, verrebbero prerenderizzate in `next build` con i dati del computer
+// che costruisce il pacchetto, e non si aggiornerebbero più.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Creative OS",
   description: "Overlay intelligente per freelance creativo",

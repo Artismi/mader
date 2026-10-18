@@ -1,5 +1,6 @@
 import { clients, clientTokens } from '@/lib/db'
 import { NextRequest } from 'next/server'
+import { appOrigin } from '@/lib/app-origin'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   const appId = process.env.META_APP_ID
   const appSecret = process.env.META_APP_SECRET
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const appUrl = appOrigin()
 
   if (!code || !clientId) return Response.json({ error: 'code o state mancante' }, { status: 400 })
   if (!appId || !appSecret) return Response.json({ error: 'META_APP_ID o META_APP_SECRET non configurati' }, { status: 500 })

@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { supabaseConfigurato, SUPABASE_NON_CONFIGURATO } from '@/lib/supabase/config';
 
 export async function GET() {
+    if (!supabaseConfigurato()) {
+        return NextResponse.json({ error: SUPABASE_NON_CONFIGURATO }, { status: 503 });
+    }
+
     try {
         const supabase = await createClient();
 

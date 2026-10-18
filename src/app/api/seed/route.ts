@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseConfigurato, SUPABASE_NON_CONFIGURATO } from '@/lib/supabase/config'
 
 // MOCK DATA SEEDER
 // Richiama GET /api/seed dopo aver fatto il login manuale
 export async function GET() {
+    if (!supabaseConfigurato()) {
+        return NextResponse.json({ error: SUPABASE_NON_CONFIGURATO }, { status: 503 })
+    }
+
     const supabase = await createClient()
     const { data: { user }, error: userError } = await supabase.auth.getUser()
 

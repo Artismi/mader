@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
+import { appOrigin } from '@/lib/app-origin'
 
 const FB_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/meta/callback`
+const REDIRECT_URI = `${appOrigin()}/api/auth/meta/callback`
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)

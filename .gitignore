@@ -73,3 +73,7 @@ ts-error.txt
 /scripts/archivio/cache/
 /scripts/archivio/out/
 .tela-test/
+
+# pacchetto Electron
+/.pacchetto/
+/dist/

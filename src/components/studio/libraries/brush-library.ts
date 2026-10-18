@@ -41,7 +41,7 @@ export class CalligraphyBrush extends fabric.PencilBrush {
     const ctx = (this.canvas as any).contextTop as CanvasRenderingContext2D | null;
     if (ctx) ctx.clearRect(0, 0, (this.canvas as any).width, (this.canvas as any).height);
 
-    const pathData = this._getfreeDrawingPathData();
+    const pathData = this.convertPointsToSVGPath(this._points);
     const path = new fabric.Path(pathData, {
       fill: 'transparent',
       stroke: this.color,

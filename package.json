@@ -7,7 +7,7 @@
     "dev": "next dev --turbo --hostname 127.0.0.1",
     "dev:electron": "concurrently -k -n NEXT,ELECTRON -c cyan,yellow \"next dev --turbo --hostname 127.0.0.1\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "next build",
-    "build:electron": "next build && electron-builder",
+    "build:electron": "next build && node scripts/prepara-pacchetto.mjs && electron-builder && node scripts/verifica-pacchetto.mjs",
     "start": "next start",
     "lint": "eslint",
     "asset:catalogo": "node scripts/asset/catalogo.mjs",
@@ -27,7 +27,8 @@
     "test:agente": "node --import ./scripts/agent/register.mjs --test scripts/agent/guscio.test.mts scripts/agent/registro.test.mts scripts/agent/catalogo.test.mts scripts/agent/maestra.test.mts scripts/agent/banco.test.mts scripts/agent/kernel.test.mts scripts/agent/events.test.mts scripts/agent/graph.test.mts scripts/agent/livelli.test.mts scripts/agent/banco-motore.test.mts scripts/agent/vie-gratuite.test.mts scripts/agent/canvas.test.mts",
     "postinstall": "node scripts/copy-vendor.mjs",
     "tela:server": "node scripts/tela/server.mjs",
-    "test:tela": "node --test --test-concurrency=1 scripts/tela/*.test.mjs"
+    "test:tela": "node --test --test-concurrency=1 scripts/tela/*.test.mjs",
+    "pacchetto:verifica": "node scripts/verifica-pacchetto.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
@@ -111,8 +112,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "concurrently": "^9.1.2",
-    "electron": "^32.3.3",
-    "electron-builder": "^25.1.8",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
@@ -123,21 +125,64 @@
     "appId": "com.creativeos.app",
     "productName": "Creative OS",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "app": ".pacchetto/app"
     },
+    "asar": true,
+    "files": [
+      "**/*",
+      "!**/*.map",
+      "!node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "server",
+        "filter": [
+          "**/*",
+          "!**/.env*",
+          "!data/**",
+          "!data-prova/**",
+          "!.claude/**",
+          "!scratch/**",
+          "!vault/**",
+          "!graphify-out/**",
+          "!crew/**",
+          "!**/*.zip",
+          "!**/*.db",
+          "!**/*.db-wal",
+          "!**/*.db-shm"
+        ]
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "server/node_modules",
+        "filter": [
+          "**/*",
+          "!**/.env*",
+          "!**/*.map"
+        ]
+      },
+      {
+        "from": ".next/standalone/.next/node_modules",
+        "to": "server/.next/node_modules",
+        "filter": [
+          "**/*",
+          "!**/.env*",
+          "!**/*.map"
+        ]
+      }
+    ],
     "win": {
       "target": "nsis"
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "mac": {
       "target": "dmg"
-    },
-    "files": [
-      "**/*",
-      "!supabase/**",
-      "!*.md"
-    ],
-    "extraMetadata": {
-      "main": "electron/main.js"
     }
   }
 }

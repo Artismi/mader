@@ -10,8 +10,12 @@ import { SCHEMA_SQL } from './schema'
 import { DEFAULT_SKILLS, DEFAULT_ARCHITECTURE } from '@/lib/ai/defaults'
 import { randomUUID } from 'crypto'
 
+// Durante `next build` i worker che raccolgono i dati delle pagine caricano questo
+// modulo in parallelo: database in memoria, così non si bloccano a vicenda e la
+// build non crea data/ nel progetto
+const IN_BUILD = process.env.NEXT_PHASE === 'phase-production-build'
 const DB_PATH = process.env.DATABASE_PATH ||
-  path.join(process.cwd(), 'data', 'creative-os.db')
+  (IN_BUILD ? ':memory:' : path.join(process.cwd(), 'data', 'creative-os.db'))
 
 // Singleton — safe per Next.js hot reload in dev
 declare global {
@@ -21,9 +25,13 @@ declare global {
 
 function initDb(): DatabaseSync {
   const dir = path.dirname(DB_PATH)
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  if (DB_PATH !== ':memory:' && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
   const db = new DatabaseSync(DB_PATH)
+
+  // Attende invece di fallire se un altro processo sta scrivendo
+  // (next build apre il database da più worker in parallelo)
+  db.exec('PRAGMA busy_timeout = 10000')
 
   // WAL mode + foreign keys
   db.exec('PRAGMA journal_mode = WAL')
@@ -72,6 +80,10 @@ function initDb(): DatabaseSync {
     )`)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_design_projects_client ON design_projects(client_id)`)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_design_projects_updated ON design_projects(updated_at DESC)`)
+
+  // Tabelle aggiunte dopo lo schema base: servono anche a un database nuovo
+  // creato dal pacchetto, non solo al ricaricamento a caldo in sviluppo
+  runLiveMigrations(db)
 
   // Dati di default al primo avvio
   seedDefaults(db)

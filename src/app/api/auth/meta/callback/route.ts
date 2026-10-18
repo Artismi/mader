@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { clientTokens, clients } from '@/lib/db'
+import { appOrigin } from '@/lib/app-origin'
 
 const FB_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID
 const FB_APP_SECRET = process.env.META_APP_SECRET
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/meta/callback`
+const REDIRECT_URI = `${appOrigin()}/api/auth/meta/callback`
 const GRAPH = 'https://graph.facebook.com/v21.0'
 
 export async function GET(req: Request) {
@@ -68,10 +69,10 @@ export async function GET(req: Request) {
     })
 
     // Torna alla pagina editoriale del cliente
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/editoriale?clientId=${clientId}&auth=success`)
+    return NextResponse.redirect(`${appOrigin()}/editoriale?clientId=${clientId}&auth=success`)
 
   } catch (err: any) {
     console.error('Meta Auth Error:', err)
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/editoriale?clientId=${clientId}&auth=error&message=${encodeURIComponent(err.message)}`)
+    return NextResponse.redirect(`${appOrigin()}/editoriale?clientId=${clientId}&auth=error&message=${encodeURIComponent(err.message)}`)
   }
 }

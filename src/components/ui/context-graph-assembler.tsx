@@ -39,7 +39,7 @@ interface ActiveNode {
   ref: React.RefObject<HTMLButtonElement | null>
 }
 
-interface DriveFile { id: string; name: string; mimeType: string; webViewLink: string }
+interface DriveFile { id: string; name: string; mimeType: string; webViewLink: string; modifiedTime?: string }
 interface VaultFile { name: string; isDir: boolean; ext: string; relativePath: string }
 interface ClientData { id: string; name: string; drive_asset_id: string | null; drive_documenti_id: string | null; drive_progetti_id: string | null }
 
