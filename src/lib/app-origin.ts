@@ -14,3 +14,12 @@ export function appOrigin(): string {
 export function internalOrigin(): string {
   return process.env.CREATIVE_OS_ORIGIN || `http://127.0.0.1:${process.env.PORT || 3000}`
 }
+
+/** Intestazioni per le chiamate interne: il token di sessione del pacchetto (vedi src/proxy.ts). */
+export function internalHeaders(): Record<string, string> {
+  const token = process.env.CREATIVE_OS_TOKEN
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'x-creative-os-token': token } : {}),
+  }
+}

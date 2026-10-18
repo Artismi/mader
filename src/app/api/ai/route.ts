@@ -29,7 +29,7 @@ import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
 import path from 'path'
 import { focusText } from '@/lib/kernel/graph'
-import { internalOrigin } from '@/lib/app-origin'
+import { internalOrigin, internalHeaders } from '@/lib/app-origin'
 
 export const maxDuration = 120 // lavori in più passi e regia dello Studio
 
@@ -676,7 +676,7 @@ export async function POST(req: Request) {
       try {
         const officeRes = await fetch(`${internalOrigin()}/api/ai/office`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: internalHeaders(),
           body: JSON.stringify({ prompt: userQuery, doc_type: 'auto' }),
           signal: AbortSignal.timeout(120_000),
         })
@@ -893,7 +893,7 @@ QUANTITÀ BOARD:
             try {
               const res = await fetch(`${internalOrigin()}/api/ai/schema`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: internalHeaders(),
                 body: JSON.stringify({ prompt }),
               })
               if (!res.ok) throw new Error(`Schema API error: ${res.status}`)
@@ -932,7 +932,7 @@ QUANTITÀ BOARD:
             try {
               const res = await fetch(`${internalOrigin()}/api/ai/office`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: internalHeaders(),
                 body: JSON.stringify({ prompt, doc_type }),
               })
               if (!res.ok) throw new Error(`Office API error: ${res.status}`)

@@ -3,6 +3,7 @@ const path = require('path')
 const { spawn } = require('child_process')
 const fs = require('fs')
 const net = require('net')
+const crypto = require('crypto')
 
 const isDev = !app.isPackaged
 
@@ -76,6 +77,11 @@ function startCrewService() {
 // il server parte su una porta libera di 127.0.0.1 scelta all'avvio.
 let PORT = 3000
 let ORIGIN = `http://localhost:${PORT}`
+
+// Token di sessione del pacchetto: nuovo a ogni avvio, lo conoscono solo il server
+// e le finestre dell'app (src/proxy.ts risponde 401 a chi non lo manda)
+const TOKEN_HEADER = 'x-creative-os-token'
+const SESSION_TOKEN = isDev ? null : crypto.randomBytes(32).toString('hex')
 
 let mainWindow = null
 let overlayWindow = null
@@ -195,6 +201,7 @@ async function startNextServer() {
       // vault predefinito: qui process.cwd() sarebbe resources/server
       VAULT_PATH: path.join(app.getPath('userData'), 'vault'),
       CREATIVE_OS_ORIGIN: ORIGIN,
+      CREATIVE_OS_TOKEN: SESSION_TOKEN,
       NEXT_TELEMETRY_DISABLED: '1',
     },
   })
@@ -210,7 +217,7 @@ async function startNextServer() {
     const checkReady = () => {
       if (done) return
       if (Date.now() > deadline) return finish(new Error('il server non risponde dopo 60 secondi'))
-      require('http').get(`${ORIGIN}/os`, (res) => {
+      require('http').get(`${ORIGIN}/os`, { headers: { [TOKEN_HEADER]: SESSION_TOKEN } }, (res) => {
         res.resume()
         if (res.statusCode < 500) finish()
         else setTimeout(checkReady, 300)
@@ -315,6 +322,12 @@ app.whenReady().then(async () => {
     dialog.showErrorBox('Creative OS', `Impossibile avviare Creative OS: ${err.message}`)
     app.quit()
     return
+  }
+  // Ogni richiesta delle finestre verso il server porta il token (pagine, fetch, immagini)
+  if (SESSION_TOKEN) {
+    session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${ORIGIN}/*`] }, (details, callback) => {
+      callback({ requestHeaders: { ...details.requestHeaders, [TOKEN_HEADER]: SESSION_TOKEN } })
+    })
   }
   startCrewService()
   createMainWindow()
