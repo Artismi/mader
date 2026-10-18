@@ -1,3 +1,4 @@
+import { PageHeader, EmptyState } from "@/components/ui/page-header";
 import { Users, FolderOpen, Mail, Tag, Landmark, Briefcase, Plus, ChevronRight } from 'lucide-react'
 import { clients, tasks } from '@/lib/db'
 import { NuovoClienteModal } from '@/components/ui/nuovo-cliente-modal'
@@ -18,35 +19,29 @@ export default function ClientiPage() {
   const bandi = allClients.filter(c => c.category === 'bando').map(processClient)
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide pb-6">
-      <div className="max-w-7xl mx-auto space-y-12 py-8 px-6">
+    <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
+      <div className="cos-page">
         
         {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6 border-b border-white/5 pb-8">
-          <div>
-            <h1 className="text-4xl font-black tracking-tighter text-white">Business.</h1>
-            <p className="mt-2 text-sm font-bold uppercase tracking-[0.2em] text-white/20">Gestione Clienti e Bandi Attivi</p>
-          </div>
-          <NuovoClienteModal />
-        </div>
+        <PageHeader
+          kicker="Business"
+          title="Clienti e bandi"
+          lead="Chi segui, cosa sai di loro e i bandi aperti."
+          actions={<NuovoClienteModal />}
+        />
 
-        <div className="grid grid-cols-1 gap-16">
+        <div className="grid grid-cols-1 gap-14">
           
           {/* FOLDER: CLIENTI */}
           <section className="space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center border border-sky-500/20 shadow-sm">
-                <Users className="w-5 h-5 text-sky-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black uppercase tracking-widest text-white/80">[CLIENTI]</h2>
-                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest leading-none mt-0.5">{clienti.length} Entità Identificate</p>
-              </div>
+            <div className="cos-section-title border-b border-line pb-3">
+              <h2 className="flex items-center gap-2.5 font-display text-[23px] font-bold tracking-[-0.02em] text-ink"><Users className="h-5 w-5 text-ink-3" aria-hidden /> Clienti</h2>
+              <span className="font-mono text-xs text-ink-3">{clienti.length}</span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {clienti.length === 0 ? (
-                <p className="text-xs text-white/10 italic py-4">Nessun cliente in questa cartella.</p>
+                <EmptyState className="lg:col-span-2" icon={<Users className="h-5 w-5" />} title="Nessun cliente ancora">Aggiungi il primo con «Nuovo cliente».</EmptyState>
               ) : (
                 clienti.map(client => <ClientCard key={client.id} client={client} color="sky" />)
               )}
@@ -55,19 +50,14 @@ export default function ClientiPage() {
 
           {/* FOLDER: BANDI */}
           <section className="space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-sm">
-                <Landmark className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black uppercase tracking-widest text-white/80">[BANDI]</h2>
-                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest leading-none mt-0.5">{bandi.length} Opportunità in Corso</p>
-              </div>
+            <div className="cos-section-title border-b border-line pb-3">
+              <h2 className="flex items-center gap-2.5 font-display text-[23px] font-bold tracking-[-0.02em] text-ink"><Landmark className="h-5 w-5 text-ink-3" aria-hidden /> Bandi</h2>
+              <span className="font-mono text-xs text-ink-3">{bandi.length}</span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {bandi.length === 0 ? (
-                <p className="text-xs text-white/10 italic py-4">Nessun bando in questa cartella.</p>
+                <EmptyState className="lg:col-span-2" icon={<Landmark className="h-5 w-5" />} title="Nessun bando aperto">Quando ne segui uno, aggiungilo come cliente di tipo bando.</EmptyState>
               ) : (
                 bandi.map(client => <ClientCard key={client.id} client={client} color="amber" />)
               )}
@@ -85,14 +75,14 @@ function ClientCard({ client, color }: { client: any; color: 'sky' | 'amber' }) 
     sky: {
       bg: 'bg-sky-500/5',
       border: 'border-sky-500/10',
-      accent: 'bg-sky-500/20 text-sky-300',
+      accent: 'bg-sunk text-ink',
       icon: 'text-sky-500/40',
       hover: 'hover:border-sky-500/30'
     },
     amber: {
       bg: 'bg-amber-500/5',
       border: 'border-amber-500/10',
-      accent: 'bg-amber-500/20 text-amber-300',
+      accent: 'bg-amber-100 text-amber-700',
       icon: 'text-amber-500/40',
       hover: 'hover:border-amber-500/30'
     }
@@ -101,26 +91,25 @@ function ClientCard({ client, color }: { client: any; color: 'sky' | 'amber' }) 
 
   return (
     <div className={cn(
-      "group relative flex flex-col rounded-2xl border bg-[#0a0a0a] transition-all duration-300 overflow-hidden",
-      theme.border, theme.hover
+      "cos-card cos-crop group flex flex-col"
     )}>
       <div className="p-6 space-y-4">
         {/* Card Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black shadow-inner", theme.accent)}>
+            <div className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-full font-display text-lg font-bold", theme.accent)}>
               {client.name.charAt(0)}
             </div>
             <div>
-              <h3 className="text-lg font-black text-white/90 leading-tight group-hover:text-white transition-colors">{client.name}</h3>
-              <div className="flex items-center gap-3 mt-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
+              <h3 className="font-display text-xl font-bold leading-tight tracking-[-0.015em] text-ink">{client.name}</h3>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                 {client.email && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-white/60">
+                  <span className="flex items-center gap-1.5 text-[13px] text-ink-3">
                     <Mail className="w-3 h-3" /> {client.email}
                   </span>
                 )}
                 {client.sector && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-white/60">
+                  <span className="flex items-center gap-1.5 text-[13px] text-ink-3">
                     <Tag className="w-3 h-3" /> {client.sector}
                   </span>
                 )}
@@ -129,7 +118,7 @@ function ClientCard({ client, color }: { client: any; color: 'sky' | 'amber' }) 
           </div>
           {client.taskCount > 0 && (
             <div className="flex flex-col items-end">
-              <span className="text-[10px] font-black bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest">
+              <span className="cos-badge is-hot">
                 {client.taskCount} Attivi
               </span>
             </div>
@@ -151,12 +140,12 @@ function ClientCard({ client, color }: { client: any; color: 'sky' | 'amber' }) 
       </div>
 
       {/* Mini Vault / Notes */}
-      <div className="mt-auto px-6 pb-6 pt-2 border-t border-white/[0.03] bg-white/[0.01]">
+      <div className="mt-auto border-t border-dashed border-line px-6 pb-6 pt-4">
          <div className="flex items-center justify-between mb-3">
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/10">Project Vault</span>
-            <ChevronRight className="w-3 h-3 text-white/10 group-hover:text-white/30 transition-all" />
+            <span className="cos-kicker">Vault del progetto</span>
+            <ChevronRight className="h-4 w-4 text-ink-3 transition-transform duration-300 group-hover:translate-x-0.5" aria-hidden />
          </div>
-         <div className="rounded-xl overflow-hidden border border-white/5 bg-black/40">
+         <div className="overflow-hidden rounded-[20px] shadow-[inset_0_0_0_1px_var(--cos-line)]">
             <VaultEditor path={`clienti/${client.name.toLowerCase().replace(/\s+/g, '-')}-handbook.md`} />
          </div>
       </div>
@@ -170,7 +159,7 @@ function ResourceLink({ href, icon, label }: { href: string; icon: React.ReactNo
       href={href} 
       target="_blank" 
       rel="noopener noreferrer" 
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[9px] font-black uppercase tracking-widest text-white/40 hover:bg-white/[0.08] hover:text-white/80 transition-all"
+      className="cos-btn cos-btn-secondary cos-btn-sm"
     >
       {icon} {label}
     </a>

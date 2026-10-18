@@ -55,8 +55,8 @@ export function NuovoClienteModal() {
 
   return (
     <>
-      <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
-        <Plus className="w-4 h-4 mr-2" /> Nuovo Cliente / Bando
+      <Button variant="primary" onClick={() => setOpen(true)}>
+        <span className="cos-dot"><Plus className="h-4 w-4" strokeWidth={2.25} /></span> Nuovo cliente
       </Button>
 
       {open && (
