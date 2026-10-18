@@ -197,7 +197,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
 
   const lista = input.candidati ?? candidatesFor({ task: input.task ?? 'general', tools: true, preferisci: input.parti ?? 'leggero' }, { choice: input.modello, riservato: input.riservato })
   if (!lista.length) {
-    return { ok: false, testo: 'Nessun modello con strumenti disponibile: aggiungi ANTHROPIC_API_KEY o GEMINI_API_KEY, oppure collega OpenRouter.', modello: '—', passi: 0, chiamate, proposte, log }
+    return { ok: false, testo: 'Nessun modello con strumenti disponibile: inserisci una chiave in Impostazioni → Chiavi dei modelli, oppure collega OpenRouter.', modello: '—', passi: 0, chiamate, proposte, log }
   }
 
   const maxPassi = input.maxPassi ?? 12

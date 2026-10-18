@@ -293,8 +293,8 @@ export function pickModel(need: Need, opts: PickOptions = {}): ModelCandidate {
   if (list.length) return list[0]
   const any = candidatesFor(need, { ...opts, includeExhausted: true })
   if (any.length) return any[0]
-  if (soloGratis()) throw new Error('Nessun modello gratuito disponibile: serve GEMINI_API_KEY in .env.local o OpenRouter collegato nelle Impostazioni (oppure spegni "solo gratis").')
-  throw new Error('Nessun modello disponibile: aggiungi ANTHROPIC_API_KEY o GEMINI_API_KEY in .env.local, oppure collega OpenRouter nelle Impostazioni.')
+  if (soloGratis()) throw new Error('Nessun modello gratuito disponibile: serve la chiave di Gemini o di OpenRouter in Impostazioni → Chiavi dei modelli (oppure spegni "solo gratis").')
+  throw new Error('Nessun modello disponibile: inserisci una chiave (basta Gemini, gratis) in Impostazioni → Chiavi dei modelli, oppure collega OpenRouter.')
 }
 
 /** Compatibilità con il vecchio resolveModel(choice, task). */

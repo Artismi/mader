@@ -80,7 +80,7 @@ export interface RuoloEsito<T> { valore: T; modello: string; log: Giro[] }
 export async function eseguiRuolo<T>(o: RuoloOpts<T>): Promise<RuoloEsito<T>> {
   const log: Giro[] = []
   const lista = o.modelli ?? candidati(o.ruolo, { riservato: o.riservato, choice: o.choice })
-  if (!lista.length) throw new Error('Nessun modello disponibile: aggiungi ANTHROPIC_API_KEY o GEMINI_API_KEY in .env.local, oppure collega OpenRouter nelle Impostazioni.')
+  if (!lista.length) throw new Error('Nessun modello disponibile: inserisci una chiave (basta Gemini, gratis) in Impostazioni → Chiavi dei modelli, oppure collega OpenRouter.')
   let migliore: { valore: T; modello: string; difetti: number } | null = null
   for (const c of lista) {
     const userContent: ModelMessage['content'] = o.images?.length

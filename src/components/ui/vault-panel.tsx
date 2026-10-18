@@ -154,7 +154,7 @@ export function VaultPanel({ initialStats }: { initialStats: VaultStats }) {
         )}>
           {process.env.NEXT_PUBLIC_HAS_GEMINI
             ? '✓ GEMINI_API_KEY configurata — RAG attivo'
-            : '⚠ Aggiungi GEMINI_API_KEY al .env.local per attivare embeddings e RAG'
+            : '⚠ Inserisci la chiave di Gemini in Impostazioni → Chiavi dei modelli per attivare la ricerca nel vault'
           }
         </div>
       </div>

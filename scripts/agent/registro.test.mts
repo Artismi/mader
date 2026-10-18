@@ -31,7 +31,7 @@ test('keyState legge le chiavi dall\'ambiente', () => {
 
 test('senza chiavi nessun candidato e un errore chiaro', () => {
   assert.equal(reg.candidatesFor({ task: 'general' }, { keys: NESSUNA }).length, 0)
-  assert.throws(() => reg.pickModel({ task: 'general' }, { keys: NESSUNA }), /ANTHROPIC_API_KEY o GEMINI_API_KEY/)
+  assert.throws(() => reg.pickModel({ task: 'general' }, { keys: NESSUNA }), /Chiavi dei modelli/)
 })
 
 test('con una sola chiave si usa quel fornitore, anche se la scelta era un altro', () => {
