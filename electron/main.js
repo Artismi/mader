@@ -1,12 +1,22 @@
-const { app, BrowserWindow, shell, globalShortcut, ipcMain, session, Menu } = require('electron')
+const { app, BrowserWindow, shell, globalShortcut, ipcMain, session, Menu, utilityProcess, dialog } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const fs = require('fs')
+const net = require('net')
+
+const isDev = !app.isPackaged
 
 // ── Crew Service (Python FastAPI) ─────────────────────────────────────────────
+// Facoltativo: in sviluppo parte se c'è crew/main.py; nel pacchetto è spento
+// (serve Python sul computer) e si accende solo con CREATIVE_OS_CREW=1.
+const crewEnabled = isDev ? process.env.CREATIVE_OS_CREW !== '0' : process.env.CREATIVE_OS_CREW === '1'
+const CREW_MAX_RESTARTS = 3
 let crewProcess = null
+let crewRestarts = 0
+let quitting = false
 
 function startCrewService() {
+  if (!crewEnabled) return
   // Cerca Python (python3 su Mac/Linux, python su Windows)
   const pythonCmds = process.platform === 'win32'
     ? ['python', 'python3']
@@ -43,11 +53,16 @@ function startCrewService() {
       if (line && !line.includes('INFO')) console.warn('[crew-err]', line)
     })
     proc.on('exit', (code, signal) => {
-      if (signal !== 'SIGTERM' && code !== 0) {
-        console.warn(`[crew] processo terminato (code=${code}) — riavvio tra 5s`)
-        setTimeout(() => startCrewService(), 5000)
-      }
       crewProcess = null
+      if (quitting || signal === 'SIGTERM' || code === 0) return
+      // Al massimo CREW_MAX_RESTARTS riavvii, poi resta spento
+      if (crewRestarts >= CREW_MAX_RESTARTS) {
+        console.warn(`[crew] processo terminato (code=${code}) — ${CREW_MAX_RESTARTS} riavvii falliti, crew service disabilitato`)
+        return
+      }
+      crewRestarts++
+      console.warn(`[crew] processo terminato (code=${code}) — riavvio ${crewRestarts}/${CREW_MAX_RESTARTS} tra 5s`)
+      setTimeout(() => startCrewService(), 5000)
     })
 
     crewProcess = proc
@@ -57,8 +72,10 @@ function startCrewService() {
   trySpawn(pythonCmds)
 }
 
-const isDev = process.env.NODE_ENV !== 'production'
-const PORT = 3000
+// In sviluppo Next gira già su localhost:3000 (concurrently); nel pacchetto
+// il server parte su una porta libera di 127.0.0.1 scelta all'avvio.
+let PORT = 3000
+let ORIGIN = `http://localhost:${PORT}`
 
 let mainWindow = null
 let overlayWindow = null
@@ -89,7 +106,7 @@ function createMainWindow() {
   })
 
   // Si apre sul nuovo guscio circolare; l'interfaccia precedente resta su "/"
-  mainWindow.loadURL(`http://localhost:${PORT}/os`)
+  mainWindow.loadURL(`${ORIGIN}/os`)
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
@@ -121,7 +138,7 @@ function createOverlayWindow() {
     },
   })
 
-  overlayWindow.loadURL(`http://localhost:${PORT}/overlay`)
+  overlayWindow.loadURL(`${ORIGIN}/overlay`)
   overlayWindow.on('blur', () => overlayWindow?.hide())
   overlayWindow.on('closed', () => { overlayWindow = null })
 }
@@ -140,28 +157,64 @@ function toggleOverlay() {
   }
 }
 
-function startNextServer() {
-  return new Promise((resolve) => {
-    if (isDev) {
-      // In dev, Next.js è già avviato da concurrently — aspettiamo solo
-      resolve()
-      return
-    }
-
-    // In production: avvia il server Next.js compilato
-    nextServer = spawn('node', [path.join(__dirname, '..', '.next', 'standalone', 'server.js')], {
-      env: { ...process.env, PORT: String(PORT) },
-      stdio: 'inherit',
+// Chiede al sistema una porta TCP libera su 127.0.0.1
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.unref()
+    srv.on('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address()
+      srv.close(() => resolve(port))
     })
+  })
+}
 
-    // Aspetta che il server sia pronto
+async function startNextServer() {
+  if (isDev) {
+    // In dev, Next.js è già avviato da concurrently — aspettiamo solo
+    return
+  }
+
+  PORT = await findFreePort()
+  ORIGIN = `http://127.0.0.1:${PORT}`
+
+  // Server Next.js standalone copiato fuori dall'asar (resources/server):
+  // gira nel Node incorporato in Electron, senza Node installato sul computer
+  const serverDir = path.join(process.resourcesPath, 'server')
+  nextServer = utilityProcess.fork(path.join(serverDir, 'server.js'), [], {
+    cwd: serverDir,
+    serviceName: 'Creative OS server',
+    stdio: 'pipe',
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      PORT: String(PORT),
+      HOSTNAME: '127.0.0.1',
+      DATABASE_PATH: dbPath,
+      CREATIVE_OS_ORIGIN: ORIGIN,
+      NEXT_TELEMETRY_DISABLED: '1',
+    },
+  })
+  nextServer.stdout?.on('data', (d) => process.stdout.write(`[next] ${d}`))
+  nextServer.stderr?.on('data', (d) => process.stderr.write(`[next] ${d}`))
+
+  // Aspetta che il server risponda; se muore o non risponde entro 60s, avvisa ed esci
+  await new Promise((resolve, reject) => {
+    let done = false
+    const finish = (err) => { if (done) return; done = true; err ? reject(err) : resolve() }
+    nextServer.once('exit', (code) => finish(new Error(`il server si è chiuso all'avvio (code=${code})`)))
+    const deadline = Date.now() + 60_000
     const checkReady = () => {
-      require('http').get(`http://localhost:${PORT}`, (res) => {
-        if (res.statusCode === 200 || res.statusCode === 307) resolve()
-        else setTimeout(checkReady, 500)
-      }).on('error', () => setTimeout(checkReady, 500))
+      if (done) return
+      if (Date.now() > deadline) return finish(new Error('il server non risponde dopo 60 secondi'))
+      require('http').get(`${ORIGIN}/os`, (res) => {
+        res.resume()
+        if (res.statusCode < 500) finish()
+        else setTimeout(checkReady, 300)
+      }).on('error', () => setTimeout(checkReady, 300))
     }
-    setTimeout(checkReady, 1000)
+    setTimeout(checkReady, 300)
   })
 }
 
@@ -184,7 +237,9 @@ ipcMain.handle('auth:openOAuthWindow', (_, url) => {
     authWindow.loadURL(url)
 
     const checkCallback = (navUrl) => {
-      if (/^http:\/\/(localhost|127\.0\.0\.1):3000\/(auth\/callback|api\/auth\/openrouter\/callback)/.test(navUrl)) {
+      const u = (() => { try { return new URL(navUrl) } catch { return null } })()
+      const sameApp = u && u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname) && u.port === String(PORT)
+      if (sameApp && /^\/(auth\/callback|api\/auth\/openrouter\/callback)/.test(u.pathname)) {
         // Carica il callback nella finestra principale, chiudi il popup
         mainWindow.loadURL(navUrl)
         authWindow.destroy()
@@ -235,7 +290,7 @@ app.whenReady().then(async () => {
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline'",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com",
-          "connect-src 'self' blob: http://127.0.0.1:8765 https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.openai.com",
+          `connect-src 'self' blob:${crewEnabled ? ' http://127.0.0.1:8765' : ''} https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.openai.com https://openrouter.ai https://api.pexels.com https://api.unsplash.com`,
           "img-src 'self' data: blob: https:",
           "media-src 'self' blob: data:",
           "font-src 'self' data: https://fonts.gstatic.com https://cdn.fontshare.com https://api.fontshare.com",
@@ -251,7 +306,14 @@ app.whenReady().then(async () => {
     })
   })
 
-  await startNextServer()
+  try {
+    await startNextServer()
+  } catch (err) {
+    console.error('[next]', err)
+    dialog.showErrorBox('Creative OS', `Impossibile avviare Creative OS: ${err.message}`)
+    app.quit()
+    return
+  }
   startCrewService()
   createMainWindow()
 
@@ -310,7 +372,10 @@ app.whenReady().then(async () => {
   })
 })
 
+app.on('before-quit', () => { quitting = true })
+
 app.on('window-all-closed', () => {
+  quitting = true
   globalShortcut.unregisterAll()
   if (nextServer) nextServer.kill()
   if (crewProcess) crewProcess.kill('SIGTERM')

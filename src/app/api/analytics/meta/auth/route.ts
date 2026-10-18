@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { appOrigin } from '@/lib/app-origin'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -7,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!clientId) return Response.json({ error: 'clientId mancante' }, { status: 400 })
 
   const appId = process.env.META_APP_ID
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const appUrl = appOrigin()
   if (!appId) return Response.json({ error: 'META_APP_ID non configurato' }, { status: 500 })
 
   const redirectUri = `${appUrl}/api/analytics/meta/callback`
