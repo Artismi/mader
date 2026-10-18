@@ -1,5 +1,6 @@
 'use client';
 
+import { controllaTavole, type TavolaManuale } from '@/lib/agent/canvas-checks'
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, getToolName, isTextUIPart, isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses, type UIMessage } from 'ai';
 import { Input } from "@/components/ui/input";
@@ -574,10 +575,15 @@ export function AIChatWidget() {
                     // con le conferme lo stesso messaggio continua: ogni chiamata si esegue una volta sola
                     if (executedToolCalls.current.has(part.toolCallId)) continue;
                     executedToolCalls.current.add(part.toolCallId);
+                    // le tavole a mano passano dagli stessi controlli della maestra del server
+                    const input = part.input as Record<string, unknown> | undefined
+                    const args = toolName === 'createDesignBoards' && Array.isArray(input?.boards)
+                        ? { ...input, boards: controllaTavole(input.boards as TavolaManuale[]).boards }
+                        : input
                     pushAiCommand({
                         toolName,
                         result: undefined,
-                        args: part.input as Record<string, unknown> | undefined,
+                        args,
                         // l'SVG dello schema arriva nell'output del tool, non nell'input
                         output: part.state === 'output-available' ? part.output : undefined,
                         timestamp: Date.now(),

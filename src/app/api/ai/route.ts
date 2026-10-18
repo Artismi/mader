@@ -8,7 +8,8 @@ import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@
 import { toolsForContext } from '@/lib/agent/run'
 import { createTrace } from '@/lib/agent/trace'
 import { createToolCallRepair } from '@/lib/agent/repair'
-import { createPrepareStep, isActionTurn, risksOf } from '@/lib/agent/steer'
+import { createPrepareStep, isActionTurn, isApproval, risksOf } from '@/lib/agent/steer'
+import { controllaTavole, isDesignRequest, notaVerifica, verificaCanvas, type ScritturaCanvas, type TavolaManuale } from '@/lib/agent/canvas-checks'
 import { checkClosure, proveFromSteps } from '@/lib/agent/evidence'
 import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
 import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
@@ -141,6 +142,11 @@ const canvasUpdateSchema = z.object({
     scaleY: z.number().optional(),
     effects: z.array(z.string()).optional(),
     effectProps: z.record(z.string(), z.unknown()).optional(),
+    // livelli: lo Studio li applica davvero (prima zIndex veniva scartato in silenzio)
+    livello: z.enum(['cima', 'fondo', 'sopra', 'sotto']).optional().describe("Ordine: 'cima' sopra a tutto, 'fondo' subito sopra lo sfondo della tavola, 'sopra'/'sotto' di un passo"),
+    sopraA: z.string().optional().describe("ID dell'elemento che questo deve coprire (es. il testo sopra la foto)"),
+    sottoA: z.string().optional().describe("ID dell'elemento sotto cui va messo (es. la foto sotto il titolo)"),
+    zIndex: z.number().optional().describe("Compatibilità: 0-2 = fondo, 7+ = cima; meglio livello, sopraA o sottoA"),
   }),
 })
 
@@ -583,6 +589,16 @@ function buildCrewStreamResponse(
   })
 }
 
+const SCRITTURE_CANVAS = new Set(['createDesignBoards', 'composeDesign', 'updateCanvasElements'])
+
+/** Le scritture sul canvas dell'ultima risposta dell'assistente (parti strumento dell'UIMessage). */
+function scrittureCanvasPrecedenti(messages: { role: string; parts?: { type: string; input?: unknown }[] }[]): ScritturaCanvas[] {
+  const ultima = [...messages].reverse().find(m => m.role === 'assistant')
+  return (ultima?.parts ?? [])
+    .filter(p => p.type.startsWith('tool-') && SCRITTURE_CANVAS.has(p.type.slice(5)) && p.input)
+    .map(p => ({ strumento: p.type.slice(5), input: p.input }))
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -724,6 +740,13 @@ export async function POST(req: Request) {
     console.log(`[ai] richiesta ${task} → ${modelLabel} (${profile.strength})${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
     const trace = createTrace(modelLabel)
+    // stato del turno: grafica nuova richiesta? motore usato? scritture sul canvas in attesa dello Studio
+    const precedenteUtente = messageText([...messages].reverse().filter((m: { role: string }) => m.role === 'user')[1])
+    const turno = {
+      grafica: isDesignRequest(userQuery) || (isApproval(userQuery) && isDesignRequest(precedenteUtente)),
+      motore: false,
+      scritture: [] as string[],
+    }
     const d = <S extends z.ZodTypeAny>(def: AgentToolDef<S>) => def as unknown as AgentToolDef<z.ZodTypeAny>
     const defs: AgentToolDef<z.ZodTypeAny>[] = [
         ...CORE_TOOLS,
@@ -750,11 +773,11 @@ export async function POST(req: Request) {
         d({ name: 'composeDesign', group: 'studio', risk: 'write',
           description: composeToolDescription(),
           inputSchema: z.object({ boards: z.array(composeBoardSchema).min(1) }),
-          execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
+          execute: async ({ boards }) => { turno.motore = true; turno.scritture.push(`composeDesign: ${boards.length} tavole`); return { success: true, rendered: boards.length } },
         }),
 
         ...(lowLevelDesign ? [d({ name: 'createDesignBoards', group: 'studio', risk: 'write',
-          description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
+          description: `Strumento di basso livello, SOLO per ritocchi puntuali chiesti dall'utente (aggiungere o spostare pochi elementi a coordinate esatte). Grafiche, post, volantini e presentazioni nuove passano dal motore: directDesign, poi composeDesign. Le tavole passano dai controlli della maestra: elementi fuori tavola spostati o rifilati, fondo e foto sotto, testo sopra, niente riquadri opachi sulle foto.
 Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
 DIMENSIONI STANDARD — scegli in base al contenuto:
@@ -795,10 +818,16 @@ QUANTITÀ BOARD:
           inputSchema: z.object({
             boards: z.array(designBoardSchema),
           }),
-          execute: async ({ boards }) => ({
-            success: true,
-            rendered: boards?.length ?? 0,
-          }),
+          execute: async ({ boards }) => {
+            // le grafiche nuove passano dal motore: a mano solo dopo directDesign/composeDesign o per i ritocchi
+            if (turno.grafica && !turno.motore) {
+              return { success: false, error: "Per una grafica nuova non comporre a mano: chiama directDesign (brief completo, formato, numero di slide), poi composeDesign con i testi e una delle direzioni. createDesignBoards serve solo ai ritocchi." }
+            }
+            // controlli della maestra: la chat disegna le stesse tavole corrette (controllaTavole)
+            const { avvisi } = controllaTavole(boards as TavolaManuale[])
+            turno.scritture.push(`createDesignBoards: ${boards.map(b => b.name ?? 'tavola').join(', ')}`)
+            return { success: true, rendered: boards?.length ?? 0, ...(avvisi.length ? { corretto: avvisi } : {}) }
+          },
         })] : []),
 
         d({ name: 'updateCanvasElements', group: 'studio', risk: 'write',
@@ -808,10 +837,10 @@ QUANTITÀ BOARD:
               'Array di update. Ogni entry ha "id" (il name dell\'elemento nel canvas) e "changes" con le proprietà da modificare.'
             ),
           }),
-          execute: async ({ updates }) => ({
-            success: true,
-            updated: updates?.length ?? 0,
-          }),
+          execute: async ({ updates }) => {
+            turno.scritture.push(`updateCanvasElements: ${updates.map(u => `${u.id} (${Object.keys(u.changes).join(', ')})`).join('; ')}`)
+            return { success: true, updated: updates?.length ?? 0 }
+          },
         }),
 
         d({ name: 'editDesign', group: 'studio', risk: 'write',
@@ -839,9 +868,11 @@ QUANTITÀ BOARD:
         d({ name: 'getCanvasState', group: 'studio', risk: 'read',
           description: 'Legge lo stato attuale del canvas con tutti gli elementi (ID, tipo, posizione, testo, colore). Usa questo tool per vedere cosa c\'è sul canvas prima di fare modifiche.',
           inputSchema: z.object({}),
+          // lo Studio applica le scritture a fine risposta: lo stato letto qui è quello di inizio turno
           execute: async () => ({
             success: true,
             snapshot: canvasSnapshot || 'Canvas vuoto — nessun elemento presente.',
+            ...(turno.scritture.length ? { inAttesa: `Scritture di questo turno, applicate dallo Studio a fine risposta (non ancora nello stato qui sopra): ${turno.scritture.join(' · ')}. Al prossimo messaggio lo stato sarà verificato.` } : {}),
           }),
         }),
 
@@ -881,9 +912,9 @@ QUANTITÀ BOARD:
             '  - "file word", "documento word scaricabile", "contratto in word"',
             '  - "file pptx", "esporta powerpoint", "scarica come ppt"',
             'NON USARE per: "presentazione", "slide", "deck", "pitch", "carosello", "poster", "grafica".',
-            'Queste richieste vanno OBBLIGATORIAMENTE al tool createDesignBoards (canvas visuale).',
+            'Queste richieste vanno al motore dello Studio: directDesign, poi composeDesign (canvas visuale).',
             'REGOLA D\'ORO: se l\'utente non ha detto esplicitamente il formato file (.xlsx/.docx/.pptx),',
-            'usa SEMPRE createDesignBoards per creare la presentazione nel canvas.',
+            'usa SEMPRE directDesign e composeDesign per creare la presentazione nel canvas.',
           ].join(' '),
           inputSchema: z.object({
             prompt: z.string().describe('Descrizione del contenuto del documento.'),
@@ -904,7 +935,7 @@ QUANTITÀ BOARD:
             }
           },
         }),
-      ...SYSTEM_TOOLS,
+      ...SYSTEM_TOOLS.map(t => t.name === 'directDesign' ? { ...t, execute: (i: unknown) => { turno.motore = true; return t.execute(i) } } : t),
     ]
 
     const system = stableSystem({
@@ -915,7 +946,9 @@ QUANTITÀ BOARD:
       skills: allActiveSkills,
       modelNote: lowLevelDesign ? undefined : COMPOSE_ONLY_NOTE.trim(),
     })
-    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills })
+    // le scritture sul canvas dichiarate al turno prima si cercano nello stato vero di adesso
+    const verifica = notaVerifica(verificaCanvas(scrittureCanvasPrecedenti(messages), canvasSnapshot))
+    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills, verifica })
 
     // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
     const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {

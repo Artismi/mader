@@ -2866,6 +2866,27 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           if (changes.scaleX !== undefined) obj.set('scaleX', changes.scaleX)
           if (changes.scaleY !== undefined) obj.set('scaleY', changes.scaleY)
         }
+
+        // Livelli: relativi a un altro elemento o alla tavola (zIndex resta per compatibilità)
+        const livello = changes.livello ?? (typeof changes.zIndex === 'number' ? (changes.zIndex <= 2 ? 'fondo' : changes.zIndex >= 7 ? 'cima' : undefined) : undefined)
+        const altro = (ref?: string) => ref ? canvas.getObjects().find(o => o.get('name') === ref.replace(/['"[\]]/g, '').trim()) : undefined
+        const sotto = altro(changes.sottoA), sopra = altro(changes.sopraA)
+        if (sotto && sotto !== obj) {
+          const i = canvas.getObjects().indexOf(obj), j = canvas.getObjects().indexOf(sotto)
+          if (i > j) canvas.moveObjectTo(obj, j)
+        } else if (sopra && sopra !== obj) {
+          const i = canvas.getObjects().indexOf(obj), j = canvas.getObjects().indexOf(sopra)
+          if (i < j) canvas.moveObjectTo(obj, j)
+        } else if (livello === 'cima') canvas.bringObjectToFront(obj)
+        else if (livello === 'sopra') canvas.bringObjectForward(obj)
+        else if (livello === 'sotto') canvas.sendObjectBackwards(obj)
+        else if (livello === 'fondo') {
+          // subito sopra la tavola che lo contiene, mai sotto
+          const ab = findParentArtboard(obj)
+          const k = ab ? canvas.getObjects().indexOf(ab) : -1
+          const i = canvas.getObjects().indexOf(obj)
+          canvas.moveObjectTo(obj, k >= 0 ? (i > k ? k + 1 : k) : 0)
+        }
       })
 
       canvas.requestRenderAll()

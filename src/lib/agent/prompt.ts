@@ -29,7 +29,12 @@ Sei l'assistente operativo di Creative OS: usi gli strumenti per leggere e cambi
 9. Rispondi in italiano, conciso. Niente elenco di quello che hai fatto se l'utente lo vede già nell'interfaccia.`
 
 export const GUIDA_GRAFICHE = `## Grafiche
-Per creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Se vuoi testi e direzioni scelti con cura prima di comporre, chiama directDesign: la regia dello Studio (analista, copywriter, direttore creativo, con i controlli della maestra) ti restituisce testi verificati e tre direzioni visive da passare a composeDesign. Usa createDesignBoards solo per posizionamenti manuali puntuali. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo e consegna anche l'adattamento in formato storia quando ha senso.`
+Grafiche, post, volantini, locandine, caroselli e presentazioni nuove passano SEMPRE dal motore dello Studio, mai composte a mano a coordinate:
+1. \`directDesign\` con il brief completo (cosa, per chi, fatti, date, tono), il formato e il numero di slide: la regia (analista, copywriter, direttore creativo, controlli della maestra) restituisce testi verificati e tre direzioni visive;
+2. \`composeDesign\` con quei testi e una delle direzioni: lo Studio impagina con griglia, scala tipografica, caratteri, foto, effetti e leggibilità controllata.
+\`createDesignBoards\` e \`updateCanvasElements\` servono solo ai ritocchi puntuali; per i livelli usa \`livello\`, \`sopraA\` o \`sottoA\` (la foto sotto, il testo sopra). Lo Studio applica le scritture a fine risposta: al messaggio dopo, il promemoria dice se qualcosa non risulta nel canvas. Non dire mai di aver fatto una modifica che non hai passato a uno strumento.
+
+`
 
 /** Famiglie di skill nate "a richiesta" (prima erano le uniche fuori dal prompt; ora lo sono tutte). */
 export function isOnDemandSkill(s: Skill): boolean {
@@ -130,6 +135,8 @@ export interface ReminderParts {
   focus?: string
   /** skill pertinenti rimaste fuori per il tetto: il modello le carica se servono */
   otherSkills?: string[]
+  /** scritture sul canvas del turno prima che lo stato vero non conferma (canvas-checks) */
+  verifica?: string
 }
 
 /** Il promemoria della richiesta: solo le sezioni che hanno contenuto. */
@@ -149,6 +156,7 @@ export function reminderText(r: ReminderParts): string {
     r.ctx.memories.length ? `## Ricordo (fatti persistenti)\n${r.ctx.memories.map(m => `- ${m.content}`).join('\n')}` : '',
     r.activeSkills.length ? `## Skill attive per questa richiesta\n${r.activeSkills.map(s => s.content).filter(Boolean).join('\n\n---\n\n')}` : '',
     r.otherSkills?.length ? `Pertinenti ma non caricate (usa loadSkill se servono): ${r.otherSkills.join(', ')}` : '',
+    r.verifica ?? '',
     r.canvasSnapshot
       ? `## Canvas aperto\n${r.canvasSnapshot}\n\nUsa gli ID esatti in updateCanvasElements ed editDesign. Per modifiche chirurgiche non usare clearBoard.`
       : '',
