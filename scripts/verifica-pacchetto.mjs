@@ -25,7 +25,8 @@ const vietato = (rel) => {
   const name = parts[parts.length - 1] ?? ''
   const fuoriDaNodeModules = !parts.includes('node_modules')
   if (name.startsWith('.env') || name.endsWith('.zip') || /\.db(-wal|-shm)?$/.test(name)) return true
-  if (fuoriDaNodeModules && parts.some((p) => CARTELLE.includes(p))) return true
+  // cartelle del progetto in radice (o in public/): .next/server/app/api/crew è una route
+  if (fuoriDaNodeModules && (CARTELLE.includes(parts[0]) || (parts[0] === 'public' && CARTELLE.includes(parts[1])))) return true
   if (/(^|\/)public\/(fonts\/pack|.*\/ds-[^/]*)(\/|$)/.test(rel)) return true
   return false
 }

@@ -23,7 +23,7 @@ const PUBLIC_ESCLUSI = [
   /(^|\/)ds-[^/]*(\/|$)/, // pack "design syndrome": licenza non verificata
 ]
 
-// Nomi che non devono mai stare nel pacchetto (fuori da node_modules)
+// Cartelle del progetto che non devono mai stare nella radice del pacchetto
 const VIETATI = new Set(['data', 'data-prova', '.claude', 'scratch', 'vault', 'graphify-out', 'crew', 'supabase'])
 const vietato = (name) => name.startsWith('.env') || name.endsWith('.zip') || name.endsWith('.db')
   || name.endsWith('.db-wal') || name.endsWith('.db-shm')
@@ -46,13 +46,49 @@ fs.rmSync(path.join(standalone, 'public'), { recursive: true, force: true })
 copyDir(path.join(root, 'public'), path.join(standalone, 'public'),
   (r) => !PUBLIC_ESCLUSI.some((re) => re.test(r)) && !vietato(path.basename(r)))
 
-// 2. pulizia fuori da node_modules (lì "data" è spesso una cartella legittima)
+// 1b. Turbopack mette in .next/node_modules dei symlink assoluti verso i pacchetti
+//     esterni del progetto (es. pptxgenjs-<hash>): nel pacchetto non esisterebbero.
+//     Li sostituiamo con copie reali e portiamo in node_modules le loro dipendenze.
+function pkgDir(name, from) {
+  // risoluzione alla Node: node_modules risalendo da `from` fino alla radice
+  for (let d = from; ; d = path.dirname(d)) {
+    const c = path.join(d, 'node_modules', name)
+    if (fs.existsSync(path.join(c, 'package.json'))) return c
+    if (d === root || path.dirname(d) === d) return null
+  }
+}
+function copiaConDipendenze(dir, visti = new Set()) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'))
+  for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })) {
+    const src = pkgDir(dep, dir)
+    if (!src || visti.has(src)) continue
+    visti.add(src)
+    const dst = path.join(standalone, 'node_modules', dep)
+    if (!fs.existsSync(path.join(dst, 'package.json'))) copyDir(src, dst)
+    copiaConDipendenze(src, visti)
+  }
+}
+const esterni = path.join(standalone, '.next', 'node_modules')
+if (fs.existsSync(esterni)) {
+  for (const e of fs.readdirSync(esterni)) {
+    const link = path.join(esterni, e)
+    if (!fs.lstatSync(link).isSymbolicLink()) continue
+    const target = fs.realpathSync(link)
+    fs.rmSync(link, { recursive: true, force: true })
+    copyDir(target, link)
+    copiaConDipendenze(target)
+    console.log(`[pacchetto] esterno ${e} copiato con le dipendenze`)
+  }
+}
+
+// 2. pulizia: file vietati ovunque fuori da node_modules, cartelle vietate in radice
 const tolti = []
 function pulisci(dir, rel = '') {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const r = rel ? `${rel}/${e.name}` : e.name
     const p = path.join(dir, e.name)
-    if ((e.isDirectory() && VIETATI.has(e.name)) || vietato(e.name)) {
+    // le cartelle vietate contano solo in radice: .next/server/app/api/crew è una route
+    if ((e.isDirectory() && !rel && VIETATI.has(e.name)) || vietato(e.name)) {
       fs.rmSync(p, { recursive: true, force: true })
       tolti.push(r)
     } else if (e.isDirectory() && e.name !== 'node_modules' && r !== '.next/static' && r !== 'public') {
