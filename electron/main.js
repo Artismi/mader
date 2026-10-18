@@ -192,6 +192,8 @@ async function startNextServer() {
       PORT: String(PORT),
       HOSTNAME: '127.0.0.1',
       DATABASE_PATH: dbPath,
+      // vault predefinito: qui process.cwd() sarebbe resources/server
+      VAULT_PATH: path.join(app.getPath('userData'), 'vault'),
       CREATIVE_OS_ORIGIN: ORIGIN,
       NEXT_TELEMETRY_DISABLED: '1',
     },

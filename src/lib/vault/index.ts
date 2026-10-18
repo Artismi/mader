@@ -494,8 +494,10 @@ export function initVaultWatcher(): void {
 export function ensureVaultInitialized(): string {
   let vaultPath = config.get('vault_path')
   if (!vaultPath) {
-    // Default to project root if not set
-    vaultPath = process.cwd()
+    // Nel pacchetto electron/main.js passa una cartella sotto userData;
+    // in sviluppo resta la radice del progetto
+    vaultPath = process.env.VAULT_PATH || process.cwd()
+    fs.mkdirSync(vaultPath, { recursive: true })
     config.set('vault_path', vaultPath)
     console.log('[vault] auto-initialized to', vaultPath)
   }
