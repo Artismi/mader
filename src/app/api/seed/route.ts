@@ -5,6 +5,10 @@ import { supabaseConfigurato, SUPABASE_NON_CONFIGURATO } from '@/lib/supabase/co
 // MOCK DATA SEEDER
 // Richiama GET /api/seed dopo aver fatto il login manuale
 export async function GET() {
+    // dati finti: mai nel pacchetto (fase 1, docs/lancio-sul-mercato.md §2)
+    if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Non disponibile' }, { status: 404 })
+    }
     if (!supabaseConfigurato()) {
         return NextResponse.json({ error: SUPABASE_NON_CONFIGURATO }, { status: 503 })
     }
