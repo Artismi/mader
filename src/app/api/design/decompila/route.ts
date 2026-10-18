@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getOpenRouterKey, getOpenRouterModels, resolveModel } from '@/lib/ai/model-provider'
+import { getOpenRouterKey, getOpenRouterModels } from '@/lib/ai/model-provider'
+import { resolveModel } from '@/lib/ai/model-registry'
 import { google } from '@/lib/ai/google'
 import { leggiConRipiego, MODELLI_GEMINI } from '@/components/studio/designer/decompila/visione'
 
