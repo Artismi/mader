@@ -14,6 +14,7 @@ import type { DesignContent, Format, Scene } from './types'
 import { STYLES, inferStyle } from './styles'
 import { findPhoto } from './generate'
 import { renderPreview, sfondoPixel } from './preview'
+import { grigliaNumerata, ordineOcchio } from './occhio-studio'
 import { generateSystem, proposeKnobs, proponi, SISTEMI, TRATTAMENTI, RANGE_KNOBS, rng, type Knobs } from './gen'
 import type { Idea } from './gen/concetto'
 
@@ -96,7 +97,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
   const [enfasi, setEnfasi] = useState<string | undefined>()
   const [direzioni, setDirezioni] = useState<Direzione[]>([])
   const [modelli, setModelli] = useState<Record<string, string> | null>(null)
-  const [items, setItems] = useState<{ k: Knobs; sc: Scene | null; thumb?: string }[]>([])
+  const [items, setItems] = useState<{ k: Knobs; sc: Scene | null; thumb?: string; segnalata?: boolean }[]>([])
   const [selected, setSelected] = useState<number | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -146,10 +147,28 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
       setMsg(`${p.promosse} promosse dal critico su ${p.candidate} candidate · idee ${concetto?.fonte === 'modello' ? `dal modello ${concetto.modello ?? ''}` : 'dalle regole'}.`)
       const scene = p.scene.map(sc => ({ ...sc, knobs: { ...sc.knobs, enfasi: enf } }))
       setItems(scene.map(sc => ({ k: sc.knobs as Knobs, sc })))
+      const thumbs: string[] = []
       for (let i = 0; i < scene.length; i++) {
         const thumb = await renderPreview(scene[i])
         if (gen.current !== my) return
+        thumbs[i] = thumb
         setItems(list => { const n = list.slice(); n[i] = { ...n[i], thumb }; return n })
+      }
+      // l'occhio: un modello con visione guarda le proposte in una griglia e le mette in ordine (una chiamata)
+      if (thumbs.length >= 2 && thumbs.every(Boolean)) {
+        setBusy('l’occhio guarda le proposte')
+        try {
+          const griglia = await grigliaNumerata(thumbs)
+          const r = await fetch('/api/design/occhio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ griglia, n: thumbs.length }) })
+          const cl = r.ok ? await r.json() as { ordine: number[]; scarta: number[]; fonte: string; modello?: string } : null
+          if (gen.current !== my) return
+          if (cl?.fonte === 'modello') {
+            const { pos, segnalate } = ordineOcchio(thumbs.length, cl.ordine, cl.scarta)
+            setItems(list => pos.map(i => ({ ...list[i], segnalata: segnalate.has(i) || undefined })))
+            setSelected(s => (s === null ? null : pos.indexOf(s)))
+            setMsg(m => `${(m ?? '').replace(/.$/, '')} · ordinate dall’occhio (${cl.modello ?? 'modello con visione'})${segnalate.size ? `, ${segnalate.size} da rivedere in fondo` : ''}.`)
+          }
+        } catch { /* senza occhio resta l'ordine del critico */ }
       }
     } catch (e) {
       setMsg((e as Error).message)
@@ -278,6 +297,7 @@ export function DesignPanel({ onApply, onClose }: { onApply: (sc: Scene) => void
               {it.thumb ? <img src={it.thumb} alt={it.k.sistema} className={cn('w-full object-cover bg-black/40', aspect)} />
                 : <div className={cn('w-full bg-white/5 flex items-center justify-center text-[8px] text-white/30', aspect, busy?.startsWith('compongo') && 'animate-pulse')}>{busy?.startsWith('compongo') ? '' : 'non regge'}</div>}
               <span className="absolute bottom-0 inset-x-0 px-1.5 py-1 text-[8px] text-white/80 bg-black/55 truncate">{sistemaNome(it.k.sistema)} · {stileNome(it.k.stile)}{it.sc?.esame ? ` · ${it.sc.esame.voto}` : ''}</span>
+              {it.segnalata && <span className="absolute top-1 right-1 rounded px-1 py-0.5 text-[7px] uppercase tracking-widest bg-black/70 text-amber-300" title="L’occhio la sconsiglia: guardala prima di usarla">da rivedere</span>}
             </button>
           ))}
         </div>

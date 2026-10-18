@@ -159,3 +159,25 @@ test('corpo minimo per il telefono, per formato', async () => {
   assert.ok(corpoMinimo('testo', 'storia', 1080) < corpoMinimo('testo', 'quadrato', 1080))
   assert.ok(pesoDifetti(['3 testi troppo piccolo per il telefono (16px, minimo 22px)']) >= 6)
 })
+
+/* ── occhio nello Studio e fondo mosso ── */
+const caricaDa = async (dir, f) => {
+  const r = await esbuild.build({ entryPoints: [path.join(repo, dir, f)], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error', alias: { '@': path.join(repo, 'src') } })
+  return import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'))
+}
+const { ordineOcchio } = await caricaDa('src/components/studio/designer', 'occhio-studio.ts')
+const { troppoMosso, sottoSoglia } = await carica('pixel.ts')
+
+test('occhio nello Studio: classifica prima, segnalate in fondo, nessuna persa', () => {
+  const { pos, segnalate } = ordineOcchio(5, [3, 1, 5, 9, 3], [1])
+  assert.deepEqual(pos, [2, 4, 1, 3, 0])
+  assert.deepEqual([...segnalate], [0])
+})
+
+test('fondo mosso: il testo piccolo chiede più contrasto, il grande no', () => {
+  assert.equal(troppoMosso({ big: false, mosso: 0.07, contrasto: 6 }), true)
+  assert.equal(troppoMosso({ big: false, mosso: 0.07, contrasto: 9 }), false)
+  assert.equal(troppoMosso({ big: false, mosso: 0.03, contrasto: 5 }), false)
+  assert.equal(troppoMosso({ big: true, mosso: 0.2, contrasto: 3 }), false)
+  assert.equal(sottoSoglia({ testo: 't', riga: 0, ok: 1, contrasto: 6, mosso: 0.07, big: false }), true)
+})
