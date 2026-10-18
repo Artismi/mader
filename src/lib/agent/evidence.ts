@@ -81,6 +81,8 @@ function scritti(prove: Prova[], strumento?: string): number {
 
 const VERBO_SCRITTURA = /\b(programm|pianific|cre|aggiung|salv|spost|aggiorn|modific|elimin|cancell|segn|registr|inser|impost|archivi|assegn|rinomin|approv|fattur)\w*/i
 const PROMESSA = /(?<!\bnon\s)\b(?:ho|abbiamo|l'ho|li ho|le ho)\s+(?:già\s+|anche\s+)?(programmat|pianificat|creat|aggiunt|salvat|spostat|aggiornat|modificat|eliminat|cancellat|segnat|registrat|inserit|impostat|archiviat|assegnat|rinominat|approvat|fatturat)\w*(?:\s+(\d+))?|\b(?:è|sono)\s+stat[aoie]\s+(?:programmat|creat|aggiunt|salvat|spostat|aggiornat|eliminat|registrat|inserit)\w*/i
+// promessa al futuro o richiesta di permesso al posto dell'azione: "Procedo con…", "Sei d'accordo?"
+const ANNUNCIO = /\b(?:procedo|proceder[oò]|ora (?:creo|faccio|applico|sistemo|aggiorno|sposto|genero|compongo)|adesso (?:creo|faccio|applico|sistemo|genero|compongo)|passo (?:ora )?a (?:creare|applicare|comporre|generare)|sei d'accordo|posso procedere|vuoi che (?:proceda|procedo|lo faccia)|confermi\?|vado\??$)/im
 
 /** Numero nel testo di una voce ("programma 3 post") o di una promessa ("ho creato 3 incarichi"). */
 const numero = (t: string) => { const m = /\b(\d{1,3})\b/.exec(t); return m ? Number(m[1]) : undefined }
@@ -138,6 +140,10 @@ export function checkClosure(o: ClosureInput): string[] {
       motivi.push(`hai detto di averne ${n}, ne risulta${totale === 1 ? '' : 'no'} ${totale}`)
     }
   }
+
+  // A3: richiesta d'azione chiusa con un annuncio o una domanda e nessuno strumento di scrittura
+  const annuncio = o.azione && !totale && !proposte && !promessa ? ANNUNCIO.exec(o.testo) : null
+  if (annuncio) motivi.push(`hai scritto «${annuncio[0]}» senza fare nulla: la richiesta è chiara (o approvata), esegui ora con gli strumenti, senza chiedere conferma`)
 
   // successo per oggetto: una chiamata riuscita a metà non è un successo
   for (const p of AMMESSO.test(o.testo) ? [] : prove.filter(p => p.esito === 'parziale')) {

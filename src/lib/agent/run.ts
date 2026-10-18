@@ -25,7 +25,9 @@ import type { AiTask } from '@/lib/ai/model-provider'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef, type ToolGroup } from './tools'
 import { createTrace } from './trace'
 import { createRepairBudget, createToolCallRepair, parseTextToolCalls } from './repair'
-import { createPrepareStep, isActionRequest, risksOf, toolsForPhase } from './steer'
+import { createPrepareStep, isActionTurn, risksOf, toolsForPhase } from './steer'
+import { clienteDelTurno, clienteVietato } from './cliente-attivo'
+import { clients } from '@/lib/db'
 import { checkClosure, provaOf, registroText, type EsitoProva } from './evidence'
 import type { Risk } from './tools'
 import { dayBand, MODO_DI_LAVORARE } from './prompt'
@@ -70,6 +72,8 @@ export interface RunAgentInput {
   gruppi?: ToolGroup[]
   /** oppure a questi nomi */
   strumenti?: string[]
+  /** il compito risponde a una proposta dell'assistente ("vai", "ok"): vale come azione */
+  dopoProposta?: boolean
   /** fornitore scelto: 'claude' | 'gemini' | 'openrouter' (vuoto = Impostazioni / automatico) */
   modello?: string
   task?: AiTask
@@ -125,7 +129,7 @@ function selectDefs(all: Def[], o: Pick<RunAgentInput, 'gruppi' | 'strumenti'>):
 }
 
 /** Senza interfaccia: le azioni che chiedono conferma diventano proposte; ogni chiamata viene registrata. */
-function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[]): Def[] {
+function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[], vietato?: (input: unknown) => string | undefined): Def[] {
   return defs.map(d => ({
     ...d,
     needsApproval: false,
@@ -136,6 +140,8 @@ function headless(defs: Def[], chiamate: Chiamata[], proposte: Proposta[]): Def[
       return problems
     } : undefined,
     execute: async (input: unknown) => {
+      const no = vietato?.(input)
+      if (no) { chiamate.push({ strumento: d.name, input, esito: 'respinta', rischio: d.risk, motivo: no }); return { success: false, error: no } }
       const ask = d.needsApproval ?? d.risk === 'destructive'
       const confirm = typeof ask === 'function' ? await ask(input as never) : ask
       if (confirm) {
@@ -181,7 +187,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const chiamate: Chiamata[] = []
   const proposte: Proposta[] = []
   const log: string[] = []
-  const defs = headless(selectDefs(input.defs ?? serverToolDefs(), input), chiamate, proposte)
+  // "nessun cliente" nel compito: nessuno strumento riceve un cliente (come in chat)
+  const sceltaCliente = clienteDelTurno([input.compito], clients.getAll().map(c => c.name))
+  const defs = headless(selectDefs(input.defs ?? serverToolDefs(), input), chiamate, proposte, i => clienteVietato(sceltaCliente, i))
   const system = agentSystemPrompt(defs, now)
   // K3: il contesto parte dal nodo in focus e dai suoi vicini; il resto l'agente lo chiede al grafo
   const contesto = [input.focus ? focusText(input.focus) : '', input.contesto?.trim() ?? ''].filter(Boolean).join('\n\n')
@@ -194,7 +202,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
 
   const maxPassi = input.maxPassi ?? 12
   const risks = risksOf(defs)
-  const azione = isActionRequest(input.compito)
+  const azione = isActionTurn(input.compito, !!input.dopoProposta)
   let ultimo: { testo: string; modello: string; passi: number; token: RunAgentResult['token'] } | undefined
   const spesa = { input: 0, cached: 0, output: 0 }
   const spendi = (u: { input: number; cached: number; output: number }) => { spesa.input += u.input; spesa.cached += u.cached; spesa.output += u.output }

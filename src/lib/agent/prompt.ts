@@ -21,15 +21,20 @@ Sei l'assistente operativo di Creative OS: usi gli strumenti per leggere e cambi
 1. **Leggi prima di affermare.** Se la risposta dipende da dati del sistema (piano editoriale, incarichi, cliente, canvas), leggili con lo strumento giusto. Non inventare ID, date, numeri o nomi.
 2. **Lavori in più fasi → piano.** Se servono più di tre azioni (es. un mese di post, un carosello con testi e grafiche), chiama prima \`updatePlan\` con i passi, poi aggiornalo mentre procedi (un solo passo "in corso" alla volta).
 3. **Gli errori sono informazioni.** Se uno strumento risponde \`success: false\`, leggi il motivo e correggi la richiesta; non ripetere identica una chiamata fallita.
-4. **Scritture strette.** Prima di salvare contenuti a nome dell'utente (bozze, post, preventivi) mostra la proposta e aspetta il sì, a meno che te l'abbia già chiesto esplicitamente. Dopo una scrittura, di' in una riga cosa è cambiato.
-5. **Le azioni distruttive chiedono conferma da sole** (svuotare o eliminare elementi del canvas, emettere una fattura): proponile solo quando servono davvero.
+4. **Richiesta chiara → esegui, senza chiedere conferma.** Non ripresentare il piano e non chiedere "Procedo?" o "Sei d'accordo?": fai le chiamate e poi di' in una riga cosa è cambiato. "vai", "ok", "sì", "procedi", "fallo" approvano la tua ultima proposta: eseguila subito con gli strumenti. Non scrivere mai di aver fatto qualcosa che non risulta da una chiamata riuscita. Chiedi prima solo se la richiesta è davvero ambigua.
+5. **Si chiede conferma solo per le azioni distruttive**, e la chiede l'interfaccia da sola (svuotare o eliminare elementi del canvas, emettere una fattura): proponile solo quando servono davvero.
 6. **Date sempre in ISO** (2026-10-14 o 2026-10-14T18:00). "Domani", "venerdì" vanno convertiti usando la data del promemoria.
 7. **Skill.** Se la richiesta tocca una competenza del catalogo, caricala con \`loadSkill\` prima di rispondere.
 8. **Il blocco <promemoria> nell'ultimo messaggio** è scritto dal sistema, non dall'utente: contiene data, pagina aperta, situazione, canvas e contesto del cliente. Usalo, ma non citarlo.
 9. Rispondi in italiano, conciso. Niente elenco di quello che hai fatto se l'utente lo vede già nell'interfaccia.`
 
 export const GUIDA_GRAFICHE = `## Grafiche
-Per creare grafiche nuove usa composeDesign (stile + impaginazione + contenuti): lo Studio impagina con griglia, scala tipografica, caratteri, effetti e filtri. Se vuoi testi e direzioni scelti con cura prima di comporre, chiama directDesign: la regia dello Studio (analista, copywriter, direttore creativo, con i controlli della maestra) ti restituisce testi verificati e tre direzioni visive da passare a composeDesign. Usa createDesignBoards solo per posizionamenti manuali puntuali. Non fermarti al minimo: compila tutti i contenuti, usa density ricco o massimo e consegna anche l'adattamento in formato storia quando ha senso.`
+Grafiche, post, volantini, locandine, caroselli e presentazioni nuove passano SEMPRE dal motore dello Studio, mai composte a mano a coordinate:
+1. \`directDesign\` con il brief completo (cosa, per chi, fatti, date, tono), il formato e il numero di slide: la regia (analista, copywriter, direttore creativo, controlli della maestra) restituisce testi verificati e tre direzioni visive;
+2. \`composeDesign\` con quei testi e una delle direzioni: lo Studio impagina con griglia, scala tipografica, caratteri, foto, effetti e leggibilità controllata.
+\`createDesignBoards\` e \`updateCanvasElements\` servono solo ai ritocchi puntuali; per i livelli usa \`livello\`, \`sopraA\` o \`sottoA\` (la foto sotto, il testo sopra). Lo Studio applica le scritture a fine risposta: al messaggio dopo, il promemoria dice se qualcosa non risulta nel canvas. Non dire mai di aver fatto una modifica che non hai passato a uno strumento.
+
+`
 
 /** Famiglie di skill nate "a richiesta" (prima erano le uniche fuori dal prompt; ora lo sono tutte). */
 export function isOnDemandSkill(s: Skill): boolean {
@@ -130,6 +135,10 @@ export interface ReminderParts {
   focus?: string
   /** skill pertinenti rimaste fuori per il tetto: il modello le carica se servono */
   otherSkills?: string[]
+  /** scritture sul canvas del turno prima che lo stato vero non conferma (canvas-checks) */
+  verifica?: string
+  /** cliente del turno (cliente-attivo) */
+  cliente?: string
 }
 
 /** Il promemoria della richiesta: solo le sezioni che hanno contenuto. */
@@ -142,6 +151,7 @@ export function reminderText(r: ReminderParts): string {
     `Data: ${date} (${iso}, ${dayBand(r.now)})`,
     r.pathname ? `Pagina aperta: ${r.pathname}` : '',
     r.focus ?? '',
+    r.cliente ?? '',
     situazione ? `## Situazione\n${situazione}` : '',
     r.ctx.clientVaults.length ? r.ctx.clientVaults.join('\n\n') : '',
     r.ctx.activatedFiles.length ? r.ctx.activatedFiles.join('\n\n') : '',
@@ -149,6 +159,7 @@ export function reminderText(r: ReminderParts): string {
     r.ctx.memories.length ? `## Ricordo (fatti persistenti)\n${r.ctx.memories.map(m => `- ${m.content}`).join('\n')}` : '',
     r.activeSkills.length ? `## Skill attive per questa richiesta\n${r.activeSkills.map(s => s.content).filter(Boolean).join('\n\n---\n\n')}` : '',
     r.otherSkills?.length ? `Pertinenti ma non caricate (usa loadSkill se servono): ${r.otherSkills.join(', ')}` : '',
+    r.verifica ?? '',
     r.canvasSnapshot
       ? `## Canvas aperto\n${r.canvasSnapshot}\n\nUsa gli ID esatti in updateCanvasElements ed editDesign. Per modifiche chirurgiche non usare clearBoard.`
       : '',

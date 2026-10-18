@@ -25,6 +25,24 @@ export function isActionRequest(text: string): boolean {
   return AZIONE.test(text) && !DOMANDA.test(text)
 }
 
+// "vai", "ok", "sì procedi", "va bene, fallo": solo parole di assenso, poche
+const ASSENSO = new Set(['ok', 'okay', 'vai', 'pure', 'procedi', 'si', 'sì', 'fallo', 'falla', 'falli', 'fai', 'va', 'bene', 'esegui', 'confermo', "d'accordo", 'daccordo', 'certo', 'perfetto', 'andiamo', 'dai', 'go', 'grazie', 'allora', 'continua', 'avanti', 'ottimo', 'yes', 'pure', 'subito'])
+
+/** Il messaggio è un assenso ("vai", "ok", "sì, procedi")? Conta l'ultima riga (la prima può essere "[Soggetto: …]"). */
+export function isApproval(text: string): boolean {
+  const riga = text.trim().split('\n').pop() ?? ''
+  const parole = riga.toLowerCase().replace(/[^\p{L}' ]+/gu, ' ').split(/\s+/).filter(Boolean)
+  return parole.length > 0 && parole.length <= 5 && parole.every(p => ASSENSO.has(p))
+}
+
+/**
+ * Il turno chiede un'azione: un verbo d'azione, oppure un assenso dopo una
+ * risposta dell'assistente (che di solito era una proposta o una domanda).
+ */
+export function isActionTurn(text: string, assistantBefore: boolean): boolean {
+  return isActionRequest(text) || (assistantBefore && isApproval(text))
+}
+
 /** Fase del compito dai passi già fatti: le scritture riuscite e le letture dopo di esse. */
 export function phaseOf(steps: Pick<StepResult<ToolSet>, 'toolCalls' | 'toolResults'>[], risks: Record<string, Risk | undefined>): Fase {
   let scritto = false, verificato = false, letto = false
@@ -73,6 +91,8 @@ export interface SteerOptions {
   perFase?: (fase: Fase) => string[] | undefined
   /** L1: tetto di contesto in token stimati; oltre, i risultati vecchi si svuotano */
   contesto?: number
+  /** A3 in chat: con un'azione, finché non c'è una scrittura riuscita lo strumento resta obbligatorio per questi passi */
+  insisti?: number
 }
 
 const piano = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -99,7 +119,7 @@ export function createPrepareStep(o: SteerOptions): PrepareStepFunction<ToolSet>
     const fase = phaseOf(steps, o.risks)
     o.onFase?.(fase, stepNumber)
     const out: { toolChoice?: 'required'; messages?: ModelMessage[]; model?: LanguageModel; activeTools?: string[] } = {}
-    if (stepNumber === 0 && o.azione) out.toolChoice = 'required'
+    if (o.azione && (stepNumber === 0 || (stepNumber < (o.insisti ?? 0) && (fase === 'leggere' || fase === 'scrivere')))) out.toolChoice = 'required'
     const attivi = o.perFase?.(fase)
     if (attivi) out.activeTools = attivi
     const base = o.contesto && estimateTokens(messages) > o.contesto ? clearOldToolOutputs(messages, 2) : messages

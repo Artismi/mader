@@ -427,3 +427,65 @@ test('runAgent: se nessuno chiude con le prove restituisce l\'ultima risposta co
   assert.equal(r.testo, 'Ho salvato la nota.')
   assert.equal(r.modello, 'solo')
 })
+
+/* ── chat dal vivo: "vai" approva, l'annuncio senza azione si respinge ── */
+
+test('isApproval / isActionTurn: "vai", "ok", "sì procedi" dopo una proposta sono azioni', () => {
+  for (const t of ['vai', 'Ok', 'sì, procedi!', 'va bene fallo', 'procedi', '[Soggetto: LoopAI]\nvai pure']) assert.equal(steer.isApproval(t), true, t)
+  for (const t of ['vai a vedere il piano e dimmi cosa manca', 'ok ma cambia il titolo', 'no', 'ciao', '']) assert.equal(steer.isApproval(t), false, t)
+  assert.equal(steer.isActionTurn('vai', true), true)
+  assert.equal(steer.isActionTurn('vai', false), false)
+  assert.equal(steer.isActionTurn('crea un incarico', false), true)
+})
+
+test('prepareStep con insisti: lo strumento resta obbligatorio finché non c\'è una scrittura', async () => {
+  const risks = { leggi: 'read', scrivi: 'write' } as const
+  const prep = steer.createPrepareStep({ azione: true, insisti: 4, risks })
+  const msgs = [{ role: 'user', content: 'vai' }] as never[]
+  const s = (toolName: string) => ({ toolCalls: [], toolResults: [{ toolName, output: { success: true } }] }) as never
+  assert.equal((await prep({ stepNumber: 1, steps: [s('leggi')], messages: msgs } as never))!.toolChoice, 'required')
+  assert.equal((await prep({ stepNumber: 2, steps: [s('leggi'), s('scrivi')], messages: msgs } as never))!.toolChoice, undefined)
+  assert.equal((await prep({ stepNumber: 4, steps: [s('leggi')], messages: msgs } as never))!.toolChoice, undefined)
+})
+
+test('A3: "Procedo con…" o "Sei d\'accordo?" senza scritture su un\'azione è respinto', async () => {
+  const { checkClosure } = await import('../../src/lib/agent/evidence')
+  for (const testo of ['Procedo con la creazione della grafica: titolo in alto, foto sotto.', 'Ecco il piano. Sei d\'accordo?', 'Posso procedere?']) {
+    const m = checkClosure({ prove: [], testo, azione: true })
+    assert.ok(m.some(x => /senza fare nulla/.test(x)), testo)
+  }
+  // con la scrittura fatta, l'annuncio non conta; senza azione nemmeno
+  assert.equal(checkClosure({ prove: [{ strumento: 'updateCanvasElements', rischio: 'write', input: {}, esito: 'ok' }], testo: 'Procedo anche con il resto?', azione: true }).length, 0)
+  assert.equal(checkClosure({ prove: [], testo: 'Procedo così: prima il titolo. Va bene?', azione: false }).length, 0)
+})
+
+test('FOREIGN KEY: ID cliente corto, tra parentesi o maiuscolo si risolve nel database; sconosciuto dà un errore chiaro', async () => {
+  const db = await import('../../src/lib/db/index')
+  const c = db.clients.create({ name: 'Bicicleria FK' } as never)
+  const corto = c.id.slice(0, 8)
+  for (const ref of [corto, `[${corto}]`, corto.toUpperCase(), c.id]) {
+    const i = db.ideas.create({ client_id: ref, text: 'film partecipativo', platforms: [], idea_status: 'nuova', assigned: false, output_links: [] } as never)
+    assert.equal(db.ideas.getAll().find(x => x.id === i.id)?.client_id, c.id, ref)
+  }
+  const p = db.editorialPosts.create({ client_id: corto, title: 'prova', channels: ['instagram'], editorial_status: 'bozza' } as never)
+  assert.equal(p.client_id, c.id)
+  assert.throws(() => db.ideas.create({ client_id: 'ffffffff', text: 'x', platforms: [], idea_status: 'nuova', assigned: false, output_links: [] } as never), /non esiste: cercalo con searchClient/)
+  assert.equal(db.idCliente(''), null)
+})
+
+test('cliente del turno: "nessun cliente" e progetto nuovo azzerano, il cliente selezionato resta un suggerimento', async () => {
+  const ca = await import('../../src/lib/agent/cliente-attivo')
+  const nomi = ['Bicicleria', 'mossetto']
+  // la storia parla di Bicicleria, poi l'utente cambia progetto
+  assert.deepEqual(ca.clienteDelTurno(['[Soggetto: Bicicleria]\nfammi un post per Bicicleria', 'nessun cliente, è un progetto nuovo: LoopAI, film partecipativo', 'vai'], nomi), { stato: 'nessuno', motivo: 'nessun cliente' })
+  assert.equal(ca.clienteDelTurno(['questo non è per Bicicleria: LoopAI'], nomi).stato, 'nessuno')
+  assert.deepEqual(ca.clienteDelTurno(['nessun cliente', 'ora torniamo a Bicicleria'], nomi), { stato: 'cliente', nome: 'Bicicleria' })
+  // il prefisso [Soggetto: …] non è una parola dell'utente
+  assert.deepEqual(ca.clienteDelTurno(['[Soggetto: Bicicleria]\ncrea una grafica per LoopAI'], nomi), { stato: 'auto' })
+  assert.match(ca.notaCliente({ stato: 'auto' }, 'Bicicleria'), /non si attribuisce a un cliente/)
+  assert.equal(ca.notaCliente({ stato: 'auto' }), '')
+  const no = { stato: 'nessuno', motivo: 'nessun cliente' } as const
+  assert.match(ca.clienteVietato(no, { text: 'idea', clientId: '2eef1ee9' })!, /senza clientId/)
+  assert.equal(ca.clienteVietato(no, { text: 'idea' }), undefined)
+  assert.equal(ca.clienteVietato({ stato: 'auto' }, { clientId: 'x' }), undefined)
+})

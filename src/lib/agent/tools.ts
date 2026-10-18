@@ -131,7 +131,9 @@ export function defineTool<S extends z.ZodTypeAny>(def: AgentToolDef<S>, trace?:
         return withHint(capResult(out, def.maxChars ?? DEFAULT_MAX))
       } catch (e) {
         ok = false
-        return withHint({ success: false, error: `${def.name} non riuscito: ${errorText(e)}` })
+        // un riferimento rotto (cliente, idea, piano) non è un guasto del database: dice come correggere
+        const fk = /FOREIGN KEY constraint failed/i.test(errorText(e)) ? ' (un ID passato non esiste: rileggilo con lo strumento di ricerca e usa l’ID che restituisce)' : ''
+        return withHint({ success: false, error: `${def.name} non riuscito: ${errorText(e)}${fk}` })
       } finally {
         trace?.tool(def.name, Date.now() - t0, ok)
       }

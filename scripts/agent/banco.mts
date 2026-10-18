@@ -60,7 +60,7 @@ async function figlio(modello: string, out: string, soloCompiti?: string[], paus
       const t0 = Date.now()
       let r
       try {
-        r = await runAgent({ compito: c.compito, candidati: [cand], maxPassi: 10, livello })
+        r = await runAgent({ compito: c.compito, contesto: c.contesto, dopoProposta: c.dopoProposta, candidati: [cand], maxPassi: 10, livello })
       } catch (e) {
         r = { ok: false, testo: String((e as Error).message), modello: cand.label, passi: 0, chiamate: [], proposte: [], log: [] }
       }

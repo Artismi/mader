@@ -68,7 +68,7 @@ export async function aSecco(o: { dormi?: (ms: number) => Promise<void>; scrivi?
         const model = modelloFinto(livello, COPIONI[c.id], guasto)
         const cand = { id: `secco:${livello}`, provider: 'google' as const, modelId: MODELLI[livello], label: `secco-${livello}`, model, profile: reg.profileOf('google', MODELLI[livello]) }
         const t0 = Date.now()
-        const out = await runAgent({ compito: c.compito, candidati: [cand], maxPassi: 10, livello })
+        const out = await runAgent({ compito: c.compito, contesto: c.contesto, dopoProposta: c.dopoProposta, candidati: [cand], maxPassi: 10, livello })
         const infra = !out.ok && out.log.length > 0 && out.log.every(l => /: (quota|salta) ·/.test(l))
         const v = out.ok ? c.verifica(out, s) : { ok: false, motivo: `${infra ? 'non eseguito' : 'nessuna risposta'}: ${out.log.at(-1) ?? out.testo}`.slice(0, 200) }
         return { log: out.log, riga: { id: c.id, area: c.area, ok: v.ok, eseguito: !infra, motivo: v.motivo, passi: out.passi, ms: Date.now() - t0, token: out.token, spesa: out.spesa, livello, errori: 0 } }

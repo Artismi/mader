@@ -23,7 +23,8 @@ const anthropic = createAnthropic({ baseURL: process.env.CREATIVE_OS_ANTHROPIC_B
 import { config } from '@/lib/db'
 import { getOpenRouterKey, getOpenRouterModels, type AiTask } from '@/lib/ai/model-provider'
 import { idState, markRetired, refreshStaleCatalogs, type IdState } from '@/lib/ai/model-catalog'
-import { avvolgi, soloGratis, vieGratuite, type ViaGratuita } from '@/lib/ai/vie-gratuite'
+import { avvolgi, restantiOggi, soloGratis, vieGratuite, VIE_GRATUITE, type ViaGratuita } from '@/lib/ai/vie-gratuite'
+import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from '@ai-sdk/provider'
 
 export type Provider = 'openrouter' | 'anthropic' | 'google'
 export type Strength = 'forte' | 'medio' | 'debole'
@@ -258,7 +259,8 @@ export function candidatesFor(need: Need, opts: PickOptions = {}): ModelCandidat
       if (need.structured && !profile.structured) continue
       const id = `${v.provider}:${v.modelId}`
       if (idState(v.provider, v.modelId) === 'ritirato') continue
-      if (!opts.includeExhausted && isExhausted(id)) continue
+      // quota del giorno finita (il conto sta su disco): non si prova nemmeno
+      if (!opts.includeExhausted && (isExhausted(id) || restantiOggi(v) <= 0)) continue
       out.push({ id, provider: v.provider, modelId: v.modelId, label: v.provider === 'openrouter' ? `openrouter:${v.modelId}` : v.modelId, profile, model: instantiate(v.provider, v.modelId) })
     }
   }
@@ -310,7 +312,7 @@ export function registrySummary() {
     soloGratis: soloGratis(),
     modelli: (['design', 'general'] as AiTask[]).map(task => ({
       task,
-      ordine: candidatesFor({ task }, { includeExhausted: true }).map(c => ({ id: c.id, ...c.profile, inPausa: isExhausted(c.id) })),
+      ordine: candidatesFor({ task }, { includeExhausted: true }).map(c => ({ id: c.id, ...c.profile, inPausa: isExhausted(c.id), restantiOggi: VIE_GRATUITE[c.id] ? restantiOggi(VIE_GRATUITE[c.id]) : undefined })),
     })),
   }
 }
@@ -332,6 +334,95 @@ export async function withModels<T>(need: Need, run: (c: ModelCandidate) => Prom
     }
   }
   throw last instanceof Error ? last : new Error(String(last))
+}
+
+/* ── catena per lo streaming (chat) ─────────────────────────────────────── */
+
+class RispostaVuota extends Error {
+  constructor(label: string) { super(`${label} ha risposto vuoto`); this.name = 'RispostaVuota' }
+}
+
+const breve = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e ? JSON.stringify(e) : String(e)).replace(/\s+/g, ' ').slice(0, 160)
+
+/** testo di un messaggio del prompt (per riconoscere i promemoria di fase) */
+const testoDi = (m: { content: unknown }) => typeof m.content === 'string' ? m.content
+  : Array.isArray(m.content) ? m.content.map(p => (p as { text?: string }).text ?? '').join(' ') : ''
+
+/**
+ * Una risposta vuota è un guasto solo se il modello deve ancora dire o fare qualcosa:
+ * dopo i risultati degli strumenti chiudere in silenzio è lecito.
+ */
+export function vuotoVietato(prompt: LanguageModelV3CallOptions['prompt']): boolean {
+  for (let i = prompt.length - 1; i >= 0; i--) {
+    const m = prompt[i]
+    if (m.role === 'tool') return false
+    if (m.role === 'user' && !/^\s*<promemoria>/.test(testoDi(m))) return true
+  }
+  return true
+}
+
+const CONTENUTO = new Set(['tool-call', 'tool-input-start', 'tool-input-delta', 'file'])
+
+/**
+ * Il modello della chat è la catena dei candidati: su quota, errore o risposta
+ * vuota si passa al successivo (anche di un altro fornitore, nell'ordine che rispetta
+ * "solo gratis"). Nello streaming si guarda l'inizio della risposta prima di
+ * consegnarla: finché non arriva contenuto si può ancora cambiare modello.
+ * Se cadono tutti, l'errore dice perché, modello per modello: mai un silenzio.
+ */
+export function catenaModelli(list: ModelCandidate[], o: { onCambio?: (da: string, motivo: string) => void; onUsato?: (c: ModelCandidate) => void } = {}): LanguageModelV3 {
+  const primo = list[0].model as LanguageModelV3
+  async function prova<R>(opts: LanguageModelV3CallOptions, fn: (m: LanguageModelV3, c: ModelCandidate) => Promise<R>): Promise<R> {
+    const errori: string[] = []
+    const vivi = list.filter(c => !isExhausted(c.id))
+    for (const c of vivi.length ? vivi : list.slice(0, 1)) {
+      try {
+        const r = await fn(c.model as LanguageModelV3, c)
+        o.onUsato?.(c)
+        return r
+      } catch (e) {
+        if (opts.abortSignal?.aborted) throw e
+        if (e instanceof RispostaVuota) markExhausted(c.id, 60_000)
+        else noteFailure(c, e)
+        errori.push(`${c.label}: ${breve(e)}`)
+        o.onCambio?.(c.label, breve(e))
+      }
+    }
+    throw new Error(`Nessun modello ha risposto (${errori.length} provati). ${errori.join(' · ')}`)
+  }
+  return {
+    specificationVersion: 'v3',
+    provider: 'catena',
+    modelId: list.map(c => c.label).join(' → '),
+    supportedUrls: primo.supportedUrls,
+    doGenerate: opts => prova(opts, async (m, c) => {
+      const r = await m.doGenerate(opts)
+      const pieno = r.content.some(p => p.type === 'tool-call' || (p.type === 'text' && p.text.trim()))
+      if (!pieno && vuotoVietato(opts.prompt)) throw new RispostaVuota(c.label)
+      return r
+    }),
+    doStream: opts => prova(opts, async (m, c) => {
+      const r = await m.doStream(opts)
+      const reader = r.stream.getReader()
+      const presi: LanguageModelV3StreamPart[] = []
+      let pieno = false
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value.type === 'error') { reader.cancel().catch(() => {}); throw value.error instanceof Error ? value.error : new Error(breve(value.error)) }
+        presi.push(value)
+        if (CONTENUTO.has(value.type) || (value.type === 'text-delta' && value.delta.trim())) { pieno = true; break }
+        if (value.type === 'finish') break
+      }
+      if (!pieno && vuotoVietato(opts.prompt)) { reader.cancel().catch(() => {}); throw new RispostaVuota(c.label) }
+      const stream = new ReadableStream<LanguageModelV3StreamPart>({
+        start(ctrl) { for (const p of presi) ctrl.enqueue(p) },
+        async pull(ctrl) { const { done, value } = await reader.read(); if (done) ctrl.close(); else ctrl.enqueue(value) },
+        cancel(motivo) { return reader.cancel(motivo) },
+      })
+      return { ...r, stream }
+    }),
+  }
 }
 
 /** generateText con la cascata dei modelli. */

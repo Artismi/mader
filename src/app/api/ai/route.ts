@@ -2,13 +2,15 @@ import * as aiSdk from 'ai'
 import { convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type UIMessageStreamWriter } from 'ai'
 import { z } from 'zod'
 import { wrapAISDK } from 'langsmith/experimental/vercel'
-import { skills, config } from '@/lib/db'
+import { skills, config, clients } from '@/lib/db'
+import { clienteDelTurno, clienteVietato, notaCliente, senzaPrefissi } from '@/lib/agent/cliente-attivo'
 import { messageText, routeOnDemandSkills } from '@/lib/ai/skill-router'
 import { buildToolSet, createRepeatGuard, toolGuide, type AgentToolDef } from '@/lib/agent/tools'
 import { toolsForContext } from '@/lib/agent/run'
 import { createTrace } from '@/lib/agent/trace'
 import { createToolCallRepair } from '@/lib/agent/repair'
-import { createPrepareStep, isActionRequest, risksOf } from '@/lib/agent/steer'
+import { createPrepareStep, isActionTurn, isApproval, risksOf } from '@/lib/agent/steer'
+import { controllaTavole, isDesignRequest, notaVerifica, verificaCanvas, type ScritturaCanvas, type TavolaManuale } from '@/lib/agent/canvas-checks'
 import { checkClosure, proveFromSteps } from '@/lib/agent/evidence'
 import { reminderText, selectActiveSkills, stableSystem, withReminder } from '@/lib/agent/prompt'
 import { compactHistory, SUMMARY_PROMPT } from '@/lib/agent/compact'
@@ -21,7 +23,7 @@ import { buildContext } from '@/lib/ai/context'
 import { designOpSchema, designOpsToolDescription, VISUAL_SOURCE_HELP, VISUAL_TREATMENTS } from '@/lib/design/design-ops-spec'
 import { FINISH_IDS, RECIPES } from '@/lib/design/compose-recipes'
 import { getOpenRouterKey } from '@/lib/ai/model-provider'
-import { pickModel, resolveModel } from '@/lib/ai/model-registry'
+import { candidatesFor, catenaModelli, pickModel, resolveModel } from '@/lib/ai/model-registry'
 import { composeToolDescription } from '@/lib/design/compose-prompt'
 import { DECOR_IDS, FORMATS, LAYOUTS, STYLES } from '@/lib/design/compose-spec'
 import fs from 'fs'
@@ -141,6 +143,11 @@ const canvasUpdateSchema = z.object({
     scaleY: z.number().optional(),
     effects: z.array(z.string()).optional(),
     effectProps: z.record(z.string(), z.unknown()).optional(),
+    // livelli: lo Studio li applica davvero (prima zIndex veniva scartato in silenzio)
+    livello: z.enum(['cima', 'fondo', 'sopra', 'sotto']).optional().describe("Ordine: 'cima' sopra a tutto, 'fondo' subito sopra lo sfondo della tavola, 'sopra'/'sotto' di un passo"),
+    sopraA: z.string().optional().describe("ID dell'elemento che questo deve coprire (es. il testo sopra la foto)"),
+    sottoA: z.string().optional().describe("ID dell'elemento sotto cui va messo (es. la foto sotto il titolo)"),
+    zIndex: z.number().optional().describe("Compatibilità: 0-2 = fondo, 7+ = cima; meglio livello, sopraA o sottoA"),
   }),
 })
 
@@ -583,10 +590,20 @@ function buildCrewStreamResponse(
   })
 }
 
+const SCRITTURE_CANVAS = new Set(['createDesignBoards', 'composeDesign', 'updateCanvasElements'])
+
+/** Le scritture sul canvas dell'ultima risposta dell'assistente (parti strumento dell'UIMessage). */
+function scrittureCanvasPrecedenti(messages: { role: string; parts?: { type: string; input?: unknown }[] }[]): ScritturaCanvas[] {
+  const ultima = [...messages].reverse().find(m => m.role === 'assistant')
+  return (ultima?.parts ?? [])
+    .filter(p => p.type.startsWith('tool-') && SCRITTURE_CANVAS.has(p.type.slice(5)) && p.input)
+    .map(p => ({ strumento: p.type.slice(5), input: p.input }))
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { messages, modelId, canvasSnapshot, clientOverride, extraVaultFiles, action, pathname, focus } = body
+    const { messages, modelId, canvasSnapshot, clientOverride, clienteSelezionato, extraVaultFiles, action, pathname, focus } = body
 
     // ── RESUME ACTION ────────────────────────────────────────────────────────
     if (action === 'resume') {
@@ -614,8 +631,14 @@ export async function POST(req: Request) {
     // UIMessage v6 porta il testo in `parts`, non in `content`
     const userQuery = messageText(lastUserMsg)
 
-    const ctx = await buildContext(userQuery, {
-      clientOverride: clientOverride ?? undefined,
+    // cliente del turno: lo decide la conversazione ("nessun cliente", "progetto nuovo", un nome),
+    // non il cliente selezionato nell'app, che resta un suggerimento
+    const sceltaCliente = clienteDelTurno(
+      messages.filter((m: { role: string }) => m.role === 'user').map((m: Parameters<typeof messageText>[0]) => messageText(m)),
+      clients.getAll().map(c => c.name),
+    )
+    const ctx = await buildContext(senzaPrefissi(userQuery), {
+      clientOverride: sceltaCliente.stato === 'nessuno' ? 'none' : sceltaCliente.stato === 'cliente' ? sceltaCliente.nome : clientOverride ?? undefined,
       extraFiles: Array.isArray(extraVaultFiles) ? extraVaultFiles : undefined,
     })
 
@@ -709,13 +732,28 @@ export async function POST(req: Request) {
     // Registro dei modelli: scelta della chat o delle Impostazioni, poi gli altri fornitori;
     // servono gli strumenti nativi (niente Gemma qui), si saltano i modelli senza quota
     // in chat gli strumenti devono partire davvero: dentro il fornitore si preferisce il modello più forte
-    const { model, label: modelLabel, profile } = pickModel({ task, tools: true, preferisci: 'forte' }, { choice: modelId })
+    // Catena: su quota, errore o risposta vuota si passa al candidato successivo (stesso ordine,
+    // stessa scelta "solo gratis"); se cadono tutti l'errore arriva in chat con i motivi
+    const need = { task, tools: true, preferisci: 'forte' } as const
+    const candidati = candidatesFor(need, { choice: modelId })
+    if (!candidati.length) candidati.push(pickModel(need, { choice: modelId }))
+    const { label: modelLabel, profile } = candidati[0]
+    const model = candidati.length > 1
+      ? catenaModelli(candidati, { onCambio: (da, motivo) => console.log(`[ai] ${da} non risponde (${motivo}): passo al successivo`) })
+      : candidati[0].model
     // I modelli piccoli o gratuiti impaginano male a coordinate: per loro solo composeDesign,
     // dove lo Studio fa griglia, foto, effetti e tipografia da sé
     const lowLevelDesign = profile.strength === 'forte'
     console.log(`[ai] richiesta ${task} → ${modelLabel} (${profile.strength})${lowLevelDesign ? '' : ' (solo composeDesign)'}`)
 
     const trace = createTrace(modelLabel)
+    // stato del turno: grafica nuova richiesta? motore usato? scritture sul canvas in attesa dello Studio
+    const precedenteUtente = messageText([...messages].reverse().filter((m: { role: string }) => m.role === 'user')[1])
+    const turno = {
+      grafica: isDesignRequest(userQuery) || (isApproval(userQuery) && isDesignRequest(precedenteUtente)),
+      motore: false,
+      scritture: [] as string[],
+    }
     const d = <S extends z.ZodTypeAny>(def: AgentToolDef<S>) => def as unknown as AgentToolDef<z.ZodTypeAny>
     const defs: AgentToolDef<z.ZodTypeAny>[] = [
         ...CORE_TOOLS,
@@ -742,11 +780,11 @@ export async function POST(req: Request) {
         d({ name: 'composeDesign', group: 'studio', risk: 'write',
           description: composeToolDescription(),
           inputSchema: z.object({ boards: z.array(composeBoardSchema).min(1) }),
-          execute: async ({ boards }) => ({ success: true, rendered: boards.length }),
+          execute: async ({ boards }) => { turno.motore = true; turno.scritture.push(`composeDesign: ${boards.length} tavole`); return { success: true, rendered: boards.length } },
         }),
 
         ...(lowLevelDesign ? [d({ name: 'createDesignBoards', group: 'studio', risk: 'write',
-          description: `Strumento di basso livello: posiziona elementi a coordinate esatte. Usalo solo quando l'utente chiede un controllo puntuale degli elementi; per grafiche nuove usa composeDesign.
+          description: `Strumento di basso livello, SOLO per ritocchi puntuali chiesti dall'utente (aggiungere o spostare pochi elementi a coordinate esatte). Grafiche, post, volantini e presentazioni nuove passano dal motore: directDesign, poi composeDesign. Le tavole passano dai controlli della maestra: elementi fuori tavola spostati o rifilati, fondo e foto sotto, testo sopra, niente riquadri opachi sulle foto.
 Crea tavole di design canvas con elementi visivi posizionati. Ogni board deve essere visivamente completa e ricca.
 
 DIMENSIONI STANDARD — scegli in base al contenuto:
@@ -787,10 +825,16 @@ QUANTITÀ BOARD:
           inputSchema: z.object({
             boards: z.array(designBoardSchema),
           }),
-          execute: async ({ boards }) => ({
-            success: true,
-            rendered: boards?.length ?? 0,
-          }),
+          execute: async ({ boards }) => {
+            // le grafiche nuove passano dal motore: a mano solo dopo directDesign/composeDesign o per i ritocchi
+            if (turno.grafica && !turno.motore) {
+              return { success: false, error: "Per una grafica nuova non comporre a mano: chiama directDesign (brief completo, formato, numero di slide), poi composeDesign con i testi e una delle direzioni. createDesignBoards serve solo ai ritocchi." }
+            }
+            // controlli della maestra: la chat disegna le stesse tavole corrette (controllaTavole)
+            const { avvisi } = controllaTavole(boards as TavolaManuale[])
+            turno.scritture.push(`createDesignBoards: ${boards.map(b => b.name ?? 'tavola').join(', ')}`)
+            return { success: true, rendered: boards?.length ?? 0, ...(avvisi.length ? { corretto: avvisi } : {}) }
+          },
         })] : []),
 
         d({ name: 'updateCanvasElements', group: 'studio', risk: 'write',
@@ -800,10 +844,10 @@ QUANTITÀ BOARD:
               'Array di update. Ogni entry ha "id" (il name dell\'elemento nel canvas) e "changes" con le proprietà da modificare.'
             ),
           }),
-          execute: async ({ updates }) => ({
-            success: true,
-            updated: updates?.length ?? 0,
-          }),
+          execute: async ({ updates }) => {
+            turno.scritture.push(`updateCanvasElements: ${updates.map(u => `${u.id} (${Object.keys(u.changes).join(', ')})`).join('; ')}`)
+            return { success: true, updated: updates?.length ?? 0 }
+          },
         }),
 
         d({ name: 'editDesign', group: 'studio', risk: 'write',
@@ -831,9 +875,11 @@ QUANTITÀ BOARD:
         d({ name: 'getCanvasState', group: 'studio', risk: 'read',
           description: 'Legge lo stato attuale del canvas con tutti gli elementi (ID, tipo, posizione, testo, colore). Usa questo tool per vedere cosa c\'è sul canvas prima di fare modifiche.',
           inputSchema: z.object({}),
+          // lo Studio applica le scritture a fine risposta: lo stato letto qui è quello di inizio turno
           execute: async () => ({
             success: true,
             snapshot: canvasSnapshot || 'Canvas vuoto — nessun elemento presente.',
+            ...(turno.scritture.length ? { inAttesa: `Scritture di questo turno, applicate dallo Studio a fine risposta (non ancora nello stato qui sopra): ${turno.scritture.join(' · ')}. Al prossimo messaggio lo stato sarà verificato.` } : {}),
           }),
         }),
 
@@ -873,9 +919,9 @@ QUANTITÀ BOARD:
             '  - "file word", "documento word scaricabile", "contratto in word"',
             '  - "file pptx", "esporta powerpoint", "scarica come ppt"',
             'NON USARE per: "presentazione", "slide", "deck", "pitch", "carosello", "poster", "grafica".',
-            'Queste richieste vanno OBBLIGATORIAMENTE al tool createDesignBoards (canvas visuale).',
+            'Queste richieste vanno al motore dello Studio: directDesign, poi composeDesign (canvas visuale).',
             'REGOLA D\'ORO: se l\'utente non ha detto esplicitamente il formato file (.xlsx/.docx/.pptx),',
-            'usa SEMPRE createDesignBoards per creare la presentazione nel canvas.',
+            'usa SEMPRE directDesign e composeDesign per creare la presentazione nel canvas.',
           ].join(' '),
           inputSchema: z.object({
             prompt: z.string().describe('Descrizione del contenuto del documento.'),
@@ -896,7 +942,7 @@ QUANTITÀ BOARD:
             }
           },
         }),
-      ...SYSTEM_TOOLS,
+      ...SYSTEM_TOOLS.map(t => t.name === 'directDesign' ? { ...t, execute: (i: unknown) => { turno.motore = true; return t.execute(i) } } : t),
     ]
 
     const system = stableSystem({
@@ -907,7 +953,9 @@ QUANTITÀ BOARD:
       skills: allActiveSkills,
       modelNote: lowLevelDesign ? undefined : COMPOSE_ONLY_NOTE.trim(),
     })
-    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills })
+    // le scritture sul canvas dichiarate al turno prima si cercano nello stato vero di adesso
+    const verifica = notaVerifica(verificaCanvas(scrittureCanvasPrecedenti(messages), canvasSnapshot))
+    const reminder = reminderText({ now: new Date(), pathname, focus: typeof focus === 'string' && /^[a-z]+:.+/.test(focus) ? focusText(focus) : undefined, ctx, canvasSnapshot, activeSkills, otherSkills, verifica, cliente: notaCliente(sceltaCliente, typeof clienteSelezionato === 'string' ? clienteSelezionato : undefined) })
 
     // Storia lunga: svuota i vecchi risultati degli strumenti, poi riassume con il modello economico
     const compacted = await compactHistory(await convertToModelMessages(messages), async (text) => {
@@ -922,10 +970,25 @@ QUANTITÀ BOARD:
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
     const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
 
-    const result = tracedStreamText({
+    const risks = risksOf(defs)
+    // con "nessun cliente" nessuno strumento riceve un cliente
+    const conCliente = (def: AgentToolDef<z.ZodTypeAny>): AgentToolDef<z.ZodTypeAny> => ({
+      ...def, execute: (i: unknown) => { const no = clienteVietato(sceltaCliente, i); return no ? { success: false, error: no } : def.execute(i) },
+    })
+    const tools = buildToolSet(defs.map(conCliente), trace, createRepeatGuard())
+    // "vai", "ok", "sì" dopo una risposta dell'assistente approvano la proposta: è un'azione
+    const lastIsUser = messages[messages.length - 1]?.role === 'user'
+    const azione = lastIsUser && isActionTurn(userQuery, messages.slice(0, -1).some((m: { role: string }) => m.role === 'assistant'))
+    const onError = (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[ai] errore da ${modelLabel}:`, msg)
+      return `${msg} (modello: ${modelLabel})`
+    }
+
+    const giro = (msgs: aiSdk.ModelMessage[], obbligo: boolean) => tracedStreamText({
       model,
       system,
-      messages: modelMessages,
+      messages: msgs,
       stopWhen: stepCountIs(24), // lavori in più fasi: piano, letture, scritture, verifica
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
       experimental_telemetry: {
@@ -936,35 +999,50 @@ QUANTITÀ BOARD:
           hasCanvas: !!canvasSnapshot,
         },
       },
-      tools: buildToolSet(defs, trace, createRepeatGuard()),
+      tools,
       // A1: nome con prefisso o JSON rotto si ripara a regole invece di fallire
       experimental_repairToolCall: createToolCallRepair(undefined, s => console.log(`[agente] ${modelLabel}: ${s}`)),
       // ai modelli deboli un sottoinsieme fisso di strumenti per la pagina aperta
       activeTools: activeTools as never,
-      // A2: strumento obbligatorio al primo passo se la richiesta è un'azione; fase nel promemoria
-      prepareStep: createPrepareStep({ azione: messages[messages.length - 1]?.role === 'user' && isActionRequest(userQuery), risks: risksOf(defs), active: activeTools }),
-      onFinish: ({ steps, totalUsage, text }) => {
-        // A3 in chat: in streaming non si riprende il giro; la traccia segna le chiusure senza prove
-        const motivi = checkClosure({ prove: proveFromSteps(steps as never, risksOf(defs)), testo: text, azione: isActionRequest(userQuery) })
+      // A2: con un'azione lo strumento è obbligatorio finché non c'è una scrittura (al massimo 4 passi)
+      prepareStep: createPrepareStep({ azione: obbligo, insisti: 4, risks, active: activeTools }),
+    })
+
+    const stream = createUIMessageStream({
+      onError,
+      execute: async ({ writer }) => {
+        const primo = giro(modelMessages, azione)
+        writer.merge(primo.toUIMessageStream({ sendFinish: false, onError }))
+        let steps = [...(await primo.steps)]
+        let text = await primo.text
+        let usage = await primo.totalUsage
+        // A3 in chat: un'azione chiusa con un annuncio ("Procedo con…") o una promessa senza
+        // scritture viene respinta una volta, e il modello riprende con lo strumento obbligatorio
+        const motivi = checkClosure({ prove: proveFromSteps(steps as never, risks), testo: text, azione })
+        if (azione && motivi.length && !proveFromSteps(steps as never, risks).some(p => p.rischio !== 'read' && p.esito === 'ok')) {
+          console.log(`[agente] ${modelLabel}: risposta respinta (${motivi[0]}), secondo giro`)
+          const risposta = (await primo.response).messages
+          const secondo = giro([...modelMessages, ...risposta, { role: 'user', content: `<promemoria>Risposta respinta: ${motivi[0]}.</promemoria>` }], true)
+          writer.merge(secondo.toUIMessageStream({ sendStart: false, onError }))
+          steps = [...steps, ...(await secondo.steps)]
+          text = await secondo.text
+          const u = await secondo.totalUsage
+          usage = { ...usage, inputTokens: (usage.inputTokens ?? 0) + (u.inputTokens ?? 0), outputTokens: (usage.outputTokens ?? 0) + (u.outputTokens ?? 0), cachedInputTokens: (usage.cachedInputTokens ?? 0) + (u.cachedInputTokens ?? 0) }
+        } else {
+          writer.write({ type: 'finish' })
+        }
+        const fine = checkClosure({ prove: proveFromSteps(steps as never, risks), testo: text, azione })
         trace.finish({
-          prove: motivi.length ? `SENZA PROVE: ${motivi[0]}` : undefined,
+          prove: fine.length ? `SENZA PROVE: ${fine[0]}` : undefined,
           steps: steps.length,
-          inputTokens: totalUsage.inputTokens,
-          cachedInputTokens: totalUsage.cachedInputTokens,
-          outputTokens: totalUsage.outputTokens,
+          inputTokens: usage.inputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          outputTokens: usage.outputTokens,
           compacted: compacted.note,
         })
       },
     })
-
-    return result.toUIMessageStreamResponse({
-      // l'errore in chat dice anche quale modello ha fallito
-      onError: (err) => {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.error(`[ai] errore da ${modelLabel}:`, msg)
-        return `${msg} (modello: ${modelLabel})`
-      },
-    })
+    return createUIMessageStreamResponse({ stream })
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
