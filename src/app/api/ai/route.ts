@@ -968,8 +968,10 @@ QUANTITÀ BOARD:
 
     const activeTools = toolsForContext(defs, { strength: profile.strength, pathname, always: ['loadSkill', 'getCanvasState', 'composeDesign', 'editDesign', 'updateCanvasElements'] })
 
+    // Telemetria (LangSmith e Phoenix) solo con consenso esplicito: CREATIVE_OS_TELEMETRIA=1
+    const telemetria = process.env.CREATIVE_OS_TELEMETRIA === '1'
     // LangSmith: wrappa streamText dentro il handler così le env vars sono già caricate
-    const { streamText: tracedStreamText } = wrapAISDK(aiSdk)
+    const tracedStreamText = telemetria ? wrapAISDK(aiSdk).streamText : aiSdk.streamText
 
     const risks = risksOf(defs)
     // con "nessun cliente" nessuno strumento riceve un cliente
@@ -993,7 +995,7 @@ QUANTITÀ BOARD:
       stopWhen: stepCountIs(24), // lavori in più fasi: piano, letture, scritture, verifica
       // Phoenix: genera OpenTelemetry spans catturati da instrumentation.ts
       experimental_telemetry: {
-        isEnabled: true,
+        isEnabled: telemetria,
         functionId: 'canvas-ai-agent',
         metadata: {
           modelId: modelLabel,

@@ -6,7 +6,10 @@
  * - Phoenix (Arize) → OTLP/HTTP su localhost:6006 (locale, gratuito)
  * - LangSmith        → wrapping del modello in route.ts (vedi wrapAISDKModel)
  *
+ * Spente di base (prodotto, GDPR): si accendono solo con CREATIVE_OS_TELEMETRIA=1.
+ *
  * Variabili d'ambiente richieste (in .env.local):
+ *   CREATIVE_OS_TELEMETRIA=1
  *   LANGCHAIN_TRACING_V2=true
  *   LANGCHAIN_API_KEY=lsv2_...
  *   LANGCHAIN_PROJECT=Canvas-AI-Monitor
@@ -16,6 +19,7 @@
 export async function register() {
   // Esegui solo nel runtime Node.js (non in Edge runtime)
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
+  if (process.env.CREATIVE_OS_TELEMETRIA !== '1') return
 
   const { NodeSDK } = await import('@opentelemetry/sdk-node')
   const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http')
