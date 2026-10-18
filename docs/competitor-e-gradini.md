@@ -57,6 +57,12 @@ La varietà ora viene da design veri, non dalle nostre regole; il motore resta g
 - **G1 + G2 sono il salto principale**, e vanno prima del blocco B: senza esempi veri, sciogliere gli archetipi in mattoni produce ancora combinazioni di regole nostre.
 - G2 richiede chiamate testuali: in vetrina, una versione simulata con esempi registrati; dal vivo, quando ci sarà credito.
 
+## Stato di G1 e G2 (18 ottobre 2026)
+
+- **G1 fatto**: 146 design in `src/components/studio/designer/archivio/archivio.json`, cioè 134 dai musei (CC0 o pubblico dominio dai metadati delle API di Rijksmuseum, Met e Smithsonian/Cooper Hewitt, decompilati con D1) e 12 tavole del motore. L'impronta per la ricerca è di layout e tipografia; quella CLIP arriva con V2/G6.
+- **Crello / OpenCOLE: non usati.** La scheda del dataset `cyberagent/crello` dichiara CDLA-Permissive-2.0 per la distribuzione, ma dice anche che i diritti dei template restano di VistaCreate e che chi li usa deve accettarne gli accordi di licenza. Per un archivio dentro un prodotto commerciale non basta: escluso, e con lui OpenCOLE, che è addestrato su Crello.
+- **G2 fatto, a secco**: sistema `esempi` nel vivaio. Le candidate G2 hanno un'impaginazione meno riconoscibile delle tavole d'archetipo (distanza dalle medie 0,250 contro 0,188), ma poche superano il critico. La chiamata vera aspetta credito o le vie gratuite del registro.
+
 ## Fonti
 - Canva Design Model e Magic Layers: businesswire.com/news/home/20260311951174
 - Adobe Firefly Design Model: news.adobe.com (rilascio dei modelli Firefly, ottobre 2023)
