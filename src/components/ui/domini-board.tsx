@@ -142,7 +142,7 @@ export function DominiBoard({ initialDomains }: Props) {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="cos-page">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">Web & Domini</h1>

@@ -15,7 +15,7 @@ export default async function AssetsPage() {
     const clientsWithoutDrive = (clients || []).filter(c => !c.drive_folder_id)
 
     return (
-        <div className="space-y-6">
+        <div className="cos-page">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
