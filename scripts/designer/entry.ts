@@ -19,7 +19,7 @@ import { loadPix } from '@/components/studio/designer/core/foto'
 import { sfondoPixel } from '@/components/studio/designer/preview'
 import { lettureVere, sottoSoglia } from '@/components/studio/designer/gen/pixel'
 import { presentazione, type RuoloSlide } from '@/components/studio/designer/gen/sequenza'
-import { programmaDa, impronta } from '@/components/studio/designer/archivio/scheda'
+import { programmaDa, impronta as improntaLayout } from '@/components/studio/designer/archivio/scheda'
 import { zoneVuote, vuotiNonProgettati, sovrapposizioni, testoMancante } from '@/components/studio/designer/gen/difetti'
 
 /** Difetti misurati sulla tavola consegnata (blocco A): sovrapposizioni, contrasto sui pixel veri, vuoti, testo tagliato o saltato. */
@@ -115,7 +115,7 @@ async function proposte(job: Job & { n?: number; misura?: boolean }): Promise<{ 
   for (const sc of p.scene) {
     const k = sc.knobs as Knobs
     const st = styleById(k.stile)
-    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), impronta: impronta(programmaDa(sc), (sc.palette?.bg ? lumi(sc.palette.bg) : 1) < 0.35), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
+    items.push({ sistema: k.sistema === 'ibrido' ? sc.label.replace('Ibrido ', 'ibrido ') : k.idea ? `${k.sistema}: ${k.idea.gesto}` : k.sistema, ok: true, ms: Math.round(performance.now() - t0), url: await draw(sc, job.thumb), knobs: k, reasons: [], layout: sc.label, stile: st.name, coppia: `${st.display.family} + ${st.text.family}`, registro: st.registro, esame: sc.esame, mattoni: sc.mattoni ?? [k.sistema], risorse: risorse(sc), impronta: improntaLayout(programmaDa(sc), (sc.palette?.bg ? lumi(sc.palette.bg) : 1) < 0.35), ...(job.misura ? { difetti: await difettiScena(sc, job.content) } : {}) })
   }
   return { items, scartate: p.scartate, motivi: classiScarto(sink), candidate: p.candidate, promosse: p.promosse, giri: p.giri, idee: Array.isArray(idee) ? idee.map(i => `${i.gesto}: ${i.nome}`) : [], concetto: conta, esempi: { ...opzE.conta, usati: [...new Set(opzE.usati)] }, traccia: sink.filter(x => x.startsWith('idea ') || x.startsWith('intreccio ') || x.startsWith('esempi ')) }
 }
@@ -133,7 +133,7 @@ async function soloEsempi(job: Job & { n?: number }) {
     ;(globalThis as { __designerSink?: string[] }).__designerSink = []
     const sc = await generateSystem(job.content, job.format, k, job.photo, { tentativi: 2 })
     if (!sc) { out.push({ ok: false, esempi: k.esempi, difetti: [scarti.ultimo] }); continue }
-    out.push(sc ? { ok: true, url: await draw(sc, job.thumb), voto: sc.esame?.voto, promossa: sc.esame?.promossa, carattere: sc.esame?.carattere?.carattere, difetti: sc.esame?.difetti ?? [], esempi: k.esempi } : { ok: false, esempi: k.esempi, difetti: [] })
+    out.push(sc ? { ok: true, url: await draw(sc, job.thumb), impronta: improntaLayout(programmaDa(sc), (sc.palette?.bg ? lumi(sc.palette.bg) : 1) < 0.35), voto: sc.esame?.voto, promossa: sc.esame?.promossa, carattere: sc.esame?.carattere?.carattere, difetti: sc.esame?.difetti ?? [], esempi: k.esempi } : { ok: false, esempi: k.esempi, difetti: [] })
   }
   return out
 }

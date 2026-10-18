@@ -46,8 +46,9 @@ function contenuto(c: DesignContent, ruolo: Strato['ruolo']): string | undefined
 const NOME: Record<string, string> = { titolo: 'titolo', occhiello: 'occhiello', testo: 'testo', dettagli: 'dettaglio_0', invito: 'invito', marchio: 'brand', numero: 'numero' }
 
 /** Il colore sotto un punto: l'ultimo strato pieno che lo copre, altrimenti il fondo. */
-function sotto(g: G, x: number, y: number): string {
-  for (let i = g.els.length - 1; i >= 0; i--) {
+function sotto(g: G, x: number, y: number, prima?: SceneEl): string {
+  const da = prima ? g.els.indexOf(prima) : -1
+  for (let i = (da >= 0 ? da : g.els.length) - 1; i >= 0; i--) {
     const e = g.els[i]
     if (e.kind === 'rect' && typeof e.fill === 'string' && (e.opacity ?? 1) > 0.6 && x >= e.x && x <= e.x + e.w && y >= e.y && y <= e.y + e.h) return e.fill
     if (e.kind === 'circle' && (e.opacity ?? 1) > 0.6 && Math.hypot(x - e.cx, y - e.cy) <= e.r) return e.fill
@@ -66,7 +67,7 @@ export function applicaProgramma(g: G, p: Programma): boolean {
   }
   // fondo
   const fondo = p.strati.find(s => s.ruolo === 'fondo')
-  if (fondo && (fondo.colore ?? 'fondo') !== 'fondo') put(g, { kind: 'rect', name: 'fondo', x: 0, y: 0, w: W, h: H, fill: col(fondo.colore, 'fondo') })
+  if (fondo && (fondo.colore ?? 'fondo') !== 'fondo') put(g, { kind: 'rect', name: 'tinta', x: 0, y: 0, w: W, h: H, fill: col(fondo.colore, 'fondo') }) // non 'fondo': il controllo di lettura lo prenderebbe per il colore della palette
   // forme: le più grandi (al più 7), nell'ordine del programma
   const forme = p.strati.filter(s => s.ruolo === 'campo' || s.ruolo === 'disco' || s.ruolo === 'filetto')
   const tenute = new Set([...forme].sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3]).slice(0, 7))
@@ -99,6 +100,11 @@ export function applicaProgramma(g: G, p: Programma): boolean {
     const s = perRuolo.get(ruolo) ?? postoLibero(g, ruolo, posati)
     // se nel suo riquadro non entra, il testo cerca un posto libero (mai il titolo: è l'ossatura)
     let el = s ? posaTesto(g, s, ruolo, testo, col) : null
+    // un titolo lungo che non sta nel riquadro dell'esempio prende una fascia piena tra i margini, alla stessa altezza
+    if (!el && ruolo === 'titolo' && s) {
+      const m = g.m / W, y = clamp(s.box[1], g.T / H, 0.68)
+      el = posaTesto(g, { ...s, box: [m, y, 1 - 2 * m, Math.min(0.32, g.B / H - y)], corpo: undefined }, ruolo, testo, col)
+    }
     if (!el && ruolo !== 'titolo' && perRuolo.has(ruolo)) { const altro = postoLibero(g, ruolo, posati); if (altro) el = posaTesto(g, altro, ruolo, testo, col) }
     if (!el) { if (ruolo === 'titolo') return false; continue }
     posati.push(el)
@@ -106,6 +112,16 @@ export function applicaProgramma(g: G, p: Programma): boolean {
   allineaAssi(g, posati)
   ariaNeiCampi(g, posati)
   liberaTesti(g, posati)
+  // le forme sono cambiate (tolte, allargate, foto ritirata): ogni testo si rilegge sul colore che ha davvero sotto
+  for (const t of posati) {
+    const b = textBox(t), grande = /^(titolo|numero)/.test(t.name), min = grande ? 3 : 4.5
+    const sotti = [0.1, 0.3, 0.5, 0.7, 0.9].flatMap(fx => [0.25, 0.5, 0.75].map(fy => sotto(g, b.x + b.w * fx, b.y + b.h * fy, t)))
+    if (sotti.some(f => contrast(t.color, f) < min)) {
+      const cand = [g.P.fg, g.P.bg, g.P.acc, '#111111', '#ffffff']
+      t.color = [...cand].sort((p, q) => Math.min(...sotti.map(f => contrast(q, f))) - Math.min(...sotti.map(f => contrast(p, f))))[0]
+      if (t.chars) t.chars = undefined
+    }
+  }
   return posati.some(t => t.name === 'titolo')
 }
 
@@ -134,6 +150,17 @@ function allineaAssi(g: G, testi: Testo[]) {
 /** Un testo dentro un campo ha bisogno d'aria: il campo si allarga fino a 16u attorno all'inchiostro. */
 function ariaNeiCampi(g: G, testi: Testo[]) {
   const pad = 16 * g.u
+  // una forma che taglia a metà un testo grande (né lo contiene né sta fuori) si toglie: il bordo spezzerebbe la lettura
+  for (const t of testi.filter(x => /^(titolo|numero|testo)/.test(x.name))) {
+    const b = textBox(t)
+    g.els = g.els.filter(e => {
+      if (!((e.kind === 'rect' && e.name === 'campo') || (e.kind === 'circle' && e.name === 'disco'))) return true
+      const [ex, ey, ew, eh] = e.kind === 'rect' ? [e.x, e.y, e.w, e.h] : [e.cx - e.r, e.cy - e.r, 2 * e.r, 2 * e.r]
+      const ox = Math.max(0, Math.min(b.x + b.w, ex + ew) - Math.max(b.x, ex)), oy = Math.max(0, Math.min(b.y + b.h, ey + eh) - Math.max(b.y, ey))
+      const quota = (ox * oy) / Math.max(1, b.w * b.h)
+      return quota < 0.05 || quota > 0.97
+    })
+  }
   for (const t of testi) {
     const b = textBox(t)
     for (const e of g.els) {
@@ -243,14 +270,16 @@ function posaTesto(g: G, s: Strato, ruolo: string, testo: string, col: (r: Strat
   const x0 = align === 'left' ? bx : align === 'center' ? bx + (bw - f.w) / 2 : bx + bw - f.w
   // dentro i margini, se la riga ci sta (il controllo dei bordi scarterebbe la tavola)
   const x = f.w <= W - 2 * g.m ? clamp(x0, g.m, W - g.m - f.w) : x0
-  const fondo = sotto(g, x + f.w / 2, by + f.h / 2)
+  // dentro i margini in alto e in basso (nella storia anche fuori dalle zone dell'interfaccia)
+  const y = f.h <= g.B - g.T ? clamp(by, g.T, g.B - f.h) : by
+  const fondo = sotto(g, x + f.w / 2, y + f.h / 2)
   let color = col(s.colore, 'inchiostro')
   if (contrast(color, fondo) < (grande ? 3 : 4.5)) color = readable(fondo, [g.P.fg, g.P.bg, g.P.acc, '#111111', '#ffffff'], grande ? 3 : 4.5)
   const angle = s.angolo && Math.abs(s.angolo) <= 15 || Math.abs(s.angolo ?? 0) === 90 ? s.angolo : undefined
   const leading = f.leading ?? (grande ? g.s.displayLeading : font === g.s.label ? 1.25 : 1.43)
   const tracking = f.tracking ?? (font === g.s.label ? 0.14 : grande ? g.s.displayTracking ?? 0 : 0)
   const chars = ruolo === 'titolo' && font === g.s.display ? accentChars(g, f.lines, color, fondo) : undefined
-  return txt(g, { name: NOME[ruolo], lines: f.lines, font, size: f.size, x, y: by, color, align, w: f.w, leading, tracking, ...(angle ? { angle } : {}), ...(chars ? { chars } : {}) })
+  return txt(g, { name: NOME[ruolo], lines: f.lines, font, size: f.size, x, y, color, align, w: f.w, leading, tracking, ...(angle ? { angle } : {}), ...(chars ? { chars } : {}) })
 }
 
 /** Il sistema `esempi`: il programma nei regolatori (k.programma), poi i controlli di sempre. */
@@ -329,8 +358,14 @@ export function programmaSimulato(c: DesignContent, format: Format, esempi: Esem
   let p: Programma = { rapporto: r3(W / H), strati }
   // non copiare: se somiglia troppo a un esempio, si sposta il blocco dei testi
   for (let i = 0; i < 3 && somiglianza(p, esempi) > 0.9; i++) for (const s of p.strati) if (ruoliTesto.has(s.ruolo)) { s.box = [s.box[0], r3(clamp(1 - s.box[1] - s.box[3], 0.03, 0.9)), s.box[2], s.box[3]] }
-  p = programmaSchema.parse(p)
-  return p
+  // valori dentro lo schema: i testi minuscoli degli esempi e i riquadri oltre il bordo si riportano nei limiti
+  for (const s of p.strati) {
+    if (s.corpo !== undefined) s.corpo = r3(clamp(s.corpo, 0.006, 0.45))
+    s.box = s.box.map(v => r3(clamp(v, -0.15, 1.15))) as Strato['box']
+    if (s.angolo !== undefined) s.angolo = clamp(s.angolo, -90, 90)
+  }
+  p.strati = p.strati.slice(0, 40)
+  return programmaSchema.parse(p)
 }
 
 function scegliTre(esempi: Esempio[], r: Rng): [Esempio, Esempio, Esempio] {

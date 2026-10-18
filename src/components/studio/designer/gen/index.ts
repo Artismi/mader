@@ -292,6 +292,14 @@ export async function proponi(c: DesignContent, format: Format, o: { photo?: str
   }
   const sceltaDa = (lista: Scene[]) => { const pr = scegli(lista, n, true); return pr.length >= n ? pr : [...pr, ...scegli(lista.filter(x => !pr.includes(x)), n - pr.length, false)] }
   let scene = sceltaDa(tutte)
+  // G2 accanto agli archetipi: fino a 2 posti per le tavole promosse dagli esempi (le migliori),
+  // al posto delle ultime della lista; senza questa riserva i voti alti degli archetipi rodati le coprono tutte
+  const riservaG2 = tutte.filter(x => (x.knobs as Knobs | undefined)?.sistema === 'esempi' && x.esame?.promossa && !scene.includes(x)).sort((a, b) => punteggio(b) - punteggio(a))
+  for (const g2 of riservaG2.slice(0, Math.max(0, 2 - scene.filter(x => (x.knobs as Knobs | undefined)?.sistema === 'esempi').length))) {
+    const via = [...scene].reverse().find(x => (x.knobs as Knobs | undefined)?.sistema !== 'esempi')
+    if (via && scene.length >= n) scene = [...scene.filter(x => x !== via), g2]
+    else scene = [...scene, g2]
+  }
   // leggibilità sui pixel veri (blocco A): le scelte renderizzate senza testi, corrette o scartate;
   // al posto delle scartate entrano le candidate successive
   if (o.pixel) {

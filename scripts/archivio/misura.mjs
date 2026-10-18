@@ -7,21 +7,23 @@
  * dell'archetipo più vicino (medie calcolate sul giro senza G2, lasciando fuori
  * la tavola stessa). Più è alta, meno la tavola "sa di archetipo".
  *
- *   node scripts/archivio/misura.mjs scripts/designer/out/g2-senza scripts/designer/out/g2-con
+ *   node scripts/archivio/misura.mjs scripts/designer/out/g2-senza scripts/designer/out/g2-con scripts/designer/out/g2-rif
+ * (il terzo giro, senza G2 e con un altro seme, dà le medie degli archetipi)
  */
 import fs from 'node:fs'
 import path from 'node:path'
 
-const [senzaDir, conDir] = process.argv.slice(2)
+const [senzaDir, conDir, rifDir] = process.argv.slice(2)
 const leggi = d => ({ rapporto: JSON.parse(fs.readFileSync(path.join(d, 'rapporto.json'), 'utf8')), diversita: JSON.parse(fs.readFileSync(path.join(d, 'diversita.json'), 'utf8')) })
 const S = leggi(senzaDir), C = leggi(conDir)
 const dist = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += (a[i] - b[i]) ** 2; return Math.sqrt(s / a.length) }
 const famiglia = s => (s.startsWith('esempi') ? 'esempi' : s.split(':')[0].split(' ')[0])
 
-// medie degli archetipi dal giro senza G2
+// medie degli archetipi da un giro di riferimento indipendente (senza G2, altro seme): le due misure partono dalle stesse medie
+const RIF = rifDir ? leggi(rifDir) : S
 const gruppi = new Map()
-for (const r of S.rapporto) for (const t of r.prime ?? []) if (t.impronta) { const k = famiglia(t.sistema); if (!gruppi.has(k)) gruppi.set(k, []); gruppi.get(k).push(t) }
-const media = (l, via) => { const v = l.filter(t => t !== via); if (!v.length) return null; const m = new Array(v[0].impronta.length).fill(0); for (const t of v) t.impronta.forEach((x, i) => (m[i] += x / v.length)); return m }
+for (const r of RIF.rapporto) for (const t of r.prime ?? []) if (t.impronta) { const k = famiglia(t.sistema); if (!gruppi.has(k)) gruppi.set(k, []); gruppi.get(k).push(t) }
+const media = (l, via) => { const v = rifDir ? l : l.filter(t => t !== via); if (!v.length) return null; const m = new Array(v[0].impronta.length).fill(0); for (const t of v) t.impronta.forEach((x, i) => (m[i] += x / v.length)); return m }
 
 function misura(R, D) {
   const prime = R.flatMap(r => r.prime ?? [])
@@ -47,7 +49,16 @@ const tutte = R => R.flatMap(r => r.prime ?? []).filter(t => t.impronta).map(t =
 const ds = tutte(S.rapporto).sort((a, b) => a - b), soglia = ds[ds.length >> 1]
 ms.riconoscibili = `${tutte(S.rapporto).filter(x => x < soglia).length}/${ds.length}`
 mc.riconoscibili = `${tutte(C.rapporto).filter(x => x < soglia).length}/${tutte(C.rapporto).length}`
+// le sole tavole G2 contro le sole tavole d'archetipo dello stesso giro
+const dTav = t => Math.min(...[...gruppi.values()].map(l => media(l, t)).filter(Boolean).map(m => dist(t.impronta, m)))
+const primeC = C.rapporto.flatMap(r => r.prime ?? []).filter(t => t.impronta)
+const solo = f => { const l = primeC.filter(f).map(dTav); return l.length ? `${(l.reduce((a, x) => a + x, 0) / l.length).toFixed(4)} (${l.length})` : 'n.d.' }
+ms.distanzaSoloG2 = 'n.d.'; mc.distanzaSoloG2 = solo(t => famiglia(t.sistema) === 'esempi')
+ms.distanzaSoloArchetipi = ms.distanzaArchetipi; mc.distanzaSoloArchetipi = solo(t => famiglia(t.sistema) !== 'esempi')
+// tutte le candidate G2 dei fogli --esempi (promosse e bocciate), se ci sono
+const cand = fs.readdirSync(conDir).filter(f => f.endsWith('-esempi.json')).flatMap(f => JSON.parse(fs.readFileSync(path.join(conDir, f), 'utf8'))).filter(t => t.ok && Array.isArray(t.impronta))
+if (cand.length) { const l = cand.map(dTav); ms.distanzaCandidateG2 = 'n.d.'; mc.distanzaCandidateG2 = `${(l.reduce((a, x) => a + x, 0) / l.length).toFixed(4)} (${l.length}, promosse ${cand.filter(t => t.promossa).length})` }
 const righe = Object.keys(ms).map(k => `| ${k} | ${ms[k]} | ${mc[k]} |`)
-const md = ['# G2: misura a secco, campione standard', '', `Senza G2: \`${senzaDir}\` · con G2: \`${conDir}\`. Prime 12 per contenuto. distanzaArchetipi = distanza media (impronta di layout) dalla media dell'archetipo più vicino; riconoscibili = tavole sotto la mediana del giro senza G2.`, '', '| misura | senza G2 | con G2 |', '|---|---|---|', ...righe, ''].join('\n')
+const md = ['# G2: misura a secco, campione standard', '', `Senza G2: \`${senzaDir}\` · con G2: \`${conDir}\` · medie degli archetipi da \`${rifDir ?? senzaDir}\`. Prime 12 per contenuto. distanzaArchetipi = distanza media (impronta di layout) dalla media dell'archetipo più vicino; riconoscibili = tavole sotto la mediana del giro senza G2.`, '', '| misura | senza G2 | con G2 |', '|---|---|---|', ...righe, ''].join('\n')
 fs.writeFileSync(path.join(conDir, 'misura-g2.md'), md)
 console.log(md)

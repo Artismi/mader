@@ -395,6 +395,7 @@ for (const nome of contenuti) {
         fs.writeFileSync(path.join(out, `${nome}-${format}-esempi.jpg`), Buffer.from(sh.split(',')[1], 'base64'))
       }
       if (args.motivi) for (const r of es) console.log(`    G2 ${r.ok ? r.voto : 'scartata'}: ${r.difetti.slice(0, 5).join('; ')}`)
+      fs.writeFileSync(path.join(out, `${nome}-${format}-esempi.json`), JSON.stringify(es.map(({ url, ...r }) => r)))
       info += ` · G2 da solo: ${es.filter(r => r.promossa).length}/${es.length} promosse`
     }
     // --ibridi: un foglio con i soli ibridi dell'incrocio, con i mattoni e gli intrecci sotto
