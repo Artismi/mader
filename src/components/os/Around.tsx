@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useOs, current, kindOf, type Acc } from './store'
 import { I, useNode } from './parts'
+import { Item } from './Today'
 
 export const SECTIONS: [string, string, string][] = [
   ['oggi', 'Oggi', 'sun'], ['messaggi', 'Messaggi', 'inbox'], ['clienti', 'Clienti', 'users'],
@@ -53,6 +54,20 @@ export function Path() {
       })}
       {next && <div className="itm next"><b>poi: {next}</b></div>}
     </nav>
+  )
+}
+
+/* ───── Altre mail che aspettano: accanto alla mail aperta, per passare alla prossima ───── */
+export function Waiting() {
+  const here = useOs(s => current(s).ref)
+  const { node } = useNode('list:messaggi')
+  const others = (node?.groups?.[0]?.[1] ?? []).filter(n => n.ref !== here).slice(0, 4)
+  if (!others.length) return null
+  return (
+    <div className="path">
+      <span className="kick">Aspettano anche</span>
+      {others.map(n => <Item key={n.ref} n={n} />)}
+    </div>
   )
 }
 

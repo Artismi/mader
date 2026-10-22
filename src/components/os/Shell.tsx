@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import './os.css'
-import { useOs, current } from './store'
+import { useOs, current, kindOf } from './store'
 import { I, Sprite, Toast } from './parts'
 import { Block } from './Block'
-import { Accessories, Needs, Path, Places, SECTIONS } from './Around'
+import { Accessories, Needs, Path, Places, SECTIONS, Waiting } from './Around'
+import { ClientView } from './Client'
 import { Ask } from './Ask'
 import { DayLine, Today } from './Today'
 import { useSidebar } from '@/components/layout/SidebarContext'
@@ -31,6 +32,8 @@ export function Shell() {
   const { setCoPilotOpen } = useSidebar()
   const rootRef = useRef<HTMLDivElement>(null)
   const isToday = step.ref === 'list:oggi'
+  const isClient = kindOf(step.ref) === 'client' && step.mode === 'view'
+  const isMail = kindOf(step.ref) === 'mail'
 
   useEffect(() => { hydrate() }, [hydrate])
 
@@ -46,7 +49,7 @@ export function Shell() {
       if (mod && e.key.toLowerCase() === 'j') { e.preventDefault(); setCoPilotOpen(true); return }
       if (mod && /^[1-6]$/.test(e.key)) { e.preventDefault(); s.root(SECTIONS[+e.key - 1][0]); return }
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); s.back(); return }
-      if (e.key === 'Escape' && !document.querySelector('.os .k')) {
+      if (e.key === 'Escape' && !document.querySelector('.os .ask-veil')) {
         if (s.petals) s.setPetals(false)
         else if (s.accs.length) s.closeAcc(s.accs[0].key)
         else if (!(e.target as HTMLElement).closest('textarea')) s.back()
@@ -66,6 +69,7 @@ export function Shell() {
         <button className="kbtn" onClick={() => setAsking(true)}><span className="o"><I n="spark" /></span><span className="l">Cerca o chiedi</span><kbd>Ctrl K</kbd></button>
       </header>
 
+      {isClient ? <ClientView key={step.ref} cref={step.ref} notice={<GoogleLink />} /> : <>
       <div className="subline">
         <GoogleLink />
         {isToday && <DayLine />}
@@ -73,7 +77,7 @@ export function Shell() {
 
       {isToday ? <Today /> : (
         <div className="body">
-          <aside className="side l"><Path /></aside>
+          <aside className="side l"><Path />{isMail && <Waiting />}</aside>
           <div className="center"><Block /></div>
           <aside className="side r"><Needs /><Accessories /></aside>
         </div>
@@ -86,6 +90,7 @@ export function Shell() {
           <kbd>Ctrl J</kbd>
         </button>
       </footer>
+      </>}
 
       {asking && <Ask onClose={() => setAsking(false)} />}
       <Toast />

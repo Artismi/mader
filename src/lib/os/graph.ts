@@ -41,6 +41,9 @@ export interface NodeDetail extends NodeSummary {
   done?: boolean
   events?: { ref: string; title: string; start: string; end: string; allDay: boolean }[]   // per l'anello del giorno
   next?: { label: string; status: string }   // prossimo passo di stato (post editoriali)
+  stats?: { value: string; label: string }[]          // numeri del cliente, in parole
+  marks?: { days: number; kind: Kind; title: string; ref: string; waiting?: boolean }[]   // contatti degli ultimi 30 giorni
+  brief?: string                                        // una riga: cosa sapere prima di aprire il cliente
   quote?: Pick<Quote, 'id' | 'number' | 'type' | 'status' | 'items' | 'total' | 'notes' | 'issued_at' | 'drive_pdf_url'> & { to?: string }
 }
 
@@ -269,8 +272,42 @@ export async function getNode(ref: string): Promise<NodeDetail | null> {
     const pending = messages.getAll({ clientId: id, limit: 100 }).filter(m => !m.replied).map(m => mailSummary(m, cm))
     const ts = openTasks().filter(t => t.client_id === id).map(taskSummary)
     const ds = designProjects.getByClient(id).map(d => designSummary(d, cm))
-    return { ...clientSummary(c, pending.length), lead: [c.email, c.sector].filter(Boolean).join(' · '),
-      groups: [['Prossima cosa', pending.slice(0, 3)], ['Lavori', ts], ['Preventivi', quotes.getAll().filter(q => q.client_id === id).map(quoteSummary)], ['Contenuti', activePosts().filter(p => p.client_id === id).map(postSummary)], ['Design', ds]],
+    const msgs = messages.getAll({ clientId: id, limit: 200 })
+    const qs = quotes.getAll().filter(q => q.client_id === id)
+    const posts = editorialPosts.getAll().filter(p => p.client_id === id)
+    const ago = (iso?: string) => iso ? Math.floor((Date.now() - Date.parse(iso)) / 86400000) : Infinity
+    const eur0 = (n: number) => n.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+
+    // i numeri che contano: cosa aspetta risposta o pagamento, da quanto non vi sentite, cosa esce
+    const waiting = qs.filter(q => q.status === 'inviato')
+    const last = Math.min(...msgs.map(m => ago(m.timestamp)))
+    const stats = [
+      { value: eur0(waiting.reduce((t, q) => t + q.total, 0)), label: waiting.length ? `in attesa · ${waiting.length} ${waiting.length === 1 ? 'documento' : 'documenti'}` : 'niente in attesa' },
+      { value: Number.isFinite(last) ? (last === 0 ? 'oggi' : last === 1 ? '1 giorno' : `${last} giorni`) : '—', label: 'dall\x27ultimo contatto' },
+      { value: String(posts.filter(p => p.editorial_status !== 'pubblicato').length), label: 'contenuti in piano' },
+    ]
+
+    // l'anello: ogni contatto degli ultimi 30 giorni è un punto; il preventivo senza risposta resta vuoto
+    const marks: NonNullable<NodeDetail['marks']> = [
+      ...msgs.map(m => ({ days: ago(m.timestamp), kind: 'mail' as Kind, title: m.subject || 'mail', ref: `mail:${m.id}` })),
+      ...qs.map(q => ({ days: ago(q.issued_at ?? q.created_at), kind: 'quote' as Kind, title: `${q.type} ${q.number}`, ref: `quote:${q.id}`, waiting: q.status === 'inviato' })),
+      ...designProjects.getByClient(id).map(d => ({ days: ago(d.updated_at), kind: 'design' as Kind, title: d.name, ref: `design:${d.id}` })),
+      ...tasks.getAll().filter(t => t.client_id === id).map(t => ({ days: ago(t.created_at), kind: 'task' as Kind, title: t.title, ref: `task:${t.id}` })),
+      ...posts.map(p => ({ days: ago(p.created_at), kind: 'post' as Kind, title: p.title || 'contenuto', ref: `post:${p.id}` })),
+    ].filter(m => m.days >= 0 && m.days < 30)
+
+    // la riga di contesto: un impegno con lui oggi, poi ciò che si è fermato
+    const first = c.name.split(/s+/)[0].toLowerCase()
+    const call = (await upcomingEvents(1)).find(e => !e.allDay && sameDay(new Date(e.start), new Date()) && e.title.toLowerCase().includes(first))
+    const stale = waiting.filter(q => ago(q.issued_at) > 7).sort((a, b) => ago(b.issued_at) - ago(a.issued_at))[0]
+    const brief = [
+      call && `${call.title} alle ${hm(call.start)}`,
+      stale && `il ${stale.type} ${stale.number} è senza risposta da ${ago(stale.issued_at)} giorni`,
+      pending.length && `${pending.length === 1 ? 'una mail aspetta' : `${pending.length} mail aspettano`} una risposta`,
+    ].filter(Boolean).join(' · ') || undefined
+
+    return { ...clientSummary(c, pending.length), lead: [c.email, c.sector].filter(Boolean).join(' · '), stats, marks, brief,
+      groups: [['Da rispondere', pending.slice(0, 3)], ['Lavori', ts], ['Preventivi', qs.map(quoteSummary)], ['Contenuti', activePosts().filter(p => p.client_id === id).map(postSummary)], ['Design', ds]],
       sats: [{ kind: 'quote', tip: 'Preventivi del cliente' }], petals: [{ label: 'Task', icon: 'check', kind: 'task' }, { label: 'Preventivo', icon: 'euro', kind: 'quote' }] }
   }
 

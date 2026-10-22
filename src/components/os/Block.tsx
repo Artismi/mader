@@ -87,7 +87,7 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
   if (kind === 'client') return (
     <>
       <Head kicker="cliente" title={node.title} lead={node.lead} orb={node.ini} action={<PlusButton node={node} />} />
-      {(node.groups ?? []).map(([l, items]) => <Group key={l} label={l} items={items} empty={l === 'Prossima cosa' ? 'Non aspetta nulla da te.' : 'Niente qui.'} />)}
+      {(node.groups ?? []).map(([l, items]) => <Group key={l} label={l} items={items} empty={l === 'Da rispondere' ? 'Non aspetta nulla da te.' : 'Niente qui.'} />)}
     </>
   )
 

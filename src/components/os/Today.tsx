@@ -8,6 +8,8 @@ import { useNode } from './parts'
 type DayEvent = NonNullable<NodeDetail['events']>[number]
 
 const hm = (d: Date) => d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+// coordinate arrotondate: server e browser calcolano i seni con decimali diversi
+export const round = (n: number) => Math.round(n * 100) / 100
 const hours = (d: Date) => d.getHours() + d.getMinutes() / 60
 const span = (mins: number) => { const h = Math.floor(mins / 60), m = mins % 60; return h ? `${h} or${h === 1 ? 'a' : 'e'}${m ? ` e ${m}` : ''}` : `${m} minuti` }
 
@@ -88,7 +90,7 @@ function Hero({ hero }: { hero?: NodeSummary }) {
   )
 }
 
-function Item({ n }: { n: NodeSummary }) {
+export function Item({ n }: { n: NodeSummary }) {
   const go = useOs(s => s.go)
   const status = n.urgent ? (n.kind === 'mail' ? 'da rispondere' : n.kind === 'post' ? 'doveva uscire' : n.kind === 'quote' ? 'da sollecitare' : 'in ritardo') : null
   return (
@@ -128,7 +130,7 @@ function Ring({ events, now: at }: { events: DayEvent[]; now: Date | null }) {
   const now = at ?? new Date(0)
   const c = 300, R = 262
   const clamp = (h: number) => Math.min(Math.max(h, 8), 20)
-  const pt = (h: number, r = R) => { const a = ((clamp(h) - 8) / 12 * 360 - 90) * Math.PI / 180; return [c + r * Math.cos(a), c + r * Math.sin(a)] }
+  const pt = (h: number, r = R) => { const a = ((clamp(h) - 8) / 12 * 360 - 90) * Math.PI / 180; return [round(c + r * Math.cos(a)), round(c + r * Math.sin(a))] }
   const arc = (h1: number, h2: number) => {
     const [x1, y1] = pt(h1), [x2, y2] = pt(Math.max(h2, h1 + .05))
     return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${clamp(h2) - clamp(h1) > 6 ? 1 : 0} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`

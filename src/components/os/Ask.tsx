@@ -48,7 +48,7 @@ export function Ask({ onClose }: { onClose: () => void }) {
       suggestions.push({ t: (what ?? why).replace(/^./, c => c.toUpperCase()), m: what ? why : 'accessorio', icon: sat.kind === 'calendar' ? 'cal' : sat.kind === 'quote' ? 'euro' : 'check', sug: true, run: () => s.toggleAcc(sat.kind, sat.ref) })
     }
     const hero = s.nodes['list:oggi']?.groups?.find(g => g[0] === '__hero')?.[1]?.[0]
-    if (hero && hero.ref !== here.ref) suggestions.push({ t: hero.kind === 'mail' ? `Rispondi a ${hero.sub.split(' · ')[0]}` : hero.title, m: hero.why ?? 'la cosa più importante adesso', icon: 'arrow', sug: true, run: () => open(hero.ref) })
+    if (hero && hero.ref !== here.ref) suggestions.push({ t: hero.kind === 'mail' ? `Rispondi a ${hero.sub.split(' · ')[0].split('@')[0]}` : hero.title, m: hero.why ?? 'la cosa più importante adesso', icon: 'arrow', sug: true, run: () => open(hero.ref) })
   }
   const needle = q.trim().toLowerCase()
   const sections: Item[] = [
@@ -67,7 +67,7 @@ export function Ask({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="k" role="dialog" aria-label="Chiedi o cerca" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="ask-veil" role="dialog" aria-label="Chiedi o cerca" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="kbox">
         <div className="kin"><span className="o"><I n="spark" /></span>
           <input ref={input} value={q} onChange={e => { setQ(e.target.value); setSel(0) }} onKeyDown={onKey} placeholder="Cerca una persona, una mail, un lavoro…" aria-label="Cerca" /></div>
