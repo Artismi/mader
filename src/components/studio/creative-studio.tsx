@@ -17,6 +17,7 @@ import {
   Settings2, Laptop, FlaskConical, Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import './studio-anello.css'
 import {
   type BzAnchor,
   anchorsToBzPath, makeAnchor, makeSmoothAnchor,
@@ -418,6 +419,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   // Project UI state (identity managed by useProjectSync)
   const [showProjectList, setShowProjectList] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [showViewMenu, setShowViewMenu] = useState(false)
   const [subtitles, setSubtitles] = useState<{ text: string, start: number, end: number, id: string }[]>([])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [transcriptionProgress, setTranscriptionProgress] = useState(0)
@@ -518,7 +520,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   const anim = useAnimationEngine(fabricRef)
   const store = useLabStore()
 
-  const { setCanvasSnapshot } = useSidebar()
+  const { setCanvasSnapshot, setCoPilotOpen } = useSidebar()
   const {
     saving, isDirty,
     currentProjectId, currentProjectName, currentClientId, currentUserDescription,
@@ -688,7 +690,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
     const canvas = new fabric.Canvas(canvasRef.current, {
       width: canvasContainerRef.current?.clientWidth || containerRef.current.clientWidth || 800,
       height: canvasContainerRef.current?.clientHeight || containerRef.current.clientHeight || 600,
-      backgroundColor: '#050505',
+      backgroundColor: '#0e1520',
       preserveObjectStacking: true,
       selection: true,
     })
@@ -3923,7 +3925,7 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-[#0d0d0d] overflow-hidden flex flex-col"
+      className="studio-anello w-full h-full overflow-hidden flex flex-col"
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
       onDrop={(e) => {
         e.preventDefault()
@@ -3946,249 +3948,108 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
       {/* Noise texture */}
       <div className="fixed inset-0 pointer-events-none z-0 opacity-[0.025]" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" }} />
 
-      {/* ── APP BAR ────────────────────────────────────────────────────────────
-          Categoria: Identità progetto + Azioni output
-          Sempre visibile, non cambia mai con la selezione                      */}
-      <div className="h-12 flex-shrink-0 flex items-center justify-between px-4 bg-[#080808]/80 backdrop-blur-3xl border-b border-white/[0.05] z-[100] relative">
-
-        {/* ── Sinistra: identità progetto ── */}
-        <div className="flex items-center gap-3">
-          {/* App name */}
-          <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40 flex-shrink-0">◈</span>
-
-          <div className="h-5 w-px bg-white/[0.06] flex-shrink-0" />
-
-          {/* Project selector */}
-          <div className="flex items-center gap-1">
-            <button ref={projectBtnRef} onClick={() => setShowProjectList(p => !p)}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg hover:bg-white/[0.05] transition-colors">
-              <span className="text-[10px] font-bold text-white/60 truncate max-w-[140px]">{currentProjectName}</span>
-              {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Modifiche non salvate" />}
-              <ChevronDown className="w-3 h-3 text-white/20 flex-shrink-0" />
-            </button>
-            <button onClick={newProject} title="Nuovo progetto [Ctrl+N]"
-              className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-white/[0.05] text-white/25 hover:text-white/60 flex-shrink-0 transition-colors">
-              <span className="text-base leading-none">+</span>
-            </button>
-          </div>
-
-          {showProjectList && typeof document !== 'undefined' && <DropdownPortal triggerRef={projectBtnRef}>
-            <div className="bg-[#141414] border border-white/10 rounded-xl shadow-2xl py-1 w-64 max-h-72 overflow-y-auto scrollbar-hide">
-              <div className="px-3 py-2 flex items-center justify-between border-b border-white/[0.06]">
-                <span className="text-[8px] font-black uppercase tracking-widest text-white/25">Progetti</span>
-                <button onClick={() => { newProject(); setShowProjectList(false) }}
-                  className="text-[9px] font-black uppercase tracking-widest text-accent/80 hover:text-accent">+ Nuovo</button>
-              </div>
-              {designProjects.length === 0 && <p className="text-center text-[9px] text-white/20 py-4 uppercase tracking-widest">Nessun progetto</p>}
-              {designProjects.map(p => (
-                <div key={p.id} className={cn('group flex items-center gap-2 px-3 py-2 hover:bg-white/[0.04] cursor-pointer', p.id === currentProjectId && 'bg-white/[0.06]')}>
-                  <button className="flex-1 text-left min-w-0" onClick={() => { loadProject(p); setShowProjectList(false) }}>
-                    <p className="text-[10px] font-bold text-white/70 truncate">{p.name}</p>
-                    <p className="text-[8px] text-white/30 truncate">{clients.find(c => c.id === p.client_id)?.name || '—'} · {new Date(p.updated_at).toLocaleDateString('it')}</p>
-                  </button>
-                  {onDeleteProject && <button onClick={() => onDeleteProject(p.id)}
-                    className="opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 flex-shrink-0 transition-opacity">
-                    <Trash2 className="w-3 h-3" />
-                  </button>}
-                </div>
-              ))}
-            </div>
-          </DropdownPortal>}
+      {/* ── BARRA IN ALTO (Anello) ─────────────────────────────────────────────
+          Indietro a sinistra, il progetto sull'asse, le uscite a destra.
+          Sempre uguale, non cambia con la selezione                             */}
+      <div className="sa-top">
+        <div className="sa-zone">
+          <button className="sa-round" onClick={() => (history.length > 1 ? history.back() : location.assign('/os'))} title="Indietro" aria-label="Indietro">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* ── Destra: azioni output ── */}
-        <div className="flex items-center gap-2">
-          {/* Artboard */}
-          <button ref={artboardBtnRef} onClick={() => setShowAB(p => !p)}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white/35 hover:text-white/60 hover:bg-white/[0.05] transition-colors">
-            <Layers className="w-3 h-3" /> Tavola <ChevronDown className="w-3 h-3 opacity-50" />
+        <div className="sa-pill">
+          <button ref={projectBtnRef} onClick={() => setShowProjectList(p => !p)} className="sa-proj" title="Cambia progetto">
+            <b>{currentProjectName}</b>
+            {isDirty ? <span className="sa-dirty">modifiche non salvate</span> : <span className="sa-ok">salvato</span>}
+            <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+          </button>
+          <button onClick={newProject} title="Nuovo progetto [Ctrl+N]" aria-label="Nuovo progetto" className="sa-mini"><Plus className="w-4 h-4" /></button>
+        </div>
+
+        {showProjectList && typeof document !== 'undefined' && <DropdownPortal triggerRef={projectBtnRef}>
+          <div className="sa-menu w-72 max-h-80 overflow-y-auto scrollbar-hide">
+            <div className="sa-menu-head">
+              <span>Progetti</span>
+              <button onClick={() => { newProject(); setShowProjectList(false) }}>+ Nuovo</button>
+            </div>
+            {designProjects.length === 0 && <p className="sa-menu-empty">Nessun progetto</p>}
+            {designProjects.map(p => (
+              <div key={p.id} className={cn('group sa-menu-row', p.id === currentProjectId && 'is-on')}>
+                <button className="flex-1 text-left min-w-0" onClick={() => { loadProject(p); setShowProjectList(false) }}>
+                  <b>{p.name}</b>
+                  <small>{clients.find(c => c.id === p.client_id)?.name || 'senza cliente'} · {new Date(p.updated_at).toLocaleDateString('it')}</small>
+                </button>
+                {onDeleteProject && <button onClick={() => onDeleteProject(p.id)} title="Elimina il progetto"
+                  className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400 flex-shrink-0 transition-opacity">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>}
+              </div>
+            ))}
+          </div>
+        </DropdownPortal>}
+
+        <div className="sa-zone sa-right">
+          <button ref={artboardBtnRef} onClick={() => setShowAB(p => !p)} className="sa-ghost" title="Nuova tavola o disposizione">
+            <Layers className="w-4 h-4" /> Tavola
           </button>
           {showAB && <DropdownPortal triggerRef={artboardBtnRef} alignRight>
-            <div className="bg-[#141414] border border-white/10 rounded-xl shadow-2xl p-2 flex flex-col gap-0.5 min-w-[180px]">
-              <p className="text-[7px] font-black uppercase tracking-widest text-white/20 px-2 py-1">Nuova tavola</p>
+            <div className="sa-menu min-w-[220px] p-1.5">
+              <p className="sa-menu-label">Nuova tavola</p>
               {ARTBOARDS.map(ab => (
-                <button key={ab.label} onClick={() => { addArtboard(ab.w, ab.h, ab.label, ab.exportType); setShowAB(false) }}
-                  className="px-2.5 py-1.5 text-left rounded-lg hover:bg-white/[0.06] flex items-center justify-between gap-3 transition-colors">
-                  <span className="text-[9px] font-bold text-white/60">{ab.label}</span>
-                  <span className="text-[8px] text-white/20">{ab.w}×{ab.h}</span>
+                <button key={ab.label} onClick={() => { addArtboard(ab.w, ab.h, ab.label, ab.exportType); setShowAB(false) }} className="sa-menu-item">
+                  <span>{ab.label}</span><small>{ab.w}×{ab.h}</small>
                 </button>
               ))}
-              <div className="h-px bg-white/[0.06] my-1" />
-              <p className="text-[7px] font-black uppercase tracking-widest text-white/20 px-2 py-1">Layout</p>
-              <button onClick={() => { rearrangeArtboards('strip', 100, 1); setShowAB(false); }}
-                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-white/[0.06] flex items-center gap-3 transition-colors group">
-                <LayoutList className="w-3.5 h-3.5 text-white/40 group-hover:text-white transition-colors" />
-                <span className="text-[9px] font-bold text-white/60">Striscia Verticale</span>
+              <div className="h-px bg-white/[0.08] my-1.5" />
+              <p className="sa-menu-label">Disposizione</p>
+              <button onClick={() => { rearrangeArtboards('strip', 100, 1); setShowAB(false) }} className="sa-menu-item">
+                <span className="flex items-center gap-2"><LayoutList className="w-4 h-4 opacity-60" />Striscia verticale</span>
               </button>
-              <button onClick={() => { rearrangeArtboards('grid', 100, 4); setShowAB(false); }}
-                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-white/[0.06] flex items-center gap-3 transition-colors group">
-                <LayoutGrid className="w-3.5 h-3.5 text-white/40 group-hover:text-white transition-colors" />
-                <span className="text-[9px] font-bold text-white/60">Griglia (4 col)</span>
+              <button onClick={() => { rearrangeArtboards('grid', 100, 4); setShowAB(false) }} className="sa-menu-item">
+                <span className="flex items-center gap-2"><LayoutGrid className="w-4 h-4 opacity-60" />Griglia a 4 colonne</span>
               </button>
             </div>
           </DropdownPortal>}
 
-          <div className="h-5 w-px bg-white/[0.06]" />
-
-          {/* Save */}
-          <button onClick={triggerSave}
-            className={cn('flex items-center gap-1.5 h-7 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all',
-              saving ? 'text-emerald-400 bg-emerald-400/10'
-                : isDirty ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/15'
-                  : 'text-white/35 hover:text-white/60 hover:bg-white/[0.05]')}>
-            <Save className="w-3 h-3" />
-            {saving ? 'Salvato ✓' : isDirty ? 'Salva*' : 'Salva'}
+          <button onClick={triggerSave} className={cn('sa-ghost', isDirty && 'is-dirty', saving && 'is-ok')} title="Salva [Ctrl+S]">
+            <Save className="w-4 h-4" /> {saving ? 'Salvato' : 'Salva'}
           </button>
-
-          {/* Export */}
-          <button ref={exportBtnRef} onClick={() => setShowExport(p => !p)}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[9px] font-bold text-white/35 hover:text-white/60 hover:bg-white/[0.05] transition-colors">
-            <Download className="w-3 h-3" /> Esporta
+          <button onClick={openLaunch} className="sa-ghost" title="Prepara la pubblicazione">
+            <Zap className="w-4 h-4" /> Lancia
+          </button>
+          <button ref={exportBtnRef} onClick={() => setShowExport(p => !p)} className="sa-primary">
+            <i /> Esporta
           </button>
           {showExport && typeof document !== 'undefined' && (
             <DropdownPortal triggerRef={exportBtnRef} alignRight>
               <ExportMenu canvas={fabricRef.current} onLegacyExport={exportCanvas} onDone={() => setShowExport(false)} />
             </DropdownPortal>
           )}
-
-          <div className="h-5 w-px bg-white/[0.06]" />
-
-          {/* Launch */}
-          <button onClick={openLaunch}
-            className="flex items-center gap-1.5 h-7 px-3 bg-accent/90 text-black rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-accent hover:scale-[1.03] active:scale-95 transition-all shadow-lg shadow-accent/20">
-            <Zap className="w-3 h-3 fill-black" /> Lancia
-          </button>
-        </div>
-
-        {/* AI Control Center Floating Bar */}
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 p-1.5 bg-[#0d0d0d]/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-top-4 duration-500">
-          <button
-            onClick={() => setShowCervello(!showCervello)}
-            className={cn(
-              "p-2 rounded-xl transition-all group flex items-center gap-2",
-              showCervello ? "bg-accent/20 text-accent border border-accent/20" : "bg-white/5 text-white/40 hover:bg-white/10 border border-transparent"
-            )}
-          >
-            <Sparkles className={cn("w-4 h-4 transition-transform duration-500", showCervello ? "scale-110" : "group-hover:scale-110")} />
-            <span className="text-[10px] font-black uppercase tracking-widest pr-1">Art Director</span>
-          </button>
-          
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          
-          <button
-            onClick={() => setShowLaunchHub(!showLaunchHub)}
-            className={cn(
-              "p-2 rounded-xl transition-all group flex items-center gap-2",
-              showLaunchHub ? "bg-blue-500/20 text-blue-400 border border-blue-500/20" : "bg-white/5 text-white/40 hover:bg-white/10 border border-transparent"
-            )}
-          >
-            <Zap className={cn("w-4 h-4 transition-transform duration-500", showLaunchHub ? "scale-110" : "group-hover:scale-110")} />
-            <span className="text-[10px] font-black uppercase tracking-widest pr-1">Launch Hub</span>
-          </button>
         </div>
       </div>
 
       {/* ── WORKSPACE ROW — occupa tutto lo spazio residuo ─────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="sa-work flex flex-1 overflow-hidden relative">
 
-        {/* ── TOOL BAR ─────────────────────────────────────────────────────────
-            Categoria: Selezione strumento
-            Lista piatta con label sezione. Tutto visibile, niente hover-expand. */}
-        <div className="w-[52px] flex-shrink-0 flex flex-col items-center py-3 gap-0 bg-[#080808]/60 border-r border-white/[0.05] z-[20] overflow-y-auto scrollbar-hide">
-
-          {/* SELEZIONA */}
-          <p className="text-[6px] font-black uppercase tracking-widest text-white/15 mb-1.5 px-1 text-center leading-tight">Sel.</p>
-          <button onClick={() => changeTool('select')} title="Selezione [V]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'select' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <MousePointer2 className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('lasso')} title="Lasso [A]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
-              tool === 'lasso' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <LassoSelect className="w-4 h-4" />
-          </button>
-
-          <div className="w-6 h-px bg-white/[0.06] my-2.5" />
-
-          {/* FORMA */}
-          <p className="text-[6px] font-black uppercase tracking-widest text-white/15 mb-1.5 px-1 text-center leading-tight">Forma</p>
-          <button onClick={() => changeTool('rect')} title="Rettangolo [R]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'rect' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Square className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('circle')} title="Cerchio [C]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'circle' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Circle className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('polygon')} title="Poligono (lati e angoli dal pannello Vettoriale)"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'polygon' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Hexagon className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('star')} title="Stella (punte e rientro dal pannello Vettoriale)"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'star' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Star className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('line')} title="Linea [L]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
-              tool === 'line' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Minus className="w-4 h-4" />
-          </button>
-
-          <div className="w-6 h-px bg-white/[0.06] my-2.5" />
-
-          {/* DISEGNO */}
-          <p className="text-[6px] font-black uppercase tracking-widest text-white/15 mb-1.5 px-1 text-center leading-tight">Dis.</p>
-          <button onClick={() => changeTool('pen')} title="Penna Bezier [F]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'pen' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <PenTool className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('pencil')} title="Matita [P]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'pencil' ? 'bg-accent/20 text-accent shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('eraser')} title="Gomma [E]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'eraser' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Eraser className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('scissors')} title="Forbici [X]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
-              tool === 'scissors' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Scissors className="w-4 h-4" />
-          </button>
-
-          <div className="w-6 h-px bg-white/[0.06] my-2.5" />
-
-          {/* CONTENUTO */}
-          <p className="text-[6px] font-black uppercase tracking-widest text-white/15 mb-1.5 px-1 text-center leading-tight">Cont.</p>
-          <button onClick={() => changeTool('text')} title="Testo [T]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5',
-              tool === 'text' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <Type className="w-4 h-4" />
-          </button>
-          <button onClick={() => setShowTemplates(v => !v)} title="Template: proposte procedurali, l'IA aiuta su richiesta"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all mb-0.5', showTemplates ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <LayoutTemplate className="w-4 h-4" />
-          </button>
-          <button onClick={() => changeTool('image')} title="Immagine [I]"
-            className={cn('w-9 h-9 flex items-center justify-center rounded-xl transition-all',
-              tool === 'image' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white/70 hover:bg-white/[0.04]')}>
-            <ImageIcon className="w-4 h-4" />
-          </button>
-
-          <div className="w-6 h-px bg-white/[0.06] my-2.5" />
-
-          {/* INQUADRATURE */}
-          <p className="text-[6px] font-black uppercase tracking-widest text-white/15 mb-1.5 px-1 text-center leading-tight">Cornice</p>
-          <ArtboardBtn onAdd={addArtboard} />
-        </div>
+        {/* ── LIVELLI (sinistra) ───────────────────────────────────────────────
+            Speculare alle proprietà a destra: stessa larghezza, stesso materiale. */}
+        <aside className="sa-panel sa-left" aria-label="Livelli">
+          <div className="sa-panel-head"><span>Livelli</span><small>{layers.length}</small></div>
+          <LayerPanel
+            layers={layers}
+            onSelect={layerSelect}
+            onToggleVisible={layerToggleVisible}
+            onToggleLock={layerToggleLock}
+            onMoveUp={layerMoveUp}
+            onMoveDown={layerMoveDown}
+            onBringToFront={layerBringToFront}
+            onSendToBack={layerSendToBack}
+            onDelete={layerDelete}
+            onClose={() => {}}
+            inline
+          />
+        </aside>
 
         {/* ── CANVAS AREA ──────────────────────────────────────────────────────── */}
         <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden"
@@ -4429,98 +4290,82 @@ export function CreativeStudio({ clients = [], designProjects = [], onSaveProjec
           />
         )}
 
+        {/* ── IN BASSO SULL'ASSE: un solo campo AI e una sola barra di strumenti ── */}
+        <div className="sa-dock">
+          <div className="sa-ai">
+            <button className="sa-ai-ask" onClick={() => setCoPilotOpen(true)} title="Apri il Co-Pilot sul canvas [Ctrl+J]">
+              <i><Sparkles className="w-4 h-4" /></i>
+              <span>Chiedi una variante o descrivi cosa vuoi…</span>
+            </button>
+            <button className={cn('sa-chip', showCervello && 'is-on')} onClick={() => setShowCervello(!showCervello)}>Art Director</button>
+            <button className={cn('sa-chip', showLaunchHub && 'is-on')} onClick={() => setShowLaunchHub(!showLaunchHub)}>Launch Hub</button>
+          </div>
+          <div className="sa-tools" role="toolbar" aria-label="Strumenti">
+            <SaTool cur={tool} onPick={changeTool} items={[
+              { t: 'select', icon: <MousePointer2 className="w-[18px] h-[18px]" />, label: 'Selezione', key: 'V' },
+              { t: 'lasso', icon: <LassoSelect className="w-[18px] h-[18px]" />, label: 'Lasso', key: 'A' },
+            ]} />
+            <SaTool cur={tool} onPick={changeTool} items={[
+              { t: 'rect', icon: <Square className="w-[18px] h-[18px]" />, label: 'Rettangolo', key: 'R' },
+              { t: 'circle', icon: <Circle className="w-[18px] h-[18px]" />, label: 'Cerchio', key: 'C' },
+              { t: 'polygon', icon: <Hexagon className="w-[18px] h-[18px]" />, label: 'Poligono' },
+              { t: 'star', icon: <Star className="w-[18px] h-[18px]" />, label: 'Stella' },
+              { t: 'line', icon: <Minus className="w-[18px] h-[18px]" />, label: 'Linea', key: 'L' },
+            ]} />
+            <SaTool cur={tool} onPick={changeTool} items={[
+              { t: 'pen', icon: <PenTool className="w-[18px] h-[18px]" />, label: 'Penna Bézier', key: 'F' },
+              { t: 'pencil', icon: <Pencil className="w-[18px] h-[18px]" />, label: 'Matita', key: 'P' },
+              { t: 'eraser', icon: <Eraser className="w-[18px] h-[18px]" />, label: 'Gomma', key: 'E' },
+              { t: 'scissors', icon: <Scissors className="w-[18px] h-[18px]" />, label: 'Forbici', key: 'X' },
+            ]} />
+            <SaTool cur={tool} onPick={changeTool} items={[{ t: 'text', icon: <Type className="w-[18px] h-[18px]" />, label: 'Testo', key: 'T' }]} />
+            <SaTool cur={tool} onPick={changeTool} items={[{ t: 'image', icon: <ImageIcon className="w-[18px] h-[18px]" />, label: 'Immagine', key: 'I' }]} />
+            <b className="sa-sep" />
+            <button onClick={() => setShowTemplates(v => !v)} title="Template: proposte procedurali, l'IA aiuta su richiesta"
+              className={cn('sa-tool', showTemplates && 'is-on')}><LayoutTemplate className="w-[18px] h-[18px]" /></button>
+            <ArtboardBtn onAdd={addArtboard} />
+          </div>
+        </div>
+
+        {/* ── VISTA (angolo in basso a sinistra del canvas): storia, zoom, ausili ── */}
+        <div className="sa-view">
+          <button onClick={undo} title="Annulla [Ctrl+Z]" aria-label="Annulla"><Undo2 className="w-4 h-4" /></button>
+          <button onClick={redo} title="Ripristina [Ctrl+Y]" aria-label="Ripristina"><Redo2 className="w-4 h-4" /></button>
+          <b className="sa-sep" />
+          <button onClick={() => { const c = fabricRef.current; if (!c) return; const z = Math.max(0.05, c.getZoom() * 0.8); c.setZoom(z); setZoom(z) }} aria-label="Riduci"><ZoomOut className="w-4 h-4" /></button>
+          <button onClick={() => fitToArtboards()} title="Adatta alle tavole [Ctrl+0]" className="sa-zoom">{Math.round(zoom * 100)}%</button>
+          <button onClick={() => { const c = fabricRef.current; if (!c) return; const z = Math.min(20, c.getZoom() * 1.2); c.setZoom(z); setZoom(z) }} aria-label="Ingrandisci"><ZoomIn className="w-4 h-4" /></button>
+          <b className="sa-sep" />
+          <button onClick={() => setShowViewMenu(v => !v)} className={cn('sa-vista', showViewMenu && 'is-on')} aria-expanded={showViewMenu}>Vista</button>
+          {showViewMenu && (
+            <div className="sa-menu sa-view-menu" role="menu">
+              {([
+                ['Griglia', showGrid, () => setShowGrid(p => !p), 'G'],
+                ['Aggancio alla griglia', snapGrid, () => setSnapGrid(p => !p), 'S'],
+                ['Righelli', showRulers, () => setShowRulers(p => !p), 'R'],
+                ['Griglia editoriale', showEditorialGrid, () => setShowEditorialGrid(p => !p), 'E'],
+                ['Tratto a mano', sel.isHandDrawn, () => toggleHandDrawn(), 'O'],
+                ['Gravità', gravityEnabled, () => setGravityEnabled(p => !p), ''],
+                ['Animazione', showAnimMode, () => {
+                  const next = !showAnimMode
+                  setShowAnimMode(next)
+                  store.set({ springEnabled: next })
+                  // i bersagli ripartono dalla posizione attuale: niente salti all'avvio
+                  const canvas = fabricRef.current
+                  if (canvas && next) canvas.getObjects().forEach((obj: any) => { obj._targetLeft = obj.left; obj._targetTop = obj.top })
+                }, ''],
+              ] as [string, boolean, () => void, string][]).map(([label, active, toggle, key]) => (
+                <button key={label} role="menuitemcheckbox" aria-checked={active} onClick={toggle} className="sa-menu-item">
+                  <span className="flex items-center gap-2.5"><i className={cn('sa-check', active && 'is-on')} />{label}</span>
+                  {key && <small>{key}</small>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>{/* end WORKSPACE ROW */}
 
-
-      {/* ── BOTTOM BAR ─────────────────────────────────────────────────────────
-          Due categorie separate, due pillole.
-          Sinistra: Ausili visivi (toggles)
-          Centro: Navigazione canvas (zoom + history)                            */}
-      <div className="h-9 flex-shrink-0 flex items-center justify-between px-4 bg-[#080808]/60 border-t border-white/[0.05] z-[20]">
-
-        {/* ── Sinistra: View toggles ── */}
-        <div className="flex items-center gap-1">
-          {([
-            ['Grid', showGrid, () => setShowGrid(p => !p), 'G'],
-            ['Snap', snapGrid, () => setSnapGrid(p => !p), 'S'],
-            ['Ruler', showRulers, () => setShowRulers(p => !p), 'R'],
-            ['Editorial', showEditorialGrid, () => setShowEditorialGrid(p => !p), 'E'],
-            ['Organic', sel.isHandDrawn, () => toggleHandDrawn(), 'O'],
-            ['Gravity', gravityEnabled, () => setGravityEnabled(p => !p), ''],
-          ] as [string, boolean, () => void, string][]).map(([label, active, toggle, key]) => (
-            <button key={label} onClick={toggle} title={key ? `${label} [${key}]` : label}
-              className={cn('h-6 px-2 rounded-md text-[8px] font-black uppercase tracking-widest transition-all',
-                active
-                  ? 'bg-white/[0.08] text-white/80'
-                  : 'text-white/20 hover:text-white/50 hover:bg-white/[0.04]')}>
-              {label}
-              <span className={cn('ml-1 inline-block w-1.5 h-1.5 rounded-full align-middle',
-                active ? 'bg-accent' : 'bg-white/10')} />
-            </button>
-          ))}
-
-          {/* Animation mode toggle */}
-          <div className="w-px h-4 bg-white/[0.06] mx-1" />
-          <button
-            onClick={() => {
-              const newState = !showAnimMode
-              setShowAnimMode(newState)
-              store.set({ springEnabled: newState })
-              
-              // Reset targets for all objects to prevent initial jumps
-              const canvas = fabricRef.current
-              if (canvas && newState) {
-                canvas.getObjects().forEach((obj: any) => {
-                  obj._targetLeft = obj.left
-                  obj._targetTop = obj.top
-                })
-              }
-            }}
-            className={cn(
-              'h-6 px-2 rounded-md text-[8px] font-black uppercase tracking-widest transition-all flex items-center gap-1',
-              showAnimMode
-                ? 'bg-violet-500/20 text-violet-300'
-                : 'text-white/20 hover:text-white/50 hover:bg-white/[0.04]',
-            )}
-          >
-            <Play className="w-2.5 h-2.5" />
-            Animazione
-            <span className={cn('ml-0.5 inline-block w-1.5 h-1.5 rounded-full align-middle',
-              showAnimMode ? 'bg-violet-400' : 'bg-white/10')} />
-          </button>
-        </div>
-
-        {/* ── Centro: Navigator (history + zoom) ── */}
-        <div className="flex items-center gap-2">
-          <button onClick={undo} title="Annulla [Ctrl+Z]"
-            className="h-6 w-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors">
-            <Undo2 className="w-3 h-3" />
-          </button>
-          <button onClick={redo} title="Ripristina [Ctrl+Y]"
-            className="h-6 w-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors">
-            <Redo2 className="w-3 h-3" />
-          </button>
-
-          <div className="w-px h-4 bg-white/[0.06]" />
-
-          <button onClick={() => { const c = fabricRef.current; if (!c) return; const z = Math.max(0.05, c.getZoom() * 0.8); c.setZoom(z); setZoom(z) }}
-            className="h-6 w-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors">
-            <ZoomOut className="w-3 h-3" />
-          </button>
-          <button onClick={() => fitToArtboards()}
-            className="h-6 px-2 rounded-md text-[9px] font-black text-white/40 hover:text-white/70 hover:bg-white/[0.05] transition-colors w-14 text-center"
-            title="Fit [Ctrl+0]">
-            {Math.round(zoom * 100)}%
-          </button>
-          <button onClick={() => { const c = fabricRef.current; if (!c) return; const z = Math.min(20, c.getZoom() * 1.2); c.setZoom(z); setZoom(z) }}
-            className="h-6 w-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors">
-            <ZoomIn className="w-3 h-3" />
-          </button>
-        </div>
-
-        {/* ── Destra: spazio vuoto per bilanciamento ── */}
-        <div className="w-[160px]" />
-      </div>
 
       {/* ── ANIMATION TIMELINE (collapsible, below bottom bar) ──────────────── */}
       {showAnimMode && (
@@ -4901,11 +4746,11 @@ function PropertiesPanel(props: PanelProps) {
   }
 
   return (
-    <div className="w-[300px] flex-shrink-0 flex flex-col border-l border-white/[0.05] bg-[#070707]/80 z-[20] overflow-hidden">
+    <aside className="sa-panel sa-right" aria-label="Proprietà">
 
       {/* Tab bar */}
       <div className="h-9 flex-shrink-0 flex items-center border-b border-white/[0.05]">
-        {(['prop', 'layers', 'lib'] as PanelTab[]).map(t => (
+        {(['prop', 'lib'] as PanelTab[]).map(t => (
           <button key={t} onClick={() => { setTab(t); if (t === 'layers') props.onRefreshLayers() }}
             className={cn('flex-1 h-full text-[7px] font-black uppercase tracking-widest transition-colors',
               tab === t ? 'text-white/70 border-b border-white/30 -mb-px' : 'text-white/20 hover:text-white/40')}>
@@ -5107,7 +4952,7 @@ function PropertiesPanel(props: PanelProps) {
         </div>
       )}
 
-    </div>
+    </aside>
   )
 }
 
@@ -5151,6 +4996,34 @@ function ToolGroup({ tools, cur, onChange }: {
   )
 }
 
+// ─── SLOT DI STRUMENTI (barra in basso) ──────────────────────────────────────
+// Un'icona per famiglia; al passaggio l'elenco si apre verso l'alto con nome e tasto.
+function SaTool({ items, cur, onPick }: { items: { t: Tool; icon: React.ReactNode; label: string; key?: string }[]; cur: Tool; onPick: (t: Tool) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const enter = () => { clearTimeout(timer.current); if (items.length > 1) setOpen(true) }
+  const leave = () => { timer.current = setTimeout(() => setOpen(false), 180) }
+  const active = items.find(x => x.t === cur)
+  const shown = active ?? items[0]
+  return (
+    <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
+      <button onClick={() => onPick(shown.t)} title={shown.key ? `${shown.label} [${shown.key}]` : shown.label} aria-label={shown.label} className={cn('sa-tool', active && 'is-on')}>
+        {shown.icon}
+        {items.length > 1 && <span className="sa-more" />}
+      </button>
+      {open && (
+        <div className="sa-menu sa-flyout" onMouseEnter={enter} onMouseLeave={leave}>
+          {items.map(x => (
+            <button key={x.t} onClick={() => { onPick(x.t); setOpen(false) }} className={cn('sa-menu-item', x.t === cur && 'is-on')}>
+              <span className="flex items-center gap-2.5">{x.icon}{x.label}</span>{x.key && <small>{x.key}</small>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── ARTBOARD FLYOUT BUTTON ──────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ArtboardBtn({ onAdd }: { onAdd: (w: number, h: number, name: string, type: any) => void }) {
@@ -5160,14 +5033,12 @@ function ArtboardBtn({ onAdd }: { onAdd: (w: number, h: number, name: string, ty
   const leave = () => { timer.current = setTimeout(() => setOpen(false), 200) }
   return (
     <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
-      <button title="Nuova cornice / artboard"
-        className="w-9 h-9 flex items-center justify-center rounded-xl transition-all text-white/30 hover:text-white/70 hover:bg-white/[0.04]">
-        <Layers className="w-4 h-4" />
+      <button title="Nuova cornice" aria-label="Nuova cornice" className="sa-tool">
+        <Layers className="w-[18px] h-[18px]" />
       </button>
       {open && (
-        <div className="absolute left-full top-0 ml-2 flex flex-col gap-0.5 p-1.5 bg-[#141414]/96 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-50 min-w-max"
-          onMouseEnter={enter} onMouseLeave={leave}>
-          <p className="text-[7px] font-black uppercase tracking-widest text-white/20 px-2 py-1">Nuova Cornice</p>
+        <div className="sa-menu sa-flyout" onMouseEnter={enter} onMouseLeave={leave}>
+          <p className="sa-menu-label">Nuova cornice</p>
           {ARTBOARDS.map(ab => (
             <button key={ab.label} onClick={() => { onAdd(ab.w, ab.h, ab.label, ab.exportType); setOpen(false) }}
               className="flex items-center justify-between gap-4 px-3 py-2 rounded-xl transition-all text-left hover:bg-white/[0.07]">
@@ -6216,7 +6087,7 @@ function Rulers({ zoom, canvas }: { zoom: number; canvas: fabric.Canvas | null }
   for (let i = 0; i <= Math.ceil(h / step) * step; i += step) vticks.push(i)
   return (
     <>
-      <div className="absolute top-12 left-5 right-0 z-[18] pointer-events-none overflow-hidden" style={{ height: SIZE }}>
+      <div className="absolute top-0 left-5 right-0 z-[18] pointer-events-none overflow-hidden" style={{ height: SIZE }}>
         <svg width="100%" height={SIZE} className="text-white/20">
           <rect width="100%" height={SIZE} fill="#0d0d0d" />
           {ticks.map(t => (
@@ -6227,7 +6098,7 @@ function Rulers({ zoom, canvas }: { zoom: number; canvas: fabric.Canvas | null }
           ))}
         </svg>
       </div>
-      <div className="absolute left-0 top-[calc(3rem+20px)] bottom-0 z-[18] pointer-events-none overflow-hidden" style={{ width: SIZE }}>
+      <div className="absolute left-0 top-5 bottom-0 z-[18] pointer-events-none overflow-hidden" style={{ width: SIZE }}>
         <svg width={SIZE} height="100%" className="text-white/20">
           <rect width={SIZE} height="100%" fill="#0d0d0d" />
           {vticks.map(t => (
@@ -6238,7 +6109,7 @@ function Rulers({ zoom, canvas }: { zoom: number; canvas: fabric.Canvas | null }
           ))}
         </svg>
       </div>
-      <div className="absolute top-12 left-0 z-[19] pointer-events-none" style={{ width: SIZE, height: SIZE, backgroundColor: '#0d0d0d', borderRight: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }} />
+      <div className="absolute top-0 left-0 z-[19] pointer-events-none" style={{ width: SIZE, height: SIZE, backgroundColor: '#0d0d0d', borderRight: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }} />
     </>
   )
 }

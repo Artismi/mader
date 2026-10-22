@@ -96,7 +96,7 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
     return (
       <>
         {children}
-        <CoPilotFloat open={isCoPilotOpen} setOpen={setCoPilotOpen} tab={pathname !== '/os'} />
+        <CoPilotFloat open={isCoPilotOpen} setOpen={setCoPilotOpen} />
       </>
     )
   }
@@ -169,21 +169,10 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Co-Pilot nel guscio: chat in un pannello laterale. La linguetta sul bordo serve solo nello Studio: in /os c'è la pillola in basso. */
-function CoPilotFloat({ open, setOpen, tab }: { open: boolean; setOpen: (v: boolean) => void; tab: boolean }) {
+/** Co-Pilot nel guscio: chat in un pannello laterale. Si apre dalla pillola in basso (guscio) o dal campo AI (Studio), oppure con Ctrl J. */
+function CoPilotFloat({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   return (
     <>
-      {tab && !open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          title="Co-Pilot AI"
-          aria-label="Apri il Co-Pilot"
-          className="fixed right-0 top-1/2 z-[300] flex h-20 w-9 -translate-y-1/2 items-center justify-center rounded-l-2xl bg-[#111] text-accent shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-all hover:w-11"
-        >
-          <Sparkles className="h-4 w-4" />
-        </button>
-      )}
       <div
         className={cn(
           'fixed right-0 top-0 z-[300] flex h-full w-[400px] max-w-[100vw] flex-col border-l border-white/10 bg-[#090909] shadow-2xl transition-transform duration-200',
