@@ -83,7 +83,7 @@ function Hero({ hero }: { hero?: NodeSummary }) {
   return (
     <div className="in">
       <span className="kick">Inizia da qui</span>
-      <h1>{isMail ? `Rispondi a ${who}` : hero.title}</h1>
+      <h1 className={(isMail ? who.length + 11 : hero.title.length) > 24 ? 'long' : undefined}>{isMail ? `Rispondi a ${who}` : hero.title}</h1>
       <p>{hero.why ? hero.why.charAt(0).toUpperCase() + hero.why.slice(1) : isMail ? `“${hero.title}”` : hero.sub}</p>
       <button className="primary" onClick={() => go(hero.ref, isMail ? 'reply' : 'view')}><span className="dot" />{isMail ? 'Rispondi' : 'Apri'}</button>
     </div>

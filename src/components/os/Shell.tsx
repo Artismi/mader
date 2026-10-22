@@ -7,6 +7,7 @@ import { I, Sprite, Toast } from './parts'
 import { Block } from './Block'
 import { Accessories, Needs, Path, Places, SECTIONS, Waiting } from './Around'
 import { ClientView } from './Client'
+import { ArchivioView, LavoriView } from './Lavori'
 import { Ask } from './Ask'
 import { DayLine, Today } from './Today'
 import { useSidebar } from '@/components/layout/SidebarContext'
@@ -34,6 +35,10 @@ export function Shell() {
   const isToday = step.ref === 'list:oggi'
   const isClient = kindOf(step.ref) === 'client' && step.mode === 'view'
   const isMail = kindOf(step.ref) === 'mail'
+  const ringPlace = isClient ? <ClientView key={step.ref} cref={step.ref} notice={<GoogleLink />} />
+    : step.ref === 'list:lavori' ? <LavoriView notice={<GoogleLink />} />
+    : step.ref === 'list:archivio' ? <ArchivioView notice={<GoogleLink />} />
+    : null
 
   useEffect(() => { hydrate() }, [hydrate])
 
@@ -69,7 +74,7 @@ export function Shell() {
         <button className="kbtn" onClick={() => setAsking(true)}><span className="o"><I n="spark" /></span><span className="l">Cerca o chiedi</span><kbd>Ctrl K</kbd></button>
       </header>
 
-      {isClient ? <ClientView key={step.ref} cref={step.ref} notice={<GoogleLink />} /> : <>
+      {ringPlace ?? <>
       <div className="subline">
         <GoogleLink />
         {isToday && <DayLine />}

@@ -3,7 +3,7 @@
  * circolare sa mostrare. Ogni suggerimento porta il suo perché (intelligenza visibile).
  * Solo lato server.
  */
-import { clients, designProjects, editorialPosts, ideas, memoryLinks, messages, quotes, tasks, type Client, type EditorialPost, type Message, type Quote } from '@/lib/db'
+import { clients, designProjects, editorialPosts, ideas, memories, memoryLinks, messages, quotes, tasks, type Client, type EditorialPost, type Message, type Quote } from '@/lib/db'
 import { upcomingEvents, type CalEvent } from '@/lib/google/calendar'
 
 export type Kind = 'list' | 'mail' | 'client' | 'task' | 'design' | 'quote' | 'idea' | 'event' | 'post'
@@ -139,6 +139,9 @@ function taskSummary(t: ReturnType<typeof tasks.getAll>[number]): NodeSummary {
   const late = due && due.getTime() < Date.now()
   return { ref: `task:${t.id}`, kind: 'task', title: t.title, sub: [t.client_name, t.deadline ? `scade ${relTime(t.deadline).replace(/ \d\d:\d\d$/, '')}` : null].filter(Boolean).join(' · ') || 'task', urgent: !!late, why: late ? 'è in ritardo' : undefined, when: t.deadline ? relTime(t.deadline).replace(/ \d\d:\d\d$/, '') : '' }
 }
+function ideaSummary(i: ReturnType<typeof ideas.getAll>[number], cm: Map<string, Client>): NodeSummary {
+  return { ref: `idea:${i.id}`, kind: 'idea', title: i.title || i.text.slice(0, 80), sub: [cm.get(i.client_id ?? '')?.name, i.idea_status].filter(Boolean).join(' · ') || 'idea', when: relTime(i.created_at) }
+}
 function designSummary(d: ReturnType<typeof designProjects.getAll>[number], cm: Map<string, Client>): NodeSummary {
   return { ref: `design:${d.id}`, kind: 'design', title: d.name, sub: [cm.get(d.client_id ?? '')?.name, `modificato ${relTime(d.updated_at)}`].filter(Boolean).join(' · '), when: relTime(d.updated_at) }
 }
@@ -206,10 +209,36 @@ export async function getList(id: string): Promise<NodeDetail> {
       return { ...base, title: 'Clienti', sub: '', lead: 'Prima chi aspetta una tua risposta.', legacy: '/clienti', groups: [['Attivi', list]] }
     }
     case 'lavori': {
-      const ts = openTasks().map(taskSummary)
-      const evs = (await upcomingEvents(7)).map(eventSummary)
-      return { ...base, title: 'Lavori', sub: '', lead: 'Agenda della settimana e cose da fare.', legacy: '/incarichi',
-        groups: [['Agenda · 7 giorni', evs], ['Task', ts], ['Preventivi aperti', openQuotes().map(quoteSummary)]] }
+      const open = openTasks()
+      const ts = open.map(taskSummary)
+      const events = await upcomingEvents(7)
+      const evs = events.map(eventSummary)
+      const oq = openQuotes()
+      // giorni da oggi (0 = oggi); ciò che è scaduto resta su oggi, segnato
+      const start = new Date(); start.setHours(0, 0, 0, 0)
+      const ahead = (iso: string) => Math.floor((Date.parse(iso) - start.getTime()) / 86400000)
+      const dated = open.filter(t => t.deadline).map(t => ({ t, d: ahead(t.deadline!) }))
+      const late = dated.filter(x => x.d < 0)
+      const week = dated.filter(x => x.d >= 0 && x.d < 7)
+      const marks: NonNullable<NodeDetail['marks']> = [
+        ...late.map(({ t }) => ({ days: 0, kind: 'task' as Kind, title: `in ritardo · ${t.title}`, ref: `task:${t.id}`, waiting: true })),
+        ...week.map(({ t, d }) => ({ days: d, kind: 'task' as Kind, title: t.title, ref: `task:${t.id}` })),
+        ...events.filter(e => !e.allDay).map(e => ({ days: ahead(e.start), kind: 'event' as Kind, title: `${hm(e.start)} ${e.title}`, ref: `event:${e.id}` })).filter(m => m.days >= 0 && m.days < 7),
+      ]
+      const owed = oq.filter(q => q.status === 'inviato').reduce((t, q) => t + q.total, 0)
+      const stats = [
+        { value: String(late.length), label: 'task in ritardo' },
+        { value: String(week.length + events.length), label: 'cose questa settimana' },
+        { value: eurS(owed), label: 'preventivi in attesa' },
+      ]
+      const stale = oq.filter(q => q.status === 'inviato' && q.issued_at && Date.now() - Date.parse(q.issued_at) > 7 * 86400000)
+      const brief = [
+        late.length && `${late.length} ${late.length === 1 ? 'task è' : 'task sono'} in ritardo`,
+        stale.length && `${stale.length} ${stale.length === 1 ? 'preventivo da sollecitare' : 'preventivi da sollecitare'}`,
+      ].filter(Boolean).join(' · ') || undefined
+      const byDue = [...dated].sort((a, b) => a.d - b.d).map(x => taskSummary(x.t))
+      return { ...base, title: 'Lavori', sub: '', lead: 'Agenda della settimana e cose da fare.', legacy: '/incarichi', marks, stats, brief,
+        groups: [['Per scadenza', byDue], ['Tutti i task', ts], ['Agenda · 7 giorni', evs], ['Preventivi aperti', oq.map(quoteSummary)]] }
     }
     case 'studio': {
       const posts = activePosts().sort((a, b) => (a.scheduled_at ?? '9').localeCompare(b.scheduled_at ?? '9')).map(postSummary)
@@ -217,10 +246,22 @@ export async function getList(id: string): Promise<NodeDetail> {
         groups: [['Design', designProjects.getAll().map(d => designSummary(d, cm))], ['Contenuti social', posts]] }
     }
     default: {
-      const ids = ideas.getAll().slice(0, 30).map((i): NodeSummary => ({
-        ref: `idea:${i.id}`, kind: 'idea', title: i.title || i.text.slice(0, 80), sub: [cm.get(i.client_id ?? '')?.name, i.idea_status].filter(Boolean).join(' · ') || 'idea',
-      }))
-      return { ...base, title: 'Archivio', sub: '', lead: 'Idee, note e file del vault.', legacy: '/memoria', groups: [['Idee', ids]] }
+      const all = ideas.getAll()
+      const ids = all.slice(0, 60).map(i => ideaSummary(i, cm))
+      const ds = designProjects.getAll()
+      const ago = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / 86400000)
+      // l'anello: ciò che hai salvato negli ultimi 30 giorni
+      const marks: NonNullable<NodeDetail['marks']> = [
+        ...all.map(i => ({ days: ago(i.created_at), kind: 'idea' as Kind, title: i.title || i.text.slice(0, 60), ref: `idea:${i.id}` })),
+        ...ds.map(d => ({ days: ago(d.updated_at), kind: 'design' as Kind, title: d.name, ref: `design:${d.id}` })),
+      ].filter(m => m.days >= 0 && m.days < 30)
+      const stats = [
+        { value: String(all.length), label: all.length === 1 ? 'idea' : 'idee' },
+        { value: String(ds.length), label: 'design' },
+        { value: String(memories.getAll({ excludeVault: true }).length), label: 'note della memoria' },
+      ]
+      return { ...base, title: 'Archivio', sub: '', lead: 'Idee, note e file del vault.', legacy: '/memoria', marks, stats,
+        groups: [['Idee', ids], ['Design', ds.map(d => designSummary(d, cm))]] }
     }
   }
 }
@@ -390,7 +431,8 @@ export function search(q: string): NodeSummary[] {
     ...openTasks().filter(t => hit(t.title, t.client_name)).slice(0, 5).map(taskSummary),
     ...designProjects.getAll().filter(d => hit(d.name)).slice(0, 5).map(d => designSummary(d, cm)),
     ...quotes.getAll().filter(q => hit(q.title, q.number, q.client_name)).slice(0, 5).map(quoteSummary),
-  ].slice(0, 12)
+    ...ideas.getAll().filter(i => hit(i.title, i.text)).slice(0, 6).map(i => ideaSummary(i, cm)),
+  ].slice(0, 16)
 }
 
 /** Preventivo per l'accessorio: quello nato da questo nodo, altrimenti l'ultimo del cliente, altrimenti nessuno */

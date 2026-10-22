@@ -264,3 +264,15 @@
 .os .tabs .c { font-size: 12px; font-weight: 600; color: var(--t3); font-variant-numeric: tabular-nums; }
 .os .tabs button[aria-current] .c { color: #b9c0ca; }
 .os .today .main { width: 100%; }
+
+/* ── archivio: il campo di ricerca nel disco, poi sopra i risultati ── */
+.os .disc .fld.seek { margin-top: 4.4cqw; height: 52px; padding: 0 22px; font-size: 16px; max-width: 34ch; text-align: center; }
+.os .seek-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.os .seek-wrap > .fld.seek { flex: none; height: 52px; padding: 0 22px; font-size: 16px; box-shadow: var(--e1); }
+.os .seek-wrap > .main { flex: 1; }
+.os .disc .choices .primary { margin-top: 0; }
+
+/* titoli nel disco: mai fuori dal cerchio, mai sillabati; i lunghi scendono di misura */
+.os .disc h1 { hyphens: manual; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.os .disc h1.long { font-size: clamp(22px, 6.4cqw, 40px); line-height: 1.04; }
+.os .disc .choices .choice { height: 52px; }
