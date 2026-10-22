@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useOs, current, kindOf, type Acc } from './store'
 import { I, useNode } from './parts'
 
@@ -9,105 +9,71 @@ export const SECTIONS: [string, string, string][] = [
   ['lavori', 'Lavori', 'check'], ['studio', 'Studio', 'pen'], ['archivio', 'Archivio', 'archive'],
 ]
 
-/* ───── Ghiera: la sezione attiva gira in alto; si gira con clic, rotella o frecce ───── */
-export function Dial() {
+/* ───── Luoghi: sei voci in una pillola sull'asse; il numero dice cosa ti aspetta ───── */
+export function Places() {
   const chain = useOs(s => s.chain)
   const root = useOs(s => s.root)
   const { node: msgs } = useNode('list:messaggi')
   const count = msgs?.groups?.[0]?.[1]?.length ?? 0
-  const [hover, setHover] = useState<number | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
   const active = Math.max(0, SECTIONS.findIndex(s => `list:${s[0]}` === chain[0].ref))
-
-  useEffect(() => {
-    const el = ref.current; if (!el) return
-    let lock = 0
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      if (Date.now() - lock < 260) return
-      lock = Date.now()
-      root(SECTIONS[(active + (e.deltaY > 0 ? 1 : -1) + SECTIONS.length) % SECTIONS.length][0])
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [active, root])
-
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-    e.preventDefault()
-    root(SECTIONS[(active + (e.key === 'ArrowRight' ? 1 : -1) + SECTIONS.length) % SECTIONS.length][0])
-  }
-  const show = hover ?? active
-  const sub = hover !== null && hover !== active ? 'clic per aprire' : chain.length > 1 ? `${chain.length - 1} ${chain.length === 2 ? 'passo' : 'passi'}` : 'inizio'
   return (
-    <div className="dial" ref={ref} role="navigation" aria-label="Sezioni: gira con la rotella o con le frecce" onKeyDown={onKey} onMouseLeave={() => setHover(null)}>
-      <div className="track" />
-      {SECTIONS.map(([id, label, icon], i) => {
-        const a = ((i - active) * 60 - 90) * Math.PI / 180
-        return (
-          <button key={id} className="spot" aria-label={label} aria-current={i === active ? 'true' : undefined} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)}
-            style={{ transform: `translate(${(Math.cos(a) * 92).toFixed(1)}px, ${(Math.sin(a) * 92).toFixed(1)}px)` }} onClick={() => root(id)}>
-            <I n={icon} />{id === 'messaggi' && count > 0 && <span className="n">{count}</span>}
-          </button>
-        )
-      })}
-      <div className={`core${show !== active ? ' preview' : ''}`}><div><b>{SECTIONS[show][1]}</b><small>{sub}</small></div></div>
-    </div>
-  )
-}
-
-/* ───── Catena: il percorso come cerchi su un filo, più il passo consigliato ───── */
-export function Chain() {
-  const chain = useOs(s => s.chain)
-  const nodes = useOs(s => s.nodes)
-  const back = useOs(s => s.back)
-  const name = (i: number) => { const s = chain[i]; return s.mode === 'reply' ? (kindOf(s.ref) === 'quote' ? 'Invio' : 'Risposta') : nodes[s.ref]?.title ?? '…' }
-  const here = chain[chain.length - 1], hn = nodes[here.ref]
-  const next = here.mode === 'reply' ? 'Invia' : kindOf(here.ref) === 'mail' && hn?.urgent ? 'Rispondi'
-    : here.ref === 'list:oggi' ? hn?.groups?.find(g => g[0] === '__hero')?.[1]?.[0]?.title : null
-  return (
-    <nav className="chain" aria-label="Percorso">
-      <h4>Percorso</h4>
-      {chain.map((s, i) => {
-        const now = i === chain.length - 1
-        return (
-          <button key={i} className={`step${now ? ' now' : ''}`} onClick={() => back(i)} aria-current={now ? 'step' : undefined} title={now ? undefined : 'Torna qui (Alt+←)'}>
-            <span className="c">{i + 1}</span><span className="l">{name(i)}</span>
-          </button>
-        )
-      })}
-      {next && <div className="step next"><span className="c">✦</span><span className="l">poi: {next}</span></div>}
+    <nav className="places" aria-label="Luoghi">
+      {SECTIONS.map(([id, label], i) => (
+        <button key={id} aria-current={i === active ? 'page' : undefined} onClick={() => root(id)} title={`${label} (Ctrl ${i + 1})`}>
+          {label}{id === 'messaggi' && count > 0 && <span className="n">{count}</span>}
+        </button>
+      ))}
     </nav>
   )
 }
 
-/* ───── Satelliti: accessori utili per QUESTO nodo, su un arco d'orbita ───── */
-export function Orbit() {
+/* ───── Percorso: da dove vieni, allineato verso il centro; ogni passo riporta lì con memoria ───── */
+export function Path() {
+  const chain = useOs(s => s.chain)
+  const nodes = useOs(s => s.nodes)
+  const back = useOs(s => s.back)
+  const name = (i: number) => {
+    const s = chain[i]
+    if (s.mode === 'reply') return kindOf(s.ref) === 'quote' ? 'Invio' : 'Risposta'
+    if (kindOf(s.ref) === 'list') return SECTIONS.find(x => `list:${x[0]}` === s.ref)?.[1] ?? '…'
+    return nodes[s.ref]?.title ?? '…'
+  }
+  const here = chain[chain.length - 1], hn = nodes[here.ref]
+  const next = here.mode === 'reply' ? 'Invia' : kindOf(here.ref) === 'mail' && hn?.urgent ? 'Rispondi' : null
+  return (
+    <nav className="path" aria-label="Percorso">
+      <span className="kick">Percorso</span>
+      {chain.map((s, i) => {
+        const now = i === chain.length - 1
+        return (
+          <button key={i} className="itm" onClick={() => back(i)} aria-current={now ? 'step' : undefined} title={now ? undefined : 'Torna qui (Alt+←)'}>
+            <b>{name(i)}</b>{!now && <span>passo {i + 1}</span>}
+          </button>
+        )
+      })}
+      {next && <div className="itm next"><b>poi: {next}</b></div>}
+    </nav>
+  )
+}
+
+/* ───── Cosa serve: gli accessori utili per QUESTO nodo, con il motivo scritto ───── */
+export function Needs() {
   const step = useOs(current)
   const node = useOs(s => s.nodes[step.ref])
   const accs = useOs(s => s.accs)
   const toggleAcc = useOs(s => s.toggleAcc)
-  const ref = useRef<HTMLDivElement>(null)
-  const [h, setH] = useState(800)
-  const [speak, setSpeak] = useState(true)
-  useLayoutEffect(() => { const update = () => setH(ref.current?.getBoundingClientRect().height ?? 800); update(); addEventListener('resize', update); return () => removeEventListener('resize', update) }, [])
-  useEffect(() => { setSpeak(true); const t = setTimeout(() => setSpeak(false), 4000); return () => clearTimeout(t) }, [step.ref, step.mode])
-
   const sats = (node?.sats ?? []).filter(s => !(step.mode === 'reply' && s.kind === 'client'))
-  const R = Math.max(420, h / 2 + 40), gap = 74, off = (dy: number) => R - Math.sqrt(R * R - dy * dy)
-  const edge = 83 - off(h / 2)
+  if (!sats.length) return null
   return (
-    <div className="orbit" ref={ref} aria-label="Accessori suggeriti">
-      {sats.length > 0 && <svg aria-hidden="true"><path d={`M ${edge} 0 A ${R} ${R} 0 0 1 ${edge} ${h}`} fill="none" stroke="var(--t3)" strokeOpacity=".5" strokeDasharray="2 7" /></svg>}
+    <div className="needs" aria-label="Cosa serve">
+      <span className="kick">Cosa serve</span>
       {sats.map((s, i) => {
-        const dy = (i - (sats.length - 1) / 2) * gap
         const open = accs.some(a => a.key === `${s.kind}:${s.ref ?? ''}`)
-        const ini = s.kind === 'client' ? s.tip.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') : null
+        const ini = s.kind === 'client' ? s.tip.split(/s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') : null
         return (
-          <button key={s.kind + i} className={`sat${s.smart && !open ? ' smart' : ''}${s.smart && speak && !open ? ' speak' : ''}`} aria-pressed={open} aria-label={s.tip}
-            style={{ transform: `translate(${-off(dy)}px, ${dy}px)` }} onClick={() => toggleAcc(s.kind, s.ref)}>
-            {ini ? <span style={{ font: '700 13px system-ui' }}>{ini}</span> : <I n={{ calendar: 'cal', quote: 'euro', task: 'check', client: 'users' }[s.kind]} />}
-            <span className="tip">{s.tip}</span>
+          <button key={s.kind + i} className={`need${s.smart && !open ? ' smart' : ''}`} aria-pressed={open} onClick={() => toggleAcc(s.kind, s.ref)}>
+            <span className="o">{ini ?? <I n={{ calendar: 'cal', quote: 'euro', task: 'check', client: 'users' }[s.kind]} />}</span>
+            <span>{s.tip}</span>
           </button>
         )
       })}

@@ -96,7 +96,7 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
     return (
       <>
         {children}
-        <CoPilotFloat open={isCoPilotOpen} setOpen={setCoPilotOpen} />
+        <CoPilotFloat open={isCoPilotOpen} setOpen={setCoPilotOpen} tab={pathname !== '/os'} />
       </>
     )
   }
@@ -169,11 +169,11 @@ function RootShellContent({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Co-Pilot nel guscio: linguetta sul bordo destro (non copre i comandi dello Studio), chat in un pannello laterale. */
-function CoPilotFloat({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+/** Co-Pilot nel guscio: chat in un pannello laterale. La linguetta sul bordo serve solo nello Studio: in /os c'è la pillola in basso. */
+function CoPilotFloat({ open, setOpen, tab }: { open: boolean; setOpen: (v: boolean) => void; tab: boolean }) {
   return (
     <>
-      {!open && (
+      {tab && !open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
