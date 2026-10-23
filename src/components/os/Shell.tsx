@@ -7,7 +7,7 @@ import { I, Sprite, Toast } from './parts'
 import { Block } from './Block'
 import { Accessories, Needs, Path, Places, SECTIONS, Waiting } from './Around'
 import { ClientView } from './Client'
-import { ArchivioView, LavoriView } from './Lavori'
+import { ArchivioView, LavoriView, MessaggiView, StudioView } from './Luoghi'
 import { Ask } from './Ask'
 import { DayLine, Today } from './Today'
 import { useSidebar } from '@/components/layout/SidebarContext'
@@ -36,7 +36,9 @@ export function Shell() {
   const isClient = kindOf(step.ref) === 'client' && step.mode === 'view'
   const isMail = kindOf(step.ref) === 'mail'
   const ringPlace = isClient ? <ClientView key={step.ref} cref={step.ref} notice={<GoogleLink />} />
+    : step.ref === 'list:messaggi' ? <MessaggiView notice={<GoogleLink />} />
     : step.ref === 'list:lavori' ? <LavoriView notice={<GoogleLink />} />
+    : step.ref === 'list:studio' ? <StudioView notice={<GoogleLink />} />
     : step.ref === 'list:archivio' ? <ArchivioView notice={<GoogleLink />} />
     : null
 

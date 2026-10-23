@@ -200,8 +200,25 @@ export async function getList(id: string): Promise<NodeDetail> {
     }
     case 'messaggi': {
       const mails = rankedMails(cm)
-      return { ...base, title: 'Messaggi', sub: '', lead: 'Ordinati per quanto contano, non per data.', legacy: '/inbox',
-        groups: [['Da rispondere', mails.filter(m => m.urgent).slice(0, 30)], ['Il resto', mails.filter(m => !m.urgent).slice(0, 40)]] }
+      const waiting = mails.filter(m => m.urgent), rest = mails.filter(m => !m.urgent)
+      // l'anello: le mail che contano negli ultimi 30 giorni; chi aspetta risposta resta un cerchio vuoto
+      const raw = messages.getAll({ limit: 200 })
+      const ago = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / 86400000)
+      const byRef = new Map(mails.map(m => [m.ref, m]))
+      const marks: NonNullable<NodeDetail['marks']> = raw
+        .map(m => ({ m, sum: byRef.get(`mail:${m.id}`) }))
+        .filter(({ m, sum }) => sum?.urgent || m.client_id)
+        .map(({ m, sum }) => ({ days: ago(m.timestamp), kind: 'mail' as Kind, title: `${sum?.sub ?? ''} · ${m.subject || '(senza oggetto)'}`, ref: `mail:${m.id}`, waiting: !!sum?.urgent }))
+        .filter(x => x.days >= 0 && x.days < 30)
+      const oldest = Math.max(0, ...raw.filter(m => byRef.get(`mail:${m.id}`)?.urgent).map(m => ago(m.timestamp)))
+      const stats = [
+        { value: String(waiting.length), label: 'aspettano una risposta' },
+        { value: String(raw.filter(m => m.client_id && ago(m.timestamp) < 7).length), label: 'dai clienti in 7 giorni' },
+        { value: String(rest.length), label: 'raccolte in “Il resto”' },
+      ]
+      const brief = waiting.length && oldest > 2 ? `la più vecchia aspetta da ${oldest} giorni` : undefined
+      return { ...base, title: 'Messaggi', sub: '', lead: 'Ordinati per quanto contano, non per data.', legacy: '/inbox', marks, stats, brief,
+        groups: [['Da rispondere', waiting.slice(0, 30)], ['Il resto', rest]] }
     }
     case 'clienti': {
       const all = messages.getAll({ limit: 500 }).filter(m => !m.replied)
@@ -241,9 +258,24 @@ export async function getList(id: string): Promise<NodeDetail> {
         groups: [['Per scadenza', byDue], ['Tutti i task', ts], ['Agenda · 7 giorni', evs], ['Preventivi aperti', oq.map(quoteSummary)]] }
     }
     case 'studio': {
-      const posts = activePosts().sort((a, b) => (a.scheduled_at ?? '9').localeCompare(b.scheduled_at ?? '9')).map(postSummary)
-      return { ...base, title: 'Studio', sub: '', lead: 'Design e contenuti: riprendi da dove avevi lasciato.', legacy: '/progettazione',
-        groups: [['Design', designProjects.getAll().map(d => designSummary(d, cm))], ['Contenuti social', posts]] }
+      const active = activePosts().sort((a, b) => (a.scheduled_at ?? '9').localeCompare(b.scheduled_at ?? '9'))
+      const posts = active.map(postSummary)
+      const ds = designProjects.getAll()
+      const ago = (iso: string) => Math.floor((Date.now() - Date.parse(iso)) / 86400000)
+      // l'anello: cosa hai toccato negli ultimi 30 giorni; i contenuti che dovevano uscire restano cerchi vuoti
+      const marks: NonNullable<NodeDetail['marks']> = [
+        ...ds.map(d => ({ days: ago(d.updated_at), kind: 'design' as Kind, title: d.name, ref: `design:${d.id}` })),
+        ...active.map(p => { const s = postSummary(p); return { days: ago(p.created_at), kind: 'post' as Kind, title: s.title, ref: s.ref, waiting: !!s.urgent } }),
+      ].filter(m => m.days >= 0 && m.days < 30)
+      const late = posts.filter(p => p.urgent).length
+      const stats = [
+        { value: String(ds.length), label: 'design' },
+        { value: String(posts.length), label: 'contenuti in piano' },
+        { value: String(late), label: 'dovevano già uscire' },
+      ]
+      const brief = late ? `${late === 1 ? 'un contenuto doveva' : `${late} contenuti dovevano`} già uscire` : undefined
+      return { ...base, title: 'Studio', sub: '', lead: 'Design e contenuti: riprendi da dove avevi lasciato.', legacy: '/progettazione', marks, stats, brief,
+        groups: [['Design', ds.map(d => designSummary(d, cm))], ['Contenuti social', posts]] }
     }
     default: {
       const all = ideas.getAll()

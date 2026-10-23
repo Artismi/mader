@@ -93,3 +93,85 @@ export function ArchivioView({ notice }: { notice?: React.ReactNode }) {
     />
   )
 }
+
+const groupOf = (n: NodeDetail, label: string): NodeSummary[] => Object.fromEntries(n.groups ?? [])[label] ?? []
+const RING_30: [number, string][] = [[0, 'oggi'], [10, '−10 g'], [20, '−20 g']]
+
+/** Messaggi: chi aspetta una risposta sta al centro; intorno le mail che contano degli ultimi 30 giorni */
+export function MessaggiView({ notice }: { notice?: React.ReactNode }) {
+  return (
+    <RingPlace
+      nref="list:messaggi"
+      notice={notice}
+      leftLabel="Aspettano anche"
+      left={n => groupOf(n, 'Da rispondere').slice(1, 5)}
+      emptyLeft="Nessun altro aspetta."
+      ring={n => <DotsRing marks={n?.marks ?? []} span={30} labels={RING_30} label={`${n?.marks?.length ?? 0} mail importanti negli ultimi 30 giorni`} />}
+      core={n => <MailCore first={groupOf(n, 'Da rispondere')[0]} />}
+    />
+  )
+}
+
+function MailCore({ first }: { first?: NodeSummary }) {
+  const go = useOs(s => s.go)
+  const root = useOs(s => s.root)
+  if (!first) return (
+    <div className="in">
+      <span className="kick">Messaggi</span>
+      <h1>Nessuno ti aspetta</h1>
+      <p>Le newsletter e le notifiche sono raccolte in “Il resto”.</p>
+      <button className="primary" onClick={() => root('studio')}><span className="dot" />Vai allo Studio</button>
+    </div>
+  )
+  const from = first.sub.split(' · ')[0]
+  const who = from.includes('@') ? from.split('@')[0] : from
+  return (
+    <div className="in">
+      <span className="kick">Da rispondere · {first.when}</span>
+      <h1 className={who.length + 11 > 24 ? 'long' : undefined}>Rispondi a {who}</h1>
+      <p>{first.why ? first.why.charAt(0).toUpperCase() + first.why.slice(1) : `“${first.title}”`}</p>
+      <div className="choices">
+        <button className="primary" onClick={() => go(first.ref, 'reply')}><span className="dot" />Rispondi</button>
+        <button className="choice" onClick={() => go(first.ref)}>Leggi la mail</button>
+      </div>
+    </div>
+  )
+}
+
+/** Studio: al centro il design da riprendere, a sinistra i contenuti in uscita, intorno gli ultimi 30 giorni */
+export function StudioView({ notice }: { notice?: React.ReactNode }) {
+  return (
+    <RingPlace
+      nref="list:studio"
+      notice={notice}
+      leftLabel="Contenuti in uscita"
+      left={n => groupOf(n, 'Contenuti social').slice(0, 4)}
+      emptyLeft="Nessun contenuto in piano."
+      ring={n => <DotsRing marks={n?.marks ?? []} span={30} labels={RING_30} label={`${n?.marks?.length ?? 0} lavori toccati negli ultimi 30 giorni`} />}
+      core={n => <DesignCore last={groupOf(n, 'Design')[0]} />}
+    />
+  )
+}
+
+function DesignCore({ last }: { last?: NodeSummary }) {
+  const go = useOs(s => s.go)
+  if (!last) return (
+    <div className="in">
+      <span className="kick">Studio</span>
+      <h1>Il primo design</h1>
+      <p>Apri il canvas e scegli un formato: post, story o copertina.</p>
+      <a className="primary" href="/os/studio/nuovo"><span className="dot" />Apri il canvas</a>
+    </div>
+  )
+  return (
+    <div className="in">
+      <span className="kick">Riprendi da qui</span>
+      <h1 className={last.title.length > 24 ? 'long' : undefined}>{last.title}</h1>
+      <p>{last.sub}</p>
+      <div className="choices">
+        <a className="primary" href={`/os/studio/${last.ref.slice('design:'.length)}`}><span className="dot" />Apri nello Studio</a>
+        <button className="choice" onClick={() => go(last.ref)}>Dettagli</button>
+      </div>
+    </div>
+  )
+}
