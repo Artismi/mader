@@ -99,6 +99,9 @@ export function Shell() {
       </footer>
       </>}
 
+      {/* durante il passaggio le pagine precedenti restano a un clic */}
+      <a className="legacy-link" href="/" title="Le pagine precedenti restano disponibili durante il passaggio">interfaccia precedente</a>
+
       {asking && <Ask onClose={() => setAsking(false)} />}
       <Toast />
     </div>
