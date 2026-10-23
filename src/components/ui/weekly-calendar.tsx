@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { TaskFormModal } from './nuovo-task-modal';
 import { useRouter } from 'next/navigation';
-import { markTaskDone, deleteTask, duplicateTask } from '@/app/actions';
+import { markTaskDone, deleteTask, duplicateTask, updateTask } from '@/app/actions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -213,8 +213,7 @@ export function WeeklyCalendar({ initialEvents = [], initialTasks = [], initialA
       const newDur = resizeDurations[resizing.eventId];
       if (newDur && newDur !== resizing.originalDuration) {
         tx(async () => {
-          const { createClient } = await import('@/lib/supabase/client');
-          await createClient().from('tasks').update({ duration_minutes: newDur }).eq('id', resizing.eventId);
+          await updateTask(resizing.eventId, { duration_minutes: newDur });
           router.refresh();
         });
       }
@@ -237,8 +236,7 @@ export function WeeklyCalendar({ initialEvents = [], initialTasks = [], initialA
     if (!id) return;
     const d = new Date(day); d.setHours(hour, 0, 0, 0);
     tx(async () => {
-      const { createClient } = await import('@/lib/supabase/client');
-      await createClient().from('tasks').update({ deadline: d.toISOString() }).eq('id', id);
+      await updateTask(id, { deadline: d.toISOString() });
       router.refresh();
     });
   };

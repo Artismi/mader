@@ -1,19 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
+import { clients as clientsRepo } from "@/lib/db";
 import { PubblicaWindow } from "@/components/ui/pubblica-window";
 import { Send } from "lucide-react";
 
-export default async function PubblicaPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+export const dynamic = "force-dynamic";
 
-    let clients: { id: string; name: string }[] = [];
-    if (user) {
-        const { data } = await supabase
-            .from('clients')
-            .select('id, name')
-            .order('name');
-        clients = data || [];
-    }
+export default async function PubblicaPage() {
+    const clients = clientsRepo.getAll().map(c => ({ id: c.id, name: c.name }));
 
     return (
         <div className="h-[calc(100vh-10rem)] flex flex-col">

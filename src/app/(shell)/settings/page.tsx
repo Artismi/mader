@@ -1,12 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
+import { googleStatus } from "@/lib/google/auth";
+import { signOut } from "@/app/actions";
 import { LogOut, User, Sparkles, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 
+export const dynamic = "force-dynamic";
+
 export default async function SettingsPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const google = googleStatus();
+    const expires = google.expiresAt ? new Date(google.expiresAt).toLocaleString("it-IT") : null;
 
     return (
         <div className="space-y-6 max-w-2xl">
@@ -21,9 +24,20 @@ export default async function SettingsPage() {
                     <User className="w-4 h-4" /> Profilo
                 </h2>
                 <div className="text-sm text-primary/70 space-y-1">
-                    <p><span className="font-medium text-primary">Email:</span> {user?.email}</p>
                     <p><span className="font-medium text-primary">Provider:</span> Google</p>
-                    <p><span className="font-medium text-primary">ID:</span> <span className="font-mono text-xs">{user?.id}</span></p>
+                    <p>
+                        <span className="font-medium text-primary">Account Google:</span>{" "}
+                        {google.connected ? "collegato" : "non collegato"}
+                        {google.connected && (google.renewable ? " (rinnovo automatico)" : " (senza refresh token: scade)")}
+                    </p>
+                    {expires && (
+                        <p><span className="font-medium text-primary">{google.expired ? "Token scaduto il:" : "Token valido fino a:"}</span> <span className="font-mono text-xs">{expires}</span></p>
+                    )}
+                    {!google.connected && (
+                        <p className="text-xs">
+                            <Link href="/login" className="text-accent hover:underline">Accedi con Google</Link> per collegare Drive, Gmail e Calendar.
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -55,7 +69,7 @@ export default async function SettingsPage() {
                 <h2 className="font-semibold text-primary flex items-center gap-2 mb-4">
                     <LogOut className="w-4 h-4" /> Sessione
                 </h2>
-                <form action="/auth/signout" method="POST">
+                <form action={signOut}>
                     <button
                         type="submit"
                         className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"

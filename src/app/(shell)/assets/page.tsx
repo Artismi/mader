@@ -1,18 +1,23 @@
-import { createClient } from '@/lib/supabase/server'
+import { clients as clientsRepo } from '@/lib/db'
 import { FolderOpen, ExternalLink } from 'lucide-react'
 import { DriveFiles } from '@/components/ui/drive-files'
 import { CreaDocumentoModal } from '@/components/ui/crea-documento-modal'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AssetsPage() {
-    const supabase = await createClient()
+    const clients = clientsRepo.getAll().map(c => ({
+        id: c.id,
+        name: c.name,
+        drive_folder_id: c.drive_folder_id ?? null,
+        drive_progetti_id: c.drive_progetti_id ?? null,
+        drive_asset_id: c.drive_asset_id ?? null,
+        drive_documenti_id: c.drive_documenti_id ?? null,
+        vault_path: c.vault_path ?? null,
+    }))
 
-    const { data: clients } = await supabase
-        .from('clients')
-        .select('id, name, drive_folder_id, drive_progetti_id, drive_asset_id, drive_documenti_id, vault_path')
-        .order('name')
-
-    const clientsWithDrive = (clients || []).filter(c => c.drive_folder_id)
-    const clientsWithoutDrive = (clients || []).filter(c => !c.drive_folder_id)
+    const clientsWithDrive = clients.filter(c => c.drive_folder_id)
+    const clientsWithoutDrive = clients.filter(c => !c.drive_folder_id)
 
     return (
         <div className="space-y-6">

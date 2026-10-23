@@ -1,21 +1,21 @@
 import { Lightbulb } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { ideas as ideasRepo } from "@/lib/db";
 import { NuovaIdeaModal } from "@/components/ui/nuova-idea-modal";
 import { IdeaBoard } from "@/components/ui/idea-board";
 
+export const dynamic = "force-dynamic";
+
 export default async function IdeePage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    let ideas: { id: string; text: string; title: string | null; assigned: boolean; created_at: string; idea_status: string | null; platforms: string[] | null; clients: { name: string } | null }[] = [];
-
-    if (user) {
-        const { data } = await supabase
-            .from('ideas')
-            .select('id, text, title, assigned, created_at, idea_status, platforms, clients(name)')
-            .order('created_at', { ascending: false });
-        ideas = (data as unknown as typeof ideas) || [];
-    }
+    const ideas = ideasRepo.getAllWithClient().map(i => ({
+        id: i.id,
+        text: i.text,
+        title: i.title ?? null,
+        assigned: i.assigned,
+        created_at: i.created_at,
+        idea_status: i.idea_status ?? null,
+        platforms: i.platforms ?? null,
+        clients: i.clients,
+    }));
 
     return (
         <div className="space-y-6">

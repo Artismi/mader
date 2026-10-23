@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { createClient } from "@/lib/supabase/client"
 import { EditorialeBoard } from "@/components/ui/editoriale-board"
 import { IdeaBoard } from "@/components/ui/idea-board"
 import { DesignWindow } from "@/components/ui/design-window"
@@ -31,10 +30,10 @@ function StudioContent() {
         const { posts: allPosts } = await resPosts.json()
         setPosts(allPosts)
 
-        // Fetch Ideas
-        const supabase = createClient()
-        const { data: ideaData } = await supabase.from('ideas').select('*, clients(name)')
-        setIdeas(ideaData || [])
+        // Fetch Ideas (SQLite via API route)
+        const resIdeas = await fetch('/api/ideas')
+        const ideaData = await resIdeas.json()
+        setIdeas(Array.isArray(ideaData) ? ideaData : [])
       } catch (err) {
         console.error('Failed to init Studio Boards:', err)
       }
