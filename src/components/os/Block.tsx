@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'   // navigazione interna: la catena resta in memoria
 import type { NodeDetail } from '@/lib/os/graph'
 import { useOs, current, kindOf } from './store'
-import { Clock, Group, I, KIND_LABEL, useNode } from './parts'
+import { Group, I, KIND_LABEL, useNode } from './parts'
 
 /** Il blocco principale: uno solo, si trasforma */
 export function Block() {
@@ -65,29 +65,6 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
   const go = useOs(s => s.go)
   const kind = kindOf(node.ref)
 
-  if (node.ref === 'list:oggi') {
-    const groups = Object.fromEntries(node.groups ?? [])
-    const hero = groups.__hero?.[0]
-    const date = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
-    return (
-      <>
-        <Head kicker={date} title={node.title} lead={node.lead} />
-        <div className="today">
-          <Clock events={node.events} />
-          {hero ? (
-            <button className="hero" onClick={() => go(hero.ref)}>
-              <span className="lbl">Inizia da qui</span>
-              <span className="t">{hero.kind === 'mail' ? `Rispondi a ${hero.sub.split(' · ')[0]}` : hero.title}</span>
-              <span className="m">{hero.kind === 'mail' ? `“${hero.title}” · ${hero.when}` : hero.sub}</span>
-              {hero.why && <span className="why">{hero.why}</span>}
-            </button>
-          ) : <p className="why">nessuno ti aspetta: è il momento buono per lo Studio</p>}
-        </div>
-        {(node.groups ?? []).filter(([l]) => l !== '__hero').map(([l, items]) => <Group key={l} label={l} items={items} empty="Tutto fatto qui." />)}
-      </>
-    )
-  }
-
   if (kind === 'list') return (
     <>
       <Head title={node.title} lead={node.lead} action={node.legacy && <a className="legacy" href={node.legacy}>vista completa ↗</a>} />
@@ -110,7 +87,7 @@ function View({ node, mode }: { node: NodeDetail; mode: 'view' | 'reply' }) {
   if (kind === 'client') return (
     <>
       <Head kicker="cliente" title={node.title} lead={node.lead} orb={node.ini} action={<PlusButton node={node} />} />
-      {(node.groups ?? []).map(([l, items]) => <Group key={l} label={l} items={items} empty={l === 'Prossima cosa' ? 'Non aspetta nulla da te.' : 'Niente qui.'} />)}
+      {(node.groups ?? []).map(([l, items]) => <Group key={l} label={l} items={items} empty={l === 'Da rispondere' ? 'Non aspetta nulla da te.' : 'Niente qui.'} />)}
     </>
   )
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Menu,
   X,
@@ -25,7 +25,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/app/actions";
 import { useSidebar } from "@/components/layout/SidebarContext";
 
 const sections = [
@@ -67,14 +67,12 @@ const sections = [
 
 export function Header() {
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isVaultOpen, isCoPilotOpen, toggleVault, toggleCoPilot } = useSidebar();
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    // la Server Action rimuove il token Google da SQLite e reindirizza a /login
+    await signOut();
   };
 
   useEffect(() => {

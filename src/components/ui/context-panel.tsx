@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Users, ChevronDown, X, Sparkles, FolderOpen, FileText, Loader2, Info } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -66,12 +65,10 @@ export function ContextPanel({ onContextChange }: Props) {
     // ─── Load clients ─────────────────────────────────────────────────────────
 
     useEffect(() => {
-        const supabase = createClient()
-        supabase
-            .from('clients')
-            .select('id, name, drive_folder_id, drive_progetti_id, drive_asset_id, drive_documenti_id')
-            .order('name')
-            .then(({ data }) => setClients(data || []))
+        fetch('/api/clients')
+            .then(r => r.json())
+            .then((data: Client[] | { error: string }) => setClients(Array.isArray(data) ? data : []))
+            .catch(() => setClients([]))
     }, [])
 
     // ─── Notify parent ───────────────────────────────────────────────────────

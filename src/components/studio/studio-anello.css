@@ -1,0 +1,106 @@
+/* Studio — direzione "Anello", versione Notte.
+   Asse al centro: indietro e uscite agli estremi, progetto, strumenti e AI sull'asse,
+   livelli e proprietà speculari ai lati, con la stessa larghezza. */
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/figtree";
+
+.studio-anello, .sa-menu {
+  --sa-bg: #0b111b; --sa-panel: #141b27; --sa-panel2: #1d2635; --sa-menu: #182131; --sa-line: #232c3a; --sa-line2: #2c3748;
+  --sa-ink: #eef2f7; --sa-t2: #b3bccb; --sa-t3: #8792a3; --sa-hot: #ff5a1f; --sa-warn: #f0b45a; --sa-ok: #5cc28f;
+  --sa-side: 280px; --sa-gut: 24px;
+  font-family: "Figtree Variable", "Segoe UI", system-ui, sans-serif;
+}
+.studio-anello { background: var(--sa-bg); color: var(--sa-t2); }
+
+/* ── barra in alto ── */
+.sa-top { position: relative; z-index: 100; flex: none; height: 80px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 0 var(--sa-gut); }
+.sa-zone { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sa-zone.sa-right { justify-content: flex-end; }
+.sa-round { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--sa-panel); box-shadow: inset 0 0 0 1px var(--sa-line); color: var(--sa-ink); transition: box-shadow .15s; }
+.sa-round:hover { box-shadow: inset 0 0 0 1.5px var(--sa-t3); }
+.sa-pill { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 6px 0 20px; border-radius: 999px; background: var(--sa-panel); box-shadow: inset 0 0 0 1px var(--sa-line); }
+.sa-proj { display: flex; align-items: center; gap: 12px; height: 100%; color: var(--sa-ink); font-size: 15px; }
+.sa-proj b { font-weight: 600; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa-ok, .sa-dirty { font-size: 13px; white-space: nowrap; }
+.sa-ok { color: var(--sa-t3); }
+.sa-dirty { color: var(--sa-warn); }
+.sa-mini { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--sa-t2); transition: background .15s, color .15s; }
+.sa-mini:hover { background: var(--sa-panel2); color: var(--sa-ink); }
+.sa-ghost { height: 40px; padding: 0 14px; border-radius: 999px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--sa-t2); white-space: nowrap; transition: background .15s, color .15s; }
+.sa-ghost:hover { background: var(--sa-panel); color: var(--sa-ink); }
+.sa-ghost.is-dirty { color: var(--sa-warn); }
+.sa-ghost.is-ok { color: var(--sa-ok); }
+.sa-primary { height: 48px; padding: 0 24px 0 22px; margin-left: 6px; border-radius: 999px; display: inline-flex; align-items: center; gap: 12px; background: var(--sa-ink); color: var(--sa-bg); font-size: 15px; font-weight: 600; white-space: nowrap; transition: transform .2s cubic-bezier(.34,1.4,.64,1); }
+.sa-primary i { width: 8px; height: 8px; border-radius: 50%; background: var(--sa-hot); }
+.sa-primary:hover { transform: translateY(-1px); }
+
+/* ── riga di lavoro: pannelli speculari, canvas al centro ── */
+.sa-work { gap: var(--sa-gut); padding: 0 var(--sa-gut) var(--sa-gut); }
+.sa-work > .flex-1 { border-radius: 24px; box-shadow: inset 0 0 0 1px var(--sa-line2); }
+.sa-panel { position: relative; z-index: 20; width: var(--sa-side); flex: none; display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--sa-panel); box-shadow: inset 0 0 0 1px var(--sa-line); }
+.sa-panel-head { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 18px 10px; }
+.sa-panel-head span { font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--sa-t3); }
+.sa-panel-head small { font-size: 13px; color: var(--sa-t3); font-variant-numeric: tabular-nums; }
+
+/* ── in basso sull'asse: AI sopra, strumenti sotto ── */
+.sa-dock { position: absolute; left: 50%; bottom: calc(var(--sa-gut) + 16px); transform: translateX(-50%); z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 12px; pointer-events: none; }
+.sa-dock > * { pointer-events: auto; }
+.sa-ai { display: flex; align-items: center; gap: 6px; width: min(540px, calc(100vw - 2 * var(--sa-side) - 6 * var(--sa-gut))); height: 52px; padding: 0 6px; border-radius: 999px; background: var(--sa-panel); box-shadow: inset 0 0 0 1px var(--sa-line2), 0 20px 40px -20px rgb(0 0 0 / .8); }
+.sa-ai-ask { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; height: 100%; font-size: 15px; color: var(--sa-t3); text-align: left; }
+.sa-ai-ask span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa-ai-ask i { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--sa-hot); color: #fff; }
+.sa-ai-ask:hover span { color: var(--sa-ink); }
+.sa-chip { height: 36px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--sa-t2); background: var(--sa-panel2); white-space: nowrap; }
+.sa-chip:hover { color: var(--sa-ink); }
+.sa-chip.is-on { background: var(--sa-ink); color: var(--sa-bg); }
+.sa-tools { display: flex; align-items: center; gap: 2px; height: 56px; padding: 4px; border-radius: 999px; background: var(--sa-panel); box-shadow: inset 0 0 0 1px var(--sa-line), 0 20px 40px -20px rgb(0 0 0 / .8); }
+.sa-tool { position: relative; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; color: var(--sa-t2); transition: background .15s, color .15s; }
+.sa-tool:hover { background: var(--sa-panel2); color: var(--sa-ink); }
+.sa-tool.is-on { background: var(--sa-ink); color: var(--sa-bg); }
+.sa-more { position: absolute; right: 9px; bottom: 9px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .5; }
+.sa-sep { display: block; width: 1px; height: 24px; background: var(--sa-line2); margin: 0 6px; flex: none; }
+
+/* ── vista: angolo in alto a sinistra del canvas ── */
+.sa-view { position: absolute; z-index: 30; top: 16px; left: calc(var(--sa-gut) + var(--sa-side) + var(--sa-gut) + 16px); display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 6px; border-radius: 999px; background: var(--sa-panel); box-shadow: inset 0 0 0 1px var(--sa-line); }
+.sa-view > button { min-width: 32px; height: 32px; border-radius: 999px; display: grid; place-items: center; color: var(--sa-t2); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sa-view > button:hover { background: var(--sa-panel2); color: var(--sa-ink); }
+.sa-view .sa-zoom, .sa-view .sa-vista { padding: 0 10px; }
+.sa-view .sa-vista.is-on { background: var(--sa-ink); color: var(--sa-bg); }
+.sa-view .sa-sep { height: 20px; margin: 0 4px; }
+.sa-view-menu { position: absolute; top: calc(100% + 10px); left: 0; min-width: 270px; }
+.sa-check { display: inline-block; width: 16px; height: 16px; border-radius: 5px; box-shadow: inset 0 0 0 1.5px var(--sa-line2); flex: none; }
+.sa-check.is-on { background: var(--sa-hot); box-shadow: none; }
+
+/* ── menu (anche nei portali fuori dallo Studio) ── */
+.sa-menu { z-index: 60; padding: 6px; border-radius: 16px; background: var(--sa-menu); box-shadow: inset 0 0 0 1px var(--sa-line2), 0 30px 60px -20px rgb(0 0 0 / .85); color: var(--sa-ink); }
+.sa-flyout { position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%); min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
+.sa-menu-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 10px; border-bottom: 1px solid var(--sa-line2); margin-bottom: 4px; }
+.sa-menu-head span, .sa-menu-label { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--sa-t3); }
+.sa-menu-label { padding: 6px 10px; }
+.sa-menu-head button { font-size: 13px; font-weight: 600; color: var(--sa-hot); }
+.sa-menu-empty { padding: 16px 10px; text-align: center; font-size: 13px; color: var(--sa-t3); }
+.sa-menu-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.sa-menu-row:hover, .sa-menu-row.is-on { background: var(--sa-panel2); }
+.sa-menu-row b { display: block; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa-menu-row small { display: block; font-size: 12px; color: var(--sa-t3); }
+.sa-menu-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 10px; border-radius: 10px; font-size: 14px; color: var(--sa-ink); text-align: left; white-space: nowrap; }
+.sa-menu-item:hover, .sa-menu-item.is-on { background: var(--sa-panel2); }
+.sa-menu-item small { font-size: 12px; color: var(--sa-t3); font-variant-numeric: tabular-nums; }
+
+/* ── leggibilità: i testi da 6–10 px dei pannelli esistenti salgono a una misura leggibile,
+      i grigi troppo tenui diventano grigi veri, i neri diventano il blu notte del guscio ── */
+.studio-anello [class*="text-[6px]"], .studio-anello [class*="text-[7px]"], .studio-anello [class*="text-[8px]"] { font-size: 10.5px !important; }
+.studio-anello [class*="text-[9px]"] { font-size: 11.5px !important; }
+.studio-anello [class*="text-[10px]"] { font-size: 12px !important; }
+.studio-anello [class*="font-black"] { font-weight: 650 !important; }
+.studio-anello [class*="text-white/1"], .studio-anello [class*="text-white/2"] { color: rgb(238 242 247 / .5) !important; }
+.studio-anello [class*="text-white/3"] { color: rgb(238 242 247 / .62) !important; }
+.studio-anello [class*="bg-[#080808]"], .studio-anello [class*="bg-[#070707]"], .studio-anello [class*="bg-[#0d0d0d]"], .studio-anello [class*="bg-[#0a0a0a]"] { background-color: var(--sa-panel) !important; }
+.studio-anello [class*="bg-[#141414]"], .studio-anello [class*="bg-[#1a1a1a]"], .studio-anello [class*="bg-[#111]"] { background-color: var(--sa-menu) !important; }
+
+@media (max-width: 1100px) {
+  .studio-anello { --sa-side: 232px; --sa-gut: 16px; }
+  .sa-zone.sa-right .sa-ghost { padding: 0 10px; font-size: 13px; }
+  .sa-chip { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sa-primary, .sa-round, .sa-tool, .sa-ghost { transition: none !important; } }

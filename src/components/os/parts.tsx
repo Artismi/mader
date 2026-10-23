@@ -73,41 +73,6 @@ export function Group({ label, items, empty = 'Niente qui.' }: { label: string; 
   )
 }
 
-/* ───── anello del giorno: 8 → 20 è un giro; gli impegni sono archi cliccabili ───── */
-type DayEvent = { ref: string; title: string; start: string; end: string; allDay: boolean }
-export function Clock({ events = [] }: { events?: DayEvent[] }) {
-  const go = useOs(s => s.go)
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(t) }, [])
-  const r = 100, C = 2 * Math.PI * r, f = (h: number) => Math.min(Math.max((h - 8) / 12, 0), 1)
-  const hours = (iso: string) => { const d = new Date(iso); return d.getHours() + d.getMinutes() / 60 }
-  const h = now.getHours() + now.getMinutes() / 60
-  const a = (f(h) * 360 - 90) * Math.PI / 180
-  const hm = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-  const timed = events.filter(e => !e.allDay)
-  const next = timed.find(e => Date.parse(e.end) > now.getTime())
-  const mins = next ? Math.round((Date.parse(next.start) - now.getTime()) / 60000) : 0
-  const label = !next ? (h < 8 ? 'la giornata non è iniziata' : h > 20 ? 'giornata finita' : timed.length ? 'impegni finiti' : 'nessun impegno oggi')
-    : mins <= 0 ? 'adesso' : mins < 60 ? `tra ${mins} min` : `alle ${new Date(next.start).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
-  return (
-    <div className="clock" role="img" aria-label={`Sono le ${hm}. ${next ? `${label}: ${next.title}` : label}`}>
-      <svg viewBox="0 0 236 236">
-        <circle cx="118" cy="118" r={r} fill="none" stroke="var(--sunk)" strokeWidth="14" />
-        {Array.from({ length: 13 }, (_, i) => { const b = (i / 12 * 360 - 90) * Math.PI / 180; return <circle key={i} cx={118 + Math.cos(b) * 117} cy={118 + Math.sin(b) * 117} r={i % 3 ? 1.2 : 2.2} fill="var(--t3)" /> })}
-        <circle cx="118" cy="118" r={r} fill="none" stroke="var(--line)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${f(h) * C} ${C}`} transform="rotate(-90 118 118)" />
-        {timed.map(e => {
-          const s = f(hours(e.start)), len = Math.max(f(hours(e.end)) - s, .012)
-          return <circle key={e.ref} className="ev" cx="118" cy="118" r={r} fill="none" stroke="var(--ink)" strokeWidth="14" strokeLinecap="round"
-            strokeDasharray={`${len * C} ${C}`} strokeDashoffset={-s * C} transform="rotate(-90 118 118)" onClick={() => go(e.ref)}><title>{e.title}</title></circle>
-        })}
-        {[8, 11, 14, 17].map(x => { const b = (f(x) * 360 - 90) * Math.PI / 180; return <text key={x} x={118 + Math.cos(b) * 134} y={118 + Math.sin(b) * 134 + 3} textAnchor="middle" fontFamily="Space Mono, monospace" fontSize="9" fill="var(--t3)">{x}</text> })}
-        {h >= 8 && h <= 20 && <circle cx={118 + Math.cos(a) * r} cy={118 + Math.sin(a) * r} r="10" fill="var(--hot)" stroke="var(--surface)" strokeWidth="3.5" />}
-      </svg>
-      <div className="mid"><div><b>{hm}</b><small>{label}{next && <><br /><em>{next.title.slice(0, 26)}</em></>}</small></div></div>
-    </div>
-  )
-}
-
 /* ───── messaggio a comparsa ───── */
 export function Toast() {
   const toast = useOs(s => s.toast)

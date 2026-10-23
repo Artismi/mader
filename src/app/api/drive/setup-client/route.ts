@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { clients } from '@/lib/db'
 import { getDriveClient, createClientVault } from '@/lib/google/drive'
 
 export async function POST(req: Request) {
@@ -12,14 +12,13 @@ export async function POST(req: Request) {
         const drive = await getDriveClient()
         const { folderId, progettiId, assetId, documentiId } = await createClientVault(drive, clientName)
 
-        const supabase = await createClient()
-        await supabase.from('clients').update({
+        clients.update(clientId, {
             drive_folder_id: folderId,
             drive_progetti_id: progettiId,
             drive_asset_id: assetId,
             drive_documenti_id: documentiId,
             vault_path: `/_CLIENTI/${clientName}/`,
-        }).eq('id', clientId)
+        })
 
         return NextResponse.json({ success: true, folderId, progettiId, assetId, documentiId })
     } catch (err: unknown) {

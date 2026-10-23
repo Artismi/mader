@@ -4,7 +4,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 const CreativeStudio = dynamic(() => import('../studio/creative-studio').then(m => m.CreativeStudio), {
   ssr: false,
-  loading: () => <div className="w-full h-full bg-[#0d0d0d] animate-pulse" />
+  loading: () => <div className="w-full h-full bg-[#0b111b] animate-pulse" />
 })
 import { upsertDesignProject, deleteDesignProject } from '@/app/actions'
 import type { Client, DesignProject } from '@/lib/db'
@@ -139,7 +139,7 @@ export function DesignWindow({ clients, designProjects = [] }: Props) {
         <button
           onClick={openRecipeModal}
           title="Salva come ricetta di design riutilizzabile"
-          className="absolute bottom-14 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a1a1a] border border-[#2a2a2a] text-[#a0a0a0] hover:text-white hover:border-[#444] transition-colors"
+          className="absolute top-[96px] right-[328px] z-50 flex items-center gap-1.5 h-9 px-3.5 rounded-full text-[13px] font-medium bg-[#141b27] border border-[#2c3748] text-[#b3bccb] hover:text-white hover:border-[#8792a3] transition-colors"
         >
           <span className="text-[10px]">✦</span> Ricetta
         </button>

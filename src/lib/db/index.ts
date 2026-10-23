@@ -78,6 +78,10 @@ export interface Idea {
   created_at: string
 }
 
+export interface IdeaWithClient extends Idea {
+  clients: { name: string } | null
+}
+
 export interface Subtask {
   id: string
   task_id: string
@@ -268,6 +272,18 @@ export const ideas = {
   getAll: (): Idea[] =>
     (db.prepare('SELECT * FROM ideas ORDER BY created_at DESC').all() as Record<string, unknown>[])
       .map(parseIdea),
+
+  /** Idee con il nome del cliente (JOIN) — stessa forma che usano IdeaBoard e la pagina Idee */
+  getAllWithClient: (): IdeaWithClient[] =>
+    (db.prepare(`
+      SELECT i.*, c.name as client_name
+      FROM ideas i LEFT JOIN clients c ON c.id = i.client_id
+      ORDER BY i.created_at DESC
+    `).all() as Record<string, unknown>[])
+      .map(row => {
+        const { client_name, ...rest } = row
+        return { ...parseIdea(rest), clients: client_name ? { name: client_name as string } : null }
+      }),
 
   getByStatus: (status: string): Idea[] =>
     (db.prepare('SELECT * FROM ideas WHERE idea_status = ? ORDER BY created_at DESC').all(status) as Record<string, unknown>[])
@@ -859,6 +875,30 @@ export const socialPosts = {
   updateStatus: (id: string, status: SocialPost['status']): void => {
     db.prepare(`UPDATE social_posts SET status = ?, published_at = CASE WHEN ? = 'published' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE published_at END WHERE id = ?`)
       .run(status, status, id)
+  },
+}
+
+// ─── API USAGE (tetto mensile per servizio) ──────────────────────────────────
+
+export interface ApiUsage {
+  id: string
+  service: string
+  month_year: string        // 'MM-YYYY'
+  request_count: number
+  max_limit: number
+}
+
+export const apiUsage = {
+  get: (service: string, monthYear: string): ApiUsage | undefined =>
+    db.prepare('SELECT * FROM api_usage_stats WHERE service = ? AND month_year = ?').get(service, monthYear) as ApiUsage | undefined,
+
+  /** Crea la riga del mese se manca e aggiunge 1 al contatore, in un solo statement */
+  increment: (service: string, monthYear: string, maxLimit: number): void => {
+    db.prepare(`
+      INSERT INTO api_usage_stats (id, service, month_year, request_count, max_limit)
+      VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT(service, month_year) DO UPDATE SET request_count = request_count + 1
+    `).run(randomUUID(), service, monthYear, maxLimit)
   },
 }
 

@@ -1,9 +1,11 @@
-import { clients as clientsDb } from "@/lib/db";
+import { clients as clientsRepo } from "@/lib/db";
 import { PubblicaWindow } from "@/components/ui/pubblica-window";
 import { Send } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function PubblicaPage() {
-    const clients = clientsDb.getAll().map(c => ({ id: c.id, name: c.name }));
+    const clients = clientsRepo.getAll().map(c => ({ id: c.id, name: c.name }));
 
     return (
         <div className="h-[calc(100vh-10rem)] flex flex-col">

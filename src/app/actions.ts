@@ -1,7 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { subtasks, skills, config, designProjects, briefs, milestones, deliverables } from '@/lib/db'
+import { redirect } from 'next/navigation'
+import { subtasks, skills, config, designProjects, briefs, milestones, deliverables, tokens } from '@/lib/db'
 import { runActionOrThrow } from '@/lib/kernel'
 import { saveMemory } from '@/lib/vault'
 import type { BriefStatus, MilestoneStatus, DeliverableStatus, DeliverableType } from '@/lib/db'
@@ -52,11 +53,13 @@ export async function updateTask(
     deadline?: string
     client_id?: string | null
     status?: string
+    duration_minutes?: number
   }
 ) {
   const { client_id, ...rest } = data
   await runActionOrThrow('task.update', { taskId, ...rest, ...(client_id !== undefined ? { clientId: client_id } : {}) })
   revalidatePath('/incarichi')
+  revalidatePath('/calendario')
 }
 
 export async function markTaskDone(taskId: string) {
@@ -329,4 +332,13 @@ export async function linkDesignProjectToBrief(projectId: string, briefId: strin
   getDb().prepare('UPDATE design_projects SET brief_id = ? WHERE id = ?').run(briefId, projectId)
   revalidatePath('/progettazione')
   revalidatePath('/clienti')
+}
+
+// ─── SESSIONE ─────────────────────────────────────────────────────────────────
+
+/** Logout locale: rimuove il token Google da SQLite (l'app non ha più sessione Supabase) */
+export async function signOut() {
+  tokens.remove('google')
+  revalidatePath('/', 'layout')
+  redirect('/login')
 }

@@ -2,34 +2,45 @@
 
 import { useEffect, useRef, useState } from 'react'
 import './os.css'
-import { useOs } from './store'
+import { useOs, current, kindOf } from './store'
 import { I, Sprite, Toast } from './parts'
 import { Block } from './Block'
-import { Accessories, Chain, Dial, Orbit } from './Around'
+import { Accessories, Needs, Path, Places, SECTIONS, Waiting } from './Around'
+import { ClientView } from './Client'
+import { ArchivioView, LavoriView, MessaggiView, StudioView } from './Luoghi'
 import { Ask } from './Ask'
+import { DayLine, Today } from './Today'
+import { useSidebar } from '@/components/layout/SidebarContext'
 
 /** Avviso solo quando serve: senza Google non si inviano risposte e le mail non si aggiornano */
 function GoogleLink() {
   const [s, setS] = useState<{ connected: boolean } | null>(null)
   useEffect(() => { fetch('/api/os?google').then(r => r.json()).then(setS).catch(() => setS(null)) }, [])
   if (!s || s.connected) return null
-  return (
-    <a className="glink" href="/login">
-      <span className="o"><I n="inbox" /></span>
-      <span><b>Google scollegato</b><small>mail e invio fermi · ricollega</small></span>
-    </a>
-  )
+  return <a className="glink" href="/login"><b>Google è scollegato</b>mail e invio sono fermi · ricollega</a>
 }
 
 // Lo streaming di Next può lasciare montata una seconda copia nascosta (#S:0):
 // solo un guscio alla volta ascolta la tastiera, altrimenti Ctrl+K scatterebbe due volte.
 let owner = 0, seq = 0
 
-/** Guscio circolare: ghiera + catena a sinistra, un blocco al centro, satelliti e accessori a destra */
+/** Guscio "Anello": luoghi in alto sull'asse, tre colonne 3 · 6 · 3, Co-Pilot in basso al centro */
 export function Shell() {
   const [asking, setAsking] = useState(false)
   const hydrate = useOs(s => s.hydrate)
+  const step = useOs(current)
+  const root = useOs(s => s.root)
+  const { setCoPilotOpen } = useSidebar()
   const rootRef = useRef<HTMLDivElement>(null)
+  const isToday = step.ref === 'list:oggi'
+  const isClient = kindOf(step.ref) === 'client' && step.mode === 'view'
+  const isMail = kindOf(step.ref) === 'mail'
+  const ringPlace = isClient ? <ClientView key={step.ref} cref={step.ref} notice={<GoogleLink />} />
+    : step.ref === 'list:messaggi' ? <MessaggiView notice={<GoogleLink />} />
+    : step.ref === 'list:lavori' ? <LavoriView notice={<GoogleLink />} />
+    : step.ref === 'list:studio' ? <StudioView notice={<GoogleLink />} />
+    : step.ref === 'list:archivio' ? <ArchivioView notice={<GoogleLink />} />
+    : null
 
   useEffect(() => { hydrate() }, [hydrate])
 
@@ -40,9 +51,12 @@ export function Shell() {
     const onDown = (e: PointerEvent) => useOs.getState().setOrigin({ x: e.clientX, y: e.clientY })
     const onKey = (e: KeyboardEvent) => {
       const s = useOs.getState()
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setAsking(v => !v); return }
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setAsking(v => !v); return }
+      if (mod && e.key.toLowerCase() === 'j') { e.preventDefault(); setCoPilotOpen(true); return }
+      if (mod && /^[1-6]$/.test(e.key)) { e.preventDefault(); s.root(SECTIONS[+e.key - 1][0]); return }
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); s.back(); return }
-      if (e.key === 'Escape' && !document.querySelector('.os .k')) {
+      if (e.key === 'Escape' && !document.querySelector('.os .ask-veil')) {
         if (s.petals) s.setPetals(false)
         else if (s.accs.length) s.closeAcc(s.accs[0].key)
         else if (!(e.target as HTMLElement).closest('textarea')) s.back()
@@ -51,23 +65,43 @@ export function Shell() {
     addEventListener('pointerdown', onDown)
     addEventListener('keydown', onKey)
     return () => { removeEventListener('pointerdown', onDown); removeEventListener('keydown', onKey); if (owner === me) owner = 0 }
-  }, [])
+  }, [setCoPilotOpen])
 
   return (
     <div className="os" ref={rootRef}>
       <Sprite />
-      <aside className="left">
-        <Dial />
-        <Chain />
+      <header className="topbar">
+        <button className="mark" onClick={() => root('oggi')} aria-label="Torna a Oggi" title="Oggi" />
+        <Places />
+        <button className="kbtn" onClick={() => setAsking(true)}><span className="o"><I n="spark" /></span><span className="l">Cerca o chiedi</span><kbd>Ctrl K</kbd></button>
+      </header>
+
+      {ringPlace ?? <>
+      <div className="subline">
         <GoogleLink />
-        <button className="ask" onClick={() => setAsking(true)}><span className="o"><I n="spark" /></span>Chiedi o cerca<kbd>Ctrl K</kbd></button>
-        <a className="legacy" href="/" title="L'interfaccia precedente resta disponibile durante il passaggio">interfaccia precedente</a>
-      </aside>
-      <div className="stage">
-        <Block />
-        <Orbit />
+        {isToday && <DayLine />}
       </div>
-      <Accessories />
+
+      {isToday ? <Today /> : (
+        <div className="body">
+          <aside className="side l"><Path />{isMail && <Waiting />}</aside>
+          <div className="center"><Block /></div>
+          <aside className="side r"><Needs /><Accessories /></aside>
+        </div>
+      )}
+
+      <footer className="foot">
+        <button className="copilot" onClick={() => setCoPilotOpen(true)}>
+          <span className="o"><I n="spark" /></span>
+          Chiedi qualcosa su {isToday ? 'questa giornata' : 'quello che stai guardando'}
+          <kbd>Ctrl J</kbd>
+        </button>
+      </footer>
+      </>}
+
+      {/* durante il passaggio le pagine precedenti restano a un clic */}
+      <a className="legacy-link" href="/" title="Le pagine precedenti restano disponibili durante il passaggio">interfaccia precedente</a>
+
       {asking && <Ask onClose={() => setAsking(false)} />}
       <Toast />
     </div>
