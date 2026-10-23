@@ -1,7 +1,5 @@
 import { google } from 'googleapis'
-import { tokens } from '@/lib/db'
 import { googleAuth } from '@/lib/google/auth'
-import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: Request) {
     try {
@@ -17,18 +15,11 @@ export async function POST(req: Request) {
             return Response.json({ error: 'Titolo e data obbligatori' }, { status: 400 })
         }
 
-        let accessToken = tokens.get('google')?.provider_token
-        if (!accessToken) {
-            const supabase = await createClient()
-            const { data: { session } } = await supabase.auth.getSession()
-            accessToken = session?.provider_token ?? undefined
-        }
-
-        if (!accessToken) {
+        const oauth2Client = googleAuth()  // token da SQLite, rinnovo automatico (lib/google/auth)
+        if (!oauth2Client) {
             return Response.json({ error: 'Google Calendar non collegato' }, { status: 403 })
         }
 
-        const oauth2Client = googleAuth(accessToken)!  // rinnovo automatico (lib/google/auth)
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
         const startDateTime = new Date(`${date}T${String(startHour).padStart(2, '0')}:00:00`)

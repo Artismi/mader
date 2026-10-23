@@ -62,6 +62,10 @@ export interface Idea {
   created_at: string
 }
 
+export interface IdeaWithClient extends Idea {
+  clients: { name: string } | null
+}
+
 export interface Subtask {
   id: string
   task_id: string
@@ -252,6 +256,18 @@ export const ideas = {
   getAll: (): Idea[] =>
     (db.prepare('SELECT * FROM ideas ORDER BY created_at DESC').all() as Record<string, unknown>[])
       .map(parseIdea),
+
+  /** Idee con il nome del cliente (JOIN) — stessa forma che usano IdeaBoard e la pagina Idee */
+  getAllWithClient: (): IdeaWithClient[] =>
+    (db.prepare(`
+      SELECT i.*, c.name as client_name
+      FROM ideas i LEFT JOIN clients c ON c.id = i.client_id
+      ORDER BY i.created_at DESC
+    `).all() as Record<string, unknown>[])
+      .map(row => {
+        const { client_name, ...rest } = row
+        return { ...parseIdea(rest), clients: client_name ? { name: client_name as string } : null }
+      }),
 
   getByStatus: (status: string): Idea[] =>
     (db.prepare('SELECT * FROM ideas WHERE idea_status = ? ORDER BY created_at DESC').all(status) as Record<string, unknown>[])
@@ -804,6 +820,74 @@ export const editorialPosts = {
 
 function parseEditorialPost(r: Record<string, unknown>): EditorialPost {
   return { ...r, channels: parseJSON(r.channels as string, []) } as unknown as EditorialPost
+}
+
+// ─── SOCIAL POSTS (Finestra di Pubblicazione) ────────────────────────────────
+
+export interface SocialPost {
+  id: string
+  client_id?: string
+  content: string
+  subject?: string
+  platforms: string[]
+  status: string            // 'draft' | 'publishing' | 'published'
+  external_ids: Record<string, string>
+  scheduled_at?: string
+  published_at?: string
+  created_at: string
+}
+
+export const socialPosts = {
+  getById: (id: string): SocialPost | undefined => {
+    const r = db.prepare('SELECT * FROM social_posts WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    return r ? parseSocialPost(r) : undefined
+  },
+
+  create: (data: { client_id?: string | null; content: string; subject?: string | null; platforms: string[]; status?: string }): SocialPost => {
+    const id = randomUUID()
+    db.prepare(`
+      INSERT INTO social_posts (id, client_id, content, subject, platforms, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, n(data.client_id), data.content, n(data.subject), JSON.stringify(data.platforms), data.status ?? 'draft')
+    return socialPosts.getById(id)!
+  },
+
+  updateStatus: (id: string, status: string, extra?: { published_at?: string }): void => {
+    db.prepare('UPDATE social_posts SET status = ?, published_at = COALESCE(?, published_at) WHERE id = ?')
+      .run(status, n(extra?.published_at), id)
+  },
+}
+
+function parseSocialPost(r: Record<string, unknown>): SocialPost {
+  return {
+    ...r,
+    platforms: parseJSON(r.platforms as string, []),
+    external_ids: parseJSON(r.external_ids as string, {}),
+  } as unknown as SocialPost
+}
+
+// ─── API USAGE (tetto mensile per servizio) ──────────────────────────────────
+
+export interface ApiUsage {
+  id: string
+  service: string
+  month_year: string        // 'MM-YYYY'
+  request_count: number
+  max_limit: number
+}
+
+export const apiUsage = {
+  get: (service: string, monthYear: string): ApiUsage | undefined =>
+    db.prepare('SELECT * FROM api_usage_stats WHERE service = ? AND month_year = ?').get(service, monthYear) as ApiUsage | undefined,
+
+  /** Crea la riga del mese se manca e aggiunge 1 al contatore, in un solo statement */
+  increment: (service: string, monthYear: string, maxLimit: number): void => {
+    db.prepare(`
+      INSERT INTO api_usage_stats (id, service, month_year, request_count, max_limit)
+      VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT(service, month_year) DO UPDATE SET request_count = request_count + 1
+    `).run(randomUUID(), service, monthYear, maxLimit)
+  },
 }
 
 // ─── POST ANALYTICS ───────────────────────────────────────────────────────────

@@ -32,9 +32,9 @@ export function googleAuth(fallbackAccessToken?: string) {
 }
 
 /** Stato del collegamento, per dire all'utente cosa fare */
-export function googleStatus(): { connected: boolean; renewable: boolean; expiresAt?: string } {
+export function googleStatus(): { connected: boolean; renewable: boolean; expired: boolean; expiresAt?: string } {
   const t = tokens.get('google')
   const renewable = !!t?.provider_refresh_token
   const valid = !!t?.expires_at && Date.parse(t.expires_at) > Date.now()
-  return { connected: renewable || valid, renewable, expiresAt: t?.expires_at }
+  return { connected: renewable || valid, renewable, expired: !!t?.expires_at && !valid, expiresAt: t?.expires_at }
 }

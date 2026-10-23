@@ -1,33 +1,18 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { google } from 'googleapis'
-import { messages, clientChannels, tokens } from '@/lib/db'
+import { messages, clientChannels } from '@/lib/db'
 import { googleAuth } from '@/lib/google/auth'
-
-function getGmailClient(accessToken: string) {
-  // rinnovo automatico se c'è il refresh token (vedi lib/google/auth)
-  return google.gmail({ version: 'v1', auth: googleAuth(accessToken)! })
-}
 
 // GET /api/gmail — sincronizza le ultime 50 email da Gmail → SQLite e restituisce la lista
 export async function GET() {
   try {
-    // Token da SQLite (già persistito dopo il login)
-    const tokenData = tokens.get('google')
-
-    // Fallback: token da Supabase session
-    let accessToken = tokenData?.provider_token
-    if (!accessToken) {
-      const supabase = await createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      accessToken = session?.provider_token ?? undefined
-    }
-
-    if (!accessToken) {
+    // Token da SQLite (già persistito dopo il login), rinnovo automatico (lib/google/auth)
+    const auth = googleAuth()
+    if (!auth) {
       return NextResponse.json({ messages: [], error: 'Token Google non trovato' })
     }
 
-    const gmail = getGmailClient(accessToken)
+    const gmail = google.gmail({ version: 'v1', auth })
 
     // Ultime 50 email in inbox
     const listRes = await gmail.users.messages.list({

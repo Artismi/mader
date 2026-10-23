@@ -1,33 +1,25 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { socialPosts } from '@/lib/db'
 
 export async function POST(req: Request) {
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
-
         const { channel, content, subject, clientId } = await req.json()
         if (!channel || !content) {
             return NextResponse.json({ error: 'channel e content sono obbligatori' }, { status: 400 })
         }
 
         // Salva il post social nel database
-        const { data: post, error: sbError } = await supabase
-            .from('social_posts')
-            .insert({
-                user_id: user.id,
+        let postId: string | undefined
+        try {
+            postId = socialPosts.create({
                 client_id: clientId || null,
                 content,
                 subject: subject || null,
                 platforms: [channel],
                 status: 'publishing',
-            })
-            .select()
-            .single()
-
-        if (sbError) {
-            console.error('[Social Publish DB Error]', sbError)
+            }).id
+        } catch (dbErr) {
+            console.error('[Social Publish DB Error]', dbErr)
             // Continua comunque — il salvataggio DB non blocca la pubblicazione
         }
 
@@ -46,7 +38,7 @@ export async function POST(req: Request) {
                         content,
                         subject,
                         clientId,
-                        postId: post?.id,
+                        postId,
                     }),
                 })
 
@@ -59,14 +51,11 @@ export async function POST(req: Request) {
         }
 
         // Aggiorna status post a published
-        if (post?.id) {
-            await supabase
-                .from('social_posts')
-                .update({ status: 'published', published_at: new Date().toISOString() })
-                .eq('id', post.id)
+        if (postId) {
+            socialPosts.updateStatus(postId, 'published', { published_at: new Date().toISOString() })
         }
 
-        return NextResponse.json({ ok: true, postId: post?.id })
+        return NextResponse.json({ ok: true, postId })
     } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return NextResponse.json({ error: msg }, { status: 500 })

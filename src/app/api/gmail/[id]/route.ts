@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
-import { tokens, messages } from '@/lib/db'
+import { messages } from '@/lib/db'
 import { googleAuth } from '@/lib/google/auth'
-import { createClient } from '@/lib/supabase/server'
 
 function decodeBase64(data: string): string {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8')
@@ -35,18 +34,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { id } = await params
 
   try {
-    let accessToken = tokens.get('google')?.provider_token
-    if (!accessToken) {
-      const supabase = await createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      accessToken = session?.provider_token ?? undefined
-    }
-
-    if (!accessToken) {
+    const oauth2Client = googleAuth()  // token da SQLite, rinnovo automatico (lib/google/auth)
+    if (!oauth2Client) {
       return NextResponse.json({ error: 'Token Google non trovato' }, { status: 401 })
     }
 
-    const oauth2Client = googleAuth(accessToken)!  // rinnovo automatico (lib/google/auth)
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
     // Cerca il gmail_id nei metadata
