@@ -1,0 +1,45 @@
+# Controlli a ogni push e pull request: tipi, test e build di Next su Windows,
+# la piattaforma del pacchetto. Il banco della tela (test:tela) richiede Chrome
+# e un server avviato: resta da lanciare a mano prima di un rilascio.
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifica:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24          # node:sqlite, come l'Electron del pacchetto
+          cache: npm
+
+      - name: Dipendenze
+        run: npm ci
+
+      - name: Tipi
+        run: npx tsc --noEmit -p .
+
+      - name: Test dell'agente
+        run: npm run test:agente
+
+      - name: Test del motore designer
+        run: npm run designer:test
+
+      - name: Test del confronto
+        run: npm run confronto:test
+
+      - name: Build di Next
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'

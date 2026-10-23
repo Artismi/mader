@@ -61,6 +61,15 @@ export default async function SettingsPage() {
                 <ChevronRight className="h-5 w-5 text-ink-3 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
             </Link>
 
+            {/* Licenze di caratteri, icone e immagini */}
+            <Link href="/settings/crediti" className="cos-card cos-crop group flex items-center justify-between gap-4 p-6 sm:p-7">
+                <div>
+                    <h2 className="text-[15px] font-semibold text-ink">Crediti e licenze</h2>
+                    <p className="mt-0.5 text-[13px] text-ink-3">Chi ha fatto caratteri, icone e immagini usati nelle tavole</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-ink-3 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
+            </Link>
+
             {/* Scollega Google */}
             {google.connected && <section className="cos-card p-6 sm:p-7">
                 <h2 className="cos-kicker mb-4 flex items-center gap-2"><LogOut className="h-3.5 w-3.5" aria-hidden /> Sessione</h2>
