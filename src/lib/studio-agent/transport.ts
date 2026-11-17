@@ -13,7 +13,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export type Raw = { url: string; source: string; title: string; text: string; kind: 'wiki' | 'rss' | 'pagina' | 'biblioteca' }
+export type Raw = { url: string; source: string; title: string; text: string; kind: 'wiki' | 'rss' | 'pagina' | 'biblioteca' | 'rilettura'; links?: string[] }
 
 export const getState = () => call<AgentState | null>('/state')
 export const putState = (st: AgentState) => call('/state', { method: 'PUT', body: JSON.stringify(st) })

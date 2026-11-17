@@ -156,7 +156,6 @@ function Bar({ k, v }: { k: string; v: number }) {
 function WorkDetail({ w }: { w: Work }) {
   const [note, setNote] = useState('')
   const [sent, setSent] = useState(false)
-  const acc = new Set(w.debate.accepted)
   return (
     <div className="space-y-4">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -177,16 +176,7 @@ function WorkDetail({ w }: { w: Work }) {
           {w.readings.map(r => <div key={r.url} className="text-sm"><a className="underline decoration-white/30 hover:decoration-white" href={r.url} target="_blank" rel="noreferrer">{r.title}</a> <span className="text-white/40">· {r.source}</span></div>)}
         </div>
       )}
-      <div className={box}>
-        <div className={h}>Dibattito interno</div>
-        <div className="space-y-1.5">
-          {w.debate.args.map(a => (
-            <div key={a.id} className={`text-sm ${acc.has(a.id) ? '' : 'text-white/35 line-through decoration-white/20'}`}>
-              <span className={a.polarity === 'pro' ? 'text-emerald-300/80' : 'text-rose-300/80'}>{a.voice}</span> <span className="text-white/40">({a.weight.toFixed(2)})</span> {a.claim}
-            </div>
-          ))}
-        </div>
-      </div>
+      <Debate w={w} />
       <div className={box}>
         <div className={h}>Scheda visiva</div>
         <div className="mb-3 flex gap-1">{w.visual.palette.map(c => <div key={c} className="h-6 flex-1 rounded" style={{ background: c }} title={c} />)}</div>
@@ -216,6 +206,38 @@ function WorkDetail({ w }: { w: Work }) {
           setNote(''); setSent(true)
         }}>Lascia la nota</button>
         {sent && <span className="ml-2 text-xs text-white/50">lasciata</span>}
+      </div>
+    </div>
+  )
+}
+
+function Debate({ w }: { w: Work }) {
+  const acc = new Set(w.debate.accepted)
+  const byId = new Map(w.debate.args.map(a => [a.id, a]))
+  const aspects = [...new Set(w.debate.args.map(a => a.aspect))]
+  const pro = w.debate.args.filter(a => acc.has(a.id) && a.polarity === 'pro').reduce((t, a) => t + a.weight, 0)
+  const con = w.debate.args.filter(a => acc.has(a.id) && a.polarity === 'contro').reduce((t, a) => t + a.weight, 0)
+  return (
+    <div className={box}>
+      <div className={h}>Dibattito interno</div>
+      <div className="mb-3 text-sm">Verdetto: <b>{w.debate.verdict === 'tiene' ? 'la tiene' : 'la butta'}</b> <span className="text-white/40">(reggono {acc.size} su {w.debate.args.length} argomenti · pro {pro.toFixed(2)} · contro {con.toFixed(2)})</span></div>
+      <div className="space-y-3">
+        {aspects.map(asp => (
+          <div key={asp}>
+            <div className="mb-1 text-xs text-white/40">su: {asp}</div>
+            {w.debate.args.filter(a => a.aspect === asp).map(a => {
+              const ok = acc.has(a.id)
+              const targets = a.attacks.map(t => byId.get(t)).filter(Boolean).map(t => t!.voice)
+              return (
+                <div key={a.id} className={`mb-1 text-sm ${ok ? '' : 'text-white/35'}`}>
+                  <span className={a.polarity === 'pro' ? 'text-emerald-300/80' : 'text-rose-300/80'}>{a.voice}</span>
+                  <span className="text-white/40"> {a.polarity === 'pro' ? 'difende' : 'attacca'}{targets.length ? ` (risponde a ${[...new Set(targets)].join(', ')})` : ''}:</span> {a.claim}
+                  <span className="ml-1 text-xs text-white/40">{ok ? '— regge' : '— cade'}</span>
+                </div>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -269,6 +291,23 @@ function Mind({ st }: { st: AgentState }) {
             </div>
           ))}
         </div>
+      </div>
+      <div className={box}>
+        <div className={h}>Ricerca in corso</div>
+        {st.ricerca && !st.ricerca.closed ? (
+          <div className="text-sm">
+            <div><b>{st.ricerca.word}</b> · fase {st.ricerca.phase} · giorno {st.day - st.ricerca.start + 1} di {st.ricerca.length} · {st.ricerca.workIds.length} tavole</div>
+            <div className="text-white/60">{st.ricerca.question}</div>
+            <div className="text-white/50">parole: {st.ricerca.words.join(', ')}</div>
+            {st.ricerca.findings.length > 0 && <div className="mt-1 text-white/60">ha trovato: {st.ricerca.findings.slice(-3).join(' / ')}</div>}
+          </div>
+        ) : <div className="text-sm text-white/40">Nessuna, la apre alla prossima giornata.</div>}
+        {(st.ricercheChiuse ?? []).length > 0 && <div className="mt-2 text-xs text-white/40">chiuse: {st.ricercheChiuse!.map(x => `${x.word} (${x.workIds.length})`).join(', ')}</div>}
+        <div className="mt-2 text-xs text-white/40">repertorio: {(st.repertorio ?? []).length} tavole da cui ripartire · link da seguire: {(st.linkQueue ?? []).length} · letture tenute: {st.readings.length} · parole nello spazio: {st.words.vocab.length}</div>
+      </div>
+      <div className={box}>
+        <div className={h}>Temi (mappa dei significati)</div>
+        {(st.themes ?? []).length ? st.themes!.map(t => <div key={t.id} className="mb-1 text-sm"><span className="text-white/40">{t.weight} · </span>{t.words.join(', ')}</div>) : <div className="text-sm text-white/40">Ancora troppe poche letture per vedere dei temi.</div>}
       </div>
       <div className={box}>
         <div className={h}>Domande aperte</div>
@@ -339,6 +378,13 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
       </div>
       <div className="flex items-center gap-3 lg:col-span-2">
         <button className={btn} onClick={save}>Salva</button>
+        {'exportArchive' in T && (
+          <button className={btn} onClick={async () => {
+            const blob = await (T as unknown as { exportArchive: () => Promise<Blob> }).exportArchive()
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(blob); a.download = `archivio-${st.name || 'artista'}-giorno-${st.day}.json`; a.click()
+          }}>Esporta archivio</button>
+        )}
         <span className="text-sm text-white/50">{msg}</span>
         <button className={`${btn} ml-auto border-rose-400/30 text-rose-200/80`} onClick={async () => {
           if (!window.confirm("Ricominciare da zero? L'artista perde memoria, poetica e criteri. Le opere restano in archivio.")) return

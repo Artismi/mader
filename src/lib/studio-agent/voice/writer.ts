@@ -8,7 +8,7 @@
  */
 import type { Features, Gesture, Register, Reading } from '../core/types'
 import { pick, chance, type Rnd } from '../core/rng'
-import { sentences, words, content } from '../reader/tokenize'
+import { sentences, words, content, STOP } from '../reader/tokenize'
 
 const ADJ: [string, (f: Features) => boolean][] = [
   ['denso', f => f.densita > 0.6], ['vuoto', f => f.vuoto > 0.45], ['buio', f => f.luminosita < 0.3], ['chiaro', f => f.luminosita > 0.7],
@@ -66,14 +66,18 @@ export function cutup(c: VoiceCtx, parts = 2): string {
     const ws = pick(c.r, pool).split(/\s+/)
     const len = 2 + Math.floor(c.r() * 4)
     const st = Math.floor(c.r() * Math.max(1, ws.length - len))
-    frags.push(ws.slice(st, st + len).join(' ').replace(/[.,;:«»"()]/g, ''))
+    const piece = ws.slice(st, st + len).map(w => w.replace(/[.,;:«»"()*]/g, '')).filter(w => /^[\p{L}'’-]+$/u.test(w))
+    // non comincia né finisce su una parola vuota
+    while (piece.length && STOP.has(piece[0].toLowerCase())) piece.shift()
+    while (piece.length > 1 && STOP.has(piece[piece.length - 1].toLowerCase())) piece.pop()
+    if (piece.length) frags.push(piece.join(' '))
   }
-  return frags.join(' ').toLowerCase()
+  return (frags.join(' ') || c.word).toLowerCase()
 }
 
 /** catena di Markov di ordine 2 */
 export function markov(c: VoiceCtx, maxWords = 14): string {
-  const corpus = [...c.readings.map(r => r.text), ...c.ownTexts].join(' ').toLowerCase().replace(/[«»"()]/g, '')
+  const corpus = [...c.readings.flatMap(r => sentences(r.text)), ...c.ownTexts].join(' ').toLowerCase().replace(/[«»"()*]/g, '')
   const toks = corpus.split(/\s+/).filter(Boolean)
   if (toks.length < 30) return cutup(c, 3)
   const next = new Map<string, string[]>()

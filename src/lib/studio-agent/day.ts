@@ -10,7 +10,7 @@
  *  6. dibattito interno → tiene o butta
  *  7. ricorsione: codebook, criteri, voci, strumenti, registri, poetica
  */
-import type { AgentState, Gesture, Intention, NotebookEntry, Reading, Visit, Work } from './core/types'
+import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ricerca, Visit, Work } from './core/types'
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { TONES } from '@/components/studio/genera/recipes'
@@ -18,13 +18,14 @@ import { emptySheet, flatten } from './hands/sheet'
 import type { ToolCtx } from './hands/tools'
 import { measure, rasterize, palette } from './eyes/measure'
 import { histogram, learn, patches, seedCodebook } from './eyes/visual-words'
-import { addText, embed, freqOf, neighbors } from './reader/wordspace'
+import { addText, embed, freqOf, neighbors, similarity, type Embedding } from './reader/wordspace'
 import { salient, sentences, words } from './reader/tokenize'
 import { addTags } from './reader/analysis'
 import { addBeliefs, contradictions, extract } from './reader/logic'
 import { frontier, ground, setDefinition, toLookUp } from './reader/lexicon'
 import { MOOD_TEMPERATURE, chooseIntention, moodOf } from './mind/intention'
-import { learnTools, runStudio } from './mind/studio'
+import { learnTools, replay, runStudio } from './mind/studio'
+import { computeThemes, openRicerca, ricercaFinished, stepRicerca } from './mind/ricerca'
 import { evolve } from './mind/criteria'
 import { adaptPeak, interest as interestOf, novelty as noveltyOf } from './mind/taste'
 import { reweigh, speak, verbale as verbaleOf } from './mind/voices'
@@ -46,32 +47,51 @@ export interface DayHooks {
 
 const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
 
-async function gather(st: AgentState, r: () => number, thread: string | null, log: DayHooks['log']): Promise<Reading[]> {
-  const jobs: Promise<T.Raw[]>[] = []
-  if (thread) jobs.push(T.read(`mode=cerca&n=2&q=${encodeURIComponent(thread)}`))
-  const feeds = st.feeds.length ? st.feeds : ['wiki:casuale']
-  const nFeeds = 1 + Math.floor(r() * 2)
-  for (let i = 0; i < nFeeds; i++) {
-    const f = pick(r, feeds)
-    if (f === 'wiki:casuale') jobs.push(T.read('mode=casuale'))
-    else if (f === 'wiki:vetrina') jobs.push(T.read('mode=vetrina'))
-    else if (f.startsWith('pagina:')) jobs.push(T.read(`mode=pagina&url=${encodeURIComponent(f.slice(7))}`))
-    else jobs.push(T.read(`mode=rss&n=2&url=${encodeURIComponent(f)}`))
+async function gather(st: AgentState, r: () => number, thread: string | null, E: Embedding | null, log: DayHooks['log']): Promise<Reading[]> {
+  const got: T.Raw[] = []
+  const seen = new Set(st.readings.map(x => x.url))
+  // 1. cerca la parola del giorno
+  if (thread) got.push(...await T.read(`mode=cerca&n=2&q=${encodeURIComponent(thread)}`))
+  // 2. segue un link letto nei giorni prima, il più vicino alla parola del giorno
+  const queue = st.linkQueue ?? []
+  if (queue.length) {
+    const scored = queue.map(t => ({ t, s: (thread && E ? similarity(E, thread, t.toLowerCase().split(' ')[0]) : 0) + r() * 0.3 }))
+    const link = scored.sort((a, b) => b.s - a.s)[0].t
+    st.linkQueue = queue.filter(t => t !== link)
+    log(`Seguo un link: ${link}`)
+    got.push(...await T.read(`mode=voce&t=${encodeURIComponent(link)}`))
   }
-  const got = (await Promise.all(jobs)).flat().filter(x => x && x.text && x.text.length > 120)
-  // biblioteca: a volte rilegge un pezzo dei testi messi in studio
-  if (r() < 0.4) {
+  // 3. una fonte a caso tra quelle scelte
+  const feeds = st.feeds.length ? st.feeds : ['wiki:casuale']
+  const f = pick(r, feeds)
+  if (f === 'wiki:casuale') got.push(...await T.read('mode=casuale'))
+  else if (f === 'wiki:vetrina') got.push(...await T.read('mode=vetrina'))
+  else if (f.startsWith('pagina:')) got.push(...await T.read(`mode=pagina&url=${encodeURIComponent(f.slice(7))}`))
+  else got.push(...await T.read(`mode=rss&n=2&url=${encodeURIComponent(f)}`))
+  // 4. biblioteca dello studio
+  const fresh0 = got.filter(x => x && x.text && x.text.length > 120 && !seen.has(x.url))
+  if (r() < 0.5 || fresh0.length < 2) {
     const lib = await T.library()
     if (lib.length) {
-      const b = pick(r, lib)
+      const b = thread ? (lib.find(x => x.text.toLowerCase().includes(thread)) ?? pick(r, lib)) : pick(r, lib)
       const paras = b.text.split(/\n\s*\n/).filter(p => p.length > 200)
-      const start = Math.floor(r() * Math.max(1, paras.length - 4))
-      got.push({ url: `biblioteca/${b.name}`, source: 'biblioteca', title: b.name.replace(/\.(md|txt)$/i, ''), text: paras.slice(start, start + 5).join('\n\n'), kind: 'biblioteca' })
+      const hit = thread ? paras.findIndex(p => p.toLowerCase().includes(thread)) : -1
+      const start = hit >= 0 ? hit : Math.floor(r() * Math.max(1, paras.length - 4))
+      fresh0.push({ url: `biblioteca/${b.name}#${start}`, source: 'biblioteca', title: b.name.replace(/\.(md|txt)$/i, ''), text: paras.slice(start, start + 5).join('\n\n'), kind: 'biblioteca' })
     }
   }
-  const seen = new Set(st.readings.map(x => x.url))
-  const fresh = got.filter(x => !seen.has(x.url)).slice(0, 6).map(toReading)
-  for (const x of fresh) log(`Leggo: ${x.title} (${x.source})`)
+  let fresh = fresh0.slice(0, 6).map(toReading)
+  // 5. se il mondo non risponde, rilegge: cerca nelle letture vecchie la parola del giorno
+  if (fresh.length < 2 && st.readings.length) {
+    const old = st.readings.filter(x => thread && x.text.toLowerCase().includes(thread)).concat(st.readings).slice(0, 40)
+    const two = [pick(r, old), pick(r, old)].filter((x, i, a) => a.indexOf(x) === i)
+    for (const o of two) { fresh.push({ ...o, id: uid(), kind: 'rilettura', fetchedAt: new Date().toISOString() }); log(`Rileggo: ${o.title}`) }
+  }
+  fresh = fresh.slice(0, 6)
+  // i link letti oggi entrano nella coda
+  const links = fresh.flatMap(x => x.links ?? [])
+  st.linkQueue = [...new Set([...(st.linkQueue ?? []), ...links])].slice(-400)
+  for (const x of fresh) if (x.kind !== 'rilettura') log(`Leggo: ${x.title} (${x.source})`)
   return fresh
 }
 
@@ -88,14 +108,22 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const visits = st.visits.filter(v => !v.read)
   if (visits.length) log(`Trovo ${visits.length} note lasciate in studio.`)
 
-  // 2 · leggere
+  // 2 · ricerca in corso (struttura su più giorni) e parola del giorno
+  const E0 = st.words.docs > 3 ? embed(st.words, 1200, 24, st.seed) : null
+  if (E0 && (!st.themes?.length || st.day % 7 === 0)) st.themes = computeThemes(E0, freqOf(st.words), 10, r)
+  if (!st.ricerca || st.ricerca.closed) {
+    st.ricerca = openRicerca(st, r)
+    if (st.ricerca) log(`Apro una ricerca su "${st.ricerca.word}" (${st.ricerca.words.join(', ')}), per ${st.ricerca.length} giorni. ${st.ricerca.question}`)
+  }
+  const step = st.ricerca ? stepRicerca(st.ricerca, st.day) : null
+  if (st.ricerca && step) { st.ricerca.phase = step.phase; log(`Ricerca "${st.ricerca.word}", fase: ${step.phase}.`) }
   const openQ = st.questions.filter(q => !q.closed).sort((a, b) => a.visits - b.visits)
   const voids = Object.values(st.lexicon).filter(e => e.state === 'a_vuoto').map(e => e.word)
-  const thread = openQ[0]?.word ?? (voids.length ? pick(r, voids) : null)
+  const thread = step?.word ?? openQ[0]?.word ?? (voids.length ? pick(r, voids) : null)
   if (thread) log(`Seguo un filo: "${thread}".`)
-  const readings = await gather(st, r, thread, log)
-  if (!readings.length) log('Non sono riuscito a leggere niente di nuovo: lavoro con quello che ho.')
-  for (const rd of readings) addText(st.words, rd.text)
+  const readings = await gather(st, r, thread, E0, log)
+  if (!readings.length) log('Non sono riuscito a leggere niente: lavoro con quello che ho.')
+  for (const rd of readings) if (rd.kind !== 'rilettura') addText(st.words, rd.text)
 
   // analisi grammaticale con il lessico del server, se c'è
   const sent = readings.flatMap(rd => sentences(rd.text).slice(0, 40).map(s => ({ s, src: rd.title })))
@@ -128,7 +156,8 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   // 3 · intenzione
   const E = embed(st.words, 1200, 24, st.seed)
   if (!st.name) { st.name = chooseName(r, salientToday); log(`Mi chiamerò ${st.name}.`) }
-  const intention: Intention = chooseIntention(st, r, E, salientToday, readings[0]?.title ?? '')
+  const intention: Intention = chooseIntention(st, r, E, salientToday, readings[0]?.title ?? '', step?.word)
+  if (st.ricerca && step) intention.why += `; ricerca "${st.ricerca.word}" (${step.phase}): ${st.ricerca.question}`
   log(`Intenzione: "${intention.word}", tono ${intention.register}. Perché: ${intention.why}.`)
 
   // 4–7 · una o più tavole: la prima, poi una serie se ha funzionato, o un ritentativo se l'ha buttata
@@ -142,8 +171,11 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const allVerb: string[] = [], allDone: string[] = [], allBored: string[] = [], newborn: string[] = []
   let ragione: Work['ragione'] = 'prima'
   let cur: Intention = intention
+  let parent: Genome | null = pickParent(st, r, step?.phase)
+  if (parent) log(`Riparto da una tavola riuscita del giorno ${parent.day} e la vario.`)
   for (let n = 1; n <= MAX_TAVOLE; n++) {
-    const out = await tavola(st, r, cur, n, ragione, readings, near, ownTexts, visits, hooks)
+    const out = await tavola(st, r, cur, n, ragione, readings, near, ownTexts, visits, hooks, parent, step?.phase)
+    parent = out.genome
     works.push(out.work)
     allVerb.push(...out.work.debate.verbale.map(l => `[tavola ${n}] ${l}`))
     allDone.push(...out.work.gestures.filter(g => g.kept).map(g => g.tool))
@@ -189,12 +221,28 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
     st.poetics.push({ day: st.day, date: new Date().toISOString(), text: rewritePoetics(st) })
     log('Ho riscritto la mia poetica.')
   }
+  if (st.ricerca && ricercaFinished(st.ricerca, st.day)) {
+    st.ricerca.closed = true
+    st.ricercheChiuse = [...(st.ricercheChiuse ?? []), st.ricerca].slice(-30)
+    entry.wants.push(`chiusa la ricerca su "${st.ricerca.word}" dopo ${st.ricerca.workIds.length} tavole`)
+    log(`Chiudo la ricerca su "${st.ricerca.word}". Ho trovato: ${st.ricerca.findings.slice(-2).join(' / ') || 'poco'}.`)
+  }
   st.lastRun = new Date().toISOString()
   await T.putState(st)
   return { state: st, works }
 }
 
 const MAX_TAVOLE = 3
+
+/** da quale tavola riuscita ripartire: nella ricerca in corso quando approfondisce o sintetizza, a volte dal repertorio intero */
+function pickParent(st: AgentState, r: () => number, phase?: Ricerca['phase']): Genome | null {
+  const rep = st.repertorio ?? []
+  if (!rep.length) return null
+  const mine = rep.filter(g => g.ricercaId && g.ricercaId === st.ricerca?.id)
+  if ((phase === 'approfondire' || phase === 'sintesi') && mine.length) return weighted(r, mine, g => g.interest, 0.6)
+  const p = st.mood === 'annoiato' || st.mood === 'inquieto' ? 0.15 : 0.35
+  return r() < p ? weighted(r, rep, g => g.interest, st.temperature) : null
+}
 
 /** variazione in serie: stessi temi, bersagli spostati verso ciò che ha funzionato e un po' oltre */
 function vary(it: Intention, r: () => number, f: Record<string, number>): Intention {
@@ -206,7 +254,8 @@ function vary(it: Intention, r: () => number, f: Record<string, number>): Intent
 async function tavola(
   st: AgentState, r: () => number, intention: Intention, n: number, ragione: Work['ragione'],
   readings: Reading[], near: string[], ownTexts: string[], visits: Visit[], hooks: DayHooks,
-): Promise<{ work: Work; bored: string[]; newborn: string[] }> {
+  parent: Genome | null, phase?: Ricerca['phase'],
+): Promise<{ work: Work; bored: string[]; newborn: string[]; genome: Genome | null }> {
   const log = hooks.log
   const fast = !!hooks.fast
   const tone = weighted(r, TONES, t => (st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 2 : 1, st.temperature)
@@ -215,10 +264,20 @@ async function tavola(
   const base = { curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]
   const steps = Math.round(base * (fast ? 0.6 : 1))
   log(`— Tavola ${n} (${ragione}), tono ${tone.label}.`)
-  const res = await runStudio(st, r, emptySheet(800, 1000, tone.bg), intention, tctx, steps, (s, g) => {
+  // da un genoma riuscito (variato) o da zero
+  let start = emptySheet(800, 1000, tone.bg)
+  let pre: { gestures: Gesture[]; genome: { tool: string; params: Record<string, unknown> }[] } = { gestures: [], genome: [] }
+  if (parent) {
+    const amount = phase === 'sintesi' ? 0.25 : ragione === 'serie' ? 0.4 : 0.6
+    const rp = await replay(st, r, start, parent.gestures, tctx, amount)
+    start = rp.sheet; pre = rp
+    log(`Rifatti ${rp.gestures.length} gesti dal genoma (variazione ${Math.round(amount * 100)}%).`)
+  }
+  const res0 = await runStudio(st, r, start, intention, tctx, parent ? Math.ceil(steps * 0.5) : steps, (s, g) => {
     log(`${g.kept ? '✓' : '✗'} ${g.tool} (${g.delta >= 0 ? '+' : ''}${g.delta})`)
     if (!fast) hooks.preview?.(flatten(s, 0.5))
   })
+  const res = { ...res0, gestures: [...pre.gestures, ...res0.gestures], genome: [...pre.genome, ...res0.genome] }
   if (fast) hooks.preview?.(flatten(res.sheet, 0.5))
 
   // guardare la tavola finita
@@ -238,13 +297,14 @@ async function tavola(
   // dibattito
   const args = speak({
     st, f, novelty: nov, intention, title: ttl, toolsUsed: res.gestures.filter(g => g.kept).map(g => g.tool),
-    readingsTitles: readings.map(x => x.title), contradictions: contradictions(st.beliefs), visits: n === 1 ? visits : [],
+    readingsTitles: readings.map(x => x.title), contradictions: contradictions(st.beliefs), visits: n === 1 ? visits : [], interest: intr,
   })
   wireAttacks(args)
   const acc = grounded(args)
   const v = verdict(args, acc)
   const verb = verbaleOf(args, acc)
-  const kept = v.keep
+  // tiene se il fronte pro regge di più e la tavola gli ha insegnato almeno qualcosa
+  const kept = v.keep && intr > 0.3
   log(`Dibattito: ${acc.size} argomenti reggono su ${args.length}. Pro ${v.pro.toFixed(2)}, contro ${v.contro.toFixed(2)} → ${kept ? 'la tengo' : 'la butto'}.`)
   const held = args.filter(a => acc.has(a.id)).sort((a, b) => b.weight - a.weight).map(a => a.claim)
   const fell = args.filter(a => !acc.has(a.id)).sort((a, b) => b.weight - a.weight).map(a => a.claim)
@@ -273,8 +333,20 @@ async function tavola(
   const saved = await T.saveWork(work, final.toDataURL('image/png'))
   hooks.onWork?.(saved)
   log(`Tavola ${n}: interesse ${(intr * 100).toFixed(0)}, novità ${(nov * 100).toFixed(0)}, progresso ${(progress * 100).toFixed(0)}.`)
+  const genes = res.genome.length > 16 ? [...res.genome.slice(0, 6), ...res.genome.slice(-10)] : res.genome
+  const genome: Genome = { id: uid(), workId: id, day: st.day, interest: intr, tone: tone.id, ricercaId: st.ricerca?.id, gestures: genes }
+  if (kept && intr > 0.5 && res.genome.length) {
+    st.repertorio = [...(st.repertorio ?? []), genome]
+      .sort((a, b) => (b.interest - (st.day - b.day) * 0.004) - (a.interest - (st.day - a.day) * 0.004))
+      .slice(0, 60)
+  }
+  if (st.ricerca && !st.ricerca.closed) {
+    st.ricerca.workIds.push(id)
+    if (kept && held[0]) st.ricerca.findings = [...st.ricerca.findings, held[0]].slice(-12)
+  }
   return {
     work: saved,
+    genome: res.genome.length ? genome : null,
     bored: [...args.filter(a => acc.has(a.id) && a.voice === 'memoria').map(a => a.claim), ...crit.died.map(c => `il criterio ${c}`)],
     newborn: crit.newborn,
   }

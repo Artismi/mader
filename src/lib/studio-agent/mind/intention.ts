@@ -31,7 +31,7 @@ const MOOD_REGISTER: Record<Mood, Register[]> = {
   giocoso: ['scherzoso'], cupo: ['filosofico', 'poetico', 'silenzio'], calmo: ['poetico', 'silenzio'],
 }
 
-export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates: string[], readingTitle: string): Intention {
+export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates: string[], readingTitle: string, forced?: string): Intention {
   // preferisce le parole a vuoto (le vuole ancorare) e quelle vicine alle domande aperte
   const qWords = st.questions.filter(q => !q.closed).map(q => q.word)
   const pool = [...new Set([...candidates, ...qWords])].filter(w => w.length > 3)
@@ -44,7 +44,7 @@ export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates
     if (anchorOf(w)) s += 0.3
     return s
   }
-  const word = pool.length ? weighted(r, pool, wScore, st.temperature) : pick(r, ['soglia', 'peso', 'confine', 'resto'])
+  const word = forced ?? (pool.length ? weighted(r, pool, wScore, st.temperature) : pick(r, ['soglia', 'peso', 'confine', 'resto']))
 
   // bersagli visivi: dalla parola stessa o dalle ancorate vicine
   const targets: Record<string, number> = {}

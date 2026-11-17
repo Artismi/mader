@@ -5,9 +5,10 @@
  */
 import type { AgentState, Argument, Features, Intention, Polarity, Visit, Belief } from '../core/types'
 import { judge } from './criteria'
+import { featureDistance } from '../eyes/measure'
 import { uid } from '../core/rng'
 
-export const VOICES = ['formale', 'occhio', 'distruttore', 'memoria', 'conservatore', 'intenzione', 'materia', 'ironia', 'logica', 'visitatore'] as const
+export const VOICES = ['formale', 'occhio', 'distruttore', 'memoria', 'conservatore', 'intenzione', 'coerenza', 'materia', 'ironia', 'logica', 'visitatore'] as const
 export type VoiceId = typeof VOICES[number]
 
 export interface DebateInput {
@@ -20,6 +21,7 @@ export interface DebateInput {
   readingsTitles: string[]
   contradictions: { a: Belief; b: Belief }[]
   visits: Visit[]
+  interest: number
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
@@ -65,6 +67,27 @@ export function speak(inp: DebateInput): Argument[] {
     else if (miss > 0.4) say('intenzione', 'intenzione', 'contro', 0.7, `"${intention.word}" si è perso per strada.`)
   }
   if (inp.readingsTitles.length && intention.why) say('intenzione', 'mondo', 'pro', 0.3, `Viene da: ${inp.readingsTitles[0]}.`)
+
+  // coerenza: la tavola parla con quelle di prima della stessa ricerca?
+  const rc = st.ricerca
+  if (rc && !rc.closed && rc.workIds.length) {
+    const prev = st.recentVisual.filter(v => rc.workIds.includes(v.id))
+    if (prev.length) {
+      const d = Math.min(...prev.map(v => featureDistance(f, v.features)))
+      if (d > 0.04 && d < 0.2) say('coerenza', 'ricerca', 'pro', 0.7, `Parla con le tavole di prima su "${rc.word}": stessa famiglia, un passo più in là.`)
+      else if (d <= 0.04) say('coerenza', 'ricerca', 'contro', 0.5, `Ripete la tavola di prima su "${rc.word}" senza aggiungere niente.`)
+      else if (d > 0.3 && rc.phase !== 'esplorare') say('coerenza', 'ricerca', 'contro', 0.6, `Non c'entra con la ricerca su "${rc.word}": è un'altra storia.`)
+    }
+    if (rc.phase === 'sintesi') say('coerenza', 'ricerca', 'pro', 0.3, `È la sintesi: deve tenere insieme ${rc.workIds.length} tavole.`)
+  }
+  // rumore contro struttura
+  const domV = Math.max(f.punti, f.linee, f.superfici)
+  if (f.elementi > 0.6 && f.complessita > 0.7 && domV < 0.5) say('formale', 'rumore', 'contro', 0.8, `È rumore: tutto si muove e niente dice qualcosa.`)
+  else if (domV > 0.55 && f.vuoto > 0.15) say('formale', 'rumore', 'pro', 0.5, `C'è una struttura: una cosa comanda e attorno c'è spazio.`)
+
+  // gusto: che cosa mi ha insegnato?
+  if (inp.interest < 0.4) say('distruttore', 'gusto', 'contro', 0.9 - inp.interest, `Non mi insegna niente (interesse ${pct(inp.interest)}).`)
+  else if (inp.interest > 0.62) say('distruttore', 'gusto', 'pro', inp.interest, `Mi ha costretto a guardare diversamente (interesse ${pct(inp.interest)}).`)
 
   // materia
   if (f.complessita < 0.15) say('materia', 'materia', 'contro', 0.5, `Troppo liscio, sa di schermo.`)

@@ -16,13 +16,17 @@ export function words(text: string): string[] {
     .filter(w => w.length > 1)
 }
 
-export const content = (ws: string[]) => ws.filter(w => !STOP.has(w) && w.length > 2)
+/** parole di contenuto: italiane (solo lettere, finale vocalico), niente codice né inglese */
+export const looksItalian = (w: string) => /^[a-zàèéìíòóùú]+$/.test(w) && /[aeiouàèéìíòóùú]$/.test(w) && !/(k|w|y|x|j)/.test(w)
+export const content = (ws: string[]) => ws.filter(w => !STOP.has(w) && w.length > 2 && looksItalian(w))
 
 export function sentences(text: string): string[] {
   return text.replace(/\s+/g, ' ')
     .split(/(?<=[.!?;:])\s+(?=[A-ZÀÈÉÌÒÙ"«(])/)
     .map(s => s.trim())
     .filter(s => s.length > 12 && s.length < 400)
+    // niente righe di codice, tabelle, formule, elenchi di numeri
+    .filter(s => !/[{}\[\]<>|=_#`$\\]/.test(s) && (s.match(/\d/g)?.length ?? 0) < s.length * 0.08)
 }
 
 /** termini salienti di un testo rispetto a un corpus (tf-idf grezzo) */

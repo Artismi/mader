@@ -11,8 +11,38 @@ export interface Reading {
   source: string
   title: string
   text: string
-  kind: 'wiki' | 'rss' | 'pagina' | 'biblioteca'
+  kind: 'wiki' | 'rss' | 'pagina' | 'biblioteca' | 'rilettura'
   fetchedAt: string
+  links?: string[]
+}
+
+/** un tema: un gruppo di parole vicine nello spazio delle parole */
+export interface Theme { id: string; words: string[]; weight: number }
+
+/** una ricerca dura più giorni: esplora le parole del tema, approfondisce la parola centrale, chiude con una sintesi */
+export interface Ricerca {
+  id: string
+  word: string
+  words: string[]
+  question: string
+  start: number
+  length: number
+  phase: 'esplorare' | 'approfondire' | 'sintesi'
+  workIds: string[]
+  /** cosa ha capito strada facendo (frasi sue, dal dibattito) */
+  findings: string[]
+  closed?: boolean
+}
+
+/** genoma di una tavola riuscita: i gesti tenuti, con i parametri completi, per rifarla e variarla */
+export interface Genome {
+  id: string
+  workId: string
+  day: number
+  interest: number
+  tone: string
+  ricercaId?: string
+  gestures: { tool: string; params: Record<string, unknown> }[]
 }
 
 export interface Gesture {
@@ -210,4 +240,10 @@ export interface AgentState {
   recentVisual: { id: string; features: Features; words: number[] }[]
   /** storia sintetica delle giornate, per umore e ricorsione */
   history: { day: number; interest: number; novelty: number; progress: number; kept: boolean }[]
+  /** voci di Wikipedia incontrate nei link e non ancora lette */
+  linkQueue?: string[]
+  themes?: Theme[]
+  ricerca?: Ricerca
+  ricercheChiuse?: Ricerca[]
+  repertorio?: Genome[]
 }

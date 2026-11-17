@@ -6,7 +6,7 @@
  */
 import type { AgentState, Visit, Work } from './core/types'
 
-export type Raw = { url: string; source: string; title: string; text: string; kind: 'wiki' | 'rss' | 'pagina' | 'biblioteca' }
+export type Raw = { url: string; source: string; title: string; text: string; kind: 'wiki' | 'rss' | 'pagina' | 'biblioteca' | 'rilettura'; links?: string[] }
 
 const DB = 'artista-osservatore'
 let dbp: Promise<IDBDatabase> | null = null

@@ -36,10 +36,17 @@ export function verdict(args: Argument[], accepted: Set<string>) {
   return { pro, contro, keep: pro >= contro }
 }
 
-/** attacchi automatici: argomenti di segno opposto sullo stesso aspetto si attaccano */
+/**
+ * Attacchi: sullo stesso aspetto i segni opposti si attaccano; in più ogni
+ * argomento attacca i due più forti del fronte opposto (chi difende l'opera
+ * risponde a chi la smonta, e viceversa). Se due si attaccano con forza
+ * simile restano entrambi in sospeso: non reggono.
+ */
 export function wireAttacks(args: Argument[]) {
-  for (const a of args) for (const b of args) {
-    if (a === b || a.polarity === b.polarity) continue
-    if (a.aspect === b.aspect && !a.attacks.includes(b.id)) a.attacks.push(b.id)
-  }
+  const pros = args.filter(a => a.polarity === 'pro').sort((a, b) => b.weight - a.weight)
+  const cons = args.filter(a => a.polarity === 'contro').sort((a, b) => b.weight - a.weight)
+  const link = (a: Argument, b: Argument) => { if (!a.attacks.includes(b.id)) a.attacks.push(b.id) }
+  for (const a of args) for (const b of args) if (a !== b && a.polarity !== b.polarity && a.aspect === b.aspect) link(a, b)
+  for (const a of pros) for (const b of cons.slice(0, 2)) link(a, b)
+  for (const a of cons) for (const b of pros.slice(0, 2)) link(a, b)
 }

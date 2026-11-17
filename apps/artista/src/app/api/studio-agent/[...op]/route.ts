@@ -6,11 +6,11 @@
  *   POST shader {url}
  */
 import { NextResponse } from 'next/server'
-import { define, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch } from '@/lib/studio-agent/server/web'
+import { define, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60
 
 type Ctx = { params: Promise<{ op: string[] }> }
 const bad = (msg: string, status = 400) => NextResponse.json({ error: msg }, { status })
@@ -25,7 +25,8 @@ export async function GET(req: Request, { params }: Ctx) {
       if (mode === 'vetrina') return NextResponse.json([await wikiFeatured()].filter(Boolean))
       if (mode === 'cerca') return NextResponse.json(await wikiSearch(q.get('q') ?? '', Number(q.get('n') ?? 2)))
       if (mode === 'rss') return NextResponse.json(await rss(q.get('url') ?? '', Number(q.get('n') ?? 2)))
-      if (mode === 'pagina') return NextResponse.json([await page(q.get('url') ?? '')].filter(Boolean))
+      if (mode === 'voce') return NextResponse.json([await wikiVoce(q.get('t') ?? '')].filter(Boolean))
+        if (mode === 'pagina') return NextResponse.json([await page(q.get('url') ?? '')].filter(Boolean))
       return bad('modo sconosciuto')
     }
     if (op === 'define') return NextResponse.json({ word: q.get('w'), definition: await define(q.get('w') ?? '') })

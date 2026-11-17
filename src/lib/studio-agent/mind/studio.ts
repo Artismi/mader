@@ -31,8 +31,16 @@ export function look(st: AgentState, s: Sheet, intention: Intention): Look {
   const prog = expectedProgress(st, ps)
   // un'immagine vuota non è un'opera
   const alive = Math.min(1, f.densita * 4 + f.bordi * 2)
-  const score = (0.35 * fit + 0.2 * crit + 0.25 * won + 0.2 * prog) * (0.4 + 0.6 * alive)
-  return { f, words, ps, score, parts: { intenzione: fit, criteri: crit, novita: nov, wundt: won, progresso: prog } }
+  // struttura: un elemento che comanda (Kandinsky), un vuoto che lavora, un baricentro sui terzi (Arnheim)
+  const dominance = Math.max(f.punti ?? 0, f.linee ?? 0, f.superfici ?? 0)
+  const vuotoBuono = f.vuoto > 0.12 && f.vuoto < 0.65 ? 1 : 0.35
+  const struct = 0.45 * dominance + 0.3 * vuotoBuono + 0.25 * f.terzi
+  // rumore: tanti elementi diversi, pelle troppo fitta, nessuno che comanda
+  const noise = Math.max(0, Math.min(1, 0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dominance))
+  const noisePenalty = noise > 0.45 ? (noise - 0.45) / 0.55 : 0
+  const base = 0.3 * fit + 0.15 * crit + 0.2 * won + 0.15 * prog + 0.2 * struct
+  const score = base * (0.4 + 0.6 * alive) * (1 - 0.6 * noisePenalty)
+  return { f, words, ps, score, parts: { intenzione: fit, criteri: crit, novita: nov, wundt: won, progresso: prog, struttura: struct, rumore: noise } }
 }
 
 function histogramQuick(cb: number[][], ps: number[][]) {
@@ -63,10 +71,12 @@ function urgency(t: Tool, s: Sheet, st: AgentState, intention: Intention, f: Fea
   }
   if (!s.layers.length) u *= ['semina', 'geometria', 'pattern', 'traccia', 'shader', 'scrivi'].includes(t.id) ? 2 : 0.05
   if (t.id === 'schiaccia') u *= 0.3
+  // troppi fogli sovrapposti: meno aggiungere, più togliere e unire
+  if (s.layers.length > 7) u *= ['togli', 'schiaccia', 'disponi', 'taglia'].includes(t.id) ? 2.5 : 0.35
   return u
 }
 
-export interface StudioResult { sheet: Sheet; gestures: Gesture[]; last: Look; effects: { tool: string; before: Features; after: Features; delta: number }[] }
+export interface StudioResult { sheet: Sheet; gestures: Gesture[]; last: Look; effects: { tool: string; before: Features; after: Features; delta: number }[]; genome: { tool: string; params: Record<string, unknown> }[] }
 
 export async function runStudio(
   st: AgentState, r: Rnd, start: Sheet, intention: Intention, ctx: ToolCtx, steps: number,
@@ -76,6 +86,7 @@ export async function runStudio(
   let cur = look(st, sheet, intention)
   const gestures: Gesture[] = []
   const effects: StudioResult['effects'] = []
+  const genome: StudioResult['genome'] = []
   const T0 = st.temperature
   for (let i = 0; i < steps; i++) {
     const T = T0 * (1 - i / steps) + 0.1
@@ -91,12 +102,12 @@ export async function runStudio(
     const g: Gesture = { tool: tool.id, params: summarize(params), kept: keep, delta: Math.round(delta * 1000) / 1000 }
     gestures.push(g)
     effects.push({ tool: tool.id, before: cur.f, after: nl.f, delta })
-    if (keep) { sheet = next; cur = nl }
+    if (keep) { genome.push({ tool: tool.id, params: encode(params, sheet) }); sheet = next; cur = nl }
     onStep?.(sheet, g, cur)
     // l'opera si assesta: la temperatura cala più in fretta se l'interesse è alto
     if (cur.score > 0.75 && i > steps / 2) break
   }
-  return { sheet, gestures, last: cur, effects }
+  return { sheet, gestures, last: cur, effects, genome }
 }
 
 /** i parametri dei gesti si salvano senza i dati pesanti */
@@ -125,4 +136,62 @@ export function learnTools(st: AgentState, effects: StudioResult['effects']) {
     t.gain += lr * (g - t.gain)
     st.tools[e.tool] = t
   }
+}
+
+// ─── genomi: rifare e variare una tavola riuscita ────────────────────────────
+
+/** il riferimento a un livello diventa la sua posizione nella pila (gli id cambiano a ogni tavola) */
+function encode(p: Record<string, unknown>, s: Sheet): Record<string, unknown> {
+  if (typeof p.layer === 'string' && p.layer !== 'tutti') {
+    const i = s.layers.findIndex(l => l.id === p.layer)
+    return { ...p, layer: undefined, __layer: i }
+  }
+  return { ...p }
+}
+function decode(p: Record<string, unknown>, s: Sheet): Record<string, unknown> | null {
+  if (typeof p.__layer === 'number') {
+    if (!s.layers.length) return null
+    const l = s.layers[Math.min(s.layers.length - 1, p.__layer)]
+    const { __layer: _x, ...rest } = p
+    void _x
+    return { ...rest, layer: l.id }
+  }
+  return p
+}
+
+function mutate(p: Record<string, unknown>, r: Rnd, amount: number): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(p)) {
+    if (k === 'seed' && typeof v === 'number') out[k] = r() < amount * 1.5 ? Math.floor(r() * 1e9) : v
+    else if (typeof v === 'number' && k !== '__layer' && k !== 'n') out[k] = v * (1 + (r() - 0.5) * 2 * amount * 0.3)
+    else out[k] = v
+  }
+  return out
+}
+
+/**
+ * Rifà una tavola dal suo genoma, con mutazioni (amount 0 = copia, 1 = molto libera).
+ * Restituisce il foglio e i gesti, come se li avesse fatti ora.
+ */
+export async function replay(
+  st: AgentState, r: Rnd, start: Sheet, genes: { tool: string; params: Record<string, unknown> }[], ctx: ToolCtx, amount: number,
+): Promise<{ sheet: Sheet; gestures: Gesture[]; genome: StudioResult['genome'] }> {
+  let sheet = start
+  const gestures: Gesture[] = []
+  const genome: StudioResult['genome'] = []
+  for (const g of genes) {
+    if (r() < 0.12 * amount) continue // a volte salta un gesto
+    const tool = TOOLS.find(t => t.id === g.tool)
+    if (!tool) continue
+    const dec = decode(mutate(g.params, r, amount), sheet)
+    if (!dec) continue
+    try {
+      const next = await tool.apply(sheet, dec, ctx)
+      genome.push({ tool: tool.id, params: encode(dec, sheet) })
+      gestures.push({ tool: tool.id, params: summarize(dec), kept: true, delta: 0 })
+      sheet = next
+    } catch { /* il gesto non si può rifare: pazienza */ }
+  }
+  void st
+  return { sheet, gestures, genome }
 }

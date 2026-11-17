@@ -72,6 +72,8 @@ export function rewritePoetics(st: AgentState): string {
     `Ascolto soprattutto ${voices.slice(0, 2).map(v => v[0]).join(' e ')}; meno ${voices[voices.length - 1][0]}.`,
     `Parlo di preferenza in tono ${regs[0][0]}, a volte ${regs[1][0]}.`,
     `So fare ${m.ancorata} parole, ne capisco per definizione ${m.definita}, ${m.a_vuoto} mi girano a vuoto${voids.length ? ` (${voids.join(', ')})` : ''}.`,
+    st.ricerca && !st.ricerca.closed ? `Sto cercando intorno a "${st.ricerca.word}" (${st.ricerca.words.join(', ')}): ${st.ricerca.question}` : '',
+    (st.ricercheChiuse ?? []).length ? `Ho chiuso ${st.ricercheChiuse!.length} ricerche: ${st.ricercheChiuse!.slice(-4).map(x => x.word).join(', ')}.` : '',
     qs.length ? `Mi chiedo: ${qs.join(' / ')}` : '',
     `Mi interessa ciò che dista da me circa ${Math.round(st.wundtPeak * 100)} su 100.`,
   ]
