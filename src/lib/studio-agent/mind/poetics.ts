@@ -9,8 +9,28 @@ import { born } from './criteria'
 import { VOICES } from './voices'
 import { mapCounts } from '../reader/lexicon'
 import { emptySpace } from '../reader/wordspace'
+import { getVetrina } from './vetrina'
 
 export const SEED_POETICS = 'Lavoro in uno studio con strumenti di grafica procedurale. Leggo il mondo e rispondo con opere. Nessuno mi chiede di piacere.'
+
+/** siti di partenza: modificabili dalle impostazioni */
+export const DEFAULT_SITES = [
+  'https://www.ilpost.it',
+  'https://www.internazionale.it',
+  'https://www.doppiozero.com',
+  'https://www.iltascabile.com',
+  'https://www.che-fare.com',
+  'https://www.artribune.com',
+  'https://www.lescienze.it',
+  'https://www.scienzainrete.it',
+  'https://www.treccani.it/magazine/',
+  'https://www.minimaetmoralia.it',
+  'https://www.nazioneindiana.com',
+  'https://www.wumingfoundation.com/giap/',
+  'https://www.dinamopress.it',
+  'https://www.jacobinitalia.it',
+  'https://ilmanifesto.it',
+]
 
 export const DEFAULT_FEEDS = [
   'wiki:casuale',
@@ -27,7 +47,7 @@ export function initialState(seed = Math.floor(Math.random() * 1e9)): AgentState
     criteria: Array.from({ length: 4 }, () => born(r, 0)),
     voices: Object.fromEntries(VOICES.map(v => [v, 1])),
     tools: {}, registers, codebook: [], codebookCounts: [],
-    words: emptySpace(), feeds: DEFAULT_FEEDS.slice(), shaders: [], visits: [], recentVisual: [], history: [],
+    words: emptySpace(), feeds: DEFAULT_FEEDS.slice(), sites: DEFAULT_SITES.slice(), liberta: false, shaders: [], visits: [], recentVisual: [], history: [],
   }
 }
 
@@ -75,6 +95,7 @@ export function rewritePoetics(st: AgentState): string {
     st.ricerca && !st.ricerca.closed ? `Sto cercando intorno a "${st.ricerca.word}" (${st.ricerca.words.join(', ')}): ${st.ricerca.question}` : '',
     (st.ricercheChiuse ?? []).length ? `Ho chiuso ${st.ricercheChiuse!.length} ricerche: ${st.ricercheChiuse!.slice(-4).map(x => x.word).join(', ')}.` : '',
     qs.length ? `Mi chiedo: ${qs.join(' / ')}` : '',
+    getVetrina(st) ? `Mi seguono ${getVetrina(st)!.followers.length} persone; ${(st.voices.pubblico ?? 1) > 1.1 ? 'le ascolto' : (st.voices.pubblico ?? 1) < 0.8 ? 'faccio a meno di loro' : 'le ascolto a metà'}.` : '',
     `Mi interessa ciò che dista da me circa ${Math.round(st.wundtPeak * 100)} su 100.`,
   ]
   return lines.filter(Boolean).join('\n')

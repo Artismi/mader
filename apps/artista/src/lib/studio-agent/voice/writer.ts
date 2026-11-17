@@ -147,3 +147,12 @@ export function workText(c: VoiceCtx, why: string, gs: Gesture[], held: string[]
   ]
   return lines.filter(Boolean).join('\n')
 }
+
+/** la riflessione che accompagna il post: cosa voleva, cosa ha tenuto, cosa non sa */
+export function reflection(c: VoiceCtx, why: string, held: string[], fell: string[], flaws: string[], question?: string): string {
+  const open = c.r() < 0.5 ? `Volevo ${c.word}.` : `Ho lavorato intorno a ${c.word}.`
+  const keep = held[0] ? ` ${held[0].replace(/\.$/, '')}.` : ''
+  const doubt = flaws[0] ? ` Forse è ${flaws[0]}, lo so.` : fell[0] ? ` Ho ignorato una voce che diceva: ${fell[0].toLowerCase()}` : ''
+  const q = question && c.r() < 0.6 ? ` ${question}` : c.register === 'silenzio' ? '' : ` ${cutup(c, 1)}.`
+  return (open + keep + doubt + q).replace(/\s+/g, ' ').trim()
+}

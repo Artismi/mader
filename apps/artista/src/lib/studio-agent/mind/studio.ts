@@ -12,6 +12,7 @@ import { flatten, type Sheet } from '../hands/sheet'
 import { TOOLS, type Tool, type ToolCtx } from '../hands/tools'
 import { measure, rasterize } from '../eyes/measure'
 import { patches } from '../eyes/visual-words'
+import { flaws as flawsOf, readability } from '../eyes/judgement'
 import { judge } from './criteria'
 import { expectedProgress, novelty, wundt } from './taste'
 import type { Mood } from '../core/types'
@@ -39,8 +40,13 @@ export function look(st: AgentState, s: Sheet, intention: Intention): Look {
   const noise = Math.max(0, Math.min(1, 0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dominance))
   const noisePenalty = noise > 0.45 ? (noise - 0.45) / 0.55 : 0
   const base = 0.3 * fit + 0.15 * crit + 0.2 * won + 0.15 * prog + 0.2 * struct
-  const score = base * (0.4 + 0.6 * alive) * (1 - 0.6 * noisePenalty)
-  return { f, words, ps, score, parts: { intenzione: fit, criteri: crit, novita: nov, wundt: won, progresso: prog, struttura: struct, rumore: noise } }
+  // difetti che chiunque vedrebbe (vuota, illeggibile, pattern a caso…): pesano quanto la voce "pubblico"
+  const read = readability(s)
+  const fl = flawsOf(f, read, fit, s.layers.map(l => l.kind))
+  const care = Math.min(1.5, st.voices.pubblico ?? 1)
+  const flawPenalty = Math.min(0.45, fl.reduce((a, x) => a + x.severity, 0) * 0.12 * care)
+  const score = base * (0.4 + 0.6 * alive) * (1 - 0.6 * noisePenalty) * (1 - flawPenalty)
+  return { f, words, ps, score, parts: { intenzione: fit, criteri: crit, novita: nov, wundt: won, progresso: prog, struttura: struct, rumore: noise, leggibilita: read.leggibilita } }
 }
 
 function histogramQuick(cb: number[][], ps: number[][]) {

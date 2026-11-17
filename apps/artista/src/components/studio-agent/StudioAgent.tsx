@@ -12,8 +12,9 @@ import { mapCounts } from '@/lib/studio-agent/reader/lexicon'
 import { contradictions } from '@/lib/studio-agent/reader/logic'
 import { uid } from '@/lib/studio-agent/core/rng'
 import * as T from '@/lib/studio-agent/transport'
+import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 
-type Tab = 'galleria' | 'mente' | 'quaderno' | 'impostazioni'
+type Tab = 'galleria' | 'vetrina' | 'mente' | 'quaderno' | 'impostazioni'
 
 const box = 'rounded-xl border border-white/10 bg-white/[0.03] p-4'
 const btn = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40'
@@ -111,12 +112,13 @@ export function StudioAgent() {
       )}
 
       <div className="mb-4 flex gap-1">
-        {(['galleria', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
+        {(['galleria', 'vetrina', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
           <button key={t} className={`${btn} ${tab === t ? 'bg-white/10' : ''}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
+      {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
       {tab === 'mente' && <Mind st={st} />}
       {tab === 'quaderno' && <Notebook st={st} works={works} open={w => { setSel(w); setTab('galleria') }} />}
       {tab === 'impostazioni' && <Settings st={st} onSaved={refresh} />}
@@ -243,6 +245,50 @@ function Debate({ w }: { w: Work }) {
   )
 }
 
+function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
+  const v = getVetrina(st)
+  const [open, setOpen] = useState<Post | null>(null)
+  if (!v || !v.posts.length) return <div className="text-white/50">Non ha ancora pubblicato niente. Pubblica le tavole che tiene.</div>
+  const img = (p: Post) => works.find(w => w.id === p.workId)?.image ?? p.image
+  const likes = v.posts.reduce((a, p) => a + p.likes, 0), views = v.posts.reduce((a, p) => a + p.views, 0)
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_460px]">
+      <div>
+        <div className="mb-4 flex flex-wrap gap-6 text-sm">
+          <div><b className="text-lg">{v.posts.length}</b> post</div>
+          <div><b className="text-lg">{v.followers.length}</b> follower <span className="text-white/40">(+{v.joined} / −{v.left})</span></div>
+          <div><b className="text-lg">{likes}</b> like</div>
+          <div><b className="text-lg">{views}</b> visualizzazioni</div>
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          {v.posts.map(p => (
+            <button key={p.workId} onClick={() => setOpen(p)} className="group relative aspect-square overflow-hidden bg-white/5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img(p)} alt={p.title} className="h-full w-full object-cover" />
+              <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/60 text-sm opacity-0 group-hover:opacity-100">♥ {p.likes} · 👁 {p.views} · 💬 {p.comments.length}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      {open && (
+        <div className="space-y-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={img(open)} alt={open.title} className="w-full rounded-xl" />
+          <div className="text-sm"><b>{st.name || 'artista'}</b> {open.caption.split('\n')[0]}</div>
+          <div className="text-sm text-white/80">{open.reflection}</div>
+          <div className="text-sm text-sky-300/70">{open.caption.split('\n')[1]}</div>
+          <div className="text-xs text-white/50">♥ {open.likes} · 👁 {open.views} · giorno {open.day}{open.flaws.length ? ` · difetti visti: ${open.flaws.map(f => f.flaw).join(', ')}` : ''}</div>
+          <div className={box}>
+            {open.comments.length ? open.comments.map(c => (
+              <div key={c.id} className={`mb-1 text-sm ${c.byArtist ? 'ml-4 text-white/70' : ''}`}><b className={c.byArtist ? 'text-white' : 'text-white/80'}>{c.who}</b> {c.text}</div>
+            )) : <div className="text-sm text-white/40">Nessun commento.</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Mind({ st }: { st: AgentState }) {
   const counts = mapCounts(st)
   const contr = useMemo(() => contradictions(st.beliefs), [st.beliefs])
@@ -351,9 +397,13 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
   const [feeds, setFeeds] = useState(st.feeds.join('\n'))
   const [shaders, setShaders] = useState(st.shaders.map(s => `${s.url} | ${s.license}`).join('\n'))
   const [msg, setMsg] = useState('')
+  const [sites, setSites] = useState((st.sites ?? []).join('\n'))
+  const [liberta, setLiberta] = useState(!!st.liberta)
   const save = async () => {
     const next: AgentState = {
       ...st,
+      sites: sites.split('\n').map(x => x.trim()).filter(x => /^https?:\/\//.test(x)),
+      liberta,
       feeds: feeds.split('\n').map(s => s.trim()).filter(Boolean),
       shaders: shaders.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
         const [url, license = 'da verificare'] = l.split('|').map(x => x.trim())
@@ -370,6 +420,12 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
         <div className={h}>Da dove legge</div>
         <p className="mb-2 text-xs text-white/50">Una fonte per riga: <code>wiki:casuale</code>, <code>wiki:vetrina</code>, l&apos;indirizzo di un feed RSS, oppure <code>pagina:https://…</code>. In più rilegge i file .md e .txt messi in <code>data/studio-agent/biblioteca/</code> (per esempio le note di ricerca di stateyour).</p>
         <textarea className="h-48 w-full rounded bg-black/30 p-2 font-mono text-xs" value={feeds} onChange={e => setFeeds(e.target.value)} />
+      </div>
+      <div className={box}>
+        <div className={h}>Siti da esplorare</div>
+        <p className="mb-2 text-xs text-white/50">Un indirizzo per riga (home o sezione). Ogni giornata ne sceglie uno, prende un articolo che non ha ancora letto, preferendo quelli che parlano della parola del giorno, e segue i link. Rispetta robots.txt e va piano.</p>
+        <textarea className="h-48 w-full rounded bg-black/30 p-2 font-mono text-xs" value={sites} onChange={e => setSites(e.target.value)} />
+        <label className="mt-2 flex items-center gap-2 text-sm text-white/70"><input type="checkbox" checked={liberta} onChange={e => setLiberta(e.target.checked)} /> libero: segue i link anche fuori da questi siti</label>
       </div>
       <div className={box}>
         <div className={h}>Codice raccolto (shader GLSL)</div>

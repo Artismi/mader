@@ -244,7 +244,7 @@ const scrivi: Tool = {
     const ax = p.align === 'left' ? size / 2 : p.align === 'right' ? cv.width - size / 2 : cv.width / 2
     lines.forEach((l, i) => g.fillText(l, ax, size / 2 + i * size * 1.15))
     const scale = Math.max(cv.width, cv.height) / Math.min(s.W, s.H)
-    return withLayer(s, { id: lid(), kind: 'testo', canvas: cv, x: p.x as number, y: p.y as number, scale, rot: p.rot as number, alpha: 1, blend: p.blend as Blend })
+    return withLayer(s, { id: lid(), kind: 'testo', canvas: cv, x: p.x as number, y: p.y as number, scale, rot: p.rot as number, alpha: 1, blend: p.blend as Blend, meta: { text: txt, color: p.color as string, size } })
   },
 }
 

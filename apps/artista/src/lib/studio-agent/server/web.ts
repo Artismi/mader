@@ -69,6 +69,52 @@ const decode = (s: string) => s
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
 
+/** link di una pagina, assoluti, senza ancore, solo http(s) */
+export function linksOf(html: string, base: string): string[] {
+  const out = new Set<string>()
+  for (const m of html.matchAll(/<a\s[^>]*href="([^"#]+)"/gi)) {
+    try {
+      const u = new URL(decode(m[1]), base)
+      if (!/^https?:$/.test(u.protocol)) continue
+      u.hash = ''
+      out.add(u.toString())
+    } catch { /* link rotto */ }
+  }
+  return [...out]
+}
+
+/** sembra un articolo: percorso con parole, non pagine di servizio */
+export function looksArticle(u: string) {
+  try {
+    const { pathname } = new URL(u)
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp3|mp4|css|js|xml|json)$/i.test(pathname)) return false
+    if (/(\/tag\/|\/tags\/|\/categor|\/autore|\/author|\/login|\/account|\/abbonati|\/subscribe|\/cookie|\/privacy|\/search|\/cerca|\/feed|\/wp-|\/page\/\d)/i.test(pathname)) return false
+    const words = pathname.split(/[\/\-_]/).filter(w => /^[a-zàèéìòù]{3,}$/i.test(w))
+    return words.length >= 3
+  } catch { return false }
+}
+
+const robots = new Map<string, string[]>()
+/** rispetta robots.txt (regole per tutti gli agenti) */
+async function allowed(url: string): Promise<boolean> {
+  const u = new URL(url)
+  if (!robots.has(u.host)) {
+    let rules: string[] = []
+    try {
+      const txt = await get(`${u.protocol}//${u.host}/robots.txt`, { ttlDays: 1, ms: 6000 })
+      let applies = false
+      for (const raw of txt.split('\n')) {
+        const line = raw.split('#')[0].trim()
+        const [k, ...rest] = line.split(':'); const v = rest.join(':').trim()
+        if (/^user-agent$/i.test(k)) applies = v === '*' || /artista/i.test(v)
+        else if (applies && /^disallow$/i.test(k) && v) rules.push(v)
+      }
+    } catch { rules = [] }
+    robots.set(u.host, rules)
+  }
+  return !robots.get(u.host)!.some(rule => u.pathname.startsWith(rule.replace(/\*.*$/, '')))
+}
+
 export function htmlToText(html: string): { title: string; text: string } {
   const title = decode((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '').trim())
   const body = html.replace(/<(script|style|nav|header|footer|aside|form|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')
@@ -149,9 +195,30 @@ export async function rss(url: string, n = 3): Promise<RawReading[]> {
 }
 
 export async function page(url: string): Promise<RawReading | null> {
-  const t = htmlToText(await get(url, { ttlDays: 7 }))
+  if (!(await allowed(url))) return null
+  const html = await get(url, { ttlDays: 7 })
+  const t = htmlToText(html)
   if (t.text.length < 200) return null
-  return { url, source: new URL(url).hostname, title: t.title || url, text: t.text, kind: 'pagina' }
+  return { url, source: new URL(url).hostname.replace(/^www\./, ''), title: t.title || url, text: t.text, kind: 'pagina', links: linksOf(html, url).filter(looksArticle).slice(0, 60) }
+}
+
+/**
+ * Esplorazione senza motore di ricerca: parte da un sito (la sua home o una
+ * sezione), sceglie un articolo che non ha ancora letto, preferendo quelli
+ * che nel titolo/percorso contengono la parola del giorno, e lo legge.
+ */
+export async function explore(seed: string, word: string, skip: string[]): Promise<RawReading | null> {
+  if (!(await allowed(seed))) return null
+  const html = await get(seed, { ttlDays: 0.2 })
+  const host = new URL(seed).host
+  const seen = new Set(skip)
+  const cands = linksOf(html, seed).filter(u => new URL(u).host === host && looksArticle(u) && !seen.has(u))
+  if (!cands.length) return null
+  const w = word.toLowerCase()
+  const hit = cands.filter(u => u.toLowerCase().includes(w))
+  const pickFrom = hit.length ? hit : cands
+  const url = pickFrom[Math.floor(Math.random() * Math.min(pickFrom.length, 25))]
+  return page(url)
 }
 
 /** definizione: Wikizionario (righe "#" della sezione italiana), poi attacco di Wikipedia */

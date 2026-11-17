@@ -17,6 +17,8 @@ export interface Layer {
   alpha: number
   blend: Blend
   flipX?: boolean
+  /** per i testi: cosa c'è scritto, colore e corpo in px del foglio (serve a capire se si legge) */
+  meta?: { text: string; color: string; size: number }
 }
 
 export interface Sheet {

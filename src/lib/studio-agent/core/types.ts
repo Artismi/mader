@@ -246,4 +246,8 @@ export interface AgentState {
   ricerca?: Ricerca
   ricercheChiuse?: Ricerca[]
   repertorio?: Genome[]
+  /** siti da cui esplorare (home o sezioni): legge articoli senza motore di ricerca */
+  sites?: string[]
+  /** libero: segue i link anche fuori dai siti scelti (sempre rispettando robots.txt) */
+  liberta?: boolean
 }

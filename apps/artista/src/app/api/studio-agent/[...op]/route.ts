@@ -6,7 +6,7 @@
  *   POST shader {url}
  */
 import { NextResponse } from 'next/server'
-import { define, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
+import { define, explore, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,8 +38,11 @@ export async function GET(req: Request, { params }: Ctx) {
 
 export async function POST(req: Request, { params }: Ctx) {
   const [op] = (await params).op
-  if (op !== 'shader') return bad('operazione sconosciuta', 404)
   const body = await req.json().catch(() => ({}))
-  try { return NextResponse.json({ code: await fetchShader(String(body.url ?? '')) }) }
+  try {
+    if (op === 'esplora') return NextResponse.json([await explore(String(body.url ?? ''), String(body.word ?? ''), Array.isArray(body.skip) ? body.skip : [])].filter(Boolean))
+    if (op !== 'shader') return bad('operazione sconosciuta', 404)
+    return NextResponse.json({ code: await fetchShader(String(body.url ?? '')) })
+  }
   catch (e) { return bad(e instanceof Error ? e.message : 'errore', 502) }
 }

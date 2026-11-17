@@ -9,7 +9,7 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import { addVisit, getWork, imagePath, libraryFiles, listWorks, loadState, posTags, resetState, saveState, saveWork } from '@/lib/studio-agent/server/store'
-import { define, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
+import { define, explore, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
 import type { AgentState, Work } from '@/lib/studio-agent/core/types'
 
 export const runtime = 'nodejs'
@@ -58,6 +58,7 @@ export async function POST(req: Request, { params }: Ctx) {
     switch (op) {
       case 'pos': return NextResponse.json(posTags(Array.isArray(body.words) ? body.words : []))
       case 'shader': return NextResponse.json({ code: await fetchShader(String(body.url ?? '')) })
+      case 'esplora': return NextResponse.json([await explore(String(body.url ?? ''), String(body.word ?? ''), Array.isArray(body.skip) ? body.skip : [])].filter(Boolean))
       case 'visit': {
         const ok = addVisit({ id: crypto.randomUUID(), date: new Date().toISOString(), text: String(body.text ?? '').slice(0, 1000), workId: body.workId, vote: body.vote === 1 || body.vote === -1 ? body.vote : undefined })
         return ok ? NextResponse.json({ ok }) : bad("l'artista non esiste ancora")

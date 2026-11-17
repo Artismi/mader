@@ -8,7 +8,7 @@ import { judge } from './criteria'
 import { featureDistance } from '../eyes/measure'
 import { uid } from '../core/rng'
 
-export const VOICES = ['formale', 'occhio', 'distruttore', 'memoria', 'conservatore', 'intenzione', 'coerenza', 'materia', 'ironia', 'logica', 'visitatore'] as const
+export const VOICES = ['formale', 'occhio', 'distruttore', 'memoria', 'conservatore', 'intenzione', 'coerenza', 'pubblico', 'materia', 'ironia', 'logica', 'visitatore'] as const
 export type VoiceId = typeof VOICES[number]
 
 export interface DebateInput {
@@ -22,6 +22,8 @@ export interface DebateInput {
   contradictions: { a: Belief; b: Belief }[]
   visits: Visit[]
   interest: number
+  audience?: { liked: number; total: number } | null
+  flaws?: { flaw: string; severity: number }[]
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
@@ -84,6 +86,15 @@ export function speak(inp: DebateInput): Argument[] {
   const domV = Math.max(f.punti, f.linee, f.superfici)
   if (f.elementi > 0.6 && f.complessita > 0.7 && domV < 0.5) say('formale', 'rumore', 'contro', 0.8, `È rumore: tutto si muove e niente dice qualcosa.`)
   else if (domV > 0.55 && f.vuoto > 0.15) say('formale', 'rumore', 'pro', 0.5, `C'è una struttura: una cosa comanda e attorno c'è spazio.`)
+
+  // pubblico: si capisce? piacerebbe? (il peso di questa voce lo decide la storia)
+  for (const fl of inp.flaws ?? []) say('pubblico', fl.flaw, 'contro', 0.3 + fl.severity * 0.6, `Chi la guarda direbbe: "${fl.flaw}".`)
+  if (inp.audience) {
+    const share = inp.audience.liked / Math.max(1, inp.audience.total)
+    if (share > 0.45) say('pubblico', 'pubblico', 'pro', 0.3 + share, `Piacerebbe a ${inp.audience.liked} su ${inp.audience.total} di quelli che mi seguono.`)
+    else if (share < 0.2) say('pubblico', 'pubblico', 'contro', 0.6 - share, `La capirebbero in pochi: ${inp.audience.liked} su ${inp.audience.total}.`)
+  }
+  if (!(inp.flaws ?? []).length) say('pubblico', 'leggibile', 'pro', 0.4, 'Si legge: si capisce cosa sto facendo.')
 
   // gusto: che cosa mi ha insegnato?
   if (inp.interest < 0.4) say('distruttore', 'gusto', 'contro', 0.9 - inp.interest, `Non mi insegna niente (interesse ${pct(inp.interest)}).`)

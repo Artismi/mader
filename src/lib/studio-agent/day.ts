@@ -30,8 +30,10 @@ import { evolve } from './mind/criteria'
 import { adaptPeak, interest as interestOf, novelty as noveltyOf } from './mind/taste'
 import { reweigh, speak, verbale as verbaleOf } from './mind/voices'
 import { grounded, verdict, wireAttacks } from './mind/argue'
-import { chooseName, newQuestion, rewritePoetics } from './mind/poetics'
-import { inscription, title as makeTitle, workText, type VoiceCtx } from './voice/writer'
+import { DEFAULT_SITES, chooseName, newQuestion, rewritePoetics } from './mind/poetics'
+import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } from './voice/writer'
+import { ensureVetrina, predict, publish, replyToComments } from './mind/vetrina'
+import { flaws, readability } from './eyes/judgement'
 
 
 export interface DayHooks {
@@ -53,21 +55,30 @@ async function gather(st: AgentState, r: () => number, thread: string | null, E:
   // 1. cerca la parola del giorno
   if (thread) got.push(...await T.read(`mode=cerca&n=2&q=${encodeURIComponent(thread)}`))
   // 2. segue un link letto nei giorni prima, il più vicino alla parola del giorno
-  const queue = st.linkQueue ?? []
+  const sites = st.sites ?? DEFAULT_SITES
+  const poolHosts = new Set(sites.map(u => { try { return new URL(u).host } catch { return '' } }))
+  const queue = (st.linkQueue ?? []).filter(t => !/^https?:/.test(t) || st.liberta || poolHosts.has(new URL(t).host))
   if (queue.length) {
-    const scored = queue.map(t => ({ t, s: (thread && E ? similarity(E, thread, t.toLowerCase().split(' ')[0]) : 0) + r() * 0.3 }))
+    const key = (t: string) => /^https?:/.test(t) ? decodeURIComponent(new URL(t).pathname).split(/[\/\-_]/).filter(Boolean).pop() ?? '' : t.toLowerCase().split(' ')[0]
+    const scored = queue.map(t => ({ t, s: (thread && E ? similarity(E, thread, key(t)) : 0) + (thread && t.toLowerCase().includes(thread) ? 0.5 : 0) + r() * 0.3 }))
     const link = scored.sort((a, b) => b.s - a.s)[0].t
-    st.linkQueue = queue.filter(t => t !== link)
+    st.linkQueue = (st.linkQueue ?? []).filter(t => t !== link)
     log(`Seguo un link: ${link}`)
-    got.push(...await T.read(`mode=voce&t=${encodeURIComponent(link)}`))
+    got.push(...await T.read(/^https?:/.test(link) ? `mode=pagina&url=${encodeURIComponent(link)}` : `mode=voce&t=${encodeURIComponent(link)}`))
   }
-  // 3. una fonte a caso tra quelle scelte
-  const feeds = st.feeds.length ? st.feeds : ['wiki:casuale']
-  const f = pick(r, feeds)
-  if (f === 'wiki:casuale') got.push(...await T.read('mode=casuale'))
-  else if (f === 'wiki:vetrina') got.push(...await T.read('mode=vetrina'))
-  else if (f.startsWith('pagina:')) got.push(...await T.read(`mode=pagina&url=${encodeURIComponent(f.slice(7))}`))
-  else got.push(...await T.read(`mode=rss&n=2&url=${encodeURIComponent(f)}`))
+  // 3. esplora uno dei siti scelti (o una fonte delle impostazioni)
+  if (sites.length && r() < 0.65) {
+    const site = pick(r, sites)
+    log(`Esploro ${new URL(site).host}${thread ? ` cercando "${thread}"` : ''}.`)
+    got.push(...await T.esplora(site, thread ?? '', [...seen].filter(u => u.includes(new URL(site).host)).slice(-200)))
+  } else {
+    const feeds = st.feeds.length ? st.feeds : ['wiki:casuale']
+    const f = pick(r, feeds)
+    if (f === 'wiki:casuale') got.push(...await T.read('mode=casuale'))
+    else if (f === 'wiki:vetrina') got.push(...await T.read('mode=vetrina'))
+    else if (f.startsWith('pagina:')) got.push(...await T.read(`mode=pagina&url=${encodeURIComponent(f.slice(7))}`))
+    else got.push(...await T.read(`mode=rss&n=2&url=${encodeURIComponent(f)}`))
+  }
   // 4. biblioteca dello studio
   const fresh0 = got.filter(x => x && x.text && x.text.length > 120 && !seen.has(x.url))
   if (r() < 0.5 || fresh0.length < 2) {
@@ -107,6 +118,9 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   log(`Giorno ${st.day}. Umore: ${st.mood} (temperatura ${st.temperature}).`)
   const visits = st.visits.filter(v => !v.read)
   if (visits.length) log(`Trovo ${visits.length} note lasciate in studio.`)
+  ensureVetrina(st, r)
+  const { replies, advice } = replyToComments(st, r, st.name)
+  for (const rp of replies) log(`Rispondo ${rp}`)
 
   // 2 · ricerca in corso (struttura su più giorni) e parola del giorno
   const E0 = st.words.docs > 3 ? embed(st.words, 1200, 24, st.seed) : null
@@ -158,6 +172,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (!st.name) { st.name = chooseName(r, salientToday); log(`Mi chiamerò ${st.name}.`) }
   const intention: Intention = chooseIntention(st, r, E, salientToday, readings[0]?.title ?? '', step?.word)
   if (st.ricerca && step) intention.why += `; ricerca "${st.ricerca.word}" (${step.phase}): ${st.ricerca.question}`
+  for (const a of advice) { intention.targets[a.feature] = a.target; log(`Tengo conto di un commento (${a.reason}): ${a.feature} verso ${a.target}.`) }
   log(`Intenzione: "${intention.word}", tono ${intention.register}. Perché: ${intention.why}.`)
 
   // 4–7 · una o più tavole: la prima, poi una serie se ha funzionato, o un ritentativo se l'ha buttata
@@ -294,10 +309,16 @@ async function tavola(
   const ttl = makeTitle(vctx)
   log(`Titolo: ${ttl || '(nessuno)'}`)
 
+  // cosa vedrebbe chiunque, e cosa ne penserebbe il pubblico
+  const read = readability(res.sheet)
+  const fl = flaws(f, read, res.last.parts.intenzione ?? 0.5, res.sheet.layers.map(l => l.kind))
+  const tagWords = [intention.word, ...(st.ricerca?.words ?? []).slice(0, 2), ...near.slice(0, 2)]
+  const audience = predict(st, f, tagWords, nov, fl)
+
   // dibattito
   const args = speak({
     st, f, novelty: nov, intention, title: ttl, toolsUsed: res.gestures.filter(g => g.kept).map(g => g.tool),
-    readingsTitles: readings.map(x => x.title), contradictions: contradictions(st.beliefs), visits: n === 1 ? visits : [], interest: intr,
+    readingsTitles: readings.map(x => x.title), contradictions: contradictions(st.beliefs), visits: n === 1 ? visits : [], interest: intr, audience, flaws: fl,
   })
   wireAttacks(args)
   const acc = grounded(args)
@@ -332,6 +353,11 @@ async function tavola(
   }
   const saved = await T.saveWork(work, final.toDataURL('image/png'))
   hooks.onWork?.(saved)
+  if (kept) {
+    const refl = reflection(vctx, intention.why, held, fell, fl.map(x => x.flaw), st.ricerca?.question)
+    const post = publish(st, r, saved, tagWords, refl, fl, read.texts)
+    log(`Pubblico: ${post.views} visualizzazioni, ${post.likes} like, ${post.comments.length} commenti.`)
+  }
   log(`Tavola ${n}: interesse ${(intr * 100).toFixed(0)}, novità ${(nov * 100).toFixed(0)}, progresso ${(progress * 100).toFixed(0)}.`)
   const genes = res.genome.length > 16 ? [...res.genome.slice(0, 6), ...res.genome.slice(-10)] : res.genome
   const genome: Genome = { id: uid(), workId: id, day: st.day, interest: intr, tone: tone.id, ricercaId: st.ricerca?.id, gestures: genes }
@@ -357,6 +383,7 @@ export async function loadOrCreate(): Promise<AgentState> {
   if (st) {
     // campi aggiunti dopo la prima versione
     st.history ??= []
+    st.sites ??= DEFAULT_SITES.slice()
     return st
   }
   const { initialState } = await import('./mind/poetics')
