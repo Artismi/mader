@@ -10,6 +10,7 @@ import {
   Brain,
   FileText,
   Palette,
+  Eye,
 } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,7 @@ const dockItems = [
   { icon: Inbox, label: 'Inbox', href: '/inbox' },
   { icon: Film, label: 'Produzione', href: '/editoriale' },
   { icon: Palette, label: 'Design', href: '/progettazione' },
+  { icon: Eye, label: 'Artista', href: '/studio-agent' },
   { icon: Rocket, label: 'Lancio', href: '/lancio' },
   { icon: Users, label: 'Clienti', href: '/clienti' },
   { icon: Brain, label: 'Memoria', href: '/memoria' },

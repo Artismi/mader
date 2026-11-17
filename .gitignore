@@ -54,3 +54,6 @@ ts-error.txt
 
 # asset dei pack importati (rigenerabili con scripts/import-packs.py, ~350 MB)
 /public/library/
+
+# artista-osservatore: opere, biblioteca e lessico locali
+data/studio-agent/
