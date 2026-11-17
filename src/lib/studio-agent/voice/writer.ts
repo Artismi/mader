@@ -6,7 +6,9 @@
  *  - grammatiche a modelli, riempite con le parole dell'intenzione,
  *    i vicini nello spazio delle parole e gli aggettivi visivi dell'opera
  */
-import type { Features, Gesture, Register, Reading } from '../core/types'
+import type { Belief, Features, Gesture, Register, Reading } from '../core/types'
+import { semanticLine, semanticLines } from './semantic'
+import { conceptsReady } from '../reader/concepts'
 import { pick, chance, type Rnd } from '../core/rng'
 import { sentences, words, content, STOP } from '../reader/tokenize'
 
@@ -39,7 +41,10 @@ export interface VoiceCtx {
   readings: Reading[]
   ownTexts: string[]
   day: number
+  beliefs?: Belief[]
 }
+
+const sem = (c: VoiceCtx) => ({ r: c.r, register: c.register, word: c.word, near: c.near, beliefs: c.beliefs ?? [] })
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -103,6 +108,7 @@ export function markov(c: VoiceCtx, maxWords = 14): string {
 export function title(c: VoiceCtx): string {
   const roll = c.r()
   if (c.register === 'silenzio') return fill(pick(c.r, TEMPLATES.silenzio), c)
+  if (conceptsReady() && roll < 0.7) { const l = semanticLine(sem(c)); if (l) return cap(l) }
   if (roll < 0.55) return fill(pick(c.r, TEMPLATES[c.register]), c)
   if (roll < 0.8) return cap(cutup(c, 2))
   return markov(c, 6)
@@ -110,6 +116,7 @@ export function title(c: VoiceCtx): string {
 
 /** testo breve da scrivere dentro l'opera */
 export function inscription(c: VoiceCtx): string {
+  if (conceptsReady() && c.register !== 'silenzio' && c.r() < 0.7) { const l = semanticLine(sem(c)); if (l) return l }
   switch (c.register) {
     case 'slogan': return fill(pick(c.r, TEMPLATES.slogan), c)
     case 'documentario': return chance(c.r, 0.5) ? cutup(c, 3) : `${c.word} / ${c.near.slice(0, 3).join(' / ')}`
@@ -141,7 +148,7 @@ export function workText(c: VoiceCtx, why: string, gs: Gesture[], held: string[]
     `Oggi: ${c.word}. ${cap(why)}.`,
     src ? `Da ${src.source}: «${cutup({ ...c, readings: [src] }, 1)}».` : '',
     gestureAccount(gs),
-    c.register === 'silenzio' ? '' : markov(c, 16) + '.',
+    c.register === 'silenzio' ? '' : conceptsReady() ? semanticLines(sem(c), 2).map(cap).join('. ') + '.' : markov(c, 16) + '.',
     held[0] ? `Ha retto: ${held[0]}` : '',
     fell[0] ? `È caduto: ${fell[0]}` : '',
   ]
@@ -153,6 +160,8 @@ export function reflection(c: VoiceCtx, why: string, held: string[], fell: strin
   const open = c.r() < 0.5 ? `Volevo ${c.word}.` : `Ho lavorato intorno a ${c.word}.`
   const keep = held[0] ? ` ${held[0].replace(/\.$/, '')}.` : ''
   const doubt = flaws[0] ? ` Forse è ${flaws[0]}, lo so.` : fell[0] ? ` Ho ignorato una voce che diceva: ${fell[0].toLowerCase()}` : ''
+  const lines = conceptsReady() ? semanticLines(sem(c), 2).map(cap) : []
+  const thought = lines.length ? ` ${lines.join('. ')}.` : ''
   const q = question && c.r() < 0.6 ? ` ${question}` : c.register === 'silenzio' ? '' : ` ${cutup(c, 1)}.`
-  return (open + keep + doubt + q).replace(/\s+/g, ' ').trim()
+  return (open + thought + keep + doubt + q).replace(/\s+/g, ' ').trim()
 }

@@ -35,9 +35,9 @@ export function look(st: AgentState, s: Sheet, intention: Intention): Look {
   // struttura: un elemento che comanda (Kandinsky), un vuoto che lavora, un baricentro sui terzi (Arnheim)
   const dominance = Math.max(f.punti ?? 0, f.linee ?? 0, f.superfici ?? 0)
   const vuotoBuono = f.vuoto > 0.12 && f.vuoto < 0.65 ? 1 : 0.35
-  const struct = 0.45 * dominance + 0.3 * vuotoBuono + 0.25 * f.terzi
+  const struct = 0.3 * dominance + 0.2 * vuotoBuono + 0.2 * f.terzi + 0.3 * (f.forma ?? 0.5)
   // rumore: tanti elementi diversi, pelle troppo fitta, nessuno che comanda
-  const noise = Math.max(0, Math.min(1, 0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dominance))
+  const noise = Math.max(0, Math.min(1, Math.max(0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dominance, (f.rumore ?? 0) * 1.3)))
   const noisePenalty = noise > 0.45 ? (noise - 0.45) / 0.55 : 0
   const base = 0.3 * fit + 0.15 * crit + 0.2 * won + 0.15 * prog + 0.2 * struct
   // difetti che chiunque vedrebbe (vuota, illeggibile, pattern a caso…): pesano quanto la voce "pubblico"

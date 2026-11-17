@@ -186,6 +186,30 @@ export function measure(R: Raster): Features {
   let dEnt = 0
   for (const c of dh.values()) { const p = c / n; dEnt -= p * Math.log2(p) }
 
+  // forma contro rumore (in spirito Machado–Cardoso): quanta struttura sopravvive a una sfocatura.
+  // le forme vere restano, la grana e il pattern fitto spariscono.
+  const blur = (src: Float32Array) => {
+    const out = new Float32Array(n)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let t = 0, c = 0
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, yy = y + dy
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue
+        t += src[yy * w + xx]; c++
+      }
+      out[y * w + x] = t / c
+    }
+    return out
+  }
+  const bl = blur(lum)
+  const dh2 = new Map<number, number>()
+  for (let i = 1; i < n; i++) { const d = Math.round((bl[i] - bl[i - 1]) * 64); dh2.set(d, (dh2.get(d) ?? 0) + 1) }
+  let bEnt = 0
+  for (const c of dh2.values()) { const p = c / n; bEnt -= p * Math.log2(p) }
+  let fine = 0, coarse = 0
+  for (let i = 0; i < n; i++) { fine += Math.abs(lum[i] - bl[i]); coarse += Math.abs(bl[i] - mean) }
+  const forma = coarse / (coarse + fine * 2 + 1e-6)
+
   const hueUsed = hueBins.filter(c => c > n * 0.01).length
   const el = elements(R)
 
@@ -212,13 +236,16 @@ export function measure(R: Raster): Features {
     linee: el.lines,
     superfici: el.planes,
     elementi: el.count,
+    forma: Math.max(0, Math.min(1, forma)),
+    rumore: Math.max(0, Math.min(1, (fine / n) * 6 * (1 - forma))),
+    struttura_tonale: Math.min(1, bEnt / 6),
   }
 }
 
 export const FEATURE_KEYS = [
   'luminosita', 'contrasto', 'densita', 'bordi', 'orizzontali', 'diagonali', 'verticali', 'simmetria', 'vuoto',
   'centroX', 'centroY', 'squilibrio', 'peso_quadrante', 'terzi', 'entropia', 'complessita', 'saturazione', 'tinte',
-  'punti', 'linee', 'superfici', 'elementi',
+  'punti', 'linee', 'superfici', 'elementi', 'forma', 'rumore',
 ] as const
 
 export function featureDistance(a: Features, b: Features) {

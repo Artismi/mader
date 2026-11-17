@@ -40,10 +40,10 @@ export function flaws(f: Features, t: TextRead, fit: number, toolsUsed: string[]
   const dom = Math.max(f.punti ?? 0, f.linee ?? 0, f.superfici ?? 0)
   if (f.densita < 0.08 || (f.elementi < 0.04 && f.bordi < 0.05)) out.push({ flaw: 'vuota', severity: 1 - f.densita * 8 })
   if (t.hasText && t.leggibilita < 0.45) out.push({ flaw: 'illeggibile', severity: 1 - t.leggibilita })
-  if (toolsUsed.includes('pattern') && f.complessita > 0.65 && dom < 0.45) out.push({ flaw: 'pattern a caso', severity: f.complessita - dom })
+  if ((toolsUsed.includes('pattern') || toolsUsed.includes('grana')) && f.complessita > 0.6 && (f.forma ?? 0.5) < 0.35) out.push({ flaw: 'pattern a caso', severity: f.complessita - dom })
   if (fit < 0.45 && dom < 0.4 && f.terzi < 0.4) out.push({ flaw: 'non dice niente', severity: 0.5 + (0.45 - fit) })
   if (f.peso_quadrante > 0.6 && f.squilibrio > 0.45) out.push({ flaw: 'sbilanciata', severity: f.peso_quadrante })
-  const noise = 0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dom
+  const noise = Math.max(0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dom, (f.rumore ?? 0) * 1.3)
   if (noise > 0.55) out.push({ flaw: 'pasticcio', severity: Math.min(1, noise) })
   return out.map(x => ({ ...x, severity: Math.max(0.1, Math.min(1, x.severity)) }))
 }

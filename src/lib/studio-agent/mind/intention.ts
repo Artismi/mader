@@ -9,6 +9,7 @@ import { weighted, pick, type Rnd } from '../core/rng'
 import { anchorOf } from '../reader/lexicon'
 import { neighbors, type Embedding } from '../reader/wordspace'
 import { TOOLS } from '../hands/tools'
+import { field } from '../reader/concepts'
 
 export function moodOf(recent: Pick<Work, 'interest' | 'novelty' | 'kept'>[], r: Rnd): Mood {
   if (!recent.length) return 'curioso'
@@ -58,6 +59,9 @@ export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates
   push(word, 1)
   const near = neighbors(E, word, 40).filter(n => anchorOf(n.word)).slice(0, 4)
   for (const n of near) push(n.word, Math.max(0.2, n.sim))
+  // il significato guida la forma: ancore nel campo semantico (limite, barriera, bordo… per "confine")
+  const sem = field(word, 2, 40).filter(x => anchorOf(x.word)).slice(0, 4)
+  for (const x of sem) push(x.word, x.via.length === 1 ? 0.8 : 0.5)
   for (const k of Object.keys(targets)) targets[k] = Math.max(0.02, Math.min(0.98, targets[k]))
   // un criterio forte della poetica entra sempre nell'intenzione
   const strong = st.criteria.slice().sort((a, b) => b.weight - a.weight)[0]
@@ -76,6 +80,7 @@ export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates
     readingTitle ? `ho letto "${readingTitle}"` : '',
     e?.state === 'a_vuoto' ? `"${word}" per me gira a vuoto` : e?.state === 'definita' ? `"${word}" lo capisco solo per definizioni` : anchorOf(word) ? `"${word}" lo so fare` : `"${word}" non so cosa sia`,
     near.length ? `mi sta vicino a ${near.map(n => n.word).join(', ')}` : '',
+    sem.length ? `nel suo significato c'è ${sem.map(x => x.word).join(', ')}` : '',
   ].filter(Boolean).join('; ')
 
   return { word, register, targets, tools: [...tools], why }

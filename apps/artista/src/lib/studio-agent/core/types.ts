@@ -250,4 +250,6 @@ export interface AgentState {
   sites?: string[]
   /** libero: segue i link anche fuori dai siti scelti (sempre rispettando robots.txt) */
   liberta?: boolean
+  /** archivio degli stili (MAP-Elites): la tavola migliore per ogni casella densità × elemento dominante × luce */
+  archivio?: Record<string, Genome & { quality: number; cell: string }>
 }

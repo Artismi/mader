@@ -9,6 +9,7 @@
  */
 import type { AgentState, LexEntry } from '../core/types'
 import { content, words } from './tokenize'
+import { conceptsReady, field } from './concepts'
 
 export interface Anchor { feature?: string; dir?: 1 | -1; tool?: string }
 
@@ -47,12 +48,13 @@ export function anchorOf(w: string): Anchor | null {
 
 export const anchorLabel = (a: Anchor) => [a.feature ? `${a.feature}${a.dir === -1 ? '−' : '+'}` : '', a.tool ? `strumento ${a.tool}` : ''].filter(Boolean).join(', ')
 
-export function setDefinition(st: AgentState, word: string, definition: string | null, day: number) {
+const DEF_STOP = new Set(['tipo', 'detto', 'anche', 'parte', 'contrario', 'essere', 'porta', 'come'])
+export function setDefinition(st: AgentState, word: string, definition: string | null, day: number, defWords?: string[]) {
   const e: LexEntry = st.lexicon[word] ?? { word, state: 'ignota' }
   e.checkedDay = day
   if (definition) {
     e.definition = definition.slice(0, 600)
-    e.defWords = content(words(definition)).filter(x => x !== word).slice(0, 14)
+    e.defWords = (defWords ?? content(words(definition))).filter(x => x !== word && !DEF_STOP.has(x)).slice(0, 14)
   }
   st.lexicon[word] = e
 }
@@ -66,6 +68,14 @@ export function ground(st: AgentState) {
     e.state = a ? 'ancorata' : e.definition ? 'a_vuoto' : 'ignota'
   }
   const solid = (w: string) => { const e = L[w]; return anchorOf(w) !== null || e?.state === 'ancorata' || e?.state === 'definita' }
+  // ancoraggio semantico: se nella rete dei concetti, entro due passi, c'è una parola che sa fare
+  if (conceptsReady()) {
+    for (const e of Object.values(L)) {
+      if (e.state === 'ancorata' || e.state === 'definita') continue
+      const hit = field(e.word, 2, 30).find(x => anchorOf(x.word))
+      if (hit) { e.state = 'definita'; e.anchor = `via ${hit.via.map(t => t.b === e.word ? t.a : t.b).join(' → ')}` }
+    }
+  }
   let changed = true, guard = 0
   while (changed && guard++ < 30) {
     changed = false

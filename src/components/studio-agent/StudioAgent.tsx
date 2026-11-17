@@ -352,6 +352,13 @@ function Mind({ st }: { st: AgentState }) {
         <div className="mt-2 text-xs text-white/40">repertorio: {(st.repertorio ?? []).length} tavole da cui ripartire · link da seguire: {(st.linkQueue ?? []).length} · letture tenute: {st.readings.length} · parole nello spazio: {st.words.vocab.length}</div>
       </div>
       <div className={box}>
+        <div className={h}>Archivio degli stili ({Object.keys(st.archivio ?? {}).length} caselle)</div>
+        {Object.values(st.archivio ?? {}).sort((a, b) => b.quality - a.quality).map(g => (
+          <div key={g.cell} className="text-sm"><span className="inline-block w-48 text-white/60">{g.cell}</span> qualità {(g.quality * 100).toFixed(0)} · giorno {g.day} · {g.gestures.length} gesti</div>
+        ))}
+        {!Object.keys(st.archivio ?? {}).length && <div className="text-sm text-white/40">Vuoto: si riempie con le tavole che tiene.</div>}
+      </div>
+      <div className={box}>
         <div className={h}>Temi (mappa dei significati)</div>
         {(st.themes ?? []).length ? st.themes!.map(t => <div key={t.id} className="mb-1 text-sm"><span className="text-white/40">{t.weight} · </span>{t.words.join(', ')}</div>) : <div className="text-sm text-white/40">Ancora troppe poche letture per vedere dei temi.</div>}
       </div>

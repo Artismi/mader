@@ -34,6 +34,7 @@ import { DEFAULT_SITES, chooseName, newQuestion, rewritePoetics } from './mind/p
 import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } from './voice/writer'
 import { ensureVetrina, predict, publish, replyToComments } from './mind/vetrina'
 import { flaws, readability } from './eyes/judgement'
+import { conceptsReady, describe, loadConcepts } from './reader/concepts'
 
 
 export interface DayHooks {
@@ -119,6 +120,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const visits = st.visits.filter(v => !v.read)
   if (visits.length) log(`Trovo ${visits.length} note lasciate in studio.`)
   ensureVetrina(st, r)
+  if (await loadConcepts()) log('Ho il lessico: 50.000 parole italiane con i loro legami.')
   const { replies, advice } = replyToComments(st, r, st.name)
   for (const rp of replies) log(`Rispondo ${rp}`)
 
@@ -150,10 +152,16 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   // mappa del sapere: cerca le definizioni di ciò che non conosce, e scende di un livello
   const df = freqOf(st.words)
   const salientToday = [...new Set(readings.flatMap(rd => salient(rd.text, df, st.words.docs, 10)))]
-  const look = [...toLookUp(st, salientToday, hooks.fast ? 3 : 6), ...frontier(st, hooks.fast ? 2 : 5)]
+  // con il lessico le definizioni sono istantanee: ne cerca di più, e il web solo per ciò che il lessico non sa
+  const nLook = conceptsReady() ? 14 : hooks.fast ? 3 : 6
+  const look = [...toLookUp(st, salientToday, nLook), ...frontier(st, conceptsReady() ? 10 : hooks.fast ? 2 : 5)]
+  let webDefs = 0
   for (const w of look) {
-    const d = await T.define(w)
-    setDefinition(st, w, d.definition, st.day)
+    const d = describe(w)
+    if (d) { setDefinition(st, w, d.text, st.day, d.words); continue }
+    if (webDefs++ >= 3) continue
+    const wd = await T.define(w)
+    setDefinition(st, w, wd.definition, st.day)
   }
   ground(st)
   if (look.length) log(`Ho cercato ${look.length} definizioni: ${look.join(', ')}.`)
@@ -252,11 +260,15 @@ const MAX_TAVOLE = 3
 /** da quale tavola riuscita ripartire: nella ricerca in corso quando approfondisce o sintetizza, a volte dal repertorio intero */
 function pickParent(st: AgentState, r: () => number, phase?: Ricerca['phase']): Genome | null {
   const rep = st.repertorio ?? []
-  if (!rep.length) return null
+  if (!rep.length && !Object.keys(st.archivio ?? {}).length) return null
   const mine = rep.filter(g => g.ricercaId && g.ricercaId === st.ricerca?.id)
   if ((phase === 'approfondire' || phase === 'sintesi') && mine.length) return weighted(r, mine, g => g.interest, 0.6)
-  const p = st.mood === 'annoiato' || st.mood === 'inquieto' ? 0.15 : 0.35
-  return r() < p ? weighted(r, rep, g => g.interest, st.temperature) : null
+  const p = st.mood === 'annoiato' || st.mood === 'inquieto' ? 0.2 : 0.45
+  if (r() >= p) return null
+  // dall'archivio degli stili: caselle diverse, la migliore di ciascuna
+  const arch = Object.values(st.archivio ?? {})
+  if (arch.length) return weighted(r, arch, g => g.quality, st.temperature)
+  return weighted(r, rep, g => g.interest, st.temperature)
 }
 
 /** variazione in serie: stessi temi, bersagli spostati verso ciò che ha funzionato e un po' oltre */
@@ -274,7 +286,7 @@ async function tavola(
   const log = hooks.log
   const fast = !!hooks.fast
   const tone = weighted(r, TONES, t => (st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 2 : 1, st.temperature)
-  const vctx: VoiceCtx = { r, register: intention.register, word: intention.word, near, readings: readings.length ? readings : st.readings.slice(-4), ownTexts, day: st.day }
+  const vctx: VoiceCtx = { r, register: intention.register, word: intention.word, near, readings: readings.length ? readings : st.readings.slice(-4), ownTexts, day: st.day, beliefs: st.beliefs.slice(-400) }
   const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5 }
   const base = { curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]
   const steps = Math.round(base * (fast ? 0.6 : 1))
@@ -341,7 +353,7 @@ async function tavola(
   st.recentVisual = [...st.recentVisual, { id, features: f, words: vis.words }].slice(-40)
   st.history = [...st.history, { day: st.day, interest: intr, novelty: nov, progress, kept }].slice(-300)
   addText(st.words, text)
-  st.beliefs = addBeliefs(st.beliefs, sentences(text).map(s => extract(s, 'io')).filter(Boolean) as NonNullable<ReturnType<typeof extract>>[])
+  st.beliefs = addBeliefs(st.beliefs, sentences(text).filter(s => !/^(Ha retto|È caduto|Oggi:|Ho |Da )/.test(s) && !/%/.test(s)).map(s => extract(s, 'io')).filter(Boolean) as NonNullable<ReturnType<typeof extract>>[])
 
   const gestures: Gesture[] = res.gestures
   const work: Work = {
@@ -365,6 +377,18 @@ async function tavola(
     st.repertorio = [...(st.repertorio ?? []), genome]
       .sort((a, b) => (b.interest - (st.day - b.day) * 0.004) - (a.interest - (st.day - a.day) * 0.004))
       .slice(0, 60)
+  }
+  // archivio degli stili: una tavola per casella, vince la migliore (qualità = interesse senza rumore né difetti)
+  if (kept && res.genome.length) {
+    const dom = (['punti', 'linee', 'superfici'] as const).reduce((a, k) => (f[k] > f[a] ? k : a), 'superfici' as 'punti' | 'linee' | 'superfici')
+    const cell = `${Math.min(3, Math.floor(f.densita * 4))}·${dom}·${f.luminosita > 0.5 ? 'chiara' : 'scura'}`
+    const quality = intr * (1 - (f.rumore ?? 0)) * (1 - Math.min(0.6, fl.reduce((a, x) => a + x.severity, 0) * 0.3))
+    st.archivio ??= {}
+    const prev = st.archivio[cell]
+    if (!prev || quality > prev.quality) {
+      st.archivio[cell] = { ...genome, quality, cell }
+      log(`Archivio degli stili: nuova migliore nella casella ${cell} (${(quality * 100).toFixed(0)}).`)
+    }
   }
   if (st.ricerca && !st.ricerca.closed) {
     st.ricerca.workIds.push(id)
