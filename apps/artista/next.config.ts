@@ -6,6 +6,7 @@ import path from 'path'
 const root = path.resolve(__dirname)
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   turbopack: { root },
   outputFileTracingRoot: root,
 }
