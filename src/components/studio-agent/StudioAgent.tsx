@@ -13,6 +13,7 @@ import { contradictions } from '@/lib/studio-agent/reader/logic'
 import { uid } from '@/lib/studio-agent/core/rng'
 import * as T from '@/lib/studio-agent/transport'
 import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
+import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 
 type Tab = 'galleria' | 'vetrina' | 'mente' | 'quaderno' | 'impostazioni'
 
@@ -259,13 +260,15 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
           <div><b className="text-lg">{v.followers.length}</b> follower <span className="text-white/40">(+{v.joined} / −{v.left})</span></div>
           <div><b className="text-lg">{likes}</b> like</div>
           <div><b className="text-lg">{views}</b> visualizzazioni</div>
+          <div><b className="text-lg">{v.virali}</b> virali</div>
         </div>
         <div className="grid grid-cols-3 gap-1">
           {v.posts.map(p => (
             <button key={p.workId} onClick={() => setOpen(p)} className="group relative aspect-square overflow-hidden bg-white/5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img(p)} alt={p.title} className="h-full w-full object-cover" />
-              <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/60 text-sm opacity-0 group-hover:opacity-100">♥ {p.likes} · 👁 {p.views} · 💬 {p.comments.length}</div>
+              <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/60 text-sm opacity-0 group-hover:opacity-100">♥ {p.likes} · 👁 {p.views}</div>
+              {p.virale && <div className="absolute left-1 top-1 rounded bg-rose-500/80 px-1.5 text-[10px] font-semibold">virale</div>}
             </button>
           ))}
         </div>
@@ -277,14 +280,44 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
           <div className="text-sm"><b>{st.name || 'artista'}</b> {open.caption.split('\n')[0]}</div>
           <div className="text-sm text-white/80">{open.reflection}</div>
           <div className="text-sm text-sky-300/70">{open.caption.split('\n')[1]}</div>
-          <div className="text-xs text-white/50">♥ {open.likes} · 👁 {open.views} · giorno {open.day}{open.flaws.length ? ` · difetti visti: ${open.flaws.map(f => f.flaw).join(', ')}` : ''}</div>
-          <div className={box}>
-            {open.comments.length ? open.comments.map(c => (
-              <div key={c.id} className={`mb-1 text-sm ${c.byArtist ? 'ml-4 text-white/70' : ''}`}><b className={c.byArtist ? 'text-white' : 'text-white/80'}>{c.who}</b> {c.text}</div>
-            )) : <div className="text-sm text-white/40">Nessun commento.</div>}
-          </div>
+          <div className="text-xs text-white/50">♥ {open.likes} · 👁 {open.views}{open.virale ? ' · virale' : ''} · giorno {open.day}{open.flaws.length ? ` · difetti: ${open.flaws.map(f => f.flaw).join(', ')}` : ''}</div>
         </div>
       )}
+    </div>
+  )
+}
+
+function ScuolaView({ st }: { st: AgentState }) {
+  const sc = getScuola(st)
+  if (!sc) return null
+  const d = sc.diagnosi[sc.diagnosi.length - 1]
+  const nome = (id: string) => MAESTRI.find(m => m.id === id)?.nome ?? id
+  return (
+    <div className={`${box} lg:col-span-2`}>
+      <div className={h}>Scuola: firma, autocritica, studio</div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <div className="mb-1 text-xs text-white/50">La firma (forza {(sc.firma.forza * 100).toFixed(0)}%)</div>
+          {sc.firma.regole.map(x => <div key={x} className="text-sm">· {x}</div>)}
+          <div className="mt-2 text-xs text-white/40">{sc.firma.storia.slice(-5).map(x => `giorno ${x.day}: ${x.cambio}`).join(' · ')}</div>
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-white/50">Ultima autocritica{d ? ` (giorno ${d.day})` : ''}</div>
+          {d ? <>
+            {Object.entries(d.misure).sort((a, b) => b[1] - a[1]).map(([k, v]) => <Bar key={k} k={k} v={v} />)}
+            <div className="mt-2 text-sm">debole: <b>{d.debolezza}</b> · forte: <b>{d.forza}</b></div>
+            <div className="text-sm text-white/60">somiglia a: {d.affinita.slice(0, 3).map(a => nome(a.maestro)).join(', ')}</div>
+          </> : <div className="text-sm text-white/40">Servono almeno tre tavole.</div>}
+          {sc.esercizio && <div className="mt-2 text-sm text-emerald-200/70">esercizio di domani: {sc.esercizio.vincoli}</div>}
+          {sc.studiare.length > 0 && <div className="text-sm text-emerald-200/70">domani studia: {sc.studiare.join(', ')}</div>}
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-white/50">Studiati: {sc.studiati.map(x => nome(x.maestro)).join(', ') || 'nessuno'}</div>
+          {sc.lezioni.slice(-6).reverse().map((x, i) => <div key={i} className="mb-1 text-sm">{x}</div>)}
+          <div className="mt-2 text-xs text-white/50">Sferzate</div>
+          {sc.sferzate.slice(-5).reverse().map((x, i) => <div key={i} className="text-sm">giorno {x.day}: {x.rottura} {x.entrata ? '→ entrata nella firma' : `(${Math.round((x.esito ?? 0) * 100)})`}</div>)}
+        </div>
+      </div>
     </div>
   )
 }
@@ -296,6 +329,7 @@ function Mind({ st }: { st: AgentState }) {
   const poetics = st.poetics.slice().reverse()
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <ScuolaView st={st} />
       <div className={box}>
         <div className={h}>Poetica</div>
         {poetics.map((p, i) => (

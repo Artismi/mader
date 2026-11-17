@@ -24,7 +24,7 @@ import { addTags } from './reader/analysis'
 import { addBeliefs, contradictions, extract } from './reader/logic'
 import { frontier, ground, setDefinition, toLookUp } from './reader/lexicon'
 import { MOOD_TEMPERATURE, chooseIntention, moodOf } from './mind/intention'
-import { learnTools, replay, runStudio } from './mind/studio'
+import { learnTools, look, replay, runStudio } from './mind/studio'
 import { computeThemes, openRicerca, ricercaFinished, stepRicerca } from './mind/ricerca'
 import { evolve } from './mind/criteria'
 import { adaptPeak, interest as interestOf, novelty as noveltyOf } from './mind/taste'
@@ -32,7 +32,9 @@ import { reweigh, speak, verbale as verbaleOf } from './mind/voices'
 import { grounded, verdict, wireAttacks } from './mind/argue'
 import { DEFAULT_SITES, chooseName, newQuestion, rewritePoetics } from './mind/poetics'
 import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } from './voice/writer'
-import { ensureVetrina, predict, publish, replyToComments } from './mind/vetrina'
+import { ensureVetrina, predict, publish } from './mind/vetrina'
+import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
+import { loadGeneri } from './voice/lingua'
 import { flaws, readability } from './eyes/judgement'
 import { conceptsReady, describe, loadConcepts } from './reader/concepts'
 
@@ -53,6 +55,13 @@ const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date
 async function gather(st: AgentState, r: () => number, thread: string | null, E: Embedding | null, log: DayHooks['log']): Promise<Reading[]> {
   const got: T.Raw[] = []
   const seen = new Set(st.readings.map(x => x.url))
+  // 0. lo studio deciso ieri sera nell'autocritica
+  const sc = getScuola(st)
+  for (const q of (sc?.studiare ?? []).slice(0, 2)) {
+    log(`Studio: ${q}.`)
+    sc!.letti = [...(sc!.letti ?? []), q].slice(-200)
+    got.push(...await T.read(`mode=cerca&n=1&q=${encodeURIComponent(q)}`))
+  }
   // 1. cerca la parola del giorno
   if (thread) got.push(...await T.read(`mode=cerca&n=2&q=${encodeURIComponent(thread)}`))
   // 2. segue un link letto nei giorni prima, il più vicino alla parola del giorno
@@ -121,8 +130,8 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (visits.length) log(`Trovo ${visits.length} note lasciate in studio.`)
   ensureVetrina(st, r)
   if (await loadConcepts()) log('Ho il lessico: 50.000 parole italiane con i loro legami.')
-  const { replies, advice } = replyToComments(st, r, st.name)
-  for (const rp of replies) log(`Rispondo ${rp}`)
+  const sc = ensureScuola(st, r)
+  await loadGeneri()
 
   // 2 · ricerca in corso (struttura su più giorni) e parola del giorno
   const E0 = st.words.docs > 3 ? embed(st.words, 1200, 24, st.seed) : null
@@ -139,6 +148,8 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (thread) log(`Seguo un filo: "${thread}".`)
   const readings = await gather(st, r, thread, E0, log)
   if (!readings.length) log('Non sono riuscito a leggere niente: lavoro con quello che ho.')
+  for (const rd of readings) registraStudio(st, rd.title, rd.text)
+  sc.studiare = []
   for (const rd of readings) if (rd.kind !== 'rilettura') addText(st.words, rd.text)
 
   // analisi grammaticale con il lessico del server, se c'è
@@ -180,7 +191,10 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (!st.name) { st.name = chooseName(r, salientToday); log(`Mi chiamerò ${st.name}.`) }
   const intention: Intention = chooseIntention(st, r, E, salientToday, readings[0]?.title ?? '', step?.word)
   if (st.ricerca && step) intention.why += `; ricerca "${st.ricerca.word}" (${step.phase}): ${st.ricerca.question}`
-  for (const a of advice) { intention.targets[a.feature] = a.target; log(`Tengo conto di un commento (${a.reason}): ${a.feature} verso ${a.target}.`) }
+  // sferzata (rompe apposta la firma) oppure l'esercizio deciso ieri sera
+  const sf = sferzata(st, r)
+  if (sf) { Object.assign(intention.targets, sf.intention.targets); intention.tools = sf.intention.tools ?? intention.tools; intention.why += `; sferzata: ${sf.rottura}`; log(`Oggi una sferzata: ${sf.rottura}.`) }
+  else { const ex = applicaEsercizio(st, intention); if (ex) log(`Esercizio di oggi: ${ex}.`) }
   log(`Intenzione: "${intention.word}", tono ${intention.register}. Perché: ${intention.why}.`)
 
   // 4–7 · una o più tavole: la prima, poi una serie se ha funzionato, o un ritentativo se l'ha buttata
@@ -197,7 +211,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   let parent: Genome | null = pickParent(st, r, step?.phase)
   if (parent) log(`Riparto da una tavola riuscita del giorno ${parent.day} e la vario.`)
   for (let n = 1; n <= MAX_TAVOLE; n++) {
-    const out = await tavola(st, r, cur, n, ragione, readings, near, ownTexts, visits, hooks, parent, step?.phase)
+    const out = await tavola(st, r, cur, n, ragione, readings, near, ownTexts, visits, hooks, parent, step?.phase, sf?.rottura)
     parent = out.genome
     works.push(out.work)
     allVerb.push(...out.work.debate.verbale.map(l => `[tavola ${n}] ${l}`))
@@ -244,6 +258,14 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
     st.poetics.push({ day: st.day, date: new Date().toISOString(), text: rewritePoetics(st) })
     log('Ho riscritto la mia poetica.')
   }
+  // autocritica serale: debolezza, cosa studiare domani, esercizio; la firma evolve
+  const dg = autocritica(st, r)
+  if (dg) {
+    const near0 = dg.affinita[0]
+    log(`Autocritica: il mio punto debole è ${dg.debolezza}, il forte ${dg.forza}. Somiglio di più a: ${near0.maestro}. Domani studio ${sc.studiare.join(', ') || 'niente'}${sc.esercizio ? `, esercizio: ${sc.esercizio.vincoli}` : ''}.`)
+    entry.wants.push(`studiare ${sc.studiare.join(', ')}`)
+  }
+  if (st.day % 5 === 0) evolviFirma(st, r)
   if (st.ricerca && ricercaFinished(st.ricerca, st.day)) {
     st.ricerca.closed = true
     st.ricercheChiuse = [...(st.ricercheChiuse ?? []), st.ricerca].slice(-30)
@@ -281,7 +303,7 @@ function vary(it: Intention, r: () => number, f: Record<string, number>): Intent
 async function tavola(
   st: AgentState, r: () => number, intention: Intention, n: number, ragione: Work['ragione'],
   readings: Reading[], near: string[], ownTexts: string[], visits: Visit[], hooks: DayHooks,
-  parent: Genome | null, phase?: Ricerca['phase'],
+  parent: Genome | null, phase?: Ricerca['phase'], rottura?: string,
 ): Promise<{ work: Work; bored: string[]; newborn: string[]; genome: Genome | null }> {
   const log = hooks.log
   const fast = !!hooks.fast
@@ -305,6 +327,14 @@ async function tavola(
     if (!fast) hooks.preview?.(flatten(s, 0.5))
   })
   const res = { ...res0, gestures: [...pre.gestures, ...res0.gestures], genome: [...pre.genome, ...res0.genome] }
+  // la redazione: togliere, ordinare, rendere leggibile, firmare (non nelle sferzate)
+  if (!rottura) {
+    const red = await redazione(st, r, res.sheet, s => look(st, s, intention), { firma: true, nome: st.name })
+    res.sheet = red.sheet
+    res.gestures = [...res.gestures, ...red.passi]
+    const tenuti = red.passi.filter(p => p.kept).map(p => p.tool.replace('redazione:', ''))
+    if (tenuti.length) log(`Redazione: ${tenuti.join(', ')}.`)
+  }
   if (fast) hooks.preview?.(flatten(res.sheet, 0.5))
 
   // guardare la tavola finita
@@ -367,8 +397,11 @@ async function tavola(
   hooks.onWork?.(saved)
   if (kept) {
     const refl = reflection(vctx, intention.why, held, fell, fl.map(x => x.flaw), st.ricerca?.question)
-    const post = publish(st, r, saved, tagWords, refl, fl, read.texts)
-    log(`Pubblico: ${post.views} visualizzazioni, ${post.likes} like, ${post.comments.length} commenti.`)
+    const post = publish(st, r, saved, tagWords, refl, fl)
+    log(`Pubblicata: ${post.views} visualizzazioni, ${post.likes} like${post.virale ? ' — è andata virale' : ''}.`)
+    if (rottura) esitoSferzata(st, saved.id, rottura, intr, post.virale)
+  } else if (rottura) {
+    esitoSferzata(st, saved.id, rottura, intr, false)
   }
   log(`Tavola ${n}: interesse ${(intr * 100).toFixed(0)}, novità ${(nov * 100).toFixed(0)}, progresso ${(progress * 100).toFixed(0)}.`)
   const genes = res.genome.length > 16 ? [...res.genome.slice(0, 6), ...res.genome.slice(-10)] : res.genome
@@ -378,6 +411,7 @@ async function tavola(
       .sort((a, b) => (b.interest - (st.day - b.day) * 0.004) - (a.interest - (st.day - a.day) * 0.004))
       .slice(0, 60)
   }
+  getScuola(st)!.registro = [...getScuola(st)!.registro, { day: st.day, features: f, kept, novelty: nov, interest: intr, flaws: fl.map(x => x.flaw), targets: Object.keys(intention.targets).length, tone: tone.id }].slice(-40)
   // archivio degli stili: una tavola per casella, vince la migliore (qualità = interesse senza rumore né difetti)
   if (kept && res.genome.length) {
     const dom = (['punti', 'linee', 'superfici'] as const).reduce((a, k) => (f[k] > f[a] ? k : a), 'superfici' as 'punti' | 'linee' | 'superfici')

@@ -9,6 +9,7 @@
 import type { Belief, Features, Gesture, Register, Reading } from '../core/types'
 import { semanticLine, semanticLines } from './semantic'
 import { conceptsReady } from '../reader/concepts'
+import { concorda } from './lingua'
 import { pick, chance, type Rnd } from '../core/rng'
 import { sentences, words, content, STOP } from '../reader/tokenize'
 
@@ -105,7 +106,8 @@ export function markov(c: VoiceCtx, maxWords = 14): string {
   return cap(out.join(' ').replace(/[,;:]$/, ''))
 }
 
-export function title(c: VoiceCtx): string {
+export function title(c: VoiceCtx): string { return concorda(titleRaw(c)) }
+function titleRaw(c: VoiceCtx): string {
   const roll = c.r()
   if (c.register === 'silenzio') return fill(pick(c.r, TEMPLATES.silenzio), c)
   if (conceptsReady() && roll < 0.7) { const l = semanticLine(sem(c)); if (l) return cap(l) }
@@ -115,7 +117,8 @@ export function title(c: VoiceCtx): string {
 }
 
 /** testo breve da scrivere dentro l'opera */
-export function inscription(c: VoiceCtx): string {
+export function inscription(c: VoiceCtx): string { return concorda(inscriptionRaw(c)) }
+function inscriptionRaw(c: VoiceCtx): string {
   if (conceptsReady() && c.register !== 'silenzio' && c.r() < 0.7) { const l = semanticLine(sem(c)); if (l) return l }
   switch (c.register) {
     case 'slogan': return fill(pick(c.r, TEMPLATES.slogan), c)
@@ -152,7 +155,7 @@ export function workText(c: VoiceCtx, why: string, gs: Gesture[], held: string[]
     held[0] ? `Ha retto: ${held[0]}` : '',
     fell[0] ? `È caduto: ${fell[0]}` : '',
   ]
-  return lines.filter(Boolean).join('\n')
+  return lines.filter(Boolean).map(concorda).join('\n')
 }
 
 /** la riflessione che accompagna il post: cosa voleva, cosa ha tenuto, cosa non sa */
@@ -163,5 +166,5 @@ export function reflection(c: VoiceCtx, why: string, held: string[], fell: strin
   const lines = conceptsReady() ? semanticLines(sem(c), 2).map(cap) : []
   const thought = lines.length ? ` ${lines.join('. ')}.` : ''
   const q = question && c.r() < 0.6 ? ` ${question}` : c.register === 'silenzio' ? '' : ` ${cutup(c, 1)}.`
-  return (open + thought + keep + doubt + q).replace(/\s+/g, ' ').trim()
+  return concorda((open + thought + keep + doubt + q).replace(/\s+/g, ' ').trim())
 }

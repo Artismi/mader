@@ -65,8 +65,21 @@ export const known = (w: string) => senses(w).length > 0
 
 export interface Triple { a: string; rel: Rel; b: string }
 
+const relCache = new Map<string, Triple[]>()
+const fieldCache = new Map<string, { word: string; via: Triple[] }[]>()
+
 /** relazioni dirette di una parola (primo o primi due significati) */
 export function relationsOf(word: string, maxSenses = 2): Triple[] {
+  if (!data) return []
+  const key = word + '|' + maxSenses
+  const hit = relCache.get(key)
+  if (hit) return hit
+  const res = relationsRaw(word, maxSenses)
+  if (relCache.size > 20000) relCache.clear()
+  relCache.set(key, res)
+  return res
+}
+function relationsRaw(word: string, maxSenses: number): Triple[] {
   if (!data) return []
   const out: Triple[] = []
   for (const i of senses(word).slice(0, maxSenses)) {
@@ -103,6 +116,16 @@ export function describe(word: string): { text: string; words: string[]; categor
 
 /** campo semantico: parole raggiungibili in pochi passi, con la strada fatta */
 export function field(word: string, depth = 2, max = 40): { word: string; via: Triple[] }[] {
+  if (!data) return []
+  const key = `${word}|${depth}|${max}`
+  const hit = fieldCache.get(key)
+  if (hit) return hit
+  const res = fieldRaw(word, depth, max)
+  if (fieldCache.size > 5000) fieldCache.clear()
+  fieldCache.set(key, res)
+  return res
+}
+function fieldRaw(word: string, depth: number, max: number): { word: string; via: Triple[] }[] {
   if (!data) return []
   const seen = new Map<string, Triple[]>([[word, []]])
   let frontier = [word]

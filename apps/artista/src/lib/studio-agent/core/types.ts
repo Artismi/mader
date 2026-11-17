@@ -138,6 +138,8 @@ export interface LexEntry {
   defWords?: string[]
   anchor?: string
   checkedDay?: number
+  /** giorno dell'ultimo tentativo di ancoraggio semantico fallito */
+  semDay?: number
 }
 
 export interface Belief {

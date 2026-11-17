@@ -229,23 +229,29 @@ const scrivi: Tool = {
     color: colorOf(c.tone, c.r), align: pick(c.r, ['left', 'center', 'right']),
     blend: chance(c.r, 0.2) ? 'difference' : 'source-over',
   }),
-  apply: async (s, p) => {
-    await loadLabFonts()
-    const face: Face = FACES[p.face as FaceId]
-    const size = Math.round((p.size as number) * Math.min(s.W, s.H))
-    const txt = face.upper ? String(p.text).toUpperCase() : String(p.text)
-    const probe = newCanvas(4, 4).getContext('2d')!
-    probe.font = fontCss(face, size)
-    const lines = wrap(probe, txt, s.W * 0.8)
-    const tw = Math.max(...lines.map(l => probe.measureText(l).width), 10)
-    const cv = newCanvas(tw + size, lines.length * size * 1.15 + size), g = cv.getContext('2d')!
-    g.font = fontCss(face, size); g.fillStyle = p.color as string; g.textBaseline = 'top'
-    g.textAlign = p.align as CanvasTextAlign
-    const ax = p.align === 'left' ? size / 2 : p.align === 'right' ? cv.width - size / 2 : cv.width / 2
-    lines.forEach((l, i) => g.fillText(l, ax, size / 2 + i * size * 1.15))
-    const scale = Math.max(cv.width, cv.height) / Math.min(s.W, s.H)
-    return withLayer(s, { id: lid(), kind: 'testo', canvas: cv, x: p.x as number, y: p.y as number, scale, rot: p.rot as number, alpha: 1, blend: p.blend as Blend, meta: { text: txt, color: p.color as string, size } })
-  },
+  apply: async (s, p) => textLayer(s, {
+    text: String(p.text), face: p.face as FaceId, sizePx: Math.round((p.size as number) * Math.min(s.W, s.H)),
+    color: p.color as string, x: p.x as number, y: p.y as number, rot: p.rot as number, align: p.align as CanvasTextAlign, blend: p.blend as Blend,
+  }),
+}
+
+/** un livello di testo (usato dallo strumento, dalla redazione e dalla firma) */
+export async function textLayer(s: Sheet, o: { text: string; face: FaceId; sizePx: number; color: string; x: number; y: number; rot?: number; align?: CanvasTextAlign; blend?: Blend; kind?: string; maxW?: number }): Promise<Sheet> {
+  await loadLabFonts()
+  const face: Face = FACES[o.face] ?? FACES.grotesk
+  const size = Math.max(8, Math.round(o.sizePx))
+  const txt = face.upper ? o.text.toUpperCase() : o.text
+  const probe = newCanvas(4, 4).getContext('2d')!
+  probe.font = fontCss(face, size)
+  const lines = wrap(probe, txt, s.W * (o.maxW ?? 0.8))
+  const tw = Math.max(...lines.map(l => probe.measureText(l).width), 10)
+  const cv = newCanvas(tw + size, lines.length * size * 1.15 + size), g = cv.getContext('2d')!
+  const align = o.align ?? 'left'
+  g.font = fontCss(face, size); g.fillStyle = o.color; g.textBaseline = 'top'; g.textAlign = align
+  const ax = align === 'left' ? size / 2 : align === 'right' ? cv.width - size / 2 : cv.width / 2
+  lines.forEach((l, i) => g.fillText(l, ax, size / 2 + i * size * 1.15))
+  const scale = Math.max(cv.width, cv.height) / Math.min(s.W, s.H)
+  return withLayer(s, { id: lid(), kind: o.kind ?? 'testo', canvas: cv, x: o.x, y: o.y, scale, rot: o.rot ?? 0, alpha: 1, blend: o.blend ?? 'source-over', meta: { text: txt, color: o.color, size } })
 }
 
 function wrap(g: CanvasRenderingContext2D, text: string, max: number): string[] {

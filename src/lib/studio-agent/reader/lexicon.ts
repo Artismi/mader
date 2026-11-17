@@ -72,8 +72,10 @@ export function ground(st: AgentState) {
   if (conceptsReady()) {
     for (const e of Object.values(L)) {
       if (e.state === 'ancorata' || e.state === 'definita') continue
+      if (e.semDay !== undefined && e.semDay > st.day - 10) continue // già provata di recente senza esito
       const hit = field(e.word, 2, 30).find(x => anchorOf(x.word))
-      if (hit) { e.state = 'definita'; e.anchor = `via ${hit.via.map(t => t.b === e.word ? t.a : t.b).join(' → ')}` }
+      if (!hit) { e.semDay = st.day; continue }
+      e.state = 'definita'; e.anchor = `via ${hit.via.map(t => t.b === e.word ? t.a : t.b).join(' → ')}`
     }
   }
   let changed = true, guard = 0
