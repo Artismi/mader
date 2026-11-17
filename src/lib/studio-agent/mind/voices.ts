@@ -89,8 +89,8 @@ export function speak(inp: DebateInput): Argument[] {
     const t = v.text.toLowerCase()
     const neg = /\b(no|non|brutt|troppo|noios|banale|ripet|male)\w*/.test(t)
     const pos = /\b(bell|sì|si|funzion|forte|ottim|ancora|brav)\w*/.test(t)
-    const pol: Polarity = neg && !pos ? 'contro' : 'pro'
-    say('visitatore', 'visita', pol, 0.6, `Qualcuno è passato e ha scritto: "${v.text.slice(0, 140)}".`)
+    const pol: Polarity = v.vote ? (v.vote > 0 ? 'pro' : 'contro') : neg && !pos ? 'contro' : 'pro'
+    say('visitatore', 'visita', pol, v.vote ? 0.8 : 0.6, v.text ? `Qualcuno è passato e ha scritto: "${v.text.slice(0, 140)}".` : `Qualcuno è passato e ha detto ${v.vote! > 0 ? 'che una tavola tiene' : 'che una tavola non tiene'}.`)
   }
   return out
 }

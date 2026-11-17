@@ -78,6 +78,10 @@ export interface Work {
   novelty: number
   kept: boolean
   image: string
+  /** numero della tavola nella giornata (1, 2, 3) */
+  tavola?: number
+  /** perché ha fatto questa tavola: prima, serie (variazione su ciò che ha funzionato) o ritentativo */
+  ragione?: 'prima' | 'serie' | 'ritenta'
 }
 
 export type Mood = 'curioso' | 'annoiato' | 'inquieto' | 'giocoso' | 'cupo' | 'calmo'
@@ -132,6 +136,7 @@ export interface NotebookEntry {
   wants: string[]
   bored: string[]
   workId?: string
+  workIds?: string[]
 }
 
 export interface PoeticsVersion {
@@ -170,6 +175,8 @@ export interface Visit {
   date: string
   workId?: string
   text: string
+  /** voto rapido di Andrea sulla tavola: +1 tiene, −1 non tiene */
+  vote?: 1 | -1
   read?: boolean
 }
 

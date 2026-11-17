@@ -27,6 +27,10 @@ export function StudioAgent() {
   const [log, setLog] = useState<string[]>([])
   const [sel, setSel] = useState<Work | null>(null)
   const [auto, setAuto] = useState(false)
+  const [fast, setFast] = useState(true)
+  const [nDays, setNDays] = useState(10)
+  const [progress, setProgress] = useState('')
+  const stop = useRef(false)
   const preview = useRef<HTMLCanvasElement>(null)
 
   const refresh = useCallback(async () => {
@@ -35,23 +39,34 @@ export function StudioAgent() {
   }, [])
   useEffect(() => { refresh() }, [refresh])
 
-  const run = useCallback(async () => {
+  /** lancia una o più giornate di fila; la galleria si aggiorna a ogni tavola */
+  const run = useCallback(async (days = 1) => {
     if (!st || running) return
-    setRunning(true); setLog([]); setTab('galleria')
+    setRunning(true); setLog([]); setTab('galleria'); stop.current = false
+    let cur = st
+    const t0 = performance.now()
     try {
-      const { state, work } = await runDay(st, {
-        log: m => setLog(l => [...l, m].slice(-200)),
-        preview: c => {
-          const p = preview.current; if (!p) return
-          p.width = c.width; p.height = c.height
-          p.getContext('2d')!.drawImage(c, 0, 0)
-        },
-      })
-      setSt(state); setWorks(w => [work, ...w]); setSel(work)
+      for (let d = 0; d < days && !stop.current; d++) {
+        setProgress(days > 1 ? `giornata ${d + 1} di ${days}` : '')
+        const { state, works } = await runDay(cur, {
+          fast,
+          log: m => setLog(l => [...l, m].slice(-300)),
+          preview: c => {
+            const p = preview.current; if (!p) return
+            p.width = c.width; p.height = c.height
+            p.getContext('2d')!.drawImage(c, 0, 0)
+          },
+          onWork: w => { setWorks(ws => [w, ...ws]); setSel(w) },
+          shouldStop: () => stop.current,
+        })
+        cur = state; setSt(state)
+        const per = (performance.now() - t0) / (d + 1) / 1000
+        setLog(l => [...l, `— Giorno ${state.day} chiuso: ${works.length} tavol${works.length > 1 ? 'e' : 'a'}. Media ${per.toFixed(1)} s a giornata${days > 1 ? `, stima per ${days}: ${((per * days) / 60).toFixed(0)} min` : ''}.`])
+      }
     } catch (e) {
       setLog(l => [...l, `Errore: ${e instanceof Error ? e.message : String(e)}`])
-    } finally { setRunning(false) }
-  }, [st, running])
+    } finally { setRunning(false); setProgress('') }
+  }, [st, running, fast])
 
   // giornata automatica: una al giorno, finché la pagina è aperta
   useEffect(() => {
@@ -59,7 +74,7 @@ export function StudioAgent() {
     const tick = () => {
       if (!st || running) return
       const last = st.lastRun ? new Date(st.lastRun).toDateString() : ''
-      if (last !== new Date().toDateString()) run()
+      if (last !== new Date().toDateString()) run(1)
     }
     tick()
     const t = setInterval(tick, 10 * 60 * 1000)
@@ -76,8 +91,13 @@ export function StudioAgent() {
           <div className="text-sm text-white/50">Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> una giornata al giorno</label>
-          <button className={btn} disabled={running} onClick={run}>{running ? 'Sta lavorando…' : 'Avvia giornata'}</button>
+          <button className={btn} disabled={running} onClick={() => run(1)}>Avvia giornata</button>
+          <input type="number" min={1} max={2000} value={nDays} onChange={e => setNDays(Math.max(1, Number(e.target.value) || 1))} className="w-20 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
+          <button className={btn} disabled={running} onClick={() => run(nDays)}>giornate di fila</button>
+          {running && <button className={btn} onClick={() => { stop.current = true }}>Ferma dopo questa tavola</button>}
+          {progress && <span className="text-sm text-white/50">{progress}</span>}
         </div>
       </div>
 
@@ -114,7 +134,7 @@ function Gallery({ works, sel, setSel }: { works: Work[]; sel: Work | null; setS
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={w.image} alt={w.title} className={`aspect-[4/5] w-full rounded-lg object-cover ${w.kept ? '' : 'opacity-40 grayscale'}`} />
             <div className="mt-1 truncate text-sm">{w.title || 'Senza titolo'}</div>
-            <div className="text-xs text-white/40">giorno {w.day}{w.kept ? '' : ' · buttata'}</div>
+            <div className="text-xs text-white/40">giorno {w.day}{w.tavola ? ` · tavola ${w.tavola}` : ''}{w.ragione && w.ragione !== 'prima' ? ` · ${w.ragione}` : ''}{w.kept ? '' : ' · buttata'}</div>
           </button>
         ))}
       </div>
@@ -143,7 +163,7 @@ function WorkDetail({ w }: { w: Work }) {
       <img src={w.image} alt={w.title} className="w-full rounded-xl" />
       <div>
         <div className="text-xl font-semibold">{w.title || 'Senza titolo'}</div>
-        <div className="text-xs text-white/40">giorno {w.day} · {w.mood} · {w.intention.register} · {w.kept ? 'tenuta' : 'buttata'} · interesse {Math.round(w.interest * 100)} · novità {Math.round(w.novelty * 100)}</div>
+        <div className="text-xs text-white/40">giorno {w.day}{w.tavola ? ` · tavola ${w.tavola} (${w.ragione})` : ''} · {w.mood} · {w.intention.register} · {w.kept ? 'tenuta' : 'buttata'} · interesse {Math.round(w.interest * 100)} · novità {Math.round(w.novelty * 100)}</div>
       </div>
       <div className={`${box} whitespace-pre-wrap text-sm leading-relaxed`}>{w.text}</div>
       <div className={box}>
@@ -177,6 +197,16 @@ function WorkDetail({ w }: { w: Work }) {
         <div className="space-y-0.5 font-mono text-xs">
           {w.gestures.map((g, i) => <div key={i} className={g.kept ? '' : 'text-white/35'}>{g.kept ? '✓' : '✗'} {g.tool} {g.delta >= 0 ? '+' : ''}{g.delta} <span className="text-white/30">{JSON.stringify(g.params).slice(0, 120)}</span></div>)}
         </div>
+      </div>
+      <div className={`${box} flex flex-wrap items-center gap-2`}>
+        <div className={`${h} mb-0 mr-2`}>Per te?</div>
+        {([1, -1] as const).map(v => (
+          <button key={v} className={btn} onClick={async () => {
+            await fetch(`${API}/visit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '', vote: v, workId: w.id }) })
+            setSent(true)
+          }}>{v > 0 ? 'tiene' : 'non tiene'}</button>
+        ))}
+        <span className="text-xs text-white/40">lo saprà alla prossima giornata</span>
       </div>
       <div className={box}>
         <div className={h}>Lascia una nota in studio</div>
@@ -259,12 +289,12 @@ function Notebook({ st, works, open }: { st: AgentState; works: Work[]; open: (w
   return (
     <div className="space-y-3">
       {st.notebook.slice().reverse().map(e => {
-        const w = works.find(x => x.id === e.workId)
+        const ws = (e.workIds ?? (e.workId ? [e.workId] : [])).map(id => works.find(x => x.id === id)).filter(Boolean) as Work[]
         return (
           <div key={e.day} className={box}>
             <div className="mb-1 flex items-baseline justify-between">
               <div className="font-semibold">Giorno {e.day}</div>
-              {w && <button className="text-xs underline text-white/50" onClick={() => open(w)}>{w.title || 'opera'}</button>}
+              <div className="flex gap-2">{ws.map(w => <button key={w.id} className="text-xs underline text-white/50" onClick={() => open(w)}>{w.title || 'tavola ' + (w.tavola ?? '')}</button>)}</div>
             </div>
             <div className="text-sm">{e.intention}</div>
             {e.wants.length > 0 && <div className="mt-1 text-sm text-emerald-200/70">vorrei: {e.wants.join(' · ')}</div>}

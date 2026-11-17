@@ -3,7 +3,7 @@
  *   GET  state | works | works/:id | image/:id | library
  *   GET  read?mode=casuale|vetrina|cerca&q=|rss&url=|pagina&url=
  *   GET  define?w=parola
- *   POST pos {words} · shader {url} · visit {text, workId?} · works {work, png}
+ *   POST pos {words} · shader {url} · visit {text, workId?, vote?} · works {work, png}
  *   PUT  state {…} · DELETE state
  */
 import { NextResponse } from 'next/server'
@@ -58,7 +58,7 @@ export async function POST(req: Request, { params }: Ctx) {
       case 'pos': return NextResponse.json(posTags(Array.isArray(body.words) ? body.words : []))
       case 'shader': return NextResponse.json({ code: await fetchShader(String(body.url ?? '')) })
       case 'visit': {
-        const ok = addVisit({ id: crypto.randomUUID(), date: new Date().toISOString(), text: String(body.text ?? '').slice(0, 1000), workId: body.workId })
+        const ok = addVisit({ id: crypto.randomUUID(), date: new Date().toISOString(), text: String(body.text ?? '').slice(0, 1000), workId: body.workId, vote: body.vote === 1 || body.vote === -1 ? body.vote : undefined })
         return ok ? NextResponse.json({ ok }) : bad("l'artista non esiste ancora")
       }
       case 'works': {

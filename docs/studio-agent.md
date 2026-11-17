@@ -8,8 +8,11 @@ Concept completo: documento "Artista-osservatore — concept".
 
 - Pagina: `/studio-agent` (voce **Artista** nel dock).
 - **Avvia giornata**: una giornata completa, con anteprima e log in tempo reale.
+- **N giornate di fila**: lancia molte giornate consecutive; la galleria si aggiorna a ogni tavola e il log stima il tempo totale. **Ferma dopo questa tavola** interrompe.
+- **Veloce**: meno gesti, ricette più leggere, tavole a 800×1000, anteprima solo a fine tavola.
+- Ogni giornata fa da 1 a 3 tavole: dopo la prima decide se continuare in **serie** (se ha funzionato) o **ritentare** (se l'ha buttata), secondo umore e interesse.
 - **Una giornata al giorno**: finché la pagina è aperta, lancia una giornata se oggi non ne ha ancora fatte.
-- Nella galleria ogni opera mostra testo, intenzione, letture, dibattito, scheda visiva e gesti. Da lì si lascia una nota: la legge la giornata dopo come voce "visitatore".
+- Nella galleria ogni opera mostra testo, intenzione, letture, dibattito, scheda visiva e gesti. Da lì si vota (**tiene / non tiene**) o si lascia una nota: la legge la giornata dopo come voce "visitatore".
 
 ## Dove stanno le cose
 
