@@ -12,6 +12,7 @@
  */
 import type { AgentState, Gesture, Intention, NotebookEntry, Reading, Visit, Work } from './core/types'
 import { rng, pick, weighted, uid } from './core/rng'
+import * as T from './transport'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten } from './hands/sheet'
 import type { ToolCtx } from './hands/tools'
@@ -31,7 +32,6 @@ import { grounded, verdict, wireAttacks } from './mind/argue'
 import { chooseName, newQuestion, rewritePoetics } from './mind/poetics'
 import { inscription, title as makeTitle, workText, type VoiceCtx } from './voice/writer'
 
-const API = '/api/studio-agent'
 
 export interface DayHooks {
   log: (msg: string) => void
@@ -44,31 +44,24 @@ export interface DayHooks {
   shouldStop?: () => boolean
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(API + path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
-  if (!res.ok) throw new Error(`${res.status} ${path}`)
-  return res.json() as Promise<T>
-}
-
-type Raw = { url: string; source: string; title: string; text: string; kind: Reading['kind'] }
-const toReading = (x: Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
+const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
 
 async function gather(st: AgentState, r: () => number, thread: string | null, log: DayHooks['log']): Promise<Reading[]> {
-  const jobs: Promise<Raw[]>[] = []
-  if (thread) jobs.push(api<Raw[]>(`/read?mode=cerca&n=2&q=${encodeURIComponent(thread)}`).catch(() => []))
+  const jobs: Promise<T.Raw[]>[] = []
+  if (thread) jobs.push(T.read(`mode=cerca&n=2&q=${encodeURIComponent(thread)}`))
   const feeds = st.feeds.length ? st.feeds : ['wiki:casuale']
   const nFeeds = 1 + Math.floor(r() * 2)
   for (let i = 0; i < nFeeds; i++) {
     const f = pick(r, feeds)
-    if (f === 'wiki:casuale') jobs.push(api<Raw[]>('/read?mode=casuale').catch(() => []))
-    else if (f === 'wiki:vetrina') jobs.push(api<Raw[]>('/read?mode=vetrina').catch(() => []))
-    else if (f.startsWith('pagina:')) jobs.push(api<Raw[]>(`/read?mode=pagina&url=${encodeURIComponent(f.slice(7))}`).catch(() => []))
-    else jobs.push(api<Raw[]>(`/read?mode=rss&n=2&url=${encodeURIComponent(f)}`).catch(() => []))
+    if (f === 'wiki:casuale') jobs.push(T.read('mode=casuale'))
+    else if (f === 'wiki:vetrina') jobs.push(T.read('mode=vetrina'))
+    else if (f.startsWith('pagina:')) jobs.push(T.read(`mode=pagina&url=${encodeURIComponent(f.slice(7))}`))
+    else jobs.push(T.read(`mode=rss&n=2&url=${encodeURIComponent(f)}`))
   }
   const got = (await Promise.all(jobs)).flat().filter(x => x && x.text && x.text.length > 120)
   // biblioteca: a volte rilegge un pezzo dei testi messi in studio
   if (r() < 0.4) {
-    const lib = await api<{ name: string; text: string }[]>('/library').catch(() => [])
+    const lib = await T.library()
     if (lib.length) {
       const b = pick(r, lib)
       const paras = b.text.split(/\n\s*\n/).filter(p => p.length > 200)
@@ -107,7 +100,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   // analisi grammaticale con il lessico del server, se c'è
   const sent = readings.flatMap(rd => sentences(rd.text).slice(0, 40).map(s => ({ s, src: rd.title })))
   const vocab = [...new Set(sent.flatMap(x => words(x.s)))]
-  addTags(await api<Record<string, string>>('/pos', { method: 'POST', body: JSON.stringify({ words: vocab }) }).catch(() => ({})))
+  addTags(await T.posTags(vocab))
   const fresh = sent.map(x => extract(x.s, x.src)).filter(Boolean) as NonNullable<ReturnType<typeof extract>>[]
   st.beliefs = addBeliefs(st.beliefs, fresh)
   log(`Ho estratto ${fresh.length} affermazioni dalle letture.`)
@@ -117,7 +110,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const salientToday = [...new Set(readings.flatMap(rd => salient(rd.text, df, st.words.docs, 10)))]
   const look = [...toLookUp(st, salientToday, hooks.fast ? 3 : 6), ...frontier(st, hooks.fast ? 2 : 5)]
   for (const w of look) {
-    const d = await api<{ definition: string | null }>(`/define?w=${encodeURIComponent(w)}`).catch(() => ({ definition: null }))
+    const d = await T.define(w)
     setDefinition(st, w, d.definition, st.day)
   }
   ground(st)
@@ -140,7 +133,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
 
   // 4–7 · una o più tavole: la prima, poi una serie se ha funzionato, o un ritentativo se l'ha buttata
   for (const sh of st.shaders.filter(x => !x.code)) {
-    const res = await api<{ code: string | null }>('/shader', { method: 'POST', body: JSON.stringify({ url: sh.url }) }).catch(() => ({ code: null }))
+    const res = await T.shader(sh.url)
     if (res.code) { sh.code = res.code; log(`Ho raccolto uno shader: ${sh.url}`) }
   }
   const near = neighbors(E, intention.word, 12).map(n => n.word)
@@ -197,7 +190,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
     log('Ho riscritto la mia poetica.')
   }
   st.lastRun = new Date().toISOString()
-  await api('/state', { method: 'PUT', body: JSON.stringify(st) })
+  await T.putState(st)
   return { state: st, works }
 }
 
@@ -277,7 +270,7 @@ async function tavola(
     debate: { args, accepted: [...acc], verdict: kept ? 'tiene' : 'butta', verbale: verb },
     interest: intr, progress, novelty: nov, kept, image: '', tavola: n, ragione,
   }
-  const saved = await api<Work>('/works', { method: 'POST', body: JSON.stringify({ work, png: final.toDataURL('image/png') }) })
+  const saved = await T.saveWork(work, final.toDataURL('image/png'))
   hooks.onWork?.(saved)
   log(`Tavola ${n}: interesse ${(intr * 100).toFixed(0)}, novità ${(nov * 100).toFixed(0)}, progresso ${(progress * 100).toFixed(0)}.`)
   return {
@@ -288,7 +281,7 @@ async function tavola(
 }
 
 export async function loadOrCreate(): Promise<AgentState> {
-  const st = await api<AgentState | null>('/state')
+  const st = await T.getState()
   if (st) {
     // campi aggiunti dopo la prima versione
     st.history ??= []
@@ -296,7 +289,7 @@ export async function loadOrCreate(): Promise<AgentState> {
   }
   const { initialState } = await import('./mind/poetics')
   const fresh = initialState()
-  await api('/state', { method: 'PUT', body: JSON.stringify(fresh) })
+  await T.putState(fresh)
   return fresh
 }
 

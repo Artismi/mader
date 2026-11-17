@@ -11,9 +11,9 @@ import { loadOrCreate, runDay } from '@/lib/studio-agent/day'
 import { mapCounts } from '@/lib/studio-agent/reader/lexicon'
 import { contradictions } from '@/lib/studio-agent/reader/logic'
 import { uid } from '@/lib/studio-agent/core/rng'
+import * as T from '@/lib/studio-agent/transport'
 
 type Tab = 'galleria' | 'mente' | 'quaderno' | 'impostazioni'
-const API = '/api/studio-agent'
 
 const box = 'rounded-xl border border-white/10 bg-white/[0.03] p-4'
 const btn = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40'
@@ -35,7 +35,7 @@ export function StudioAgent() {
 
   const refresh = useCallback(async () => {
     setSt(await loadOrCreate())
-    setWorks(await fetch(`${API}/works`).then(r => r.json()).catch(() => []))
+    setWorks(await T.listWorks())
   }, [])
   useEffect(() => { refresh() }, [refresh])
 
@@ -202,7 +202,7 @@ function WorkDetail({ w }: { w: Work }) {
         <div className={`${h} mb-0 mr-2`}>Per te?</div>
         {([1, -1] as const).map(v => (
           <button key={v} className={btn} onClick={async () => {
-            await fetch(`${API}/visit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '', vote: v, workId: w.id }) })
+            await T.addVisit({ text: '', vote: v, workId: w.id })
             setSent(true)
           }}>{v > 0 ? 'tiene' : 'non tiene'}</button>
         ))}
@@ -212,7 +212,7 @@ function WorkDetail({ w }: { w: Work }) {
         <div className={h}>Lascia una nota in studio</div>
         <textarea className="w-full rounded bg-black/30 p-2 text-sm" rows={3} value={note} onChange={e => { setNote(e.target.value); setSent(false) }} placeholder="La leggerà all'inizio della prossima giornata, come la reazione di chi passa." />
         <button className={`${btn} mt-2`} disabled={!note.trim()} onClick={async () => {
-          await fetch(`${API}/visit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: note, workId: w.id }) })
+          await T.addVisit({ text: note, workId: w.id })
           setNote(''); setSent(true)
         }}>Lascia la nota</button>
         {sent && <span className="ml-2 text-xs text-white/50">lasciata</span>}
@@ -322,7 +322,7 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
         return old ? { ...old, license } : { id: uid(), url, license, uses: 0, gain: 0.5 }
       }),
     }
-    await fetch(`${API}/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+    await T.putState(next)
     setMsg('salvato'); onSaved()
   }
   return (
@@ -342,7 +342,7 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
         <span className="text-sm text-white/50">{msg}</span>
         <button className={`${btn} ml-auto border-rose-400/30 text-rose-200/80`} onClick={async () => {
           if (!window.confirm("Ricominciare da zero? L'artista perde memoria, poetica e criteri. Le opere restano in archivio.")) return
-          await fetch(`${API}/state`, { method: 'DELETE' }); onSaved()
+          await T.deleteState(); onSaved()
         }}>Ricomincia da zero</button>
       </div>
     </div>
