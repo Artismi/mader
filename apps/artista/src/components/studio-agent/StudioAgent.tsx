@@ -127,7 +127,7 @@ export function StudioAgent() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold">{st.name || 'Artista senza nome'}</div>
-          <div className="text-sm text-white/50">versione 18/11 · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
+          <div className="text-sm text-white/50">versione 18/11b · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>

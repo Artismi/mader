@@ -25,6 +25,7 @@ import { art, concorda, realizza } from '../voice/lingua'
 import { getCantieri } from './cantiere'
 import { APERTURE } from '../voice/conclusioni'
 import type { Follia, Linguaggio } from './linguaggi'
+import { impaginaTesti, type Impagina } from '../hands/tipo'
 
 // ─── la visione ─────────────────────────────────────────────────────────────
 export interface Tesi { testo: string; conf: number; da: number; a: string; b: string; ritirata?: boolean }
@@ -239,6 +240,7 @@ const LAY_REL: Record<Rel, Lay[]> = {
   identita: ['sovrapposti', 'griglia', 'zoom'], diventa: ['coppia', 'griglia', 'vuoto'], accanto: ['coppia', 'vuoto', 'griglia', 'diviso'],
 }
 let ultimoLay: Lay | null = null
+let ultimoTipo: Impagina | null = null
 const hx = (a: number, b: number, c: number) => '#' + [a, b, c].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
 function mediaSotto(s: Sheet, x0: number, y0: number, x1: number, y1: number): string {
   const c = flatten(s, 0.2), g = c.getContext('2d')!
@@ -355,32 +357,20 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   }
   const RUOLO: Record<Ruolo, string> = { silenzio: '', parola: '', definizione: '', risposta: '', copertina: 'episodio', prima: 'prima', domanda: 'domanda', premessa: 'premessa', passaggio: 'passaggio', conclusione: 'conclusione', controllo: 'controllo', obiezione: 'obiezione', fiducia: 'fiducia', visione: 'visione', immagine: 'immagine', altra: 'altra strada', coda: 'prossima puntata' }
   void RUOLO
-  if (r() < 0.6) await scrivi(`${i}/${N}`, 0.07, 0.035, 0.018, 0.3, 'mono')
   const big = sc.ruolo === 'copertina' || sc.ruolo === 'domanda' || sc.ruolo === 'coda' || sc.ruolo === 'conclusione' || sc.ruolo === 'parola' || sc.ruolo === 'definizione'
   const pesante = s.layers.filter(l => ['ricetta', 'shader', 'pattern', 'grana'].includes(l.kind)).length > 0 || ultimoLay === 'zoom' || ultimoLay === 'sovrapposti'
   if (sc.follia === 'istruzione' && sc.a) { sc = { ...sc, titolo: realizza(pick(r, ['prendi {det:a}. mettilo accanto {a:b}. aspetta.', 'cerca {det:a} dove non c\'è {det:b}. scrivilo.', 'togli {det:b} {da:a}. guarda cosa resta.', 'ripeti {det:a} finché non diventa {det:b}.']), { a: sc.a, b: sc.b ?? sc.a }).toUpperCase(), corpo: sc.titolo } ; zona = { x0: 0.07, y0: 0.2, x1: 0.93 } }
   if (sc.follia === 'assenza' && sc.a) sc = { ...sc, corpo: `${sc.corpo} ${realizza('(Qui doveva esserci {det:a}. Non c\'è.)', { a: sc.a })}`.trim() }
   if (L?.tipo.maiuscolo && sc.titolo.length < 90) sc = { ...sc, titolo: sc.titolo.toUpperCase() }
-  // titolo, corpo e fonte come un blocco: misurati prima, poi messi senza sovrapporsi
-  const misura = async (text: string, size: number, maxW: number, f: FaceId) => (await textLayer(prova, { text, face: f, sizePx: size * M, color: '#000', x: 0, y: 0, maxW })).layers[0].canvas.height / s.H
-  let sT = sc.follia === 'istruzione' ? 0.07 : sc.ruolo === 'parola' ? 0.12 : big ? (sc.titolo.length > 50 ? 0.054 : 0.07) : sc.titolo.length > 60 ? 0.04 : 0.05
-  let corpo = sc.corpo
-  if (corpo.length > 480) corpo = corpo.slice(0, 480).replace(/\s\S*$/, '') + '…'
-  let sC = corpo.length > 300 ? 0.025 : 0.03
-  const wT = Math.min(0.86, zona.x1 - zona.x0), wC = Math.min(0.84, zona.x1 - zona.x0)
-  const fT = big ? face : lettura
-  let hT = 0, hC = 0
-  const gap = 0.014, fondo = sc.fonte ? 0.935 : 0.955
-  for (let k = 0; k < 5; k++) {
-    hT = sc.titolo ? await misura(sc.titolo, sT, wT, fT) : 0
-    hC = corpo ? await misura(corpo, sC, wC, lettura) : 0
-    if (hT + hC + gap <= fondo - 0.08) break
-    sT *= 0.86; sC *= 0.9
-  }
-  const top = Math.max(0.07, Math.min(zona.y0, fondo - (hT + (corpo ? gap + hC : 0))))
-  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, top, sT, wT, fT, ink, pesante)
-  if (corpo) await scrivi(corpo, zona.x0, top + h + gap, sC, wC, lettura, ink, pesante)
-  if (sc.fonte) await scrivi(`fonte: ${sc.fonte}`, 0.07, 0.95, 0.016, 0.7, 'mono')
+  // il testo: un'idea tipografica per tavola (mai la stessa di quella prima), con le due regole ferme
+  const vietate: Impagina[] = ultimoTipo ? [ultimoTipo] : []
+  if (sc.ruolo === 'parola') vietate.push('colonna', 'verticale')
+  const imp = await impaginaTesti(s, r, { titolo: sc.titolo, corpo: sc.corpo, fonte: sc.fonte ? `fonte: ${sc.fonte}` : undefined, numero: r() < 0.6 ? `${i}/${N}` : undefined }, {
+    face: big ? face : lettura, lettura, colori: [...colori, t.ink, t.acc], bg: t.bg, maiuscolo: !!L?.tipo.maiuscolo, barra: !!L?.tipo.barra,
+    espressivo: !!L?.tipo.immagine || sc.ruolo === 'parola' || sc.ruolo === 'copertina' || !!sc.follia, zona,
+  }, vietate)
+  s = imp.sheet
+  ultimoTipo = imp.modo
   return s
 }
 

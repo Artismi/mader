@@ -234,4 +234,66 @@ const sfasa: Tool = {
   },
 }
 
-export const NUOVI: Tool[] = [retino, duotono, deforma, caleido, flusso, tipografia, grafico, ombra, sfasa]
+/**
+ * Ornato: la ripetizione come la insegna Lewis F. Day (Pattern Design, 1903).
+ * Un motivo su un'ossatura: quadrato, mezzo-salto ("drop repeat"), mattone, diamante, triangolo/esagono,
+ * squame, ogiva, spolvero (motivi sparsi su una griglia nascosta), fregio (bordo). Due operazioni sul motivo:
+ * il ribaltamento ("turnover", a specchio una cella sì e una no) e la rotazione ("turn-round", di 90° per cella).
+ * L'ossatura a volte resta visibile come un traliccio sottile.
+ */
+const ornato: Tool = {
+  id: 'ornato', label: 'Ornato (ripetizione alla Day)', nature: 'ripetizione', pushes: { simmetria: 0.4, elementi: 0.3, complessita: 0.1 },
+  available: s => liberi(s).some(l => l.scale < 1.2),
+  propose: (s, c) => ({
+    layer: pick(c.r, liberi(s).filter(l => l.scale < 1.2)).id,
+    sistema: pick(c.r, ['quadrato', 'mezzosalto', 'mattone', 'diamante', 'triangolo', 'squame', 'ogiva', 'spolvero', 'fregio']),
+    op: pick(c.r, ['nessuna', 'ribalta', 'gira']), passo: range(c.r, 0.12, 0.3), scala: range(c.r, 0.55, 0.95),
+    traliccio: chance(c.r, 0.35), colore: pick(c.r, colori(c)), alpha: range(c.r, 0.6, 1), sostituisci: chance(c.r, 0.3),
+  }),
+  apply: async (s, p) => {
+    const l = s.layers.find(x => x.id === p.layer)
+    if (!l) return s
+    const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
+    const P = (p.passo as number) * s.W, k = (p.scala as number) * P, sis = p.sistema as string, op = p.op as string
+    const asp = l.canvas.height / l.canvas.width
+    const cella = (x: number, y: number, i: number, j: number) => {
+      g.save(); g.translate(x, y)
+      if (op === 'ribalta' && (i + j) % 2) g.scale(-1, 1)
+      if (op === 'gira') g.rotate(((i + j * 2) % 4) * Math.PI / 2)
+      if (sis === 'diamante' || sis === 'ogiva') g.rotate(Math.PI / 4 * (sis === 'diamante' ? 0 : 0))
+      g.drawImage(l.canvas, -k / 2, -(k * asp) / 2, k, k * asp)
+      g.restore()
+    }
+    g.globalAlpha = p.alpha as number
+    const nx = Math.ceil(s.W / P) + 2, ny = Math.ceil(s.H / P) + 2
+    if (sis === 'fregio') {
+      const n = Math.ceil(s.W / P) + 1
+      for (let i = 0; i < n; i++) { cella(i * P, P * 0.6, i, 0); cella(i * P + P / 2, s.H - P * 0.6, i, 1) }
+    } else {
+      let a = 7
+      const rnd = () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296)
+      for (let j = -1; j < ny; j++) for (let i = -1; i < nx; i++) {
+        let x = i * P, y = j * P
+        if (sis === 'mezzosalto' && i % 2) y += P / 2
+        if (sis === 'mattone' && j % 2) x += P / 2
+        if (sis === 'diamante' || sis === 'triangolo') { if (j % 2) x += P / 2; y = j * P * (sis === 'triangolo' ? 0.866 : 0.5) }
+        if (sis === 'squame') { if (j % 2) x += P / 2; y = j * P * 0.5 }
+        if (sis === 'ogiva') { if (j % 2) x += P / 2; y = j * P * 0.6 }
+        if (sis === 'spolvero') { x += (rnd() - 0.5) * P * 0.3; y += (rnd() - 0.5) * P * 0.3; if (rnd() < 0.25) continue }
+        cella(x, y, i, j)
+      }
+      // l'ossatura visibile: traliccio sottile
+      if (p.traliccio) {
+        g.globalAlpha = 0.45; g.strokeStyle = p.colore as string; g.lineWidth = 1.2
+        g.beginPath()
+        if (sis === 'diamante' || sis === 'squame' || sis === 'ogiva' || sis === 'triangolo') for (let v = -s.H; v < s.W + s.H; v += P) { g.moveTo(v, 0); g.lineTo(v - s.H, s.H); g.moveTo(v - s.H, 0); g.lineTo(v, s.H) }
+        else { for (let x = 0; x < s.W + P; x += P) { g.moveTo(x - P / 2, 0); g.lineTo(x - P / 2, s.H) } for (let y = 0; y < s.H + P; y += P) { g.moveTo(0, y - P / 2); g.lineTo(s.W, y - P / 2) } }
+        g.stroke()
+      }
+    }
+    const lay = fullLayer(s, lid(), 'ornato', cv)
+    return p.sostituisci ? { ...s, layers: [...s.layers.filter(x => x.id !== l.id && !LOCKED.has(x.kind)).slice(0, 1), lay, ...s.layers.filter(x => LOCKED.has(x.kind))] } : withLayer(s, lay)
+  },
+}
+
+export const NUOVI: Tool[] = [ornato, retino, duotono, deforma, caleido, flusso, tipografia, grafico, ombra, sfasa]
