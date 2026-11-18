@@ -35,6 +35,8 @@ import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } 
 import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
+import { lavora, type Lavoro } from './mind/cantiere'
+import { formatoDi, rendiPagina } from './mind/pagina'
 import { aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
@@ -157,6 +159,9 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   aggiornaAtlante(st, readings)
   log(`Atlante: ${ensureAtlante(st).frasi.length - nFrasi} frasi nuove da rileggere, ${Object.keys(ensureAtlante(st).concetti).length} concetti.`)
   enDelGiorno = null
+  // il cantiere: il lavoro lungo avanza di un passo
+  const lavoro = lavora(st, r, log)
+  paginaOggi = lavoro && (formatoDi(lavoro) === 'copertina' || lavoro.azione === 'chiude' || r() < 0.5) ? lavoro : null
 
   // analisi grammaticale con il lessico del server, se c'è
   const sent = readings.flatMap(rd => sentences(rd.text).slice(0, 40).map(s => ({ s, src: rd.title })))
@@ -201,6 +206,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const sf = sferzata(st, r)
   if (sf) { Object.assign(intention.targets, sf.intention.targets); intention.tools = sf.intention.tools ?? intention.tools; intention.why += `; sferzata: ${sf.rottura}`; log(`Oggi una sferzata: ${sf.rottura}.`) }
   else { const ex = applicaEsercizio(st, intention); if (ex) log(`Esercizio di oggi: ${ex}.`) }
+  if (lavoro && !sf) { intention.word = lavoro.capitolo.concetto; intention.why += `; cantiere «${lavoro.cantiere.titolo}», capitolo «${lavoro.capitolo.titolo}» (${lavoro.azione})` }
   log(`Intenzione: "${intention.word}", tono ${intention.register}. Perché: ${intention.why}.`)
 
   // 4–7 · una o più tavole: la prima, poi una serie se ha funzionato, o un ritentativo se l'ha buttata
@@ -307,6 +313,7 @@ function vary(it: Intention, r: () => number, f: Record<string, number>): Intent
 }
 
 let enDelGiorno: Enunciato | null = null
+let paginaOggi: Lavoro | null = null
 
 async function tavola(
   st: AgentState, r: () => number, intention: Intention, n: number, ragione: Work['ragione'],
@@ -318,12 +325,14 @@ async function tavola(
   const F = getScuola(st)!.firma
   // la regia: prima decide che cosa mostrare (le sferzate no: lì si va a briglia sciolta)
   // che cosa dice questa tavola: un enunciato dall'atlante (le letture reinterpretate)
-  const en = rottura ? null : enunciato(st, r, intention.word, ragione === 'serie' ? enDelGiorno : null)
+  const pag = n === 1 && !rottura ? paginaOggi : null
+  if (n === 1) paginaOggi = null
+  const en = rottura || pag ? null : enunciato(st, r, intention.word, ragione === 'serie' ? enDelGiorno : null)
   if (en) { enDelGiorno = en; intention.word = en.a; intention.why += `; enunciato: «${en.frase}» (${en.perche})`; log(`Enunciato: «${en.frase}». Da «${en.citazione}» (${en.fonte}). ${en.perche}.`) }
-  const scena = rottura || en ? null : progetta(st, r, intention, near, ragione === 'serie' ? (parent as Genome & { forma?: Forma } | null)?.forma : undefined)
+  const scena = rottura || en || pag ? null : progetta(st, r, intention, near, ragione === 'serie' ? (parent as Genome & { forma?: Forma } | null)?.forma : undefined)
   const tone = scena ? toneFor(scena, r, TONES, F.tone) : weighted(r, TONES, t => (t.id === F.tone ? 1.6 : 1) * ((st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 2 : 1), st.temperature)
   const vctx: VoiceCtx = { r, register: intention.register, word: intention.word, near, readings: readings.length ? readings : st.readings.slice(-4), ownTexts, day: st.day, beliefs: st.beliefs.slice(-400) }
-  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5, noText: !!(scena || en) }
+  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5, noText: !!(scena || en || pag) }
   const base = { curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]
   const steps = Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : en ? 0.8 : 1))
   log(`— Tavola ${n} (${ragione}), tono ${tone.label}.`)
@@ -331,7 +340,11 @@ async function tavola(
   let pre: { gestures: Gesture[]; genome: { tool: string; params: Record<string, unknown> }[] } = { gestures: [], genome: [] }
   let costr: Awaited<ReturnType<typeof costruisci>> | null = null
   let messa: Awaited<ReturnType<typeof mettiInScena>> | null = null
-  if (en) {
+  if (pag) {
+    log(`Pagina del cantiere (${formatoDi(pag)}): «${pag.capitolo.titolo}».`)
+    start = await rendiPagina(st, r, pag, start, tctx, F.face)
+    pre = { gestures: [{ tool: `pagina:${formatoDi(pag)}`, params: { capitolo: pag.capitolo.titolo }, kept: true, delta: 0 }], genome: [] }
+  } else if (en) {
     messa = await mettiInScena(st, r, en, start, tctx)
     start = messa.sheet
     pre = { gestures: messa.passi, genome: [] }
@@ -350,13 +363,13 @@ async function tavola(
     start = rp.sheet; pre = rp
     log(`Rifatti ${rp.gestures.length} gesti dal genoma (variazione ${Math.round(amount * 100)}%).`)
   }
-  const res0 = await runStudio(st, r, start, intention, tctx, parent && !scena && !en ? Math.ceil(steps * 0.5) : steps, (s, g) => {
+  const res0 = pag ? { sheet: start, gestures: [] as Gesture[], last: look(st, start, intention), effects: [], genome: [] } : await runStudio(st, r, start, intention, tctx, parent && !scena && !en ? Math.ceil(steps * 0.5) : steps, (s, g) => {
     log(`${g.kept ? '✓' : '✗'} ${g.tool} (${g.delta >= 0 ? '+' : ''}${g.delta})`)
     if (!fast) hooks.preview?.(flatten(s, 0.5))
   })
   const res = { ...res0, gestures: [...pre.gestures, ...res0.gestures], genome: [...pre.genome, ...res0.genome] }
   // il testo per ultimo: dentro la composizione, dove c'è spazio, leggibile su ciò che c'è sotto
-  let ttl0 = ''
+  let ttl0 = pag ? `${pag.cantiere.titolo} — ${pag.capitolo.titolo}` : ''
   if (en && messa) {
     const modo = weighted(r, ['riga', 'colonna', 'etichette', 'grande'] as ModoTesto[], m => (m === 'grande' && intention.register === 'slogan' ? 3 : m === 'etichette' && (en.rel === 'contro' || en.rel === 'causa') ? 2 : 1), 0.8)
     res.sheet = await scriviEnunciato(res.sheet, r, en, messa, F.face, tone, modo)
@@ -366,7 +379,7 @@ async function tavola(
     res.sheet = await impagina(res.sheet, scena, costr, ttl0, F.face, tone, F.margine)
   }
   // la redazione: togliere, ordinare, rendere leggibile, firmare (non nelle sferzate)
-  if (!rottura) {
+  if (!rottura && !pag) {
     const red = await redazione(st, r, res.sheet, s => look(st, s, intention), { firma: true, nome: st.name, impaginato: !!(scena || en) })
     res.sheet = red.sheet
     res.gestures = [...res.gestures, ...red.passi]
@@ -409,7 +422,7 @@ async function tavola(
   log(`Dibattito: ${acc.size} argomenti reggono su ${args.length}. Pro ${v.pro.toFixed(2)}, contro ${v.contro.toFixed(2)} → ${kept ? 'la tengo' : 'la butto'}.`)
   const held = args.filter(a => acc.has(a.id)).sort((a, b) => b.weight - a.weight).map(a => a.claim)
   const fell = args.filter(a => !acc.has(a.id)).sort((a, b) => b.weight - a.weight).map(a => a.claim)
-  const text = workText(vctx, intention.why, res.gestures, held, fell)
+  const text = (pag ? `${pag.paragrafo.testo}\n\n` : '') + workText(vctx, intention.why, res.gestures, held, fell)
 
   // ricorsione
   const crit = evolve(st, r, f, intr)

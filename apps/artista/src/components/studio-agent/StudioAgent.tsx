@@ -15,8 +15,10 @@ import * as T from '@/lib/studio-agent/transport'
 import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 import { getAtlante } from '@/lib/studio-agent/mind/atlante'
+import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
+import { getOfficina, disegnaGeneratore } from '@/lib/studio-agent/mind/officina'
 
-type Tab = 'galleria' | 'vetrina' | 'mente' | 'quaderno' | 'impostazioni'
+type Tab = 'galleria' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
 
 const box = 'rounded-xl border border-white/10 bg-white/[0.03] p-4'
 const btn = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40'
@@ -114,13 +116,14 @@ export function StudioAgent() {
       )}
 
       <div className="mb-4 flex gap-1">
-        {(['galleria', 'vetrina', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
+        {(['galleria', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
           <button key={t} className={`${btn} ${tab === t ? 'bg-white/10' : ''}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
       {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
+      {tab === 'cantiere' && <CantiereView st={st} />}
       {tab === 'mente' && <Mind st={st} />}
       {tab === 'quaderno' && <Notebook st={st} works={works} open={w => { setSel(w); setTab('galleria') }} />}
       {tab === 'impostazioni' && <Settings st={st} onSaved={refresh} />}
@@ -288,6 +291,83 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
   )
 }
 
+function CantiereView({ st }: { st: AgentState }) {
+  const cs = getCantieri(st)
+  const [i, setI] = useState(cs.length - 1)
+  if (!cs.length) return <div className="text-sm text-white/50">Nessun cantiere ancora: si apre quando l'atlante ha abbastanza concetti letti (di solito dopo qualche giorno).</div>
+  const C = cs[Math.max(0, Math.min(cs.length - 1, i))]
+  const scarica = () => {
+    const blob = new Blob([esporta(C)], { type: 'text/markdown' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${C.titolo.replace(/[^\wàèéìòù]+/gi, '-')}.md`; a.click()
+  }
+  return (
+    <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+      <div className={box}>
+        <div className={h}>Cantieri</div>
+        {cs.map((c, j) => <button key={c.id} onClick={() => setI(j)} className={`mb-1 block w-full text-left text-sm ${c === C ? 'text-white' : 'text-white/50'}`}>{c.titolo}<span className="block text-xs text-white/40">{c.forma} · g{c.nato}{c.chiuso ? `–${c.chiuso}` : ' · in corso'}</span></button>)}
+      </div>
+      <div className={box}>
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <div><div className="text-2xl font-semibold">{C.titolo}</div><div className="text-xs text-white/50">{C.forma}, dal giorno {C.nato}{C.da ? ` — viene da «${C.da}»` : ''}</div></div>
+          <button className={btn} onClick={scarica}>Scarica (.md)</button>
+        </div>
+        {C.capitoli.map((k, n) => (
+          <div key={k.id} className="mb-5">
+            <div className="mb-2 text-lg font-semibold">{n + 1}. {k.titolo}</div>
+            {k.paragrafi.map(p => (
+              <div key={p.id} className="mb-3">
+                {p.punti?.length ? <ul className="mb-1 list-disc pl-5 text-sm">{p.punti.map((x, j) => <li key={j}>{x}</li>)}</ul> : null}
+                <p className={`text-sm leading-relaxed ${p.tipo === 'obiezione' ? 'border-l-2 border-amber-300/60 pl-3 text-amber-100/90' : ''}`}>{p.testo}{p.contestato && <span className="ml-1 text-xs text-amber-300">[contestato]</span>}</p>
+                {p.versioni.map((v, j) => <p key={j} className="mt-1 text-xs text-white/35 line-through">{v.testo}</p>)}
+                {p.fonti.length > 0 && <div className="mt-1 text-xs text-white/40">fonti: {p.fonti.join('; ')}</div>}
+              </div>
+            ))}
+          </div>
+        ))}
+        {C.domanda && <div className="mt-4 text-sm text-emerald-200/80">Domanda aperta: {C.domanda}</div>}
+        <div className="mt-4 text-xs text-white/40">{C.diario.slice(-12).map(d => `g${d.day}: ${d.nota}`).join(' · ')}</div>
+      </div>
+    </div>
+  )
+}
+
+function Thumb({ st, id }: { st: AgentState; id: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const g = getOfficina(st)?.gen.find(x => x.id === id)
+    if (!g || !ref.current) return
+    const cv = disegnaGeneratore(st, g, 96, '#f2f0ea', g.tipo === 'campo' ? '#111111' : null)
+    g.usi--
+    cv.style.width = '64px'; cv.style.height = '64px'
+    ref.current.replaceChildren(cv)
+  }, [st, id])
+  return <div ref={ref} className="h-16 w-16 shrink-0 bg-black/40" />
+}
+
+function OfficinaView({ st }: { st: AgentState }) {
+  const O = getOfficina(st)
+  if (!O) return null
+  return (
+    <div className={`${box} lg:col-span-2`}>
+      <div className={h}>Officina: {O.gen.length} generatori scritti, {Object.keys(O.libreria).length} funzioni sue</div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          {O.gen.slice(-8).reverse().map(g => (
+            <div key={g.id} className="mb-2 flex gap-3">
+              <Thumb st={st} id={g.id} />
+              <div className="min-w-0"><div className="text-sm">{g.nome} <span className="text-white/40">({g.tipo}, g{g.nato}, critica: {g.critica})</span></div><code className="block break-all text-xs text-white/60">{g.testo.slice(0, 220)}</code></div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-white/50">La sua libreria</div>
+          {Object.entries(O.libreria).slice(-10).map(([n, f]) => <div key={n} className="mb-1 text-xs"><code className="text-emerald-200/80">{n}()</code> = <code className="text-white/60">{f.testo.slice(0, 160)}</code></div>)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AtlanteView({ st }: { st: AgentState }) {
   const A = getAtlante(st)
   if (!A) return null
@@ -357,6 +437,7 @@ function Mind({ st }: { st: AgentState }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <AtlanteView st={st} />
+      <OfficinaView st={st} />
       <ScuolaView st={st} />
       <div className={box}>
         <div className={h}>Poetica</div>

@@ -33,9 +33,11 @@ import { runShader } from '../hands/shader'
 import { ratio } from '../eyes/judgement'
 import { isNome, realizza } from '../voice/lingua'
 import type { Sogg } from './scena'
+import { disegnaGeneratore, ensureOfficina, generatoreById, scriviGeneratore } from './officina'
+import type { Features } from '../core/types'
 
 export type Rel = 'contro' | 'causa' | 'dentro' | 'identita' | 'diventa' | 'accanto'
-export interface Motivo { forma: Sogg | 'ricetta'; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
+export interface Motivo { forma: Sogg | 'ricetta' | 'codice'; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
 export interface Concetto { word: string; motivo?: Motivo; frasi: number; usi: number; ultima: number }
 export interface Frase { t: string; fonte: string; nomi: string[]; day: number; usata?: number; rel?: Rel }
 export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita'; riuscita?: number }
@@ -214,14 +216,27 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   const a = anchorOf(w)
   const trama = a?.feature === 'linee' || a?.feature === 'orizzontali' ? 'righe' : a?.feature === 'punti' || a?.feature === 'elementi' ? 'punti' : a?.feature === 'vuoto' ? 'contorno' : a?.feature === 'complessita' ? 'tratteggio' : pick(r, ['pieno', 'pieno', 'righe', 'punti', 'tratteggio', 'contorno'] as const)
   const pool = TEXTLESS()
+  // niente forma nota: a volte scrive un generatore suo per questo concetto
+  if (!sh && r() < 0.55) {
+    const vuole: Features = {}
+    if (a?.feature) vuole[a.feature] = (a.dir ?? 1) > 0 ? 0.7 : 0.15
+    const g = scriviGeneratore(st, r, w, vuole)
+    c.motivo = { forma: 'codice', gen: g.id, trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+    return c.motivo
+  }
   c.motivo = sh
     ? { forma: sh, trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
     : { forma: 'ricetta', trama, colore: r() < 0.35 ? 'acc' : 'ink', recipe: pick(r, pool).id, seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
   return c.motivo
 }
 
+let ST: AgentState | null = null
 async function disegnaMotivo(m: Motivo, t: Tone, q: number, override?: string): Promise<HTMLCanvasElement> {
   const color = override ?? (m.colore === 'acc' ? t.acc : t.ink)
+  if (m.forma === 'codice' && ST) {
+    const g = generatoreById(ST, m.gen)
+    if (g) return disegnaGeneratore(ST, g, 600, color, null)
+  }
   if (m.forma === 'ricetta') {
     const rc = RECIPES.find(x => x.id === m.recipe) ?? TEXTLESS()[0]
     const values = shuffleParams(rc, defaults(rc), m.seed)
@@ -375,7 +390,14 @@ export interface Messa { sheet: Sheet; passi: { tool: string; params: Record<str
 
 const lid = () => `m${Math.random().toString(36).slice(2, 9)}`
 
+/** il segno di un concetto, disegnato netto (per pagine e diapositive) */
+export async function segnoDi(st: AgentState, r: Rnd, w: string, t: Tone, ctx: ToolCtx): Promise<HTMLCanvasElement> {
+  ST = st
+  return disegnaMotivo(motivoDi(st, r, w), t, ctx.quality)
+}
+
 export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: Sheet, ctx: ToolCtx): Promise<Messa> {
+  ST = st
   let s = start
   const t = ctx.tone
   const passi: Messa['passi'] = []
@@ -400,7 +422,16 @@ export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: 
   if (s.layers.length && r() < 0.5) await usa('luce', { layer: s.layers[0].id, look: pick(r, LOOKS).id, amount: Math.round(range(r, 40, 90)) })
   // il colore: una tavolozza oltre il tono, e un campo che la mette in gioco
   const { colori, armonia } = tavolozza(t, r)
-  if (armonia !== 'tono' || r() < 0.4) { s = withLayer(s, campoColore(s, r, colori)); passi.push({ tool: 'scena:colore', params: { armonia }, kept: true, delta: 0 }) }
+  if (r() < 0.35) {
+    // un campo scritto da lui: una formula che diventa colore
+    const O = ensureOfficina(st)
+    const campi = O.gen.filter(g => g.tipo === 'campo' && g.punteggio > 0.4)
+    const g = campi.length && r() < 0.5 ? pick(r, campi) : scriviGeneratore(st, r, e.a, { complessita: 0.4 }, 'campo')
+    const cv = disegnaGeneratore(st, g, 360, colori[1], pick(r, [colori[0], colori[2] ?? colori[0], t.bg]))
+    const big = newCanvas(s.W, s.H); big.getContext('2d')!.drawImage(cv, 0, 0, s.W, s.H)
+    s = withLayer(s, fullLayer(s, lid(), 'colore', big, pick(r, ['multiply', 'overlay', 'soft-light', 'color', 'screen']) as GlobalCompositeOperation, range(r, 0.4, 0.85)))
+    passi.push({ tool: 'scena:campo', params: { generatore: g.nome, formula: g.testo.slice(0, 80) }, kept: true, delta: 0 })
+  } else if (armonia !== 'tono' || r() < 0.4) { s = withLayer(s, campoColore(s, r, colori)); passi.push({ tool: 'scena:colore', params: { armonia }, kept: true, delta: 0 }) }
 
   // 2. i due segni, disposti secondo la relazione; oggi disegnati in uno stile (netto, a pennello, come maschera)
   const mA = motivoDi(st, r, e.a), mB = motivoDi(st, r, e.b)
@@ -531,8 +562,9 @@ export async function scriviEnunciato(s: Sheet, r: Rnd, e: Enunciato, m: Messa, 
     }
     case 'etichette': {
       // le due parole accanto ai loro segni, la frase in basso
-      out = (await metti(out, e.a, Math.min(0.85, m.posA[0] + 0.02), Math.max(0.04, m.posA[1] - 0.2), 0.03, 0.4)).out
-      out = (await metti(out, e.b, Math.min(0.85, m.posB[0] + 0.02), Math.min(0.9, m.posB[1] + 0.16), 0.03, 0.4)).out
+      const lab = async (o: Sheet, w: string, p: [number, number], dy: number) => (p[0] > 0.6 ? metti(o, w, p[0] - 0.02, p[1] + dy, 0.03, 0.4, 'right') : metti(o, w, p[0] + 0.02, p[1] + dy, 0.03, 0.4))
+      out = (await lab(out, e.a, m.posA, -0.2)).out
+      out = (await lab(out, e.b, m.posB, 0.16)).out
       const a = await metti(out, e.frase, z.x0, z.y0 + 0.02, 0.04, z.x1 - z.x0)
       out = (await metti(a.out, fonte, z.x0, Math.min(0.89, z.y0 + 0.03 + a.h), 0.015, 0.7, 'left', 'mono')).out
       break
