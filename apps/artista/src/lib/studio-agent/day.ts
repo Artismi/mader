@@ -56,6 +56,9 @@ export interface DayHooks {
 
 const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
 
+/** codifica sicura: le stringhe tagliate a metà di un carattere (surrogati soli) non fanno più saltare la giornata */
+const enc = (x: string) => { try { return encodeURIComponent(x) } catch { return encodeURIComponent(x.replace(/[\uD800-\uDFFF]/g, '')) } }
+
 async function gather(st: AgentState, r: () => number, thread: string | null, E: Embedding | null, log: DayHooks['log']): Promise<Reading[]> {
   const got: T.Raw[] = []
   const seen = new Set(st.readings.map(x => x.url))
@@ -64,34 +67,36 @@ async function gather(st: AgentState, r: () => number, thread: string | null, E:
   for (const q of (sc?.studiare ?? []).slice(0, 2)) {
     log(`Studio: ${q}.`)
     sc!.letti = [...(sc!.letti ?? []), q].slice(-200)
-    got.push(...await T.read(`mode=cerca&n=1&q=${encodeURIComponent(q)}`))
+    got.push(...await T.read(`mode=cerca&n=1&q=${enc(q)}`))
   }
   // 1. cerca la parola del giorno
-  if (thread) got.push(...await T.read(`mode=cerca&n=2&q=${encodeURIComponent(thread)}`))
+  if (thread) got.push(...await T.read(`mode=cerca&n=2&q=${enc(thread)}`))
   // 2. segue un link letto nei giorni prima, il più vicino alla parola del giorno
   const sites = st.sites ?? DEFAULT_SITES
-  const poolHosts = new Set(sites.map(u => { try { return new URL(u).host } catch { return '' } }))
-  const queue = (st.linkQueue ?? []).filter(t => !/^https?:/.test(t) || st.liberta || poolHosts.has(new URL(t).host))
+  const host = (u: string) => { try { return new URL(u).host } catch { return '' } }
+  const poolHosts = new Set(sites.map(host))
+  const queue = (st.linkQueue ?? []).filter(t => !/^https?:/.test(t) ? !/[\uD800-\uDFFF]/.test(t) : (st.liberta || poolHosts.has(host(t))) && !!host(t))
   if (queue.length) {
-    const key = (t: string) => /^https?:/.test(t) ? decodeURIComponent(new URL(t).pathname).split(/[\/\-_]/).filter(Boolean).pop() ?? '' : t.toLowerCase().split(' ')[0]
+    const dec = (x: string) => { try { return decodeURIComponent(x) } catch { return x } }
+    const key = (t: string) => { if (!/^https?:/.test(t)) return t.toLowerCase().split(' ')[0]; try { return dec(new URL(t).pathname).split(/[\/\-_]/).filter(Boolean).pop() ?? '' } catch { return '' } }
     const scored = queue.map(t => ({ t, s: (thread && E ? similarity(E, thread, key(t)) : 0) + (thread && t.toLowerCase().includes(thread) ? 0.5 : 0) + r() * 0.3 }))
     const link = scored.sort((a, b) => b.s - a.s)[0].t
     st.linkQueue = (st.linkQueue ?? []).filter(t => t !== link)
     log(`Seguo un link: ${link}`)
-    got.push(...await T.read(/^https?:/.test(link) ? `mode=pagina&url=${encodeURIComponent(link)}` : `mode=voce&t=${encodeURIComponent(link)}`))
+    got.push(...await T.read(/^https?:/.test(link) ? `mode=pagina&url=${enc(link)}` : `mode=voce&t=${enc(link)}`))
   }
   // 3. esplora uno dei siti scelti (o una fonte delle impostazioni)
   if (sites.length && r() < 0.65) {
     const site = pick(r, sites)
-    log(`Esploro ${new URL(site).host}${thread ? ` cercando "${thread}"` : ''}.`)
-    got.push(...await T.esplora(site, thread ?? '', [...seen].filter(u => u.includes(new URL(site).host)).slice(-200)))
+    log(`Esploro ${host(site)}${thread ? ` cercando "${thread}"` : ''}.`)
+    got.push(...await T.esplora(site, thread ?? '', [...seen].filter(u => u.includes(host(site))).slice(-200)))
   } else {
     const feeds = st.feeds.length ? st.feeds : ['wiki:casuale']
     const f = pick(r, feeds)
     if (f === 'wiki:casuale') got.push(...await T.read('mode=casuale'))
     else if (f === 'wiki:vetrina') got.push(...await T.read('mode=vetrina'))
-    else if (f.startsWith('pagina:')) got.push(...await T.read(`mode=pagina&url=${encodeURIComponent(f.slice(7))}`))
-    else got.push(...await T.read(`mode=rss&n=2&url=${encodeURIComponent(f)}`))
+    else if (f.startsWith('pagina:')) got.push(...await T.read(`mode=pagina&url=${enc(f.slice(7))}`))
+    else got.push(...await T.read(`mode=rss&n=2&url=${enc(f)}`))
   }
   // 4. biblioteca dello studio
   const fresh0 = got.filter(x => x && x.text && x.text.length > 120 && !seen.has(x.url))

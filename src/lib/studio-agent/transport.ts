@@ -24,6 +24,6 @@ export const addVisit = (v: Omit<Visit, 'id' | 'date'>) => call('/visit', { meth
 export const library = () => call<{ name: string; text: string }[]>('/library').catch(() => [])
 export const posTags = (words: string[]) => call<Record<string, string>>('/pos', { method: 'POST', body: JSON.stringify({ words }) }).catch(() => ({}))
 export const read = (query: string) => call<Raw[]>(`/read?${query}`).catch(() => [] as Raw[])
-export const define = (w: string) => call<{ definition: string | null }>(`/define?w=${encodeURIComponent(w)}`).catch(() => ({ definition: null }))
+export const define = (w: string) => call<{ definition: string | null }>(`/define?w=${(() => { try { return encodeURIComponent(w) } catch { return encodeURIComponent(w.replace(/[\uD800-\uDFFF]/g, "")) } })()}`).catch(() => ({ definition: null }))
 export const esplora = (url: string, word: string, skip: string[]) => call<Raw[]>('/esplora', { method: 'POST', body: JSON.stringify({ url, word, skip }) }).catch(() => [] as Raw[])
 export const shader = (url: string) => call<{ code: string | null }>('/shader', { method: 'POST', body: JSON.stringify({ url }) }).catch(() => ({ code: null }))
