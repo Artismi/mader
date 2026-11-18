@@ -199,7 +199,7 @@ export function connect(a: string, b: string, depth = 4): Triple[] | null {
 export const category = (w: string) => { const s = senses(w)[0]; return s === undefined || !data ? '' : data.syn[s][1] }
 
 // ─── verbi: forme flesse → infinito (dal lessico), per leggere e riscrivere frasi ──
-export interface Verbo { inf: string; con: 'are' | 'ere' | 'ire' | 'rre'; stem: string }
+export interface Verbo { inf: string; con: 'are' | 'ere' | 'ire' | 'rre'; stem: string; irr?: { s: string; p: string; part?: string } }
 let VERBI: Map<string, Verbo> | null = null
 export function verbi(): Map<string, Verbo> {
   if (VERBI || !data) return VERBI ?? new Map()
@@ -219,6 +219,40 @@ export function verbi(): Map<string, Verbo> {
       m.set(l, v)
       for (const f of fs) if (!m.has(stem + f)) m.set(stem + f, v)
     }
+  }
+  // irregolari frequenti: forme → infinito, con il presente giusto
+  const IRR: [string, string, string, string | undefined, string[]][] = [
+    ['essere', 'è', 'sono', undefined, ['è', 'era', 'erano', 'fu', 'furono', 'sarà', 'sia']],
+    ['avere', 'ha', 'hanno', 'avuto', ['ha', 'hanno', 'aveva', 'avevano', 'ebbe', 'ebbero']],
+    ['fare', 'fa', 'fanno', 'fatto', ['fa', 'fanno', 'faceva', 'facevano', 'fece', 'fecero', 'farà']],
+    ['diventare', 'diventa', 'diventano', 'diventato', ['divenne', 'divennero', 'diviene', 'divengono']],
+    ['nascere', 'nasce', 'nascono', 'nato', ['nacque', 'nacquero', 'nato', 'nata', 'nati', 'nate']],
+    ['dire', 'dice', 'dicono', 'detto', ['dice', 'dicono', 'diceva', 'disse', 'dissero']],
+    ['mettere', 'mette', 'mettono', 'messo', ['mise', 'misero']],
+    ['prendere', 'prende', 'prendono', 'preso', ['prese', 'presero']],
+    ['vedere', 'vede', 'vedono', 'visto', ['vide', 'videro']],
+    ['venire', 'viene', 'vengono', undefined, ['viene', 'vengono', 'venne', 'vennero', 'veniva']],
+    ['rimanere', 'rimane', 'rimangono', undefined, ['rimane', 'rimangono', 'rimase', 'rimasero']],
+    ['scegliere', 'sceglie', 'scelgono', 'scelto', ['sceglie', 'scelgono', 'scelse', 'scelsero']],
+    ['perdere', 'perde', 'perdono', 'perso', ['perse', 'persero']],
+    ['vincere', 'vince', 'vincono', 'vinto', ['vinse', 'vinsero']],
+    ['scrivere', 'scrive', 'scrivono', 'scritto', ['scrisse', 'scrissero']],
+    ['porre', 'pone', 'pongono', 'posto', ['pone', 'pongono', 'pose', 'posero']],
+    ['tenere', 'tiene', 'tengono', 'tenuto', ['tiene', 'tengono', 'tenne', 'tennero']],
+    ['volere', 'vuole', 'vogliono', 'voluto', ['vuole', 'vogliono', 'volle']],
+    ['potere', 'può', 'possono', undefined, ['può', 'possono', 'poteva']],
+    ['dovere', 'deve', 'devono', undefined, ['deve', 'devono', 'doveva']],
+    ['produrre', 'produce', 'producono', 'prodotto', ['produce', 'producono', 'produsse', 'produssero']],
+    ['condurre', 'conduce', 'conducono', 'condotto', ['condusse', 'condussero']],
+    ['muovere', 'muove', 'muovono', 'mosso', ['mosse', 'mossero']],
+    ['chiudere', 'chiude', 'chiudono', 'chiuso', ['chiuse', 'chiusero']],
+    ['aprire', 'apre', 'aprono', 'aperto', ['aprì', 'aprirono']],
+    ['distruggere', 'distrugge', 'distruggono', 'distrutto', ['distrusse', 'distrussero']],
+  ]
+  for (const [inf, s3, p3, part, fs] of IRR) {
+    const v: Verbo = { inf, con: (inf.endsWith('rre') ? 'rre' : inf.slice(-3)) as Verbo['con'], stem: inf.slice(0, -3), irr: { s: s3, p: p3, part } }
+    m.set(inf, v)
+    for (const f of [s3, p3, ...fs]) m.set(f, v)
   }
   VERBI = m
   return m

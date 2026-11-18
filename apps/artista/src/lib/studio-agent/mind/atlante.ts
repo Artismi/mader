@@ -32,17 +32,19 @@ import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { runShader } from '../hands/shader'
 import { ratio } from '../eyes/judgement'
 import { isNome, realizza } from '../voice/lingua'
+import { esito } from '../voice/conclusioni'
 import type { Sogg } from './scena'
 import { disegnaGeneratore, ensureOfficina, generatoreById, scriviGeneratore } from './officina'
 import type { Features } from '../core/types'
+import type { Deduzione } from '../voice/scrittura'
 
 export type Rel = 'contro' | 'causa' | 'dentro' | 'identita' | 'diventa' | 'accanto'
 export interface Motivo { forma: Sogg | 'ricetta' | 'codice'; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
 export interface Concetto { word: string; motivo?: Motivo; frasi: number; usi: number; ultima: number }
 export interface Frase { t: string; fonte: string; nomi: string[]; day: number; usata?: number; rel?: Rel }
 export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita' | 'deduce'; riuscita?: number }
-export interface Atlante { concetti: Record<string, Concetto>; frasi: Frase[]; tesi: Tesi[]; deduzioni?: { day: number; a: string; b: string; tipo: string; testo: string; premesse: string[] }[] }
-export interface Enunciato { a: string; b: string; rel: Rel; citazione: string; fonte: string; frase: string; postura: Tesi['postura']; perche: string }
+export interface Atlante { concetti: Record<string, Concetto>; frasi: Frase[]; tesi: Tesi[]; deduzioni?: (Deduzione & { day: number })[] }
+export interface Enunciato { modello?: string; tipoD?: string; a: string; b: string; rel: Rel; citazione: string; fonte: string; frase: string; postura: Tesi['postura']; perche: string }
 
 type WithA = AgentState & { atlante?: Atlante }
 export const getAtlante = (st: AgentState) => (st as WithA).atlante
@@ -120,11 +122,11 @@ export function enunciato(st: AgentState, r: Rnd, parola: string, precedente?: E
     return { ...precedente, postura, frase: dire(r, precedente.a, precedente.b, precedente.rel, postura), perche: 'la stessa cosa, detta un\'altra volta' }
   }
   // a volte la tavola dice una cosa che ha dedotto lui, non letta
-  const ds = (A.deduzioni ?? []).filter(x => st.day - x.day < 6 && !A.tesi.some(t => t.frase === x.testo))
+  const ds = (A.deduzioni ?? []).filter(x => !x.ritirata && x.tipo !== 'ritrattazione' && st.day - x.day < 6 && !A.tesi.some(t => t.frase === x.testo))
   if (ds.length && r() < 0.4) {
     const x = pick(r, ds)
     const rel: Rel = x.tipo === 'contesa' || x.tipo === 'disaccordo' ? 'contro' : x.tipo === 'dipendenza' ? 'dentro' : x.tipo === 'catena' ? 'causa' : 'identita'
-    return { a: x.a, b: x.b || x.a, rel, citazione: x.premesse.join('; ').slice(0, 120), fonte: 'ragionamento mio', frase: x.testo, postura: 'deduce', perche: `l'ho dedotto io: ${x.premesse.join(', e ')}` }
+    return { a: x.a, b: x.b || x.a, rel, citazione: x.premesse.join('; ').slice(0, 120), fonte: 'ragionamento mio', frase: x.testo, postura: 'deduce', perche: `l'ho dedotto io: ${x.premesse.join(', e ')}`, modello: x.modello, tipoD: x.tipo }
   }
   // da dove partire: il filo di ieri (prosegue da B), la parola del giorno, o un concetto ricco
   const filo = last && r() < 0.5 ? last.b : null
@@ -184,6 +186,7 @@ function dire(r: Rnd, a: string, b: string, rel: Rel, postura: Tesi['postura']):
 /** dopo la tavola: la tesi resta, i concetti si contano, i motivi si rafforzano o mutano */
 export function registraTesi(st: AgentState, e: Enunciato, interesse: number, tenuta: boolean) {
   const A = ensureAtlante(st)
+  if (e.modello && e.tipoD) esito(st, Math.random, e.tipoD as never, e.modello, tenuta && interesse > 0.45)
   A.tesi = [...A.tesi, { day: st.day, a: e.a, b: e.b, rel: e.rel, frase: e.frase, fonte: e.fonte, postura: e.postura, riuscita: tenuta ? interesse : interesse * 0.5 }].slice(-200)
   for (const w of [e.a, e.b]) {
     const c = A.concetti[w]

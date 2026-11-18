@@ -22,7 +22,8 @@ import { pick, uid, weighted, type Rnd } from '../core/rng'
 import { sentences } from '../reader/tokenize'
 import { ensureAtlante, type Tesi } from './atlante'
 import { isNome, realizza } from '../voice/lingua'
-import { scriviObiezione, scriviParagrafo } from '../voice/scrittura'
+import { coerenza, diciDeduzione, scriviObiezione, scriviParagrafo } from '../voice/scrittura'
+import { esito } from '../voice/conclusioni'
 import { generatoreById } from './officina'
 
 export type FormaCantiere = 'libro' | 'saggio' | 'presentazione'
@@ -147,7 +148,9 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
 
   if (azione === 'apri') {
     const k = capitoloNuovo(liberi[0][0])
-    return esponi(st, r, C, k, usate, log, 'apre un capitolo') ?? null
+    const ok = esponi(st, r, C, k, usate, log, 'apre un capitolo')
+    if (ok) return ok
+    C.capitoli = C.capitoli.filter(x => x !== k); C.diario.pop()
   }
   if (azione === 'rivedi') {
     const { k, p } = contestati[0] ?? pick(r, vecchi)
@@ -191,7 +194,12 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
   const fatto = esponi(st, r, C, corrente, usate, log, 'espone')
   if (fatto) return fatto
   // niente di nuovo da dire qui: apre un capitolo nuovo, se può
-  if (liberi.length && C.capitoli.length < target) return esponi(st, r, C, capitoloNuovo(liberi[0][0]), usate, log, 'apre un capitolo')
+  if (liberi.length && C.capitoli.length < target) {
+    const k = capitoloNuovo(liberi[0][0])
+    const ok = esponi(st, r, C, k, usate, log, 'apre un capitolo')
+    if (!ok) { C.capitoli = C.capitoli.filter(x => x !== k); C.diario.pop() }
+    return ok
+  }
   return null
 }
 
@@ -203,10 +211,24 @@ function esponi(st: AgentState, r: Rnd, C: Cantiere, k: Capitolo, usate: Set<str
   const tp = precedente ? suaTesi(st, precedente.concetto) : undefined
   const w = scriviParagrafo(st, r, k.concetto, { tesi: t?.frase, segno: r() < 0.6 ? segnoTesto(st, k.concetto) : undefined, altri, prima: k.paragrafi.length === 0 ? tp?.frase : undefined, usati: new Set(C.fattiUsati ?? []), dedotte: new Set((ensureAtlante(st).deduzioni ?? []).map(x => x.testo)) })
   if (!w.fatti && (k.paragrafi.length || !t)) return null
-  if (w.dedotta) { const A = ensureAtlante(st); A.deduzioni = [...(A.deduzioni ?? []), { day: st.day, a: w.dedotta.a, b: w.dedotta.b, tipo: w.dedotta.tipo, testo: w.dedotta.testo, premesse: w.dedotta.premesse }].slice(-100); log(`Deduco: ${w.dedotta.testo}.`) }
+  let ritratto: Paragrafo | null = null
+  if (w.dedotta) {
+    const A = ensureAtlante(st)
+    const co = coerenza(st, r, w.dedotta, A.deduzioni ?? [])
+    A.deduzioni = [...(A.deduzioni ?? []), { ...w.dedotta, day: st.day }].slice(-150)
+    log(`Deduco (${w.dedotta.passi} passi, fiducia ${Math.round(w.dedotta.conf * 100)}%): ${w.dedotta.testo}.`)
+    esito(st, r, w.dedotta.tipo, w.dedotta.modello, !w.dedotta.ritirata && w.dedotta.conf >= 0.4)
+    if (co.ritrattazione) {
+      if (co.contro) esito(st, r, co.contro.tipo, co.contro.modello, false)
+      log(`Mi contraddico: ${co.ritrattazione.testo}.`)
+      ritratto = { id: uid(), tipo: 'revisione', testo: diciDeduzione(r, co.ritrattazione), fonti: [], day: st.day, versioni: [] }
+      C.diario.push({ day: st.day, nota: `ritratto una deduzione: ${co.ritrattazione.testo.slice(0, 80)}` })
+    }
+  }
   C.fattiUsati = [...(C.fattiUsati ?? []), ...w.chiavi].slice(-600)
   const p: Paragrafo = { id: uid(), tipo: w.fatti ? 'esposizione' : 'tesi', testo: w.testo, punti: C.forma === 'presentazione' ? w.punti.slice(0, 4) : undefined, fonti: w.fonti, day: st.day, versioni: [] }
   k.paragrafi.push(p)
+  if (ritratto) k.paragrafi.push(ritratto)
   log(`Cantiere: scrivo in «${k.titolo}» (${k.paragrafi.length}° paragrafo, ${w.fatti} fatti riscritti${w.fonti.length ? ` da ${w.fonti.join(', ')}` : ''}).`)
   deforma(st, C, log)
   return { cantiere: C, capitolo: k, paragrafo: p, azione }

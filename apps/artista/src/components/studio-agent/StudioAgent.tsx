@@ -15,6 +15,7 @@ import * as T from '@/lib/studio-agent/transport'
 import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 import { getAtlante } from '@/lib/studio-agent/mind/atlante'
+import { getRepertorio } from '@/lib/studio-agent/voice/conclusioni'
 import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
 import { getOfficina, disegnaGeneratore } from '@/lib/studio-agent/mind/officina'
 
@@ -344,6 +345,26 @@ function Thumb({ st, id }: { st: AgentState; id: string }) {
   return <div ref={ref} className="h-16 w-16 shrink-0 bg-black/40" />
 }
 
+function RagionamentiView({ st }: { st: AgentState }) {
+  const D = getAtlante(st)?.deduzioni ?? []
+  const R = getRepertorio(st)
+  if (!D.length) return null
+  return (
+    <div className={`${box} lg:col-span-2`}>
+      <div className={h}>Ragionamenti: {D.length} deduzioni, {D.filter(d => d.ritirata).length} ritirate, {R?.modelli.length ?? 0} modelli di conclusione suoi</div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>{D.slice(-12).reverse().map((d, i) => (
+          <div key={i} className={`mb-2 text-sm ${d.ritirata ? 'text-white/35 line-through' : ''}`}><span className="text-white/40">g{d.day} · {d.tipo} · {d.passi} passi · {Math.round(d.conf * 100)}%</span> {d.testo}</div>
+        ))}</div>
+        <div>
+          <div className="mb-1 text-xs text-white/50">Modelli nati da lui (dalle conclusioni che hanno funzionato, o incrociandone due)</div>
+          {(R?.modelli ?? []).slice().sort((a, b) => b.peso - a.peso).slice(0, 12).map((m, i) => <div key={i} className="mb-1 text-xs"><span className="text-white/40">{m.tipo} · peso {m.peso.toFixed(1)} · {m.da}</span> <code className="text-white/70">{m.tpl}</code></div>)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OfficinaView({ st }: { st: AgentState }) {
   const O = getOfficina(st)
   if (!O) return null
@@ -437,6 +458,7 @@ function Mind({ st }: { st: AgentState }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <AtlanteView st={st} />
+      <RagionamentiView st={st} />
       <OfficinaView st={st} />
       <ScuolaView st={st} />
       <div className={box}>

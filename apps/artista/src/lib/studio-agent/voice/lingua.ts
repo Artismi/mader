@@ -57,6 +57,8 @@ function indovina(h: string): { g: G; n: 's' | 'p' | 'i' } {
 const head = (s: string) => s.trim().toLowerCase().split(/[\s']/)[0] ?? ''
 /** è un nome del lessico (al singolare)? */
 export const isNome = (w: string) => !!LEX && LEX.get(w)?.sg === w
+/** il singolare di un nome («fabbriche» → «fabbrica») */
+export const singolare = (w: string) => LEX?.get(w)?.sg ?? w
 /** nome, anche al plurale */
 export const isNomeQ = (w: string) => !!LEX?.get(w)
 /** il genere visto nei testi letti («la fine», «il fine»): vince su quello del dizionario */
@@ -118,7 +120,9 @@ export function concorda(text: string): string {
   if (!text) return text
   let out = text.replace(/\b(il|lo|la|un|uno|una|del|dello|della|al|allo|alla|dal|dallo|dalla|nel|nello|nella|sul|sullo|sulla|i|gli|le|dei|degli|delle|ai|agli|alle|dai|dagli|dalle|nei|negli|nelle|sui|sugli|sulle)\s+([a-zàèéìòù]+)/gi, (m, a: string, w: string) => {
     const low = a.toLowerCase()
-    const v = LEX?.get(w.toLowerCase())
+    const v0 = LEX?.get(w.toLowerCase())
+    const vis = VISTO.get(w.toLowerCase())
+    const v = vis && vis.m !== vis.f ? { ...(v0 ?? { n: 's' as const, sg: w, pl: w }), g: (vis.f > vis.m ? 'f' : 'm') as G, n: v0?.n ?? indovina(w.toLowerCase()).n } : v0
     if (!v) {
       // elisione anche per le parole ignote: «la arancia» → «l'arancia», «lo uomo» → «l'uomo»
       if (VOC(w) && /^(lo|la|il)$/.test(low)) return (a[0] === a[0].toUpperCase() ? "L'" : "l'") + w
@@ -132,6 +136,10 @@ export function concorda(text: string): string {
     return unisci(nuovo, w)
   })
   out = out.replace(/\b(un|Un)\s+(ora|altra|idea|isola|ombra|onda|ala|arte|anima)\b/g, (_m, a, w) => (a === 'Un' ? "Un'" : "un'") + w)
+  // accordo del verbo con un soggetto plurale nei modelli fissi («le immagini porta» → «portano»)
+  const PL: Record<string, string> = { è: 'sono', porta: 'portano', decide: 'decidono', vive: 'vivono', arriva: 'arrivano', sta: 'stanno', manca: 'mancano', somiglia: 'somigliano', diventa: 'diventano', tiene: 'tengono', abita: 'abitano' }
+  out = out.replace(/\b(le|i|gli|Le|I|Gli) ([a-zàèéìòù]+) (è|porta|decide|vive|arriva|sta|manca|somiglia|diventa|tiene|abita)\b/g, (m, a: string, w: string, v: string) => (genere(w).n === 'p' ? `${a} ${w} ${PL[v]}` : m))
+  out = out.replace(/\b(manca) (le|i|gli) /g, 'mancano $2 ')
   out = out.replace(/([.!?]\s+)([a-zàèéìòù])/g, (_m, p, c) => p + c.toUpperCase())
   return out.replace(/\s+([,.;:!?])/g, '$1').replace(/\s{2,}/g, ' ').trim()
 }
