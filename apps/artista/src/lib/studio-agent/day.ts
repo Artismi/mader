@@ -35,6 +35,7 @@ import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } 
 import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
+import { aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
 import { conceptsReady, describe, loadConcepts } from './reader/concepts'
@@ -152,6 +153,10 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   for (const rd of readings) registraStudio(st, rd.title, rd.text)
   sc.studiare = []
   for (const rd of readings) if (rd.kind !== 'rilettura') addText(st.words, rd.text)
+  const nFrasi = ensureAtlante(st).frasi.length
+  aggiornaAtlante(st, readings)
+  log(`Atlante: ${ensureAtlante(st).frasi.length - nFrasi} frasi nuove da rileggere, ${Object.keys(ensureAtlante(st).concetti).length} concetti.`)
+  enDelGiorno = null
 
   // analisi grammaticale con il lessico del server, se c'è
   const sent = readings.flatMap(rd => sentences(rd.text).slice(0, 40).map(s => ({ s, src: rd.title })))
@@ -301,6 +306,8 @@ function vary(it: Intention, r: () => number, f: Record<string, number>): Intent
   return { ...it, targets, why: it.why.split('; serie')[0] + '; serie: varia la tavola precedente' }
 }
 
+let enDelGiorno: Enunciato | null = null
+
 async function tavola(
   st: AgentState, r: () => number, intention: Intention, n: number, ragione: Work['ragione'],
   readings: Reading[], near: string[], ownTexts: string[], visits: Visit[], hooks: DayHooks,
@@ -310,17 +317,26 @@ async function tavola(
   const fast = !!hooks.fast
   const F = getScuola(st)!.firma
   // la regia: prima decide che cosa mostrare (le sferzate no: lì si va a briglia sciolta)
-  const scena = rottura ? null : progetta(st, r, intention, near, ragione === 'serie' ? (parent as Genome & { forma?: Forma } | null)?.forma : undefined)
-  const tone = scena ? toneFor(scena, r, TONES, F.tone) : weighted(r, TONES, t => (st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 2 : 1, st.temperature)
+  // che cosa dice questa tavola: un enunciato dall'atlante (le letture reinterpretate)
+  const en = rottura ? null : enunciato(st, r, intention.word, ragione === 'serie' ? enDelGiorno : null)
+  if (en) { enDelGiorno = en; intention.word = en.a; intention.why += `; enunciato: «${en.frase}» (${en.perche})`; log(`Enunciato: «${en.frase}». Da «${en.citazione}» (${en.fonte}). ${en.perche}.`) }
+  const scena = rottura || en ? null : progetta(st, r, intention, near, ragione === 'serie' ? (parent as Genome & { forma?: Forma } | null)?.forma : undefined)
+  const tone = scena ? toneFor(scena, r, TONES, F.tone) : weighted(r, TONES, t => (t.id === F.tone ? 1.6 : 1) * ((st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 2 : 1), st.temperature)
   const vctx: VoiceCtx = { r, register: intention.register, word: intention.word, near, readings: readings.length ? readings : st.readings.slice(-4), ownTexts, day: st.day, beliefs: st.beliefs.slice(-400) }
-  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5, noText: !!scena }
+  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5, noText: !!(scena || en) }
   const base = { curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]
-  const steps = Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : 1))
+  const steps = Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : en ? 0.8 : 1))
   log(`— Tavola ${n} (${ragione}), tono ${tone.label}.`)
   let start = emptySheet(800, 1000, tone.bg)
   let pre: { gestures: Gesture[]; genome: { tool: string; params: Record<string, unknown> }[] } = { gestures: [], genome: [] }
   let costr: Awaited<ReturnType<typeof costruisci>> | null = null
-  if (scena) {
+  let messa: Awaited<ReturnType<typeof mettiInScena>> | null = null
+  if (en) {
+    messa = await mettiInScena(st, r, en, start, tctx)
+    start = messa.sheet
+    pre = { gestures: messa.passi, genome: [] }
+    if (!fast) hooks.preview?.(flatten(start, 0.5))
+  } else if (scena) {
     log(`Scena: ${scena.perche}. «${scena.didascalia}».`)
     intention.why += `; scena: ${scena.perche}`
     Object.assign(intention.targets, scenaFeatures(scena))
@@ -334,20 +350,24 @@ async function tavola(
     start = rp.sheet; pre = rp
     log(`Rifatti ${rp.gestures.length} gesti dal genoma (variazione ${Math.round(amount * 100)}%).`)
   }
-  const res0 = await runStudio(st, r, start, intention, tctx, parent && !scena ? Math.ceil(steps * 0.5) : steps, (s, g) => {
+  const res0 = await runStudio(st, r, start, intention, tctx, parent && !scena && !en ? Math.ceil(steps * 0.5) : steps, (s, g) => {
     log(`${g.kept ? '✓' : '✗'} ${g.tool} (${g.delta >= 0 ? '+' : ''}${g.delta})`)
     if (!fast) hooks.preview?.(flatten(s, 0.5))
   })
   const res = { ...res0, gestures: [...pre.gestures, ...res0.gestures], genome: [...pre.genome, ...res0.genome] }
-  // il testo per ultimo, in una zona sua: titolo e didascalia parlano di ciò che si vede
+  // il testo per ultimo: dentro la composizione, dove c'è spazio, leggibile su ciò che c'è sotto
   let ttl0 = ''
-  if (scena && costr && intention.register !== 'silenzio') {
+  if (en && messa) {
+    const modo = weighted(r, ['riga', 'colonna', 'etichette', 'grande'] as ModoTesto[], m => (m === 'grande' && intention.register === 'slogan' ? 3 : m === 'etichette' && (en.rel === 'contro' || en.rel === 'causa') ? 2 : 1), 0.8)
+    res.sheet = await scriviEnunciato(res.sheet, r, en, messa, F.face, tone, modo)
+    ttl0 = en.frase.charAt(0).toUpperCase() + en.frase.slice(1)
+  } else if (scena && costr && intention.register !== 'silenzio') {
     ttl0 = makeTitle(vctx, true)
     res.sheet = await impagina(res.sheet, scena, costr, ttl0, F.face, tone, F.margine)
   }
   // la redazione: togliere, ordinare, rendere leggibile, firmare (non nelle sferzate)
   if (!rottura) {
-    const red = await redazione(st, r, res.sheet, s => look(st, s, intention), { firma: true, nome: st.name, impaginato: !!scena })
+    const red = await redazione(st, r, res.sheet, s => look(st, s, intention), { firma: true, nome: st.name, impaginato: !!(scena || en) })
     res.sheet = red.sheet
     res.gestures = [...res.gestures, ...red.passi]
     const tenuti = red.passi.filter(p => p.kept).map(p => p.tool.replace('redazione:', ''))
@@ -421,6 +441,7 @@ async function tavola(
   } else if (rottura) {
     esitoSferzata(st, saved.id, rottura, intr, false)
   }
+  if (en) registraTesi(st, en, intr, kept)
   log(`Tavola ${n}: interesse ${(intr * 100).toFixed(0)}, novità ${(nov * 100).toFixed(0)}, progresso ${(progress * 100).toFixed(0)}.`)
   const genes = res.genome.length > 16 ? [...res.genome.slice(0, 6), ...res.genome.slice(-10)] : res.genome
   const genome: Genome & { forma?: Forma } = { id: uid(), workId: id, day: st.day, interest: intr, tone: tone.id, ricercaId: st.ricerca?.id, gestures: genes, forma: scena?.forma }

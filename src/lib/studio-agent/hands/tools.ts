@@ -399,8 +399,8 @@ const disponi: Tool = {
 const togli: Tool = {
   id: 'togli', label: 'Togliere', nature: 'vuoto',
   pushes: { vuoto: 0.2, densita: -0.3, complessita: -0.2 },
-  available: s => free(s).length > 1,
-  propose: (s, c) => ({ layer: someLayer(s, c.r).id }),
+  available: s => free(s).filter(l => l.kind !== 'motivo').length > 1,
+  propose: (s, c) => { const xs = free(s).filter(l => l.kind !== 'motivo'); return { layer: xs[Math.floor(c.r() * xs.length)].id } },
   apply: async (s, p) => ({ ...s, layers: s.layers.filter(l => l.id !== p.layer) }),
 }
 

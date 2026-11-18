@@ -115,7 +115,7 @@ export async function redazione(st: AgentState, r: Rnd, sheet: Sheet, look: Look
   // 1. togliere il superfluo (dall'alto; con il minimalismo studiato prova di più)
   const tries = studied.has('minimalismo') ? 8 : 5
   for (const l of cur.layers.slice().reverse().slice(0, tries)) {
-    if (cur.layers.length <= 1 || ['firma', 'testo', 'piastra', 'mappa', 'etichette', 'orizzonte', 'pannelli'].includes(l.kind)) continue
+    if (cur.layers.length <= 1 || ['firma', 'testo', 'piastra', 'mappa', 'etichette', 'orizzonte', 'pannelli', 'motivo', 'campo'].includes(l.kind)) continue
     await prova('togli', { livello: l.kind }, { ...cur, layers: cur.layers.filter(x => x.id !== l.id) })
   }
   // 2. troppi testi: tiene i più grandi

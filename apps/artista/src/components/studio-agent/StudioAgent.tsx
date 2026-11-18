@@ -14,6 +14,7 @@ import { uid } from '@/lib/studio-agent/core/rng'
 import * as T from '@/lib/studio-agent/transport'
 import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
+import { getAtlante } from '@/lib/studio-agent/mind/atlante'
 
 type Tab = 'galleria' | 'vetrina' | 'mente' | 'quaderno' | 'impostazioni'
 
@@ -287,6 +288,32 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
   )
 }
 
+function AtlanteView({ st }: { st: AgentState }) {
+  const A = getAtlante(st)
+  if (!A) return null
+  const conMotivo = Object.values(A.concetti).filter(c => c.motivo).sort((a, b) => b.usi - a.usi).slice(0, 24)
+  const ricchi = Object.values(A.concetti).sort((a, b) => b.frasi - a.frasi).slice(0, 20)
+  return (
+    <div className={`${box} lg:col-span-2`}>
+      <div className={h}>Atlante: {A.frasi.length} frasi, {Object.keys(A.concetti).length} concetti, {A.tesi.length} tesi</div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <div className="mb-1 text-xs text-white/50">Le sue tesi, nel tempo</div>
+          {A.tesi.slice(-12).reverse().map((t, i) => <div key={i} className="mb-1 text-sm"><span className="text-white/40">g{t.day} · {t.postura}</span> {t.frase} <span className="text-white/30">({t.fonte})</span></div>)}
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-white/50">Iconografia (il segno di ogni concetto)</div>
+          {conMotivo.map(c => <div key={c.word} className="text-sm">{c.word} <span className="text-white/40">→ {c.motivo!.forma === 'ricetta' ? `disegno ${c.motivo!.recipe}` : `${c.motivo!.forma} ${c.motivo!.trama}`}, usato {c.usi}×, forza {Math.round(c.motivo!.forza * 100)}</span></div>)}
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-white/50">Concetti più letti</div>
+          <div className="text-sm">{ricchi.map(c => `${c.word} (${c.frasi})`).join(' · ')}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ScuolaView({ st }: { st: AgentState }) {
   const sc = getScuola(st)
   if (!sc) return null
@@ -329,6 +356,7 @@ function Mind({ st }: { st: AgentState }) {
   const poetics = st.poetics.slice().reverse()
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <AtlanteView st={st} />
       <ScuolaView st={st} />
       <div className={box}>
         <div className={h}>Poetica</div>
