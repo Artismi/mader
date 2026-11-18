@@ -35,6 +35,8 @@ import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } 
 import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
+import { chiudiEpisodio, didascalia, getVisione, pianifica, rendiScheda } from './mind/episodio'
+import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
 import { aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
@@ -52,6 +54,8 @@ export interface DayHooks {
   fast?: boolean
   /** interrompere dopo la tavola in corso */
   shouldStop?: () => boolean
+  /** modalità episodio: invece di 1–3 tavole, un episodio di N tavole che si leggono in sequenza */
+  episodio?: number
 }
 
 const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
@@ -153,9 +157,10 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (st.ricerca && step) { st.ricerca.phase = step.phase; log(`Ricerca "${st.ricerca.word}", fase: ${step.phase}.`) }
   const openQ = st.questions.filter(q => !q.closed).sort((a, b) => a.visits - b.visits)
   const voids = Object.values(st.lexicon).filter(e => e.state === 'a_vuoto').map(e => e.word)
-  const thread = step?.word ?? openQ[0]?.word ?? (voids.length ? pick(r, voids) : null)
+  const domEp = hooks.episodio ? (getVisione(st)?.domanda ?? '').toLowerCase().split(/[^a-zàèéìòù]+/).find(w => w.length > 3 && ensureAtlante(st).concetti[w]) : undefined
+  const thread = domEp ?? step?.word ?? openQ[0]?.word ?? (voids.length ? pick(r, voids) : null)
   if (thread) log(`Seguo un filo: "${thread}".`)
-  const readings = await gather(st, r, thread, E0, log)
+  const readings = await gather(st, r, thread, E0, log).catch(e => { log(`Non riesco a leggere (${e instanceof Error ? e.message : e}): lavoro con quello che ho.`); return [] as Reading[] })
   if (!readings.length) log('Non sono riuscito a leggere niente: lavoro con quello che ho.')
   for (const rd of readings) registraStudio(st, rd.title, rd.text)
   sc.studiare = []
@@ -227,8 +232,13 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   let cur: Intention = intention
   let parent: Genome | null = pickParent(st, r, step?.phase)
   if (parent) log(`Riparto da una tavola riuscita del giorno ${parent.day} e la vario.`)
-  for (let n = 1; n <= MAX_TAVOLE; n++) {
-    const out = await tavola(st, r, cur, n, ragione, readings, near, ownTexts, visits, hooks, parent, step?.phase, sf?.rottura)
+  if (hooks.episodio) {
+    try { works.push(...await episodio(st, r, hooks, intention, thread, readings)) } catch (e) { log(`Episodio interrotto: ${e instanceof Error ? e.message : e}`) }
+  }
+  for (let n = 1; n <= (hooks.episodio ? 0 : MAX_TAVOLE); n++) {
+    let out: Awaited<ReturnType<typeof tavola>>
+    try { out = await tavola(st, r, cur, n, ragione, readings, near, ownTexts, visits, hooks, parent, step?.phase, sf?.rottura)
+    } catch (e) { log(`Tavola ${n} saltata: ${e instanceof Error ? e.message : e}`); break }
     parent = out.genome
     works.push(out.work)
     allVerb.push(...out.work.debate.verbale.map(l => `[tavola ${n}] ${l}`))
@@ -318,6 +328,56 @@ function vary(it: Intention, r: () => number, f: Record<string, number>): Intent
 }
 
 let enDelGiorno: Enunciato | null = null
+
+/** un episodio: N tavole che si leggono in fila, un ragionamento dall'inizio alla fine */
+async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intention: Intention, thread: string | null, readings: Reading[]): Promise<Work[]> {
+  const log = hooks.log
+  const N = Math.max(4, Math.min(20, hooks.episodio ?? 12))
+  const F = getScuola(st)!.firma
+  const tone = weighted(r, TONES, t => (t.id === F.tone ? 2 : 1), 0.8)
+  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => '', shaders: st.shaders, quality: hooks.fast ? 0.35 : 0.5, noText: true }
+  const plan = pianifica(st, r, N, thread ?? intention.word, fraseDi, readings)
+  const nEp = ((st as AgentState & { episodi?: unknown[] }).episodi?.length ?? 0) + 1
+  log(`Episodio ${nEp}: «${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ' Non ho ancora una deduzione: racconto la visione.'}`)
+  const works: Work[] = []
+  const epId = uid()
+  for (let i = 0; i < plan.schede.length; i++) {
+    if (hooks.shouldStop?.()) break
+    const sc = plan.schede[i]
+    let sheet
+    try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
+    const final = flatten(sheet, 1)
+    const R = rasterize(final)
+    const f = measure(R)
+    const ps = patches(R)
+    if (!st.codebook.length) { const s0 = seedCodebook(ps, r); st.codebook = s0.cb; st.codebookCounts = s0.counts }
+    const nov = noveltyOf(st, f, histogram(st.codebook, ps))
+    const progress = Math.min(1, learn(st.codebook, st.codebookCounts, ps) * 5)
+    const id = uid()
+    const work: Work = {
+      id, day: st.day, createdAt: new Date().toISOString(), title: `${i + 1}/${plan.schede.length} · ${sc.titolo}`, text: sc.corpo, intention: { ...intention, word: sc.a ?? intention.word }, mood: st.mood,
+      readings: sc.fonte ? [{ title: sc.fonte, url: '', source: sc.fonte }] : [], gestures: [{ tool: `episodio:${sc.ruolo}`, params: {}, kept: true, delta: 0 }],
+      visual: { features: f, words: histogram(st.codebook, ps), palette: palette(R) },
+      debate: { args: [], accepted: [], verdict: 'tiene', verbale: [] }, interest: interestOf(st, nov, progress), progress, novelty: nov, kept: true, image: '',
+      tavola: i + 1, ragione: i ? 'serie' : 'prima', episodio: { id: epId, n: nEp, i: i + 1, N: plan.schede.length, ruolo: sc.ruolo, titolo: plan.titolo },
+    }
+    st.recentVisual = [...st.recentVisual, { id, features: f, words: work.visual.words }].slice(-40)
+    const saved = await T.saveWork(work, final.toDataURL('image/png'))
+    works.push(saved)
+    hooks.onWork?.(saved)
+    hooks.preview?.(flatten(sheet, 0.5))
+    log(`${i + 1}/${plan.schede.length} ${sc.ruolo}: ${sc.titolo}`)
+  }
+  if (!works.length) return works
+  const caption = didascalia(st, plan.titolo, plan.d, plan.domanda)
+  const ep = chiudiEpisodio(st, r, { lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
+  const post = publish(st, r, works[0], [plan.d?.a, plan.d?.b].filter(Boolean) as string[], caption, [])
+  post.carosello = works.map(w => w.id)
+  post.title = `Episodio ${ep.n}: ${plan.titolo}`
+  post.caption = caption
+  log(`Episodio ${ep.n} pubblicato: ${post.views} visualizzazioni, ${post.likes} like${post.virale ? ' — virale' : ''}. Prossima puntata: ${plan.domanda}`)
+  return works
+}
 let paginaOggi: Lavoro | null = null
 
 async function tavola(

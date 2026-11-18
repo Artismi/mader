@@ -112,6 +112,8 @@ export interface Work {
   tavola?: number
   /** perché ha fatto questa tavola: prima, serie (variazione su ciò che ha funzionato) o ritentativo */
   ragione?: 'prima' | 'serie' | 'ritenta'
+  /** se fa parte di un episodio: quale, e in che posizione */
+  episodio?: { id: string; n: number; i: number; N: number; ruolo: string; titolo: string }
 }
 
 export type Mood = 'curioso' | 'annoiato' | 'inquieto' | 'giocoso' | 'cupo' | 'calmo'

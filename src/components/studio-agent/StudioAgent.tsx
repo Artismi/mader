@@ -15,11 +15,13 @@ import * as T from '@/lib/studio-agent/transport'
 import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 import { getAtlante } from '@/lib/studio-agent/mind/atlante'
+import { getEpisodi, getVisione } from '@/lib/studio-agent/mind/episodio'
+import JSZip from 'jszip'
 import { getRepertorio } from '@/lib/studio-agent/voice/conclusioni'
 import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
 import { getOfficina, disegnaGeneratore } from '@/lib/studio-agent/mind/officina'
 
-type Tab = 'galleria' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
+type Tab = 'galleria' | 'episodi' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
 
 const box = 'rounded-xl border border-white/10 bg-white/[0.03] p-4'
 const btn = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40'
@@ -35,6 +37,9 @@ export function StudioAgent() {
   const [auto, setAuto] = useState(false)
   const [fast, setFast] = useState(true)
   const [nDays, setNDays] = useState(10)
+  const [epMode, setEpMode] = useState(false)
+  const [epN, setEpN] = useState(12)
+  const [ogni, setOgni] = useState<'giorno' | '30' | '60'>('giorno')
   const [progress, setProgress] = useState('')
   const stop = useRef(false)
   const preview = useRef<HTMLCanvasElement>(null)
@@ -54,8 +59,10 @@ export function StudioAgent() {
     try {
       for (let d = 0; d < days && !stop.current; d++) {
         setProgress(days > 1 ? `giornata ${d + 1} di ${days}` : '')
-        const { state, works } = await runDay(cur, {
-          fast,
+        let res: Awaited<ReturnType<typeof runDay>>
+        try {
+        res = await runDay(cur, {
+          fast, episodio: epMode ? epN : undefined,
           log: m => setLog(l => [...l, m].slice(-300)),
           preview: c => {
             const p = preview.current; if (!p) return
@@ -65,6 +72,15 @@ export function StudioAgent() {
           onWork: w => { setWorks(ws => [w, ...ws]); setSel(w) },
           shouldStop: () => stop.current,
         })
+        } catch (e) {
+          // una giornata andata storta non ferma le altre: la salta e va avanti
+          const msg = e instanceof Error ? `${e.message} ${(e.stack ?? '').split('\n').slice(1, 3).join(' ')}` : String(e)
+          setLog(l => [...l, `Errore nella giornata ${cur.day + 1}: ${msg}. La salto e vado avanti.`])
+          cur = { ...cur, day: cur.day + 1 }
+          await T.putState(cur).catch(() => {})
+          continue
+        }
+        const { state, works } = res
         cur = state; setSt(state)
         const per = (performance.now() - t0) / (d + 1) / 1000
         setLog(l => [...l, `— Giorno ${state.day} chiuso: ${works.length} tavol${works.length > 1 ? 'e' : 'a'}. Media ${per.toFixed(1)} s a giornata${days > 1 ? `, stima per ${days}: ${((per * days) / 60).toFixed(0)} min` : ''}.`])
@@ -72,20 +88,21 @@ export function StudioAgent() {
     } catch (e) {
       setLog(l => [...l, `Errore: ${e instanceof Error ? e.message : String(e)}`])
     } finally { setRunning(false); setProgress('') }
-  }, [st, running, fast])
+  }, [st, running, fast, epMode, epN])
 
   // giornata automatica: una al giorno, finché la pagina è aperta
   useEffect(() => {
     if (!auto) return
     const tick = () => {
       if (!st || running) return
+      if (ogni !== 'giorno') { const ms = Number(ogni) * 60 * 1000; if (!st.lastRun || Date.now() - new Date(st.lastRun).getTime() >= ms - 30000) run(1); return }
       const last = st.lastRun ? new Date(st.lastRun).toDateString() : ''
       if (last !== new Date().toDateString()) run(1)
     }
     tick()
-    const t = setInterval(tick, 10 * 60 * 1000)
+    const t = setInterval(tick, ogni === 'giorno' ? 10 * 60 * 1000 : 60 * 1000)
     return () => clearInterval(t)
-  }, [auto, st, running, run])
+  }, [auto, st, running, run, ogni])
 
   if (!st) return <div className="p-8 text-white/60">Apro lo studio…</div>
 
@@ -94,11 +111,15 @@ export function StudioAgent() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold">{st.name || 'Artista senza nome'}</div>
-          <div className="text-sm text-white/50">Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
+          <div className="text-sm text-white/50">versione 18/11 · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
-          <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> una giornata al giorno</label>
+          <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={epMode} onChange={e => setEpMode(e.target.checked)} /> episodi da</label>
+          <input type="number" min={4} max={20} value={epN} onChange={e => setEpN(Math.max(4, Math.min(20, Number(e.target.value) || 12)))} className="w-14 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
+          <span className="text-sm text-white/60">tavole</span>
+          <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> in automatico</label>
+          <select value={ogni} onChange={e => setOgni(e.target.value as 'giorno' | '30' | '60')} className="rounded border border-white/15 bg-black px-2 py-1 text-sm"><option value="giorno">una volta al giorno</option><option value="30">ogni 30 minuti</option><option value="60">ogni ora</option></select>
           <button className={btn} disabled={running} onClick={() => run(1)}>Avvia giornata</button>
           <input type="number" min={1} max={2000} value={nDays} onChange={e => setNDays(Math.max(1, Number(e.target.value) || 1))} className="w-20 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
           <button className={btn} disabled={running} onClick={() => run(nDays)}>giornate di fila</button>
@@ -117,13 +138,14 @@ export function StudioAgent() {
       )}
 
       <div className="mb-4 flex gap-1">
-        {(['galleria', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
+        {(['galleria', 'episodi', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
           <button key={t} className={`${btn} ${tab === t ? 'bg-white/10' : ''}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
       {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
+      {tab === 'episodi' && <EpisodiView st={st} works={works} />}
       {tab === 'cantiere' && <CantiereView st={st} />}
       {tab === 'mente' && <Mind st={st} />}
       {tab === 'quaderno' && <Notebook st={st} works={works} open={w => { setSel(w); setTab('galleria') }} />}
@@ -288,6 +310,55 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
           <div className="text-xs text-white/50">♥ {open.likes} · 👁 {open.views}{open.virale ? ' · virale' : ''} · giorno {open.day}{open.flaws.length ? ` · difetti: ${open.flaws.map(f => f.flaw).join(', ')}` : ''}</div>
         </div>
       )}
+    </div>
+  )
+}
+
+function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
+  const eps = getEpisodi(st).slice().reverse()
+  const V = getVisione(st)
+  const byId = useMemo(() => new Map(works.map(w => [w.id, w])), [works])
+  const [aperto, setAperto] = useState<string | null>(eps[0]?.id ?? null)
+  const scarica = async (ep: (typeof eps)[number]) => {
+    const zip = new JSZip()
+    const ws = ep.schede.map(id => byId.get(id)).filter(Boolean) as Work[]
+    for (const [i, w] of ws.entries()) {
+      const b = await fetch(w.image).then(r => r.blob())
+      zip.file(`${String(i + 1).padStart(2, '0')}.png`, b)
+    }
+    zip.file('didascalia.txt', ep.caption)
+    // Instagram pubblica al massimo 10 immagini per carosello via API: le divido in parti
+    if (ws.length > 10) zip.file('LEGGIMI.txt', `Questo episodio ha ${ws.length} tavole. Un carosello Instagram via API ne accetta al massimo 10: pubblicalo in ${Math.ceil(ws.length / 10)} post (01–10, 11–20).`)
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `episodio-${ep.n}.zip`; a.click()
+  }
+  if (!eps.length) return <div className="text-sm text-white/50">Nessun episodio ancora. Spunta «episodi da N tavole» e avvia una giornata.</div>
+  return (
+    <div className="grid gap-4">
+      {V && (
+        <div className={box}>
+          <div className={h}>La sua visione: {V.titolo}</div>
+          {V.tesi.map((t, i) => <div key={i} className={`text-sm ${t.ritirata ? 'text-white/35 line-through' : ''}`}>· {t.testo} <span className="text-white/40">({Math.round(t.conf * 100)}%, g{t.da})</span></div>)}
+          <div className="mt-2 text-sm text-emerald-200/80">Domanda aperta: {V.domanda}</div>
+        </div>
+      )}
+      {eps.map(ep => (
+        <div key={ep.id} className={box}>
+          <div className="mb-2 flex items-start justify-between gap-4">
+            <button className="text-left" onClick={() => setAperto(aperto === ep.id ? null : ep.id)}><div className="text-lg font-semibold">Episodio {ep.n}: {ep.titolo}</div><div className="text-xs text-white/50">giorno {ep.day} · {ep.schede.length} tavole · prossima puntata: {ep.domanda}</div></button>
+            <button className={btn} onClick={() => scarica(ep)}>Scarica (.zip)</button>
+          </div>
+          {aperto === ep.id && <>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {ep.schede.map(id => byId.get(id)).filter(Boolean).map(w => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={w!.id} src={w!.image} alt={w!.title} title={w!.title} className="aspect-[4/5] h-64 shrink-0 rounded object-cover" />
+              ))}
+            </div>
+            <pre className="mt-2 whitespace-pre-wrap text-xs text-white/60">{ep.caption}</pre>
+          </>}
+        </div>
+      ))}
     </div>
   )
 }

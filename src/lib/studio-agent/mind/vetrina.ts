@@ -23,6 +23,8 @@ export interface Follower {
 export interface Post {
   workId: string; day: number; title: string; caption: string; reflection: string
   views: number; likes: number; virale: boolean; image?: string
+  /** carosello: le tavole dell'episodio, in ordine */
+  carosello?: string[]
   flaws: { flaw: Flaw; severity: number }[]
 }
 export interface Vetrina { followers: Follower[]; posts: Post[]; left: number; joined: number; virali: number }

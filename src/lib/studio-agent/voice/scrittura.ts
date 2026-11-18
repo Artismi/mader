@@ -365,7 +365,7 @@ export function deduci(st: AgentState, r: Rnd, concetti: string[]): Deduzione[] 
     const h = iperonimo(c, new Set(concetti))
     if (!h || h === c) continue
     const fh = fattiSu(st, h, 10).find(f => f.s === h && f.o)
-    if (fh) metti('eredita', c, fh.o!, { a: c, b: fh.o!, x: h }, [`${art(c, 'det')} è un tipo ${art(h, 'di')}`, frase(fh)], fh.neg ? -1 : 1, 0.35, 2)
+    if (fh) metti('eredita', c, fh.o!, { a: c, b: fh.o!, x: h }, [`${art(c, 'det')} è un tipo di ${h}`, frase(fh)], fh.neg ? -1 : 1, 0.35, 2)
   }
   const seen = new Set<string>()
   return out.filter(d => { const k = `${d.tipo}|${d.a}|${d.b}|${d.segno}`; if (seen.has(k)) return false; seen.add(k); return true })
@@ -398,3 +398,6 @@ export function diciDeduzione(r: Rnd, d: Deduzione): string {
   const quanto = d.conf > 0.5 ? '' : d.conf > 0.25 ? pick(r, [' (ma non ne sono sicuro)', ' (con qualche dubbio)']) : ' (è poco più di un\'ipotesi)'
   return concorda(`${intro}: ${d.premesse.join('; ')}. ${cap(d.testo)}${quanto}.`)
 }
+
+/** un fatto detto piano, sempre allo stesso modo (per premesse e confronti) */
+export const fraseDi = (f: Fatto) => riscrivi(() => 0.5, f, new Set(), 'attiva')

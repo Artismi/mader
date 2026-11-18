@@ -41,7 +41,7 @@ const G: Record<TipoD, { apre: string[]; corpo: string[]; coda: string[] }> = {
   },
   contesa: {
     apre: ['qui c\'è un conflitto:', 'a guardare bene,', 'ne viene una tensione:', 'c\'è una lotta muta:'],
-    corpo: ['{det:a} e {det:b} si contendono {det:x}', '{det:x} sta in mezzo, tirato da {det:a} e da {det:b}', '{det:x} è un terreno conteso: da una parte {det:a}, dall\'altra {det:b}', 'chi si prende {det:x}, {det:a} o {det:b}?'],
+    corpo: ['{det:a} e {det:b} si contendono {det:x}', '{det:x} sta in mezzo, tirato {da:a} e {da:b}', '{det:x} è un terreno conteso: da una parte {det:a}, dall\'altra {det:b}', 'chi si prende {det:x}, {det:a} o {det:b}?'],
     coda: ['', ', e non è detto che vinca il più forte', ': {det:x} non sceglie, viene scelto', ', e il prezzo lo paga {det:x}'],
   },
   disaccordo: {
@@ -103,3 +103,6 @@ export function esito(st: AgentState, r: Rnd, tipo: TipoD, modello: string, buon
   }
   R.modelli = R.modelli.filter(x => x.peso > 0.05).slice(-120)
 }
+
+/** tutte le aperture (per togliere l'attacco quando la conclusione diventa un titolo) */
+export const APERTURE = Object.values(G).flatMap(g => g.apre)
