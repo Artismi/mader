@@ -13,12 +13,15 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+/** richiesta arrivata da internet attraverso il tunnel: può solo scaricare i file da pubblicare */
+const daFuori = (req: Request) => req.headers.has('cf-connecting-ip') || /trycloudflare\.com$/i.test(new URL(req.url).hostname) || /trycloudflare\.com/i.test(req.headers.get('host') ?? '')
 type Ctx = { params: Promise<{ op: string[] }> }
 const bad = (msg: string, status = 400) => NextResponse.json({ error: msg }, { status })
 
 export async function GET(req: Request, { params }: Ctx) {
   const [op, arg] = (await params).op
   const q = new URL(req.url).searchParams
+  if (daFuori(req) && op !== 'media') return bad('non disponibile', 403)
   try {
     // i file da pubblicare, serviti a Instagram attraverso il tunnel
     if (op === 'media' && arg) { const m = leggiMedia(decodeURIComponent(arg)); return m ? new NextResponse(new Uint8Array(m.dati), { headers: { 'content-type': m.tipo, 'cache-control': 'no-store' } }) : bad('non trovato', 404) }
@@ -42,6 +45,7 @@ export async function GET(req: Request, { params }: Ctx) {
 
 export async function POST(req: Request, { params }: Ctx) {
   const [op] = (await params).op
+  if (daFuori(req)) return bad('non disponibile', 403)
   if (op === 'ig-media') {
     try { return NextResponse.json({ nome: salvaMedia(new URL(req.url).searchParams.get('nome') ?? 'file.bin', await req.arrayBuffer()) }) } catch (e) { return bad(e instanceof Error ? e.message : 'errore', 500) }
   }

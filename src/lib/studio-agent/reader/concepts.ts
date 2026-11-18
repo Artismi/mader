@@ -36,6 +36,19 @@ export function loadConcepts(url = '/lessico/lessico.json'): Promise<boolean> {
 }
 export const conceptsReady = () => !!data
 
+// ── l'inglese: per ogni significato, la parola inglese di Princeton WordNet (stesso ordine dei synset) ──
+let en: string[] | null = null
+export function loadInglese(url = '/lessico/inglese.json'): Promise<boolean> {
+  if (en) return Promise.resolve(true)
+  return fetch(url).then(r => (r.ok ? r.json() : null)).then((d: string[] | null) => { en = d; return !!d }).catch(() => false)
+}
+/** la parola inglese per una parola italiana, nel senso che ha in questo contesto */
+export function inglese(word: string, ctx?: Set<string>): string | null {
+  if (!data || !en) return null
+  const s = senso(word, ctx)
+  return s ? en[s.i]?.replace(/\(.*?\)/g, '').trim() || null : null
+}
+
 const lemma = (i: number) => data!.syn[i][0][0]
 const rels = (i: number, k: Rel) => (data!.syn[i][3 + KEYS.indexOf(k)] as number[]) ?? []
 

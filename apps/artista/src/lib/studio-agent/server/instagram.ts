@@ -21,7 +21,7 @@ const MEDIA = join(DIR, 'media')
 const CONF = join(DIR, 'instagram.json')
 mkdirSync(MEDIA, { recursive: true })
 
-const G = 'https://graph.instagram.com/v22.0'
+const G = 'https://graph.instagram.com/v27.0'
 export interface Conf { token?: string; userId?: string; username?: string; tokenDel?: number }
 export const leggiConf = (): Conf => { try { return JSON.parse(readFileSync(CONF, 'utf8')) } catch { return {} } }
 const scriviConf = (c: Conf) => writeFileSync(CONF, JSON.stringify(c, null, 2))
@@ -32,7 +32,17 @@ async function ig(path: string, params: Record<string, string> = {}, method: 'GE
   const body = new URLSearchParams({ ...params, access_token: c.token ?? '' })
   const res = method === 'GET' ? await fetch(`${u}?${body}`) : await fetch(u, { method: 'POST', body })
   const j = await res.json().catch(() => ({}))
-  if (!res.ok || j.error) throw new Error(j.error?.message ?? `Instagram ha risposto ${res.status}`)
+  if (!res.ok || j.error) {
+    const e = j.error ?? {}
+    if (e.code === 190) throw new Error('Il token non vale più (scaduto o revocato): generane uno nuovo nella dashboard di Meta e incollalo qui.')
+    if (e.code === 10 || e.code === 200) throw new Error(`Instagram nega il permesso (${e.message}). Controlla che il token sia stato generato con instagram_business_content_publish.`)
+    if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613) throw new Error('Troppe richieste a Instagram: riprovo più tardi.')
+    if (e.code === 9 && /limit/i.test(e.message ?? '')) throw new Error('Raggiunto il limite di post nelle 24 ore.')
+    const err = new Error(`${e.error_user_msg ?? e.message ?? `Instagram ha risposto ${res.status}`}${e.code ? ` [${e.code}${e.error_subcode ? '/' + e.error_subcode : ''}]` : ''}`) as Error & { scarico?: boolean }
+    // Instagram non è riuscito a scaricare il file: quasi sempre il tunnel
+    if (e.error_subcode === 2207052 || e.code === 9004 || /download|fetch|media uri/i.test(e.message ?? '')) err.scarico = true
+    throw err
+  }
   return j
 }
 
@@ -56,7 +66,8 @@ export async function stato() {
   const userId = String(me.user_id ?? me.id)
   scriviConf({ ...leggiConf(), userId, username: me.username })
   const lim = await ig(`${userId}/content_publishing_limit`, { fields: 'quota_usage,config' }).catch(() => null) as { data?: { quota_usage?: number; config?: { quota_total?: number } }[] } | null
-  return { collegato: true, username: me.username, userId, tunnel: tunnelUrl, usati24h: lim?.data?.[0]?.quota_usage, limite24h: lim?.data?.[0]?.config?.quota_total }
+  const c2 = leggiConf()
+  return { collegato: true, username: me.username, userId, tunnel: tunnelUrl, usati24h: lim?.data?.[0]?.quota_usage, limite24h: lim?.data?.[0]?.config?.quota_total, scade: c2.tokenDel ? new Date(c2.tokenDel + 60 * 86400e3).toISOString() : undefined }
 }
 
 // ─── media e tunnel ─────────────────────────────────────────────────────────
@@ -70,9 +81,10 @@ export function salvaMedia(nome: string, dati: ArrayBuffer) {
 export function leggiMedia(nome: string): { dati: Buffer; tipo: string } | null {
   const p = join(MEDIA, nome.replace(/[^a-z0-9._-]/gi, '_'))
   if (!existsSync(p)) return null
-  return { dati: readFileSync(p), tipo: p.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg' }
+  return { dati: readFileSync(p), tipo: p.endsWith('.mp4') ? 'video/mp4' : p.endsWith('.txt') ? 'text/plain' : 'image/jpeg' }
 }
 
+const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 let tunnel: ChildProcess | null = null
 let tunnelUrl: string | null = null
 const BIN = join(DIR, platform() === 'win32' ? 'cloudflared.exe' : 'cloudflared')
@@ -106,26 +118,48 @@ export async function apriTunnel(porta = Number(process.env.PORT ?? 3123)): Prom
     const leggi = (b: Buffer) => { const m = b.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/); if (m && !tunnelUrl) { tunnelUrl = m[0]; clearTimeout(t); setTimeout(() => ok(tunnelUrl!), 4000) } }
     tunnel!.stdout?.on('data', leggi); tunnel!.stderr?.on('data', leggi)
     tunnel!.on('exit', () => { tunnelUrl = null })
+  }).then(async (u) => {
+    // prova dall'esterno: il tunnel deve servire davvero i file (a volte ci mette qualche secondo)
+    const prova = `ok-${Date.now()}`
+    writeFileSync(join(MEDIA, 'ping.txt'), prova)
+    for (let i = 0; i < 12; i++) {
+      const t = await fetch(`${u}/api/studio-agent/media/ping.txt`, { cache: 'no-store' }).then(r => (r.ok ? r.text() : '')).catch(() => '')
+      if (t === prova) return u as string
+      await pausa(2500)
+    }
+    throw new Error('Il tunnel si è aperto ma da internet non risponde (firewall o antivirus? prova a consentire cloudflared).')
   })
 }
+export function chiudiTunnel() { tunnel?.kill(); tunnel = null; tunnelUrl = null }
 
 // ─── pubblicazione ──────────────────────────────────────────────────────────
-const pausa = (ms: number) => new Promise(r => setTimeout(r, ms))
 async function aspettaPronto(id: string) {
   for (let i = 0; i < 40; i++) {
     const j = await ig(id, { fields: 'status_code' }) as { status_code?: string }
     if (j.status_code === 'FINISHED') return
-    if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') throw new Error(`Instagram non ha accettato un file (${j.status_code})`)
+    if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') { const e = new Error(`Instagram non ha accettato un file (${j.status_code})`) as Error & { scarico?: boolean }; e.scarico = true; throw e }
     await pausa(3000)
   }
   throw new Error('Instagram ci mette troppo a elaborare i video')
 }
 
-/** pubblica un carosello (2–10 elementi) o un elemento singolo; i file sono già in ~/.artista-osservatore/media */
+/** pubblica un carosello (2–20 elementi) o un elemento singolo; i file sono già in ~/.artista-osservatore/media */
 export async function pubblica(file: string[], didascalia: string): Promise<{ id: string; permalink?: string }> {
   const c = leggiConf()
   if (!c.token || !c.userId) throw new Error('Instagram non è collegato')
-  const base = await apriTunnel()
+  const lim = await ig(`${c.userId}/content_publishing_limit`, { fields: 'quota_usage,config' }).catch(() => null) as { data?: { quota_usage?: number; config?: { quota_total?: number } }[] } | null
+  const usati = lim?.data?.[0]?.quota_usage ?? 0, tot = lim?.data?.[0]?.config?.quota_total ?? 50
+  if (usati >= tot) throw new Error(`Limite raggiunto: ${usati}/${tot} post nelle ultime 24 ore. Riprovo più tardi.`)
+  try { return await pubblicaCon(await apriTunnel(), file, didascalia) }
+  catch (e) {
+    if (!(e as { scarico?: boolean }).scarico) throw e
+    // Instagram non riusciva a scaricare: riapro il tunnel e riprovo una volta
+    chiudiTunnel()
+    return pubblicaCon(await apriTunnel(), file, didascalia)
+  }
+}
+async function pubblicaCon(base: string, file: string[], didascalia: string): Promise<{ id: string; permalink?: string }> {
+  const c = leggiConf() as Required<Conf>
   const url = (f: string) => `${base}/api/studio-agent/media/${encodeURIComponent(f)}`
   const video = (f: string) => f.endsWith('.mp4')
   const caption = didascalia.slice(0, 2200)
@@ -136,7 +170,7 @@ export async function pubblica(file: string[], didascalia: string): Promise<{ id
     contenitore = j.id
   } else {
     const figli: string[] = []
-    for (const f of file.slice(0, 10)) {
+    for (const f of file.slice(0, 20)) {
       const j = await ig(`${c.userId}/media`, video(f) ? { media_type: 'VIDEO', video_url: url(f), is_carousel_item: 'true' } : { image_url: url(f), is_carousel_item: 'true' }, 'POST') as { id: string }
       figli.push(j.id)
     }

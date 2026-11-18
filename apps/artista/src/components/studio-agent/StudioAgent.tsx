@@ -16,6 +16,7 @@ import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 import { getAtlante } from '@/lib/studio-agent/mind/atlante'
 import { getEpisodi, getVisione } from '@/lib/studio-agent/mind/episodio'
+import { getProfilo } from '@/lib/studio-agent/mind/profilo'
 import JSZip from 'jszip'
 import { suona, wav } from '@/lib/studio-agent/suono/musica'
 import { puoVideo, videoFermo } from '@/lib/studio-agent/suono/video'
@@ -24,7 +25,7 @@ import { getLinguaggi, LINGUAGGI } from '@/lib/studio-agent/mind/linguaggi'
 import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
 import { getOfficina, disegnaGeneratore } from '@/lib/studio-agent/mind/officina'
 
-type Tab = 'galleria' | 'sequenze' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
+type Tab = 'galleria' | 'sequenze' | 'profilo' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
 
 const box = 'rounded-xl border border-white/10 bg-white/[0.03] p-4'
 const btn = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40'
@@ -47,6 +48,33 @@ export function StudioAgent() {
   const [igAuto, setIgAuto] = useState(false)
   const [igFormato, setIgFormato] = useState<'video' | 'immagini'>('video')
   const [progress, setProgress] = useState('')
+  // le scelte di lancio restano anche se la pagina si ricarica
+  const caricato = useRef(false)
+  useEffect(() => {
+    try {
+      const k = JSON.parse(localStorage.getItem('artista-lancio') ?? '{}')
+      if (typeof k.fast === 'boolean') setFast(k.fast)
+      if (typeof k.epMode === 'boolean') setEpMode(k.epMode)
+      if (k.epN) setEpN(k.epN)
+      if (k.ogni) setOgni(k.ogni)
+      if (k.igFormato) setIgFormato(k.igFormato)
+      if (typeof k.igAuto === 'boolean') setIgAuto(k.igAuto)
+      if (typeof k.auto === 'boolean') setAuto(k.auto)
+    } catch { /* niente */ }
+    caricato.current = true
+    T.igStato().then(setIgS).catch(() => {})
+  }, [])
+  useEffect(() => { if (caricato.current) try { localStorage.setItem('artista-lancio', JSON.stringify({ fast, epMode, epN, ogni, igFormato, igAuto, auto })) } catch { /* niente */ } }, [fast, epMode, epN, ogni, igFormato, igAuto, auto])
+  // in automatico: chiede di non far spegnere lo schermo (se il PC va in sospensione si ferma tutto)
+  useEffect(() => {
+    if (!auto || !('wakeLock' in navigator)) return
+    let lock: { release: () => Promise<void> } | null = null
+    const prendi = () => (navigator as unknown as { wakeLock: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock.request('screen').then(l => { lock = l }).catch(() => {})
+    prendi()
+    const vis = () => { if (document.visibilityState === 'visible') prendi() }
+    document.addEventListener('visibilitychange', vis)
+    return () => { document.removeEventListener('visibilitychange', vis); lock?.release().catch(() => {}) }
+  }, [auto])
   const stop = useRef(false)
   const preview = useRef<HTMLCanvasElement>(null)
 
@@ -127,7 +155,7 @@ export function StudioAgent() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold">{st.name || 'Artista senza nome'}</div>
-          <div className="text-sm text-white/50">versione 18/11b · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
+          <div className="text-sm text-white/50">versione 18/11c · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
@@ -154,12 +182,13 @@ export function StudioAgent() {
       )}
 
       <div className="mb-4 flex gap-1">
-        {(['galleria', 'sequenze', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
+        {(['galleria', 'sequenze', 'profilo', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
           <button key={t} className={`${btn} ${tab === t ? 'bg-white/10' : ''}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
+      {tab === 'profilo' && <ProfiloView st={st} works={works} ig={!!igS?.collegato} />}
       {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
       {tab === 'sequenze' && <EpisodiView st={st} works={works} ig={!!igS?.collegato} formato={igFormato} onSalva={refresh} />}
       {tab === 'cantiere' && <CantiereView st={st} />}
@@ -170,7 +199,7 @@ export function StudioAgent() {
         <div className={`${box} mb-4 flex flex-wrap items-center gap-3 text-sm`}>
           <label className="flex items-center gap-2"><input type="checkbox" checked={igAuto} onChange={e => setIgAuto(e.target.checked)} disabled={!igS?.collegato} /> pubblica su Instagram ogni sequenza appena è pronta</label>
           <select value={igFormato} onChange={e => setIgFormato(e.target.value as 'video' | 'immagini')} className="rounded border border-white/15 bg-black px-2 py-1"><option value="video">come video con la musica</option><option value="immagini">come immagini</option></select>
-          <span className="text-white/50">Instagram accetta al massimo 10 tavole per post e circa 50 post al giorno: con le sequenze ogni 30 minuti si sta dentro.</span>
+          <span className="text-white/50">Instagram accetta fino a 20 tavole per post e 50–100 post al giorno (dipende dall'account): ogni 30 minuti sono 48 post, si sta dentro. Prima di pubblicare controllo comunque il limite.</span>
         </div>
         <Settings st={st} onSaved={refresh} />
       </>}
@@ -341,7 +370,7 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
 type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; permalink?: string; quando: string; errore?: string } }
 /** prepara i file (JPEG 1080×1350 o MP4 con il suo pezzo di brano), li passa al server e pubblica il carosello */
 async function pubblicaSuInstagram(ep: Ep, ws: Work[], formato: 'video' | 'immagini', log: (m: string) => void): Promise<{ id?: string; permalink?: string; error?: string }> {
-  const scelte = ws.slice(0, 10)
+  const scelte = ws.slice(0, 20)
   if (!scelte.length) return { error: 'nessuna tavola' }
   const v = formato === 'video' && ep.musica ? await puoVideo() : { ok: false, perche: formato === 'video' ? 'nessuna musica' : '' }
   if (formato === 'video' && !v.ok) log(`Video non possibili qui (${v.perche}): pubblico le immagini.`)
@@ -382,7 +411,7 @@ function InstagramPanel({ onCambia }: { onCambia: (s: T.IgStato) => void }) {
         <button className={btn} onClick={tunnel}>Prova il tunnel</button>
         <span className="text-sm text-white/60">{msg}</span>
       </div>
-      {s && <div className="mt-2 text-sm">{s.collegato ? <>collegato come <b>@{s.username}</b>{s.limite24h ? ` · ${s.usati24h ?? 0}/${s.limite24h} post nelle ultime 24 ore` : ''}{s.tunnel ? ` · tunnel ${s.tunnel}` : ''}</> : <span className="text-white/50">non collegato{s.error ? ` (${s.error})` : ''}</span>}</div>}
+      {s && <div className="mt-2 text-sm">{s.collegato ? <>collegato come <b>@{s.username}</b>{s.limite24h ? ` · ${s.usati24h ?? 0}/${s.limite24h} post nelle ultime 24 ore` : ''}{s.tunnel ? ` · tunnel ${s.tunnel}` : ''}{s.scade ? ` · il token scade circa il ${new Date(s.scade).toLocaleDateString('it-IT')} (lo rinnovo da solo se il programma gira almeno una volta dopo 50 giorni)` : ''}</> : <span className="text-white/50">non collegato{s.error ? ` (${s.error})` : ''}</span>}</div>}
     </div>
   )
 }
@@ -426,8 +455,6 @@ function EpisodiView({ st, works, ig, formato, onSalva }: { st: AgentState; work
     if (ep.musica && !v.ok) zip.file('VIDEO.txt', `Non ho potuto fare i video qui (${v.perche}): ci sono immagini e audio separati.`)
     setStato('')
     zip.file('didascalia.txt', ep.caption)
-    // Instagram pubblica al massimo 10 immagini per carosello via API: le divido in parti
-    if (ws.length > 10) zip.file('LEGGIMI.txt', `Questo episodio ha ${ws.length} tavole. Un carosello Instagram via API ne accetta al massimo 10: pubblicalo in ${Math.ceil(ws.length / 10)} post (01–10, 11–20).`)
     const blob = await zip.generateAsync({ type: 'blob' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `episodio-${ep.n}.zip`; a.click()
   }
@@ -814,6 +841,69 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
           if (!window.confirm("Ricominciare da zero? L'artista perde memoria, poetica e criteri. Le opere restano in archivio.")) return
           await T.deleteState(); onSaved()
         }}>Ricomincia da zero</button>
+      </div>
+    </div>
+  )
+}
+
+/** il profilo che si dà: nome, bio, presentazione, foto. Instagram non lascia cambiarli via API: si copiano a mano */
+function ProfiloView({ st, works, ig }: { st: AgentState; works: Work[]; ig: boolean }) {
+  const P = getProfilo(st)
+  const [msg, setMsg] = useState('')
+  if (!P) return <div className="text-sm text-white/50">Si scrive il profilo dopo la prima sequenza.</div>
+  const foto = works.find(w => w.id === P.foto)
+  const copia = (t: string) => { navigator.clipboard.writeText(t).then(() => setMsg('copiato')) }
+  const scaricaFoto = async () => {
+    if (!foto) return
+    const bmp = await createImageBitmap(await fetch(foto.image).then(r => r.blob()))
+    const lato = Math.min(bmp.width, bmp.height), cv = new OffscreenCanvas(1080, 1080)
+    cv.getContext('2d')!.drawImage(bmp, (bmp.width - lato) / 2, (bmp.height - lato) / 2, lato, lato, 0, 0, 1080, 1080)
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 })); a.download = `foto-profilo-${P.nome}.jpg`; a.click()
+  }
+  const presentati = async () => {
+    // il primo post: la presentazione, con le sue tavole più forti
+    const scelte = works.filter(w => w.kept).sort((a, b) => b.interest - a.interest).slice(0, 6)
+    const nomi: string[] = []
+    for (const [i, w] of scelte.entries()) {
+      setMsg(`preparo ${i + 1}/${scelte.length}…`)
+      const bmp = await createImageBitmap(await fetch(w.image).then(r => r.blob()))
+      const cv = new OffscreenCanvas(1080, 1350); cv.getContext('2d')!.drawImage(bmp, 0, 0, 1080, 1350)
+      const r = await T.igMedia(`presentazione-${Date.now()}-${i + 1}.jpg`, await cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 }))
+      if (!r.nome) { setMsg(r.error ?? 'errore'); return }
+      nomi.push(r.nome)
+    }
+    setMsg('pubblico…')
+    const r = await T.igPubblica(nomi, P.presentazione + '\n\n#proceduralart #generativeart #creativecoding #noai')
+    setMsg(r.error ? `errore: ${r.error}` : `pubblicato ${r.permalink ?? ''}`)
+  }
+  const riga = (et: string, t: string, max?: number) => (
+    <div className="mb-3">
+      <div className="mb-1 flex items-center gap-2 text-xs text-white/50">{et}{max ? <span className={[...t].length > max ? 'text-red-400' : ''}>{[...t].length}/{max}</span> : null}<button className={btn} onClick={() => copia(t)}>Copia</button></div>
+      <div className="whitespace-pre-wrap text-sm">{t}</div>
+    </div>
+  )
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className={box}>
+        <div className={h}>Il profilo che si è dato (giorno {P.day})</div>
+        {riga('Nome', P.nome, 30)}
+        {riga('Nome utente (suggerito)', P.username, 30)}
+        {riga('Bio', P.bio, 150)}
+        {riga('Presentazione (primo post)', P.presentazione, 2200)}
+        <div className="flex flex-wrap gap-2">
+          {ig && <button className={btn} onClick={presentati}>Pubblica la presentazione come primo post</button>}
+          <span className="text-sm text-white/60">{msg}</span>
+        </div>
+      </div>
+      <div className={box}>
+        <div className={h}>Foto profilo</div>
+        {foto ? <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={foto.image} alt="foto profilo" className="mb-2 aspect-square w-full rounded-full object-cover" />
+          <button className={btn} onClick={scaricaFoto}>Scarica (1080×1080)</button>
+        </> : <div className="text-sm text-white/50">ancora nessuna</div>}
+        <div className="mt-4 text-xs text-white/50">Quando cambia idea su di sé:</div>
+        {P.storia.slice().reverse().slice(0, 8).map((x, i) => <div key={i} className="text-xs text-white/60">g{x.day} · {x.cosa}</div>)}
       </div>
     </div>
   )

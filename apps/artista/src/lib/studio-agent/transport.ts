@@ -97,7 +97,7 @@ export async function exportArchive(): Promise<Blob> {
 }
 
 // ─── Instagram (la parte che parla con Instagram sta sul server locale) ──────
-export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; error?: string }
+export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; scade?: string; error?: string }
 const j = (r: Response) => r.json()
 export const igStato = (): Promise<IgStato> => fetch('/api/studio-agent/ig-stato').then(j).catch(e => ({ collegato: false, error: String(e) }))
 export const igToken = (token: string): Promise<IgStato> => fetch('/api/studio-agent/ig-token', { method: 'POST', body: JSON.stringify({ token }) }).then(j)
