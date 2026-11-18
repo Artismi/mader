@@ -82,6 +82,8 @@ function urgency(t: Tool, s: Sheet, st: AgentState, intention: Intention, f: Fea
   return u
 }
 
+const REGIA_NO = new Set(['geometria', 'traccia', 'ripeti', 'scrivi', 'fondo', 'disponi'])
+
 export interface StudioResult { sheet: Sheet; gestures: Gesture[]; last: Look; effects: { tool: string; before: Features; after: Features; delta: number }[]; genome: { tool: string; params: Record<string, unknown> }[] }
 
 export async function runStudio(
@@ -96,7 +98,8 @@ export async function runStudio(
   const T0 = st.temperature
   for (let i = 0; i < steps; i++) {
     const T = T0 * (1 - i / steps) + 0.1
-    const avail = TOOLS.filter(t => t.available(sheet, ctx))
+    // con la regia lo studio lavora la materia, non aggiunge cose a caso
+    const avail = TOOLS.filter(t => t.available(sheet, ctx) && (!ctx.noText || !REGIA_NO.has(t.id)))
     if (!avail.length) break
     const tool = weighted(r, avail, t => urgency(t, sheet, st, intention, sheet.layers.length ? cur.f : null, st.mood), T)
     let next: Sheet

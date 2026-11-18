@@ -106,7 +106,13 @@ export function markov(c: VoiceCtx, maxWords = 14): string {
   return cap(out.join(' ').replace(/[,;:]$/, ''))
 }
 
-export function title(c: VoiceCtx): string { return concorda(titleRaw(c)) }
+export function title(c: VoiceCtx, pulito = false): string { return concorda(pulito ? titlePulito(c) : titleRaw(c)) }
+/** titolo da regia: parla della parola, niente cut-up né catene di Markov */
+function titlePulito(c: VoiceCtx): string {
+  if (c.register === 'silenzio') return fill(pick(c.r, TEMPLATES.silenzio), c)
+  for (let i = 0; i < 3 && conceptsReady(); i++) { const l = semanticLine(sem(c)); if (l && l.length < 70 && !/\d|\[|\]/.test(l)) return cap(l) }
+  return cap(fill(pick(c.r, TEMPLATES[c.register]), c))
+}
 function titleRaw(c: VoiceCtx): string {
   const roll = c.r()
   if (c.register === 'silenzio') return fill(pick(c.r, TEMPLATES.silenzio), c)

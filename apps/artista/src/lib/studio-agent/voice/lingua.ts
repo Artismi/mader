@@ -55,6 +55,8 @@ function indovina(h: string): { g: G; n: 's' | 'p' | 'i' } {
 }
 
 const head = (s: string) => s.trim().toLowerCase().split(/[\s']/)[0] ?? ''
+/** è un nome del lessico (al singolare)? */
+export const isNome = (w: string) => !!LEX && LEX.get(w)?.sg === w
 export function genere(s: string) {
   const h = head(s)
   const v = LEX?.get(h)

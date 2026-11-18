@@ -24,6 +24,8 @@ export interface ToolCtx {
   shaders: ShaderSource[]
   /** scala di lavoro delle ricette (anteprima veloce) */
   quality: number
+  /** il testo lo mette la regia alla fine: lo studio non scrive */
+  noText?: boolean
 }
 
 export type Params = Record<string, unknown>
@@ -43,7 +45,9 @@ export interface Tool {
 let nextId = 0
 const lid = () => `l${Date.now().toString(36)}${(nextId++).toString(36)}`
 const colorOf = (t: Tone, r: Rnd) => pick(r, [t.ink, t.ink, t.acc, t.bg])
-const someLayer = (s: Sheet, r: Rnd) => s.layers[Math.floor(r() * s.layers.length)]
+const LOCKED = new Set(['testo', 'firma', 'piastra', 'mappa', 'etichette'])
+const free = (s: Sheet) => { const xs = s.layers.filter(l => !LOCKED.has(l.kind)); return xs.length ? xs : s.layers }
+const someLayer = (s: Sheet, r: Rnd) => { const xs = free(s); return xs[Math.floor(r() * xs.length)] }
 
 // ─── segno: ricette del laboratorio ─────────────────────────────────────────
 const semina: Tool = {
@@ -51,11 +55,11 @@ const semina: Tool = {
   pushes: { densita: 0.3, complessita: 0.2, elementi: 0.2 },
   available: () => true,
   propose: (s, c) => {
-    const rc = pick(c.r, RECIPES)
+    const rc = pick(c.r, c.noText ? RECIPES.filter(x => !x.params.some(p => p.type === 'text')) : RECIPES)
     const seed = Math.floor(c.r() * 1e9)
     return {
       recipe: rc.id, seed, values: shuffleParams(rc, defaults(rc), seed),
-      piece: rc.piece || chance(c.r, s.layers.length ? 0.7 : 0.3),
+      piece: c.noText ? false : rc.piece || chance(c.r, s.layers.length ? 0.7 : 0.3),
       x: range(c.r, 0.2, 0.8), y: range(c.r, 0.2, 0.8),
       scale: range(c.r, 0.35, 1.1), rot: chance(c.r, 0.3) ? range(c.r, -0.6, 0.6) : 0,
       blend: chance(c.r, 0.25) ? pick(c.r, ['multiply', 'screen', 'difference', 'overlay']) : 'source-over',
@@ -221,7 +225,7 @@ const traccia: Tool = {
 const scrivi: Tool = {
   id: 'scrivi', label: 'Testo', nature: 'parola',
   pushes: { orizzontali: 0.2, bordi: 0.15, linee: 0.1 },
-  available: (_s, c) => c.intention.register !== 'silenzio',
+  available: (_s, c) => !c.noText && c.intention.register !== 'silenzio',
   propose: (s, c) => ({
     text: c.say(), face: pick(c.r, Object.keys(FACES)) as FaceId,
     size: range(c.r, 0.03, 0.18), x: range(c.r, 0.1, 0.9), y: range(c.r, 0.1, 0.9),
@@ -326,7 +330,7 @@ const taglia: Tool = {
       g.fill()
       return { ...l, canvas: cv }
     }
-    return { ...s, layers: s.layers.map(l => (p.layer === 'tutti' || l.id === p.layer ? cut(l) : l)) }
+    return { ...s, layers: s.layers.map(l => ((p.layer === 'tutti' && !LOCKED.has(l.kind)) || l.id === p.layer ? cut(l) : l)) }
   },
 }
 
@@ -334,9 +338,9 @@ const taglia: Tool = {
 const ripeti: Tool = {
   id: 'ripeti', label: 'Ripetizione', nature: 'ripetizione',
   pushes: { elementi: 0.2, simmetria: 0.1, densita: 0.15 },
-  available: s => s.layers.some(l => l.kind !== 'grana' && l.kind !== 'pattern'),
+  available: s => s.layers.some(l => l.kind !== 'grana' && l.kind !== 'pattern' && !LOCKED.has(l.kind)),
   propose: (s, c) => {
-    const ls = s.layers.filter(l => l.kind !== 'grana' && l.kind !== 'pattern')
+    const ls = s.layers.filter(l => l.kind !== 'grana' && l.kind !== 'pattern' && !LOCKED.has(l.kind))
     return {
       layer: pick(c.r, ls).id, n: Math.floor(range(c.r, 2, 7)), dx: range(c.r, -0.2, 0.2), dy: range(c.r, -0.2, 0.2),
       dscale: range(c.r, 0.75, 1.15), drot: chance(c.r, 0.4) ? range(c.r, -0.5, 0.5) : 0, fade: chance(c.r, 0.5),
@@ -395,7 +399,7 @@ const disponi: Tool = {
 const togli: Tool = {
   id: 'togli', label: 'Togliere', nature: 'vuoto',
   pushes: { vuoto: 0.2, densita: -0.3, complessita: -0.2 },
-  available: s => s.layers.length > 1,
+  available: s => free(s).length > 1,
   propose: (s, c) => ({ layer: someLayer(s, c.r).id }),
   apply: async (s, p) => ({ ...s, layers: s.layers.filter(l => l.id !== p.layer) }),
 }

@@ -8,6 +8,9 @@ import type { AgentState, Intention, Mood, Register, Work } from '../core/types'
 import { weighted, pick, type Rnd } from '../core/rng'
 import { anchorOf } from '../reader/lexicon'
 import { neighbors, type Embedding } from '../reader/wordspace'
+import { isNome } from '../voice/lingua'
+import { category } from '../reader/concepts'
+const IMMAGINABILI = new Set(['luogo', 'cosa naturale', 'oggetto fatto', 'corpo', 'animale', 'pianta', 'forma', 'cibo', 'sostanza', 'fenomeno', 'tempo', 'evento', 'sentimento'])
 import { TOOLS } from '../hands/tools'
 import { field } from '../reader/concepts'
 
@@ -35,7 +38,11 @@ const MOOD_REGISTER: Record<Mood, Register[]> = {
 export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates: string[], readingTitle: string, forced?: string): Intention {
   // preferisce le parole a vuoto (le vuole ancorare) e quelle vicine alle domande aperte
   const qWords = st.questions.filter(q => !q.closed).map(q => q.word)
-  const pool = [...new Set([...candidates, ...qWords])].filter(w => w.length > 3)
+  const VUOTE = new Set(['cosa', 'cose', 'modo', 'parte', 'fatto', 'volta', 'tipo', 'caso', 'resto', 'genere', 'senso'])
+  const pool0 = [...new Set([...candidates, ...qWords])].filter(w => w.length > 3 && !VUOTE.has(w))
+  // una tavola parte da un nome: le cose si mostrano, i verbi e gli avverbi no
+  const nomi = pool0.filter(isNome)
+  const pool = nomi.length >= 3 ? nomi : pool0
   const wScore = (w: string) => {
     const e = st.lexicon[w]
     let s = 1
@@ -43,9 +50,10 @@ export function chooseIntention(st: AgentState, r: Rnd, E: Embedding, candidates
     if (e?.state === 'ignota') s += 0.5
     if (qWords.includes(w)) s += 1.5
     if (anchorOf(w)) s += 0.3
+    if (IMMAGINABILI.has(category(w))) s += 1.2
     return s
   }
-  const word = forced ?? (pool.length ? weighted(r, pool, wScore, st.temperature) : pick(r, ['soglia', 'peso', 'confine', 'resto']))
+  const word = (forced && (isNome(forced) || !nomi.length) ? forced : null) ?? (pool.length ? weighted(r, pool, wScore, st.temperature) : pick(r, ['soglia', 'peso', 'confine', 'resto']))
 
   // bersagli visivi: dalla parola stessa o dalle ancorate vicine
   const targets: Record<string, number> = {}

@@ -100,7 +100,7 @@ type Look = (s: Sheet) => { score: number }
 export interface Passo { tool: string; params: Record<string, unknown>; kept: boolean; delta: number }
 
 /** passata editoriale guardata gesto per gesto: tiene solo ciò che non peggiora */
-export async function redazione(st: AgentState, r: Rnd, sheet: Sheet, look: Look, opts: { firma: boolean; nome: string }): Promise<{ sheet: Sheet; passi: Passo[] }> {
+export async function redazione(st: AgentState, r: Rnd, sheet: Sheet, look: Look, opts: { firma: boolean; nome: string; impaginato?: boolean }): Promise<{ sheet: Sheet; passi: Passo[] }> {
   const sc = (st as WithS).scuola!
   const F = sc.firma
   const studied = new Set(sc.studiati.map(x => x.maestro))
@@ -115,23 +115,23 @@ export async function redazione(st: AgentState, r: Rnd, sheet: Sheet, look: Look
   // 1. togliere il superfluo (dall'alto; con il minimalismo studiato prova di più)
   const tries = studied.has('minimalismo') ? 8 : 5
   for (const l of cur.layers.slice().reverse().slice(0, tries)) {
-    if (cur.layers.length <= 1 || l.kind === 'firma') continue
+    if (cur.layers.length <= 1 || ['firma', 'testo', 'piastra', 'mappa', 'etichette', 'orizzonte', 'pannelli'].includes(l.kind)) continue
     await prova('togli', { livello: l.kind }, { ...cur, layers: cur.layers.filter(x => x.id !== l.id) })
   }
   // 2. troppi testi: tiene i più grandi
   const testi = cur.layers.filter(l => l.meta && l.kind !== 'firma').sort((a, b) => b.meta!.size - a.meta!.size)
-  if (testi.length > F.maxTesti) {
+  if (!opts.impaginato && testi.length > F.maxTesti) {
     const via = new Set(testi.slice(F.maxTesti).map(l => l.id))
     await prova('testi', { tolti: via.size }, { ...cur, layers: cur.layers.filter(l => !via.has(l.id)) }, 0.01)
   }
   // 3. testo leggibile, nel carattere della firma, col colore che contrasta di più
-  for (const l of cur.layers.filter(x => x.meta && x.kind !== 'firma')) {
+  for (const l of opts.impaginato ? [] : cur.layers.filter(x => x.meta && x.kind !== 'firma')) {
     const tone = TONES.find(t => t.id === F.tone) ?? TONES[0]
     const colors = [tone.ink, tone.acc, tone.bg, '#111111', '#f2f0ea']
     const best = colors.sort((a, b) => ratio(b, cur.bg) - ratio(a, cur.bg))[0]
     if (ratio(l.meta!.color, cur.bg) > 4.5 && r() > F.forza) continue
     const base = { ...cur, layers: cur.layers.filter(x => x.id !== l.id) }
-    const rot = studied.has('costruttivismo') && r() < 0.4 ? -Math.PI / 8 : Math.abs(Math.sin(l.rot)) > 0.5 ? 0 : l.rot
+    const rot = 0
     const rifatto = await textLayer(base, { text: l.meta!.text, face: F.face, sizePx: Math.max(l.meta!.size, Math.min(cur.W, cur.H) * 0.035), color: best, x: l.x, y: l.y, rot })
     // il testo rifatto va dove stava nella pila
     const nuovo = rifatto.layers[rifatto.layers.length - 1]
@@ -142,7 +142,7 @@ export async function redazione(st: AgentState, r: Rnd, sheet: Sheet, look: Look
   // 4. griglia e margini (la regola svizzera, più forte se studiata)
   const g = studied.has('svizzero') ? 6 : F.griglia
   const snap = (v: number) => { const m = F.margine; const step = (1 - 2 * m) / g; return Math.min(1 - m, Math.max(m, m + Math.round((v - m) / step) * step)) }
-  const pezzi = cur.layers.filter(l => l.kind !== 'grana' && l.kind !== 'pattern' && l.kind !== 'firma' && l.scale < 1.2)
+  const pezzi = cur.layers.filter(l => !['grana', 'pattern', 'firma', 'testo', 'piastra', 'mappa', 'etichette'].includes(l.kind) && l.scale < 1.2)
   if (pezzi.length && r() < 0.4 + F.forza * 0.6) {
     const layers = cur.layers.map(l => (pezzi.includes(l) ? { ...l, x: snap(l.x), y: snap(l.y) } : l))
     await prova('griglia', { colonne: g, margine: F.margine }, { ...cur, layers })
