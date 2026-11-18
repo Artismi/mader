@@ -40,6 +40,7 @@ import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
 import { scegliLinguaggio, esitoLinguaggio } from './mind/linguaggi'
+import { componi, durata, GENERE_NOME } from './suono/musica'
 import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
@@ -394,9 +395,13 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     log(`${i + 1}/${plan.schede.length} ${sc.ruolo}${sc.titolo ? `: ${sc.titolo}` : ''}`)
   }
   if (!works.length) return works
-  const caption = didascalia(st, plan.titolo, plan.d, plan.domanda) + `\n\nLinguaggio: ${L.nome}. ${L.contesto}.`
+  // la musica: un brano composto per questa sequenza, un pezzo per tavola
+  const partitura = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.slice(0, works.length).map(x => ({ concetto: x.a, follia: x.follia })), seme: Math.floor(r() * 1e9) })
+  const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
+  log(`Musica: ${descrMusica}. Ogni tavola ha ${durata(partitura).toFixed(1)} secondi del brano.`)
+  const caption = didascalia(st, plan.titolo, plan.d, plan.domanda) + `\n\nLinguaggio: ${L.nome}. ${L.contesto}.\nMusica: ${descrMusica}, composta da me.`
   esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
-  const ep = chiudiEpisodio(st, r, { lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
+  const ep = chiudiEpisodio(st, r, { musica: { partitura, descr: descrMusica }, lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
   const post = publish(st, r, works[0], [plan.d?.a, plan.d?.b].filter(Boolean) as string[], caption, [])
   post.carosello = works.map(w => w.id)
   post.title = plan.titolo

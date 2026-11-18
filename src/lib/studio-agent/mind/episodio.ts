@@ -29,7 +29,7 @@ import type { Follia, Linguaggio } from './linguaggi'
 // ─── la visione ─────────────────────────────────────────────────────────────
 export interface Tesi { testo: string; conf: number; da: number; a: string; b: string; ritirata?: boolean }
 export interface Visione { titolo: string; tesi: Tesi[]; domanda: string; storia: { day: number; nota: string }[] }
-export interface EpisodioInfo { lettura?: string; coppia?: string; id: string; n: number; titolo: string; day: number; schede: string[]; conclusione: string; domanda: string; caption: string }
+export interface EpisodioInfo { musica?: { partitura: import('../suono/musica').Partitura; descr: string }; lettura?: string; coppia?: string; id: string; n: number; titolo: string; day: number; schede: string[]; conclusione: string; domanda: string; caption: string }
 type WithV = AgentState & { visione?: Visione; episodi?: EpisodioInfo[] }
 export const getVisione = (st: AgentState) => (st as WithV).visione
 export const getEpisodi = (st: AgentState) => (st as WithV).episodi ?? []

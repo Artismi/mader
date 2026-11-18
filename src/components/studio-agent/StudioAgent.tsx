@@ -17,6 +17,8 @@ import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 import { getAtlante } from '@/lib/studio-agent/mind/atlante'
 import { getEpisodi, getVisione } from '@/lib/studio-agent/mind/episodio'
 import JSZip from 'jszip'
+import { suona, wav } from '@/lib/studio-agent/suono/musica'
+import { puoVideo, videoFermo } from '@/lib/studio-agent/suono/video'
 import { getRepertorio } from '@/lib/studio-agent/voice/conclusioni'
 import { getLinguaggi, LINGUAGGI } from '@/lib/studio-agent/mind/linguaggi'
 import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
@@ -320,13 +322,39 @@ function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
   const V = getVisione(st)
   const byId = useMemo(() => new Map(works.map(w => [w.id, w])), [works])
   const [aperto, setAperto] = useState<string | null>(eps[0]?.id ?? null)
+  const [stato, setStato] = useState('')
+  const audioRef = useRef<AudioContext | null>(null)
+  const ascolta = async (ep: (typeof eps)[number]) => {
+    if (!ep.musica) return
+    audioRef.current?.close()
+    const ac = new AudioContext(); audioRef.current = ac
+    let t = ac.currentTime + 0.1
+    setStato('compongo…')
+    for (let i = 0; i < ep.musica.partitura.sezioni.length; i++) {
+      const b = await suona(ep.musica.partitura, i)
+      const src = ac.createBufferSource(); src.buffer = b; src.connect(ac.destination); src.start(t)
+      t += b.duration - (ep.musica.partitura.sezioni[i].ultimo ? 1.5 : 0)
+      if (i === 0) setStato('suona')
+    }
+  }
+  const ferma = () => { audioRef.current?.close(); audioRef.current = null; setStato('') }
   const scarica = async (ep: (typeof eps)[number]) => {
     const zip = new JSZip()
     const ws = ep.schede.map(id => byId.get(id)).filter(Boolean) as Work[]
+    const v = ep.musica ? await puoVideo() : { ok: false, perche: 'nessuna musica' }
     for (const [i, w] of ws.entries()) {
+      setStato(`preparo ${i + 1}/${ws.length}…`)
       const b = await fetch(w.image).then(r => r.blob())
-      zip.file(`${String(i + 1).padStart(2, '0')}.png`, b)
+      const nome = String(i + 1).padStart(2, '0')
+      zip.file(`${nome}.png`, b)
+      if (ep.musica && ep.musica.partitura.sezioni[i]) {
+        const audio = await suona(ep.musica.partitura, i)
+        if (v.ok) { const bmp = await createImageBitmap(b); zip.file(`${nome}.mp4`, await videoFermo(bmp, audio)) }
+        else zip.file(`${nome}.wav`, wav(audio))
+      }
     }
+    if (ep.musica && !v.ok) zip.file('VIDEO.txt', `Non ho potuto fare i video qui (${v.perche}): ci sono immagini e audio separati.`)
+    setStato('')
     zip.file('didascalia.txt', ep.caption)
     // Instagram pubblica al massimo 10 immagini per carosello via API: le divido in parti
     if (ws.length > 10) zip.file('LEGGIMI.txt', `Questo episodio ha ${ws.length} tavole. Un carosello Instagram via API ne accetta al massimo 10: pubblicalo in ${Math.ceil(ws.length / 10)} post (01–10, 11–20).`)
@@ -346,8 +374,11 @@ function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
       {eps.map(ep => (
         <div key={ep.id} className={box}>
           <div className="mb-2 flex items-start justify-between gap-4">
-            <button className="text-left" onClick={() => setAperto(aperto === ep.id ? null : ep.id)}><div className="text-lg font-semibold">{ep.titolo}</div><div className="text-xs text-white/50">sequenza {ep.n} · giorno {ep.day} · {ep.schede.length} tavole</div></button>
-            <button className={btn} onClick={() => scarica(ep)}>Scarica (.zip)</button>
+            <button className="text-left" onClick={() => setAperto(aperto === ep.id ? null : ep.id)}><div className="text-lg font-semibold">{ep.titolo}</div><div className="text-xs text-white/50">sequenza {ep.n} · giorno {ep.day} · {ep.schede.length} tavole{ep.musica ? ` · ${ep.musica.descr}` : ''}{stato ? ` · ${stato}` : ''}</div></button>
+            <div className="flex gap-2">
+              {ep.musica && <button className={btn} onClick={() => (stato ? ferma() : ascolta(ep))}>{stato ? 'Ferma' : 'Ascolta'}</button>}
+              <button className={btn} onClick={() => scarica(ep)}>Scarica (.zip)</button>
+            </div>
           </div>
           {aperto === ep.id && <>
             <div className="flex gap-2 overflow-x-auto pb-2">
