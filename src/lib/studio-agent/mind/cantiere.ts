@@ -22,12 +22,14 @@ import { pick, uid, weighted, type Rnd } from '../core/rng'
 import { sentences } from '../reader/tokenize'
 import { ensureAtlante, type Tesi } from './atlante'
 import { isNome, realizza } from '../voice/lingua'
+import { scriviObiezione, scriviParagrafo } from '../voice/scrittura'
+import { generatoreById } from './officina'
 
 export type FormaCantiere = 'libro' | 'saggio' | 'presentazione'
 export interface Versione { day: number; testo: string; perche: string }
 export interface Paragrafo { id: string; tipo: 'esposizione' | 'tesi' | 'obiezione' | 'revisione' | 'conclusione'; testo: string; punti?: string[]; fonti: string[]; day: number; versioni: Versione[]; contestato?: boolean }
 export interface Capitolo { id: string; concetto: string; titolo: string; paragrafi: Paragrafo[]; nato: number }
-export interface Cantiere { usate?: string[]; id: string; titolo: string; tema: string; forma: FormaCantiere; nato: number; chiuso?: number; capitoli: Capitolo[]; diario: { day: number; nota: string }[]; domanda?: string; da?: string }
+export interface Cantiere { usate?: string[]; fattiUsati?: string[]; id: string; titolo: string; tema: string; forma: FormaCantiere; nato: number; chiuso?: number; capitoli: Capitolo[]; diario: { day: number; nota: string }[]; domanda?: string; da?: string }
 export interface Lavoro { cantiere: Cantiere; capitolo: Capitolo; paragrafo: Paragrafo; azione: string }
 
 type WithC = AgentState & { cantieri?: Cantiere[] }
@@ -86,6 +88,15 @@ function componi(r: Rnd, cs: Cand[], gia: Set<string>, n: number): { testo: stri
   return { testo: parti.join(' '), fonti: [...new Set(scelte.map(c => c.fonte))], usate: scelte.map(c => c.t) }
 }
 
+function segnoTesto(st: AgentState, w: string): string | undefined {
+  const m = ensureAtlante(st).concetti[w]?.motivo
+  if (!m) return undefined
+  if (m.forma === 'codice') { const g = generatoreById(st, m.gen); return g ? (g.tipo === 'tartaruga' ? 'un segno che ho scritto io in codice, una traccia che si ripete e si ramifica' : 'una formula mia che diventa una superficie') : undefined }
+  if (m.forma === 'ricetta') return `un disegno che torna ogni volta uguale, il suo`
+  const tr = { pieno: 'pieno', righe: 'a righe', punti: 'a punti', tratteggio: 'tratteggiato', contorno: 'solo il contorno' }[m.trama]
+  return `${realizza('{ind:f}', { f: m.forma })} ${tr}${m.colore === 'acc' ? ', nel colore acceso' : ''}`
+}
+
 function suaTesi(st: AgentState, concetto: string): Tesi | undefined {
   const T = ensureAtlante(st).tesi.filter(t => t.a === concetto || t.b === concetto)
   return T[T.length - 1]
@@ -105,8 +116,8 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
     const titolo = cap1(realizza(pick(r, ['{su:t}', 'quello che so {di:t}', '{det:t}, da vicino', 'intorno {a:t}', '{det:t} e il resto']), { t: tema }))
     C = { id: uid(), titolo, tema, forma, nato: st.day, capitoli: [], diario: [], da: prev?.titolo }
     ;(st as WithC).cantieri = [...getCantieri(st).filter(x => x.id !== C!.id), C]
-    C.diario.push({ day: st.day, nota: `apro un ${forma}: «${titolo}»${prev ? `, dopo «${prev.titolo}»` : ''}` })
-    log(`Cantiere: apro un ${forma}, «${titolo}».`)
+    C.diario.push({ day: st.day, nota: `apro ${forma === 'presentazione' ? 'una' : 'un'} ${forma}: «${titolo}»${prev ? `, dopo «${prev.titolo}»` : ''}` })
+    log(`Cantiere: apro ${forma === 'presentazione' ? 'una' : 'un'} ${forma}, «${titolo}».`)
   }
   const target = C.forma === 'presentazione' ? 7 : C.forma === 'saggio' ? 4 : 8
   const usate = new Set(C.usate ?? [])
@@ -127,8 +138,8 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
   const contestati = C.capitoli.flatMap(k => k.paragrafi.filter(p => p.contestato).map(p => ({ k, p })))
   const vecchi = C.capitoli.flatMap(k => k.paragrafi.filter(p => p.tipo === 'esposizione' && st.day - p.day > 6 && p.versioni.length < 3).map(p => ({ k, p })))
   const pesi: Record<string, number> = {
-    esponi: 3, obietta: 1.2, rivedi: contestati.length ? 2.5 : vecchi.length ? 1 : 0,
-    apri: liberi.length && pieni && C.capitoli.length < target ? 3 : 0,
+    esponi: 3 / (1 + Math.max(0, Math.min(...C.capitoli.map(k => k.paragrafi.length)) - 1)), obietta: 1.2, rivedi: contestati.length ? 2.5 : vecchi.length ? 1 : 0,
+    apri: liberi.length && C.capitoli.length < target ? (pieni ? 3 : 0.6) : 0,
     chiudi: C.capitoli.length >= target && pieni ? 6 : 0,
   }
   const azione = weighted(r, Object.keys(pesi), k => pesi[k] + 1e-6, 0.8)
@@ -140,11 +151,10 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
   }
   if (azione === 'rivedi') {
     const { k, p } = contestati[0] ?? pick(r, vecchi)
-    const cs = candidate(st, k.concetto, [C.tema])
-    const nuovo = componi(r, cs.slice().reverse(), usate, 2)
-    C.usate = [...(C.usate ?? []), ...nuovo.usate].slice(-400)
     const t = suaTesi(st, k.concetto)
-    const testo = `Riscrivo. Prima avevo scritto: «${p.testo.slice(0, 140)}${p.testo.length > 140 ? '…' : ''}». ${nuovo.testo || ''} ${t ? `Ora direi piuttosto: ${t.frase}.` : 'Non ne sono più sicuro.'}`.replace(/\s+/g, ' ').trim()
+    const nuovo = scriviParagrafo(st, r, k.concetto, { tesi: t?.frase, contro: p.contestato, altri: C.capitoli.map(x => x.concetto).filter(x => x !== k.concetto), usati: new Set(C.fattiUsati ?? []) })
+    C.fattiUsati = [...(C.fattiUsati ?? []), ...nuovo.chiavi].slice(-600)
+    const testo = `${pick(r, ['Riscrivo questa parte.', 'Torno su quello che avevo scritto: non mi convince più.', 'Lo dico di nuovo, meglio.'])} ${nuovo.testo}`
     p.versioni.push({ day: p.day, testo: p.testo, perche: p.contestato ? 'era contestato' : 'era vecchio' })
     p.testo = testo; p.day = st.day; p.contestato = false; p.tipo = 'revisione'; p.fonti = [...new Set([...p.fonti, ...nuovo.fonti])]
     C.diario.push({ day: st.day, nota: `rivedo un paragrafo di «${k.titolo}»` })
@@ -155,13 +165,11 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
   if (azione === 'obietta') {
     const k = corrente
     const t = suaTesi(st, k.concetto)
-    const contro = candidate(st, k.concetto, [C.tema]).filter(c => RX_CONTRO.test(c.t) && !usate.has(c.t))
-    if (contro.length && k.paragrafi.length) {
-      const c = contro[0]
+    const ob = scriviObiezione(st, r, k.concetto, t?.frase)
+    if (ob && k.paragrafi.length) {
       const bersaglio = k.paragrafi[k.paragrafi.length - 1]
       bersaglio.contestato = true
-      const p: Paragrafo = { id: uid(), tipo: 'obiezione', testo: `Ma c'è chi la vede diversamente. In «${c.fonte}» si legge: «${c.t.replace(/\s+/g, ' ')}» ${t ? `Questo mette in crisi quello che sostenevo (${t.frase}).` : 'Questo mette in crisi quello che ho scritto sopra.'} Dovrò tornarci.`, fonti: [c.fonte], day: st.day, versioni: [] }
-      C.usate = [...(C.usate ?? []), c.t]
+      const p: Paragrafo = { id: uid(), tipo: 'obiezione', testo: ob.testo, fonti: [ob.fonte], day: st.day, versioni: [] }
       k.paragrafi.push(p)
       C.diario.push({ day: st.day, nota: `obiezione in «${k.titolo}»` })
       log(`Cantiere: un'obiezione in «${k.titolo}».`)
@@ -180,22 +188,25 @@ export function lavora(st: AgentState, r: Rnd, log: (s: string) => void): Lavoro
     log(`Cantiere: chiudo «${C.titolo}» (${C.capitoli.length} capitoli). Resta: ${domanda}`)
     return { cantiere: C, capitolo: k, paragrafo: p, azione: 'chiude' }
   }
-  return esponi(st, r, C, corrente, usate, log, 'espone') ?? null
+  const fatto = esponi(st, r, C, corrente, usate, log, 'espone')
+  if (fatto) return fatto
+  // niente di nuovo da dire qui: apre un capitolo nuovo, se può
+  if (liberi.length && C.capitoli.length < target) return esponi(st, r, C, capitoloNuovo(liberi[0][0]), usate, log, 'apre un capitolo')
+  return null
 }
 
 function esponi(st: AgentState, r: Rnd, C: Cantiere, k: Capitolo, usate: Set<string>, log: (s: string) => void, azione: string): Lavoro | null {
-  const altri = C.capitoli.map(x => x.concetto)
-  const cs = candidate(st, k.concetto, altri)
-  const n = C.forma === 'presentazione' ? 3 : 2 + Math.floor(r() * 3)
-  const c = componi(r, cs, usate, n)
-  C.usate = [...(C.usate ?? []), ...c.usate].slice(-400)
+  void usate
+  const altri = C.capitoli.map(x => x.concetto).filter(x => x !== k.concetto)
   const t = suaTesi(st, k.concetto)
-  if (!c.testo && !t) return null
-  const punti = C.forma === 'presentazione' ? c.usate.map(s => s.replace(/\s+/g, ' ').split(/[,;:]/)[0].slice(0, 90)) : undefined
-  const testo = [c.testo, t ? pick(r, [`Per me: ${t.frase}.`, `Io la leggo così: ${t.frase}.`, `Quello che ne tiro fuori: ${t.frase}.`]) : ''].filter(Boolean).join(' ')
-  const p: Paragrafo = { id: uid(), tipo: c.testo ? 'esposizione' : 'tesi', testo, punti, fonti: c.fonti, day: st.day, versioni: [] }
+  const precedente = C.capitoli[C.capitoli.indexOf(k) - 1]
+  const tp = precedente ? suaTesi(st, precedente.concetto) : undefined
+  const w = scriviParagrafo(st, r, k.concetto, { tesi: t?.frase, segno: r() < 0.6 ? segnoTesto(st, k.concetto) : undefined, altri, prima: k.paragrafi.length === 0 ? tp?.frase : undefined, usati: new Set(C.fattiUsati ?? []) })
+  if (!w.fatti && (k.paragrafi.length || !t)) return null
+  C.fattiUsati = [...(C.fattiUsati ?? []), ...w.chiavi].slice(-600)
+  const p: Paragrafo = { id: uid(), tipo: w.fatti ? 'esposizione' : 'tesi', testo: w.testo, punti: C.forma === 'presentazione' ? w.punti.slice(0, 4) : undefined, fonti: w.fonti, day: st.day, versioni: [] }
   k.paragrafi.push(p)
-  log(`Cantiere: scrivo in «${k.titolo}» (${k.paragrafi.length}° paragrafo${c.fonti.length ? `, da ${c.fonti.join(', ')}` : ''}).`)
+  log(`Cantiere: scrivo in «${k.titolo}» (${k.paragrafi.length}° paragrafo, ${w.fatti} fatti riscritti${w.fonti.length ? ` da ${w.fonti.join(', ')}` : ''}).`)
   deforma(st, C, log)
   return { cantiere: C, capitolo: k, paragrafo: p, azione }
 }

@@ -169,3 +169,42 @@ export function connect(a: string, b: string, depth = 4): Triple[] | null {
 }
 
 export const category = (w: string) => { const s = senses(w)[0]; return s === undefined || !data ? '' : data.syn[s][1] }
+
+// ─── verbi: forme flesse → infinito (dal lessico), per leggere e riscrivere frasi ──
+export interface Verbo { inf: string; con: 'are' | 'ere' | 'ire' | 'rre'; stem: string }
+let VERBI: Map<string, Verbo> | null = null
+export function verbi(): Map<string, Verbo> {
+  if (VERBI || !data) return VERBI ?? new Map()
+  const m = new Map<string, Verbo>()
+  for (const s of data.syn) {
+    if (s[2] !== 'v') continue
+    for (const l of s[0] as string[]) {
+      if (l.includes(' ')) continue
+      const con = /rre$/.test(l) ? 'rre' : (l.slice(-3) as Verbo['con'])
+      if (!['are', 'ere', 'ire', 'rre'].includes(con)) continue
+      const stem = l.slice(0, -3)
+      const v: Verbo = { inf: l, con, stem }
+      const fs = con === 'are' ? ['a', 'ano', 'ato', 'ava', 'avano', 'ò', 'erà', 'ata', 'ati', 'ate']
+        : con === 'ere' ? ['e', 'ono', 'uto', 'eva', 'evano', 'erà', 'uta']
+        : con === 'ire' ? ['e', 'ono', 'isce', 'iscono', 'ito', 'iva', 'ivano', 'irà', 'ita']
+        : ['ce', 'cono', 'ceva', 'cevano']
+      m.set(l, v)
+      for (const f of fs) if (!m.has(stem + f)) m.set(stem + f, v)
+    }
+  }
+  VERBI = m
+  return m
+}
+/** sinonimi nominali e iperonimo di una parola (per variare il lessico quando riscrive) */
+export function sinonimi(w: string): string[] {
+  if (!data) return []
+  const s = senses(w).find(i => data!.syn[i][2] === 'n')
+  return s === undefined ? [] : (data.syn[s][0] as string[]).filter(x => x !== w && !x.includes(' ')).slice(0, 4)
+}
+export function iperonimo(w: string): string | null {
+  if (!data) return null
+  const s = senses(w).find(i => data!.syn[i][2] === 'n')
+  if (s === undefined) return null
+  const h = rels(s, 'h')[0]
+  return h === undefined ? null : lemma(h)
+}
