@@ -14,7 +14,7 @@ import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ri
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { TONES } from '@/components/studio/genera/recipes'
-import { emptySheet, flatten } from './hands/sheet'
+import { emptySheet, flatten, type Sheet } from './hands/sheet'
 import type { ToolCtx } from './hands/tools'
 import { measure, rasterize, palette } from './eyes/measure'
 import { histogram, learn, patches, seedCodebook } from './eyes/visual-words'
@@ -39,7 +39,7 @@ import { chiudiEpisodio, didascalia, getVisione, pianifica, rendiScheda } from '
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
-import { diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
+import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
 import { conceptsReady, describe, loadConcepts } from './reader/concepts'
@@ -334,8 +334,20 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const log = hooks.log
   const N = Math.max(4, Math.min(20, hooks.episodio ?? 12))
   const F = getScuola(st)!.firma
-  const tone = weighted(r, TONES, t => (t.id === F.tone ? 2 : 1), 0.8)
+  // ogni sequenza un tono diverso dalle ultime, e una tavolozza sua
+  const W = st as AgentState & { toniRecenti?: string[] }
+  const tone = weighted(r, TONES, t => ((W.toniRecenti ?? []).slice(-4).includes(t.id) ? 0.1 : 1) * ((st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 1.6 : 1), 1)
+  W.toniRecenti = [...(W.toniRecenti ?? []), tone.id].slice(-10)
+  const { colori, armonia } = tavolozza(tone, r)
+  log(`Tono ${tone.label}, colori ${armonia}.`)
   const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => '', shaders: st.shaders, quality: hooks.fast ? 0.35 : 0.5, noText: true }
+  const passi = Math.round(({ curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]) * (hooks.fast ? 0.45 : 0.7))
+  const studio = async (s0: Sheet) => {
+    const it: Intention = { ...intention, targets: {}, tools: ['materia', 'luce', 'shader', 'traccia', 'taglia', 'grana', 'pattern', 'semina'] }
+    const res = await runStudio(st, r, s0, it, { ...tctx }, passi)
+    learnTools(st, res.effects)
+    return res.sheet
+  }
   const cambiati = diversifica(st, r)
   if (cambiati.length) log(`Alcuni segni si somigliavano troppo: ${cambiati.join(', ')} ne hanno uno nuovo.`)
   const plan = pianifica(st, r, N, thread ?? intention.word, fraseDi, readings)
@@ -347,7 +359,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     if (hooks.shouldStop?.()) break
     const sc = plan.schede[i]
     let sheet
-    try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
+    try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face, { studio: sc.ruolo === 'parola' && r() < 0.5 ? undefined : studio, colori }) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
     const final = flatten(sheet, 1)
     const R = rasterize(final)
     const f = measure(R)

@@ -337,7 +337,7 @@ export function tavolozza(t: Tone, r: Rnd): { colori: string[]; armonia: Armonia
 }
 
 /** un campo di colore: sfumatura o blocchi, fusi con un metodo che cambia il colore sotto */
-function campoColore(s: Sheet, r: Rnd, col: string[]): Layer {
+export function campoColore(s: Sheet, r: Rnd, col: string[]): Layer {
   const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
   if (r() < 0.6) {
     const radiale = r() < 0.4
@@ -358,7 +358,7 @@ function campoColore(s: Sheet, r: Rnd, col: string[]): Layer {
 }
 
 /** il segno disegnato a pennellate: tratti dentro la forma, qualcuno che scappa fuori */
-function pennella(base: HTMLCanvasElement, color: string, r: Rnd, colori: string[]): HTMLCanvasElement {
+export function pennella(base: HTMLCanvasElement, color: string, r: Rnd, colori: string[]): HTMLCanvasElement {
   const W = base.width, H = base.height
   const cv = newCanvas(W, H), g = cv.getContext('2d')!
   const ang = r() * Math.PI, n = 50 + Math.floor(r() * 90)
@@ -389,7 +389,7 @@ function pennella(base: HTMLCanvasElement, color: string, r: Rnd, colori: string
 }
 
 /** il segno come maschera: dentro c'è una materia (shader, ricetta o sfumatura) */
-function maschera(base: HTMLCanvasElement, r: Rnd, ctx: ToolCtx, colori: string[]): HTMLCanvasElement {
+export function maschera(base: HTMLCanvasElement, r: Rnd, ctx: ToolCtx, colori: string[]): HTMLCanvasElement {
   const W = base.width, H = base.height
   const cv = newCanvas(W, H), g = cv.getContext('2d')!
   const pool = ctx.shaders.filter(x => x.code)

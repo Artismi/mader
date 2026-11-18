@@ -19,7 +19,7 @@ import type { Tone } from '@/components/studio/genera/recipes'
 import { newCanvas, withLayer, fullLayer, emptySheet, flatten, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
-import { ensureAtlante, mettiInScena, segnoDi, type Enunciato, type Rel } from './atlante'
+import { campoColore, ensureAtlante, maschera, pennella, segnoDi, type Rel } from './atlante'
 import { coerenza, deduci, diciDeduzione, fattiDi, fattiSu, scriviObiezione, scriviParagrafo, type Deduzione, type Fatto } from '../voice/scrittura'
 import { art, concorda, realizza } from '../voice/lingua'
 import { getCantieri } from './cantiere'
@@ -200,7 +200,7 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
 const lid = () => `e${Math.random().toString(36).slice(2, 9)}`
 
 // ─── variazioni: lo stesso segno, trattato in modi diversi a seconda di cosa succede ──
-type Modo = 'intero' | 'frammento' | 'ripetuto' | 'specchio' | 'spezzato' | 'sbiadito' | 'contorno' | 'ibrido' | 'pennello' | 'negativo'
+type Modo = 'materia' | 'intero' | 'frammento' | 'ripetuto' | 'specchio' | 'spezzato' | 'sbiadito' | 'contorno' | 'ibrido' | 'pennello' | 'negativo'
 function cv0(w: number, h: number) { const c = newCanvas(w, h); return { c, g: c.getContext('2d')! } }
 function variante(src: HTMLCanvasElement, modo: Modo, r: Rnd, colore: string, altro?: HTMLCanvasElement): HTMLCanvasElement {
   const W = src.width, H = src.height
@@ -224,11 +224,11 @@ function variante(src: HTMLCanvasElement, modo: Modo, r: Rnd, colore: string, al
   return c
 }
 const MODI_RUOLO: Record<Ruolo, Modo[]> = {
-  copertina: ['intero', 'frammento', 'pennello'], prima: ['sbiadito', 'contorno'], domanda: ['frammento', 'contorno', 'negativo'],
-  premessa: ['intero', 'pennello', 'negativo', 'specchio'], passaggio: ['ripetuto', 'spezzato', 'contorno'], conclusione: ['ibrido', 'intero', 'pennello'],
+  copertina: ['materia', 'intero', 'frammento', 'pennello'], prima: ['sbiadito', 'contorno'], domanda: ['frammento', 'contorno', 'negativo'],
+  premessa: ['materia', 'intero', 'pennello', 'negativo', 'specchio', 'materia'], passaggio: ['ripetuto', 'spezzato', 'contorno'], conclusione: ['ibrido', 'materia', 'pennello'],
   controllo: ['contorno', 'specchio'], obiezione: ['spezzato', 'frammento', 'negativo'], fiducia: ['sbiadito', 'ripetuto'], visione: ['ripetuto', 'contorno', 'intero'],
   immagine: ['pennello', 'frammento', 'ibrido', 'spezzato', 'ripetuto'], altra: ['specchio', 'negativo', 'pennello'], coda: ['frammento', 'contorno'],
-  silenzio: ['pennello', 'frammento', 'ibrido', 'spezzato', 'ripetuto', 'negativo', 'specchio'], parola: ['contorno', 'frammento', 'sbiadito'], definizione: ['intero', 'negativo', 'pennello'], risposta: ['frammento', 'contorno', 'specchio'],
+  silenzio: ['materia', 'materia', 'pennello', 'frammento', 'ibrido', 'spezzato', 'ripetuto', 'negativo', 'specchio'], parola: ['contorno', 'frammento', 'sbiadito', 'materia'], definizione: ['materia', 'intero', 'negativo', 'pennello'], risposta: ['frammento', 'contorno', 'specchio'],
 }
 
 // ─── composizioni: ognuna dice la relazione in un altro modo ──────────────────
@@ -250,7 +250,7 @@ function mediaSotto(s: Sheet, x0: number, y0: number, x1: number, y1: number): s
 }
 const lid2 = () => `e${Math.random().toString(36).slice(2, 9)}`
 
-export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number, N: number, nEp: number, ctx0: ToolCtx, face: FaceId): Promise<Sheet> {
+export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number, N: number, nEp: number, ctx0: ToolCtx, face: FaceId, opts: { studio?: (s: Sheet) => Promise<Sheet>; colori?: string[] } = {}): Promise<Sheet> {
   // il colore cambia lungo l'episodio: la conclusione al negativo, l'obiezione sul colore acceso, le altre leggermente diverse
   const t0: Tone = ctx0.tone
   const t: Tone = sc.ruolo === 'conclusione' ? { ...t0, bg: t0.ink, ink: t0.bg, dark: !t0.dark } : sc.ruolo === 'obiezione' ? { ...t0, bg: t0.acc, acc: t0.ink, ink: ratio(t0.ink, t0.acc) > ratio(t0.bg, t0.acc) ? t0.ink : t0.bg } : t0
@@ -265,11 +265,17 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
     const p = tool.propose(s, ctx)
     s = await tool.apply(s, { ...p, piece: false, alpha: range(r, 0.25, 0.75), blend: pick(r, ['source-over', 'multiply', 'overlay', 'screen']) }, ctx)
   }
+  const colori = opts.colori?.length ? opts.colori : [t.ink, t.acc]
+  if (r() < 0.65) s = withLayer(s, campoColore(s, r, [...colori, t.bg]))
   let zona = { x0: 0.07, y0: 0.66, x1: 0.93 }
-  const col = (x?: string) => (x ? (ensureAtlante(st).concetti[x]?.motivo?.colore === 'acc' ? t.acc : t.ink) : t.ink)
+  // il colore di un segno: stabile per parola dentro la sequenza, preso dalla tavolozza della sequenza
+  const hash = (w: string) => [...w].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7)
+  const col = (x?: string) => (x ? colori[hash(x) % colori.length] : colori[0])
   const segno = async (w: string, modo: Modo, altro?: string) => {
-    const base = await segnoDi(st, r, w, t, ctx)
+    const base = await segnoDi(st, r, w, { ...t, ink: col(w), acc: col(w) }, ctx)
     const b2 = altro ? await segnoDi(st, r, altro, t, ctx) : undefined
+    if (modo === 'materia') return maschera(base, r, ctx, colori)
+    if (modo === 'pennello') return pennella(base, col(w), r, colori)
     return variante(base, modo, r, col(w), b2)
   }
   const metti = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
@@ -303,6 +309,8 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
   } else {
     zona = { x0: 0.07, y0: 0.4, x1: 0.93 }
   }
+  // lo studio: lavora la tavola come faceva prima (materia, luce, tagli, tracce), con l'occhio che giudica
+  if (opts.studio) { try { s = await opts.studio(s) } catch { /* resta com'è */ } }
   if (sc.ruolo === 'parola') zona = { x0: 0.07, y0: pick(r, [0.5, 0.6]), x1: 0.93 }
   if (sc.corpo.length > 160 && zona.y0 > 0.6) zona = { ...zona, y0: 0.56 }
   // 3. il testo: intestazione, titolo, corpo; la piastra solo se sotto c'è troppa materia
