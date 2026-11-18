@@ -13,6 +13,7 @@ import { pick, range, chance, type Rnd } from '../core/rng'
 import type { Intention, Mood, ShaderSource } from '../core/types'
 import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, type Sheet, type Layer, type Blend } from './sheet'
 import { runShader } from './shader'
+import { NUOVI } from './tools2'
 
 export interface ToolCtx {
   r: Rnd
@@ -26,6 +27,14 @@ export interface ToolCtx {
   quality: number
   /** il testo lo mette la regia alla fine: lo studio non scrive */
   noText?: boolean
+  /** il linguaggio permette il testo come immagine (parola gigante, barre, tessiture di frasi) */
+  tipoOk?: boolean
+  /** la tavolozza della sequenza */
+  colori?: string[]
+  /** numeri suoi da mettere in grafico (fiducia, letture…) */
+  dati?: { label: string; v: number }[]
+  /** strumenti preferiti dal linguaggio in uso */
+  preferiti?: string[]
 }
 
 export type Params = Record<string, unknown>
@@ -447,5 +456,5 @@ const schiaccia: Tool = {
   },
 }
 
-export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia]
+export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI]
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)

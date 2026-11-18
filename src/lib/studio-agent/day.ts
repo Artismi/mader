@@ -39,6 +39,7 @@ import { chiudiEpisodio, didascalia, getVisione, pianifica, rendiScheda } from '
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
+import { scegliLinguaggio, esitoLinguaggio } from './mind/linguaggi'
 import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
@@ -334,32 +335,42 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const log = hooks.log
   const N = Math.max(4, Math.min(20, hooks.episodio ?? 12))
   const F = getScuola(st)!.firma
-  // ogni sequenza un tono diverso dalle ultime, e una tavolozza sua
-  const W = st as AgentState & { toniRecenti?: string[] }
-  const tone = weighted(r, TONES, t => ((W.toniRecenti ?? []).slice(-4).includes(t.id) ? 0.1 : 1) * ((st.mood === 'cupo' || st.mood === 'inquieto') === t.dark ? 1.6 : 1), 1)
-  W.toniRecenti = [...(W.toniRecenti ?? []), tone.id].slice(-10)
-  const { colori, armonia } = tavolozza(tone, r)
-  log(`Tono ${tone.label}, colori ${armonia}.`)
-  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => '', shaders: st.shaders, quality: hooks.fast ? 0.35 : 0.5, noText: true }
-  const passi = Math.round(({ curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]) * (hooks.fast ? 0.45 : 0.7))
-  const studio = async (s0: Sheet) => {
-    const it: Intention = { ...intention, targets: {}, tools: ['materia', 'luce', 'shader', 'traccia', 'taglia', 'grana', 'pattern', 'semina'] }
-    const res = await runStudio(st, r, s0, it, { ...tctx }, passi)
-    learnTools(st, res.effects)
-    return res.sheet
-  }
   const cambiati = diversifica(st, r)
   if (cambiati.length) log(`Alcuni segni si somigliavano troppo: ${cambiati.join(', ')} ne hanno uno nuovo.`)
   const plan = pianifica(st, r, N, thread ?? intention.word, fraseDi, readings)
   const nEp = ((st as AgentState & { episodi?: unknown[] }).episodi?.length ?? 0) + 1
-  log(`Sequenza ${nEp} in forma «${plan.forma}»: «${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ` Niente da dedurre oggi: leggo${plan.lettura ? ` «${plan.lettura}»` : ''}.`}`)
+  // il linguaggio: lo sceglie (o lo inventa) per quello che sta dicendo
+  const parole = [...new Set(plan.schede.flatMap(x => [x.a, x.b]).filter(Boolean) as string[])]
+  const { L, perche: perL } = scegliLinguaggio(st, r, parole)
+  // il tono: dal linguaggio, diverso dalle ultime sequenze
+  const W = st as AgentState & { toniRecenti?: string[] }
+  const tone = weighted(r, TONES, t => ((W.toniRecenti ?? []).slice(-3).includes(t.id) ? 0.15 : 1) * (L.toni.includes(t.id) ? 3 : 0.5), 1)
+  W.toniRecenti = [...(W.toniRecenti ?? []), tone.id].slice(-10)
+  const { colori, armonia } = tavolozza(tone, r, L.armonie)
+  // i suoi numeri, per i grafici: quanto crede alle premesse, quanto ha letto dei concetti
+  const A = ensureAtlante(st)
+  const dati = parole.slice(0, 10).map(w => ({ label: w, v: (A.concetti[w]?.frasi ?? 0) + (A.concetti[w]?.usi ?? 0) * 2 + 1 }))
+  const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => pick(r, plan.schede.map(x => x.titolo).filter(Boolean)) ?? '', shaders: st.shaders, quality: hooks.fast ? 0.35 : 0.5, noText: true, tipoOk: L.tipo.immagine, colori, dati, preferiti: L.strumenti }
+  // le follie: qualche salto dentro la sequenza (di più se è curioso, inquieto o giocoso)
+  const pF = 0.12 + (st.temperature - 0.8) * 0.2 + (['curioso', 'inquieto', 'giocoso'].includes(st.mood) ? 0.1 : 0)
+  let nF = 0
+  for (const sc of plan.schede) if (nF < 3 && sc.a && r() < pF) { sc.follia = pick(r, r() < 0.7 ? L.follie : ['scala', 'ossessione', 'scambio', 'assenza', 'istruzione', 'grafico', 'inversione', 'caleido']); nF++ }
+  log(`Sequenza ${nEp} in forma «${plan.forma}», linguaggio «${L.nome}», tono ${tone.label} (${armonia}). ${perL}`)
+  log(`«${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ` Niente da dedurre oggi: leggo${plan.lettura ? ` «${plan.lettura}»` : ''}.`}${nF ? ` Salti: ${plan.schede.filter(x => x.follia).map(x => x.follia).join(', ')}.` : ''}`)
+  const passi = Math.round(({ curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]) * (hooks.fast ? 0.45 : 0.7))
+  const studio = async (s0: Sheet) => {
+    const it: Intention = { ...intention, targets: {}, tools: [...L.strumenti, 'materia', 'luce', 'shader', 'traccia', 'taglia'] }
+    const res = await runStudio(st, r, s0, it, { ...tctx }, passi)
+    learnTools(st, res.effects)
+    return res.sheet
+  }
   const works: Work[] = []
   const epId = uid()
   for (let i = 0; i < plan.schede.length; i++) {
     if (hooks.shouldStop?.()) break
     const sc = plan.schede[i]
     let sheet
-    try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face, { studio: sc.ruolo === 'parola' && r() < 0.5 ? undefined : studio, colori }) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
+    try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face, { studio: sc.ruolo === 'parola' && r() < 0.5 ? undefined : studio, colori, L }) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
     const final = flatten(sheet, 1)
     const R = rasterize(final)
     const f = measure(R)
@@ -383,7 +394,8 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     log(`${i + 1}/${plan.schede.length} ${sc.ruolo}${sc.titolo ? `: ${sc.titolo}` : ''}`)
   }
   if (!works.length) return works
-  const caption = didascalia(st, plan.titolo, plan.d, plan.domanda)
+  const caption = didascalia(st, plan.titolo, plan.d, plan.domanda) + `\n\nLinguaggio: ${L.nome}. ${L.contesto}.`
+  esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
   const ep = chiudiEpisodio(st, r, { lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
   const post = publish(st, r, works[0], [plan.d?.a, plan.d?.b].filter(Boolean) as string[], caption, [])
   post.carosello = works.map(w => w.id)

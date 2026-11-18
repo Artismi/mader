@@ -324,8 +324,8 @@ function hueOf(hx: string) {
 }
 export type Armonia = 'tono' | 'complementare' | 'analoga' | 'triade' | 'acida' | 'notturna'
 /** una tavolozza oltre il tono: armonie costruite sull'accento */
-export function tavolozza(t: Tone, r: Rnd): { colori: string[]; armonia: Armonia } {
-  const armonia = pick(r, ['tono', 'complementare', 'analoga', 'triade', 'acida', 'notturna'] as Armonia[])
+export function tavolozza(t: Tone, r: Rnd, scelte?: Armonia[]): { colori: string[]; armonia: Armonia } {
+  const armonia = pick(r, scelte?.length ? scelte : ['tono', 'complementare', 'analoga', 'triade', 'acida', 'notturna'] as Armonia[])
   const h = hueOf(t.acc)
   const extra = armonia === 'complementare' ? [hslHex(h + 180, 0.8, 0.5), hslHex(h + 160, 0.6, 0.35)]
     : armonia === 'analoga' ? [hslHex(h + 30, 0.75, 0.55), hslHex(h - 30, 0.7, 0.45)]

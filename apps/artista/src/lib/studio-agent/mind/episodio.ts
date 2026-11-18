@@ -24,6 +24,7 @@ import { coerenza, deduci, diciDeduzione, fattiDi, fattiSu, scriviObiezione, scr
 import { art, concorda, realizza } from '../voice/lingua'
 import { getCantieri } from './cantiere'
 import { APERTURE } from '../voice/conclusioni'
+import type { Follia, Linguaggio } from './linguaggi'
 
 // ─── la visione ─────────────────────────────────────────────────────────────
 export interface Tesi { testo: string; conf: number; da: number; a: string; b: string; ritirata?: boolean }
@@ -44,7 +45,7 @@ function ensureVisione(st: AgentState, r: Rnd): Visione {
 
 // ─── il piano di un episodio ───────────────────────────────────────────────
 type Ruolo = 'copertina' | 'prima' | 'domanda' | 'premessa' | 'passaggio' | 'conclusione' | 'controllo' | 'obiezione' | 'fiducia' | 'visione' | 'immagine' | 'altra' | 'coda' | 'silenzio' | 'parola' | 'definizione' | 'risposta'
-interface Scheda { ruolo: Ruolo; titolo: string; corpo: string; a?: string; b?: string; rel?: Rel; catena?: string[]; fonte?: string }
+interface Scheda { follia?: Follia; ruolo: Ruolo; titolo: string; corpo: string; a?: string; b?: string; rel?: Rel; catena?: string[]; fonte?: string }
 
 const REL_VERBO = (f: Fatto): Rel => (f.neg ? 'contro' : /^(divent|trasform|cambi|passa)/.test(f.v.inf) ? 'diventa' : /^(restare|stare|vivere|abitare|contenere)/.test(f.v.inf) ? 'dentro' : /^(essere|sembrare)/.test(f.v.inf) ? 'identita' : 'causa')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -140,7 +141,7 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const S: Scheda[] = []
   const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: glossa(x.f), a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
   const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`), catena: [d.a, d.b], a: d.a, b: d.b } : null)
-  const muta = (a?: string, b?: string): Scheda | null => (mute++ >= 1 ? null : { ruolo: 'silenzio', titolo: d ? cap(senzaAttacco(d.testo).split(/[,:;]/)[0]) : tesi.length ? cap(pick(r, tesi).testo.split(/[,:;]/)[0]) : cap(V.titolo), corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
+  const muta = (a?: string, b?: string): Scheda | null => (mute++ >= 1 ? null : { ruolo: 'silenzio', titolo: d ? cap(senzaAttacco(d.testo).split(/[,:;]/)[0]) : tesi.length ? cap(senzaAttacco(pick(r, tesi).testo).split(/[,:;]/)[0]) : cap(V.titolo), corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
   const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: riassunto(w), a: w })
   const ritorno = (): Scheda | null => (prev && r() < 0.35 ? { ruolo: 'prima', titolo: pick(r, ['Torno su una cosa', 'Me lo ero già chiesto', 'Ancora']), corpo: `${cap(prev.conclusione)}.`, a: d?.a } : null)
   const dub = (): Scheda[] => [co.ritrattazione ? { ruolo: 'controllo', titolo: 'Non torna', corpo: diciDeduzione(r, co.ritrattazione), a: d?.a, b: d?.b, rel: 'contro' as Rel } : null, ob ? { ruolo: 'obiezione', titolo: pick(r, ['Però', 'Eppure', 'Qualcuno direbbe di no']), corpo: ob.testo, a: d?.a, b: d?.b, rel: 'contro' as Rel, fonte: ob.fonte } : null].filter(Boolean) as Scheda[]
@@ -184,7 +185,7 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
       push(d ? { ruolo: 'passaggio', titolo: cap(senzaAttacco(d.testo)), corpo: d.premesse.join('; ') + '.', catena: nodi.slice(0, 6) } : muta())
       break
     case 'manifesto':
-      for (const t of [...tesi.slice(-3).map(t => t.testo), ...(d ? [d.testo] : [])]) push({ ruolo: 'copertina', titolo: cap(senzaAttacco(t)).toUpperCase(), corpo: '', a: tesi.find(x => x.testo === t)?.a ?? d?.a, b: tesi.find(x => x.testo === t)?.b ?? d?.b, rel: 'causa' })
+      for (const t of [...tesi.slice(-3).map(t => t.testo), ...(d ? [d.testo] : [])]) push({ ruolo: 'copertina', titolo: cap(senzaAttacco(t)), corpo: '', a: tesi.find(x => x.testo === t)?.a ?? d?.a, b: tesi.find(x => x.testo === t)?.b ?? d?.b, rel: 'causa' })
       if (r() < 0.5) push(muta(d?.a, d?.b))
       break
   }
@@ -250,7 +251,10 @@ function mediaSotto(s: Sheet, x0: number, y0: number, x1: number, y1: number): s
 }
 const lid2 = () => `e${Math.random().toString(36).slice(2, 9)}`
 
-export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number, N: number, nEp: number, ctx0: ToolCtx, face: FaceId, opts: { studio?: (s: Sheet) => Promise<Sheet>; colori?: string[] } = {}): Promise<Sheet> {
+export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number, N: number, nEp: number, ctx0: ToolCtx, face0: FaceId, opts: { studio?: (s: Sheet) => Promise<Sheet>; colori?: string[]; L?: Linguaggio } = {}): Promise<Sheet> {
+  const L = opts.L
+  let sc = sc0
+  const face: FaceId = L?.tipo.face ?? face0
   // il colore cambia lungo l'episodio: la conclusione al negativo, l'obiezione sul colore acceso, le altre leggermente diverse
   const t0: Tone = ctx0.tone
   const t: Tone = sc.ruolo === 'conclusione' ? { ...t0, bg: t0.ink, ink: t0.bg, dark: !t0.dark } : sc.ruolo === 'obiezione' ? { ...t0, bg: t0.acc, acc: t0.ink, ink: ratio(t0.ink, t0.acc) > ratio(t0.bg, t0.acc) ? t0.ink : t0.bg } : t0
@@ -288,18 +292,23 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
     zona = { x0: 0.07, y0: 0.64, x1: 0.93 }
     ultimoLay = null
   } else if (sc.a) {
-    const modi = MODI_RUOLO[sc.ruolo]
+    const modi = L && r() < 0.6 ? (L.modi as Modo[]) : MODI_RUOLO[sc.ruolo]
     const ma = pick(r, modi), mb = pick(r, modi)
-    const opts = sc.b && sc.a !== sc.b ? LAY_REL[sc.rel ?? 'accanto'].filter(l => l !== ultimoLay) : (['zoom', 'vuoto', 'griglia', 'solo'] as Lay[]).filter(l => l !== ultimoLay)
-    const lay = pick(r, opts.length ? opts : ['solo']) as Lay
+    let opts = sc.b && sc.a !== sc.b ? LAY_REL[sc.rel ?? 'accanto'].filter(l => l !== ultimoLay) : (['zoom', 'vuoto', 'griglia', 'solo'] as Lay[]).filter(l => l !== ultimoLay)
+    if (L && r() < 0.6) { const pref = (L.lay as Lay[]).filter(l => l !== ultimoLay); if (pref.length) opts = pref }
+    let lay = pick(r, opts.length ? opts : ['solo']) as Lay
+    // le follie: i salti
+    if (sc.follia === 'scala') lay = 'zoom'
+    if (sc.follia === 'ossessione') lay = 'griglia'
     ultimoLay = lay
-    const A = await segno(sc.a, ma, sc.b)
-    const B = sc.b && sc.b !== sc.a ? await segno(sc.b, mb, sc.a) : null
+    let A = await segno(sc.follia === 'scambio' && sc.b ? sc.b : sc.a, ma, sc.b)
+    let B = sc.b && sc.b !== sc.a ? await segno(sc.follia === 'scambio' ? sc.a : sc.b, mb, sc.a) : null
+    if (sc.follia === 'assenza') { A = newCanvas(4, 4); B = null; lay = 'vuoto' }
     const alto = r() < 0.5
     switch (lay) {
-      case 'zoom': { const cx = pick(r, [0.15, 0.85]), cy = pick(r, [0.2, 0.45]); metti(A, cx, cy, range(r, 0.9, 1.3), { rot: (r() - 0.5) * 0.4 }); if (B) metti(B, 1 - cx * 0.9, 0.5, 0.16); zona = { x0: 0.07, y0: 0.68, x1: 0.93 }; break }
+      case 'zoom': { const cx = pick(r, [0.15, 0.85]), cy = pick(r, [0.2, 0.45]); metti(A, cx, cy, sc.follia === 'scala' ? range(r, 1.8, 2.6) : range(r, 0.9, 1.3), { rot: (r() - 0.5) * 0.4 }); if (B) metti(B, 1 - cx * 0.9, 0.5, 0.16); zona = { x0: 0.07, y0: 0.68, x1: 0.93 }; break }
       case 'vuoto': { const x = pick(r, [1 / 3, 2 / 3]), y = alto ? 0.3 : 0.62; metti(A, x, y, 0.12); if (B) metti(B, 1 - x, y + 0.06, 0.07); zona = alto ? { x0: 0.07, y0: 0.6, x1: 0.93 } : { x0: 0.07, y0: 0.14, x1: 0.93 }; break }
-      case 'griglia': { const n = 3 + Math.floor(r() * 2); const kk = Math.floor(r() * n * n); for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) metti(a * n + b === kk && B ? B : A, 0.18 + (a * 0.64) / (n - 1), 0.12 + (b * 0.42) / (n - 1), 0.5 / n, { alpha: a * n + b === kk ? 1 : 0.85 }); zona = { x0: 0.07, y0: 0.7, x1: 0.93 }; break }
+      case 'griglia': { const n = sc.follia === 'ossessione' ? 8 + Math.floor(r() * 7) : 3 + Math.floor(r() * 2); const kk = Math.floor(r() * n * n); for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) metti(a * n + b === kk && B ? B : A, 0.18 + (a * 0.64) / (n - 1), 0.12 + (b * 0.42) / (n - 1), 0.5 / n, { alpha: a * n + b === kk ? 1 : 0.85 }); zona = { x0: 0.07, y0: 0.7, x1: 0.93 }; break }
       case 'sovrapposti': metti(A, 0.45, 0.36, 0.55); if (B) metti(B, 0.56, 0.42, 0.5, { blend: pick(r, ['difference', 'multiply', 'screen', 'exclusion']) }); zona = { x0: 0.07, y0: 0.72, x1: 0.93 }; break
       case 'diviso': { const cv = newCanvas(s.W, s.H); const g = cv.getContext('2d')!; g.fillStyle = t.acc; g.globalAlpha = 0.85; const sx = alto; if (sx) g.fillRect(0, 0, s.W / 2, s.H * 0.62); else g.fillRect(s.W / 2, 0, s.W / 2, s.H * 0.62); s = withLayer(s, fullLayer(s, lid2(), 'campo', cv)); metti(A, 0.25, 0.32, 0.36); if (B) metti(B, 0.75, 0.32, 0.36, { rot: r() < 0.3 ? Math.PI : 0 }); zona = { x0: 0.07, y0: 0.68, x1: 0.93 }; break }
       case 'orbita': { const cxo = 0.5, cyo = 0.36; if (B) metti(B, cxo, cyo, 0.26); const n = 5 + Math.floor(r() * 5); for (let k = 0; k < n; k++) { const an = (k / n) * Math.PI * 2; metti(A, cxo + Math.cos(an) * 0.3, cyo + Math.sin(an) * 0.24, 0.09, { rot: an }) } zona = { x0: 0.07, y0: 0.7, x1: 0.93 }; break }
@@ -309,6 +318,16 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
   } else {
     zona = { x0: 0.07, y0: 0.4, x1: 0.93 }
   }
+  if (sc.follia === 'inversione') {
+    // figura e sfondo si scambiano: il campo diventa pieno, i segni diventano buchi
+    const piena = newCanvas(s.W, s.H), g = piena.getContext('2d')!
+    g.fillStyle = pick(r, colori); g.fillRect(0, 0, s.W, s.H)
+    g.globalCompositeOperation = 'destination-out'
+    g.drawImage(flatten({ ...s, bg: 'rgba(0,0,0,0)', layers: s.layers.filter(l => l.kind === 'motivo') }), 0, 0)
+    s = withLayer(s, fullLayer(s, lid2(), 'inverso', piena))
+  }
+  if (sc.follia === 'caleido') { const tl = toolById('caleido'); if (tl) s = await tl.apply(s, { ...tl.propose(s, ctx), sostituisci: true, alpha: 1, blend: 'source-over' }, ctx) }
+  if (sc.follia === 'grafico' && ctx.dati?.length) { const tl = toolById('grafico'); if (tl) s = await tl.apply(s, { ...tl.propose(s, ctx), y: 0.12, h: 0.35 }, ctx) }
   // lo studio: lavora la tavola come faceva prima (materia, luce, tagli, tracce), con l'occhio che giudica
   if (opts.studio) { try { s = await opts.studio(s) } catch { /* resta com'è */ } }
   if (sc.ruolo === 'parola') zona = { x0: 0.07, y0: pick(r, [0.5, 0.6]), x1: 0.93 }
@@ -323,13 +342,15 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
     const sotto = mediaSotto(s, left, top, left + w, top + h)
     const cands = [color0, t.ink, t.bg, t.acc, '#111111', '#f4f2ec']
     const color = cands.sort((a, b) => ratio(b, sotto) - ratio(a, sotto))[0]
-    const piastra = piastra0 || ratio(color, sotto) < 4.5
-    const L = (await textLayer(prova, { text, face: f, sizePx: size * M, color: piastra ? ([t.ink, '#111111', '#f4f2ec'].sort((a, b) => ratio(b, t.bg) - ratio(a, t.bg))[0]) : color, x: 0, y: 0, maxW })).layers[0]
+    const barra = !!L?.tipo.barra && f !== 'mono' && size >= 0.04
+    const piastra = piastra0 || barra || ratio(color, sotto) < 4.5
+    const fondo = barra ? t.acc : t.bg
+    const TL = (await textLayer(prova, { text, face: f, sizePx: size * M, color: piastra ? ([t.ink, t.bg, '#111111', '#f4f2ec'].sort((a, b) => ratio(b, fondo) - ratio(a, fondo))[0]) : color, x: 0, y: 0, maxW })).layers[0]
     if (piastra) {
-      const cv = newCanvas(Math.round(w * s.W), Math.round(h * s.H)); const g = cv.getContext('2d')!; g.fillStyle = t.bg; g.fillRect(0, 0, cv.width, cv.height)
-      s = withLayer(s, { id: lid2(), kind: 'piastra', canvas: cv, x: left + w / 2, y: top + h / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: 0.86, blend: 'source-over' })
+      const cv = newCanvas(Math.round(w * s.W), Math.round(h * s.H)); const g = cv.getContext('2d')!; g.fillStyle = barra ? t.acc : t.bg; g.fillRect(0, 0, cv.width, cv.height)
+      s = withLayer(s, { id: lid2(), kind: 'piastra', canvas: cv, x: left + w / 2, y: top + h / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: barra ? 1 : 0.86, blend: 'source-over' })
     }
-    s = withLayer(s, { ...L, x: left + w / 2, y: top + h / 2 })
+    s = withLayer(s, { ...TL, x: left + w / 2, y: top + h / 2 })
     return h
   }
   const RUOLO: Record<Ruolo, string> = { silenzio: '', parola: '', definizione: '', risposta: '', copertina: 'episodio', prima: 'prima', domanda: 'domanda', premessa: 'premessa', passaggio: 'passaggio', conclusione: 'conclusione', controllo: 'controllo', obiezione: 'obiezione', fiducia: 'fiducia', visione: 'visione', immagine: 'immagine', altra: 'altra strada', coda: 'prossima puntata' }
@@ -337,7 +358,10 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
   if (r() < 0.6) await scrivi(`${i}/${N}`, 0.07, 0.035, 0.018, 0.3, 'mono')
   const big = sc.ruolo === 'copertina' || sc.ruolo === 'domanda' || sc.ruolo === 'coda' || sc.ruolo === 'conclusione' || sc.ruolo === 'parola' || sc.ruolo === 'definizione'
   const pesante = s.layers.filter(l => ['ricetta', 'shader', 'pattern', 'grana'].includes(l.kind)).length > 0 || ultimoLay === 'zoom' || ultimoLay === 'sovrapposti'
-  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, zona.y0, sc.ruolo === 'parola' ? 0.12 : big ? (sc.titolo.length > 50 ? 0.054 : 0.07) : sc.titolo.length > 60 ? 0.04 : 0.05, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, pesante)
+  if (sc.follia === 'istruzione' && sc.a) { sc = { ...sc, titolo: realizza(pick(r, ['prendi {det:a}. mettilo accanto {a:b}. aspetta.', 'cerca {det:a} dove non c\'è {det:b}. scrivilo.', 'togli {det:b} {da:a}. guarda cosa resta.', 'ripeti {det:a} finché non diventa {det:b}.']), { a: sc.a, b: sc.b ?? sc.a }).toUpperCase(), corpo: sc.titolo } ; zona = { x0: 0.07, y0: 0.2, x1: 0.93 } }
+  if (sc.follia === 'assenza' && sc.a) sc = { ...sc, corpo: `${sc.corpo} ${realizza('(Qui doveva esserci {det:a}. Non c\'è.)', { a: sc.a })}`.trim() }
+  if (L?.tipo.maiuscolo && sc.titolo.length < 90) sc = { ...sc, titolo: sc.titolo.toUpperCase() }
+  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, zona.y0, sc.follia === 'istruzione' ? 0.07 : sc.ruolo === 'parola' ? 0.12 : big ? (sc.titolo.length > 50 ? 0.054 : 0.07) : sc.titolo.length > 60 ? 0.04 : 0.05, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, pesante)
   if (sc.corpo) {
     let corpo = sc.corpo
     if (corpo.length > 480) corpo = corpo.slice(0, 480).replace(/\s\S*$/, '') + '…'

@@ -18,6 +18,7 @@ import { getAtlante } from '@/lib/studio-agent/mind/atlante'
 import { getEpisodi, getVisione } from '@/lib/studio-agent/mind/episodio'
 import JSZip from 'jszip'
 import { getRepertorio } from '@/lib/studio-agent/voice/conclusioni'
+import { getLinguaggi, LINGUAGGI } from '@/lib/studio-agent/mind/linguaggi'
 import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
 import { getOfficina, disegnaGeneratore } from '@/lib/studio-agent/mind/officina'
 
@@ -416,6 +417,21 @@ function Thumb({ st, id }: { st: AgentState; id: string }) {
   return <div ref={ref} className="h-16 w-16 shrink-0 bg-black/40" />
 }
 
+function LinguaggiView({ st }: { st: AgentState }) {
+  const R = getLinguaggi(st)
+  if (!R) return null
+  const nome = (id: string) => [...LINGUAGGI, ...R.nati].find(x => x.id === id)?.nome ?? id
+  return (
+    <div className={`${box} lg:col-span-2`}>
+      <div className={h}>Linguaggi: {R.nati.length} inventati da lui</div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>{R.nati.slice().reverse().map(L => <div key={L.id} className="mb-1 text-sm">{L.nome} <span className="text-white/40">(da {L.genitori?.map(nome).join(' + ')}, g{L.nato}, usato {L.usi ?? 0}×, punteggio {Math.round((L.punteggio ?? 0.5) * 100)})</span></div>)}</div>
+        <div className="text-sm text-white/60">{R.storia.slice(-12).reverse().map((x, i) => <div key={i}>g{x.day}: {nome(x.id)}{x.esito !== undefined ? ` · ${Math.round(x.esito * 100)}` : ''}</div>)}</div>
+      </div>
+    </div>
+  )
+}
+
 function RagionamentiView({ st }: { st: AgentState }) {
   const D = getAtlante(st)?.deduzioni ?? []
   const R = getRepertorio(st)
@@ -529,6 +545,7 @@ function Mind({ st }: { st: AgentState }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <AtlanteView st={st} />
+      <LinguaggiView st={st} />
       <RagionamentiView st={st} />
       <OfficinaView st={st} />
       <ScuolaView st={st} />
