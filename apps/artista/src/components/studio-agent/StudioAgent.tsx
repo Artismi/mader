@@ -43,6 +43,9 @@ export function StudioAgent() {
   const [epMode, setEpMode] = useState(false)
   const [epN, setEpN] = useState(12)
   const [ogni, setOgni] = useState<'giorno' | '30' | '60'>('giorno')
+  const [igS, setIgS] = useState<T.IgStato | null>(null)
+  const [igAuto, setIgAuto] = useState(false)
+  const [igFormato, setIgFormato] = useState<'video' | 'immagini'>('video')
   const [progress, setProgress] = useState('')
   const stop = useRef(false)
   const preview = useRef<HTMLCanvasElement>(null)
@@ -85,13 +88,23 @@ export function StudioAgent() {
         }
         const { state, works } = res
         cur = state; setSt(state)
+        if (igAuto && igS?.collegato) {
+          const ep = getEpisodi(state).slice(-1)[0] as Ep | undefined
+          if (ep && ep.day === state.day && !ep.instagram) {
+            const ws = (await T.listWorks()).filter(w => ep.schede.includes(w.id)).sort((a, b) => ep.schede.indexOf(a.id) - ep.schede.indexOf(b.id))
+            const r = await pubblicaSuInstagram(ep, ws, igFormato, m => setLog(l => [...l, m]))
+            ep.instagram = { ...r, quando: new Date().toISOString(), errore: r.error }
+            await T.putState(state)
+            setLog(l => [...l, r.error ? `Instagram: errore — ${r.error}` : `Instagram: pubblicato ${r.permalink ?? r.id}`])
+          }
+        }
         const per = (performance.now() - t0) / (d + 1) / 1000
         setLog(l => [...l, `— Giorno ${state.day} chiuso: ${works.length} tavol${works.length > 1 ? 'e' : 'a'}. Media ${per.toFixed(1)} s a giornata${days > 1 ? `, stima per ${days}: ${((per * days) / 60).toFixed(0)} min` : ''}.`])
       }
     } catch (e) {
       setLog(l => [...l, `Errore: ${e instanceof Error ? e.message : String(e)}`])
     } finally { setRunning(false); setProgress('') }
-  }, [st, running, fast, epMode, epN])
+  }, [st, running, fast, epMode, epN, igAuto, igS, igFormato])
 
   // giornata automatica: una al giorno, finché la pagina è aperta
   useEffect(() => {
@@ -148,11 +161,19 @@ export function StudioAgent() {
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
       {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
-      {tab === 'sequenze' && <EpisodiView st={st} works={works} />}
+      {tab === 'sequenze' && <EpisodiView st={st} works={works} ig={!!igS?.collegato} formato={igFormato} onSalva={refresh} />}
       {tab === 'cantiere' && <CantiereView st={st} />}
       {tab === 'mente' && <Mind st={st} />}
       {tab === 'quaderno' && <Notebook st={st} works={works} open={w => { setSel(w); setTab('galleria') }} />}
-      {tab === 'impostazioni' && <Settings st={st} onSaved={refresh} />}
+      {tab === 'impostazioni' && <>
+        <div className="mb-4"><InstagramPanel onCambia={setIgS} /></div>
+        <div className={`${box} mb-4 flex flex-wrap items-center gap-3 text-sm`}>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={igAuto} onChange={e => setIgAuto(e.target.checked)} disabled={!igS?.collegato} /> pubblica su Instagram ogni sequenza appena è pronta</label>
+          <select value={igFormato} onChange={e => setIgFormato(e.target.value as 'video' | 'immagini')} className="rounded border border-white/15 bg-black px-2 py-1"><option value="video">come video con la musica</option><option value="immagini">come immagini</option></select>
+          <span className="text-white/50">Instagram accetta al massimo 10 tavole per post e circa 50 post al giorno: con le sequenze ogni 30 minuti si sta dentro.</span>
+        </div>
+        <Settings st={st} onSaved={refresh} />
+      </>}
     </div>
   )
 }
@@ -317,7 +338,56 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
   )
 }
 
-function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
+type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; permalink?: string; quando: string; errore?: string } }
+/** prepara i file (JPEG 1080×1350 o MP4 con il suo pezzo di brano), li passa al server e pubblica il carosello */
+async function pubblicaSuInstagram(ep: Ep, ws: Work[], formato: 'video' | 'immagini', log: (m: string) => void): Promise<{ id?: string; permalink?: string; error?: string }> {
+  const scelte = ws.slice(0, 10)
+  if (!scelte.length) return { error: 'nessuna tavola' }
+  const v = formato === 'video' && ep.musica ? await puoVideo() : { ok: false, perche: formato === 'video' ? 'nessuna musica' : '' }
+  if (formato === 'video' && !v.ok) log(`Video non possibili qui (${v.perche}): pubblico le immagini.`)
+  const nomi: string[] = []
+  for (const [i, w] of scelte.entries()) {
+    const blob = await fetch(w.image).then(r => r.blob())
+    const bmp = await createImageBitmap(blob)
+    let file: Blob, nome: string
+    if (v.ok && ep.musica?.partitura.sezioni[i]) {
+      file = await videoFermo(bmp, await suona(ep.musica.partitura, i)); nome = `${ep.id}-${i + 1}.mp4`
+    } else {
+      const cv = new OffscreenCanvas(1080, 1350); cv.getContext('2d')!.drawImage(bmp, 0, 0, 1080, 1350)
+      file = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 }); nome = `${ep.id}-${i + 1}.jpg`
+    }
+    const r = await T.igMedia(nome, file)
+    if (!r.nome) return { error: r.error ?? 'caricamento fallito' }
+    nomi.push(r.nome)
+    log(`Instagram: preparato ${i + 1}/${scelte.length}`)
+  }
+  log('Instagram: pubblico…')
+  return T.igPubblica(nomi, ep.caption)
+}
+
+function InstagramPanel({ onCambia }: { onCambia: (s: T.IgStato) => void }) {
+  const [token, setToken] = useState('')
+  const [s, setS] = useState<T.IgStato | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { T.igStato().then(x => { setS(x); onCambia(x) }) }, [onCambia])
+  const collega = async () => { setMsg('verifico…'); const x = await T.igToken(token); setS(x); onCambia(x); setMsg(x.error ?? (x.collegato ? 'collegato' : 'non collegato')); setToken('') }
+  const tunnel = async () => { setMsg('apro il tunnel (la prima volta scarica cloudflared)…'); const x = await T.igTunnel(); setMsg(x.error ?? `tunnel aperto: ${x.tunnel}`) }
+  return (
+    <div className={`${box} lg:col-span-2`}>
+      <div className={h}>Instagram</div>
+      <p className="mb-2 text-xs text-white/50">Incolla il token generato nella dashboard di Meta (Instagram API con login Instagram). Resta sul tuo PC, in un file nella tua cartella utente. Per pubblicare il PC deve restare acceso con questa pagina aperta: Instagram scarica le tavole dal tuo PC attraverso un tunnel gratuito di Cloudflare.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="password" placeholder="token di accesso" value={token} onChange={e => setToken(e.target.value)} className="w-96 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
+        <button className={btn} onClick={collega} disabled={!token}>Collega</button>
+        <button className={btn} onClick={tunnel}>Prova il tunnel</button>
+        <span className="text-sm text-white/60">{msg}</span>
+      </div>
+      {s && <div className="mt-2 text-sm">{s.collegato ? <>collegato come <b>@{s.username}</b>{s.limite24h ? ` · ${s.usati24h ?? 0}/${s.limite24h} post nelle ultime 24 ore` : ''}{s.tunnel ? ` · tunnel ${s.tunnel}` : ''}</> : <span className="text-white/50">non collegato{s.error ? ` (${s.error})` : ''}</span>}</div>}
+    </div>
+  )
+}
+
+function EpisodiView({ st, works, ig, formato, onSalva }: { st: AgentState; works: Work[]; ig: boolean; formato: 'video' | 'immagini'; onSalva: () => void }) {
   const eps = getEpisodi(st).slice().reverse()
   const V = getVisione(st)
   const byId = useMemo(() => new Map(works.map(w => [w.id, w])), [works])
@@ -376,6 +446,13 @@ function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
           <div className="mb-2 flex items-start justify-between gap-4">
             <button className="text-left" onClick={() => setAperto(aperto === ep.id ? null : ep.id)}><div className="text-lg font-semibold">{ep.titolo}</div><div className="text-xs text-white/50">sequenza {ep.n} · giorno {ep.day} · {ep.schede.length} tavole{ep.musica ? ` · ${ep.musica.descr}` : ''}{stato ? ` · ${stato}` : ''}</div></button>
             <div className="flex gap-2">
+              {ig && !(ep as Ep).instagram?.id && <button className={btn} onClick={async () => {
+                const ws = ep.schede.map(id => byId.get(id)).filter(Boolean) as Work[]
+                const r = await pubblicaSuInstagram(ep as Ep, ws, formato, setStato)
+                ;(ep as Ep).instagram = { ...r, quando: new Date().toISOString(), errore: r.error }
+                await T.putState(st); setStato(r.error ? `errore: ${r.error}` : 'pubblicato'); onSalva()
+              }}>Pubblica su Instagram</button>}
+              {(ep as Ep).instagram?.permalink && <a className={btn} href={(ep as Ep).instagram!.permalink} target="_blank" rel="noreferrer">Vedi su Instagram</a>}
               {ep.musica && <button className={btn} onClick={() => (stato ? ferma() : ascolta(ep))}>{stato ? 'Ferma' : 'Ascolta'}</button>}
               <button className={btn} onClick={() => scarica(ep)}>Scarica (.zip)</button>
             </div>

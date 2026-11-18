@@ -27,3 +27,12 @@ export const read = (query: string) => call<Raw[]>(`/read?${query}`).catch(() =>
 export const define = (w: string) => call<{ definition: string | null }>(`/define?w=${(() => { try { return encodeURIComponent(w) } catch { return encodeURIComponent(w.replace(/[\uD800-\uDFFF]/g, "")) } })()}`).catch(() => ({ definition: null }))
 export const esplora = (url: string, word: string, skip: string[]) => call<Raw[]>('/esplora', { method: 'POST', body: JSON.stringify({ url, word, skip }) }).catch(() => [] as Raw[])
 export const shader = (url: string) => call<{ code: string | null }>('/shader', { method: 'POST', body: JSON.stringify({ url }) }).catch(() => ({ code: null }))
+
+// Instagram: in Creative OS non è ancora collegato (c'è nell'app autonoma)
+export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; error?: string }
+const noIg = { error: 'Instagram è disponibile nell\'app autonoma' }
+export const igStato = async (): Promise<IgStato> => ({ collegato: false, ...noIg })
+export const igToken = async (_t: string): Promise<IgStato> => ({ collegato: false, ...noIg })
+export const igTunnel = async (): Promise<{ tunnel?: string; error?: string }> => noIg
+export const igMedia = async (_n: string, _b: Blob): Promise<{ nome?: string; error?: string }> => noIg
+export const igPubblica = async (_f: string[], _d: string): Promise<{ id?: string; permalink?: string; error?: string }> => noIg

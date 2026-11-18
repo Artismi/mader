@@ -6,6 +6,7 @@
  *   POST shader {url}
  */
 import { NextResponse } from 'next/server'
+import { apriTunnel, leggiMedia, pubblica, salvaMedia, salvaToken, stato } from '@/lib/studio-agent/server/instagram'
 import { define, explore, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
 
 export const runtime = 'nodejs'
@@ -16,9 +17,12 @@ type Ctx = { params: Promise<{ op: string[] }> }
 const bad = (msg: string, status = 400) => NextResponse.json({ error: msg }, { status })
 
 export async function GET(req: Request, { params }: Ctx) {
-  const [op] = (await params).op
+  const [op, arg] = (await params).op
   const q = new URL(req.url).searchParams
   try {
+    // i file da pubblicare, serviti a Instagram attraverso il tunnel
+    if (op === 'media' && arg) { const m = leggiMedia(decodeURIComponent(arg)); return m ? new NextResponse(new Uint8Array(m.dati), { headers: { 'content-type': m.tipo, 'cache-control': 'no-store' } }) : bad('non trovato', 404) }
+    if (op === 'ig-stato') return NextResponse.json(await stato())
     if (op === 'read') {
       const mode = q.get('mode') ?? 'casuale'
       if (mode === 'casuale') return NextResponse.json([await wikiRandom()].filter(Boolean))
@@ -38,8 +42,14 @@ export async function GET(req: Request, { params }: Ctx) {
 
 export async function POST(req: Request, { params }: Ctx) {
   const [op] = (await params).op
+  if (op === 'ig-media') {
+    try { return NextResponse.json({ nome: salvaMedia(new URL(req.url).searchParams.get('nome') ?? 'file.bin', await req.arrayBuffer()) }) } catch (e) { return bad(e instanceof Error ? e.message : 'errore', 500) }
+  }
   const body = await req.json().catch(() => ({}))
   try {
+    if (op === 'ig-token') return NextResponse.json(await salvaToken(String(body.token ?? '')))
+    if (op === 'ig-tunnel') return NextResponse.json({ tunnel: await apriTunnel() })
+    if (op === 'ig-pubblica') return NextResponse.json(await pubblica(Array.isArray(body.file) ? body.file : [], String(body.didascalia ?? '')))
     if (op === 'esplora') return NextResponse.json([await explore(String(body.url ?? ''), String(body.word ?? ''), Array.isArray(body.skip) ? body.skip : [])].filter(Boolean))
     if (op !== 'shader') return bad('operazione sconosciuta', 404)
     return NextResponse.json({ code: await fetchShader(String(body.url ?? '')) })
