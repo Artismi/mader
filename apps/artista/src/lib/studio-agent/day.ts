@@ -45,7 +45,7 @@ import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mett
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
 import { conceptsReady, describe, loadConcepts, loadInglese } from './reader/concepts'
-import { aggiornaProfilo, didascaliaEN } from './mind/profilo'
+import { aggiornaProfilo, battezza, didascaliaEN } from './mind/profilo'
 
 
 export interface DayHooks {
@@ -404,7 +404,12 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const caption = didascaliaEN(st, { n: getEpisodi(st).length + 1, titolo: plan.titolo, parole: plan.schede.slice(0, works.length).map(x => x.a).filter((x): x is string => !!x), d: plan.d, domanda: plan.domanda, lettura: plan.lettura, forma: plan.forma, L, partitura, nTavole: works.length })
   esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
   const ep = chiudiEpisodio(st, r, { musica: { partitura, descr: descrMusica }, lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
-  aggiornaProfilo(st, (await T.listWorks()).filter(w => w.day >= st.day - 20))
+  {
+    const recenti = (await T.listWorks()).filter(w => w.day >= st.day - 20)
+    const P = aggiornaProfilo(st, recenti)
+    // alla terza sequenza ha abbastanza parole sue: si sceglie un nome vero
+    if (!P.why && getEpisodi(st).length >= 3) { const b = battezza(st, recenti); log(b.perche) }
+  }
   const post = publish(st, r, works[0], [plan.d?.a, plan.d?.b].filter(Boolean) as string[], caption, [])
   post.carosello = works.map(w => w.id)
   post.title = plan.titolo

@@ -13,7 +13,7 @@ import { inglese } from '../reader/concepts'
 import type { Linguaggio } from './linguaggi'
 import type { Partitura } from '../suono/musica'
 
-export interface Profilo { nome: string; username: string; bio: string; presentazione: string; temi: string[]; day: number; foto?: string; storia: { day: number; cosa: string }[] }
+export interface Profilo { perche?: string; why?: string; nome: string; username: string; bio: string; presentazione: string; temi: string[]; day: number; foto?: string; storia: { day: number; cosa: string }[] }
 type WithP = AgentState & { profilo?: Profilo }
 export const getProfilo = (st: AgentState) => (st as WithP).profilo
 
@@ -61,9 +61,10 @@ export function aggiornaProfilo(st: AgentState, works: Work[] = []): Profilo {
     `Procedural artist, no AI. Reading, reasoning, drawing in code.`,
   ]
   const bio = bioCand.find(b => [...b].length <= 150) ?? bioCand[bioCand.length - 1]
+  const prima = W.profilo
   const V = getVisione(st)
   const presentazione = [
-    `I'm ${nome}.`,
+    prima?.why && prima.nome === nome ? `I'm ${nome}. ${prima.why.replace(/^My name is [^:]+: /, 'The name ')}` : `I'm ${nome}.`,
     `I'm not an AI model and nobody writes these posts for me: I'm a procedural program, a few thousand hand-written rules running on one laptop in Turin.`,
     `I read Italian Wikipedia and a small library, break sentences into facts, link the facts in a graph and look for what follows from what — and for what contradicts what. When two of my conclusions clash, I take one back.`,
     `Each chapter is one chain of reasoning: a sequence of plates I draw with code, in a visual language I pick or invent for it, and a piece of music I compose for it, one section per slide.`,
@@ -72,14 +73,13 @@ export function aggiornaProfilo(st: AgentState, works: Work[] = []): Profilo {
     `The plates are in Italian, the language I read and think in. I'm learning to talk to you in English.`,
   ].join('\n\n')
   const username = nome.toLowerCase().replace(/[^a-z0-9]/g, '') + '.procedural'
-  const prima = W.profilo
   // la foto: la tavola più interessante delle ultime, scelta da lui; cambia quando ne trova una più forte
   const cand = works.filter(w => w.kept).sort((a, b) => b.interest - a.interest)[0]
   const foto = cand && (!prima?.foto || cand.interest > (works.find(w => w.id === prima.foto)?.interest ?? 0) * 1.15) ? cand.id : prima?.foto
   const storia = prima?.storia ?? []
   if (!prima || prima.bio !== bio) storia.push({ day: st.day, cosa: `bio: ${bio}` })
   if (foto && foto !== prima?.foto) storia.push({ day: st.day, cosa: 'nuova foto profilo' })
-  W.profilo = { nome, username, bio, presentazione, temi: T, day: st.day, foto, storia: storia.slice(-30) }
+  W.profilo = { perche: prima?.nome === nome ? prima?.perche : undefined, why: prima?.nome === nome ? prima?.why : undefined, nome, username, bio, presentazione, temi: T, day: st.day, foto, storia: storia.slice(-30) }
   return W.profilo
 }
 
@@ -103,4 +103,72 @@ export function didascaliaEN(st: AgentState, o: { n: number; titolo: string; par
   const tags = ['#proceduralart', '#generativeart', '#creativecoding', '#noai', ...[a, b].filter(x => x && !x.startsWith('“')).map(tag)]
   righe.push('', [...new Set(tags)].join(' '))
   return righe.join('\n').slice(0, 2150)
+}
+
+/**
+ * Sceglie le tavole del post: tiene l'apertura e la chiusura, poi le più forti,
+ * cercando di non perdere nessun passaggio (ruolo) del ragionamento, e le rimette in ordine.
+ */
+export function cura(ws: Work[], n: number): Work[] {
+  if (ws.length <= n) return ws
+  const tieni = new Set([ws[0].id, ws[ws.length - 1].id])
+  const ruoli = new Set(ws.filter(w => tieni.has(w.id)).map(w => w.episodio?.ruolo))
+  const resto = ws.slice(1, -1).map(w => ({ w, sc: w.interest }))
+  while (tieni.size < n && resto.length) {
+    resto.sort((a, b) => (b.sc + (ruoli.has(b.w.episodio?.ruolo) ? 0 : 0.25)) - (a.sc + (ruoli.has(a.w.episodio?.ruolo) ? 0 : 0.25)))
+    const x = resto.shift()!
+    tieni.add(x.w.id); ruoli.add(x.w.episodio?.ruolo)
+  }
+  return ws.filter(w => tieni.has(w.id))
+}
+
+/**
+ * «Come ti chiami?» Si dà un nome dalle due parole su cui torna più spesso:
+ * le fonde (inizio dell'una, fine dell'altra), scarta i nomi impronunciabili, e spiega perché.
+ */
+export function chiediNome(st: AgentState, works: Work[] = []): { nome: string; perche: string; why: string } {
+  const V = getVisione(st)
+  const conta = new Map<string, number>()
+  const add = (w: string | undefined, k = 1) => { if (w && /^[a-zàèéìòù]{4,}$/.test(w)) conta.set(w, (conta.get(w) ?? 0) + k) }
+  for (const t of V?.tesi ?? []) { add(t.a, 2); add(t.b, 2) }
+  for (const e of getEpisodi(st)) for (const w of (e.coppia ?? '').split('|')) add(w)
+  for (const w of works) add(w.intention?.word, 0.5)
+  const top = [...conta.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0].normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+  if (top.length < 2) return { nome: st.name, perche: `Per ora mi chiamo ancora ${st.name}: non ho abbastanza parole mie per un nome.`, why: '' }
+  const voc = /[aeiou]/
+  const pronunciabile = (x: string) => x.length >= 5 && x.length <= 9 && !/[^aeiou]{3}/.test(x) && !/[aeiou]{3}/.test(x) && voc.test(x[x.length - 1] ?? '')
+  const cand: { nome: string; a: string; b: string; sc: number }[] = []
+  for (const a of top.slice(0, 4)) for (const b of top.slice(0, 4)) {
+    if (a === b) continue
+    for (let i = 2; i <= Math.min(5, a.length - 1); i++) for (let j = 1; j < b.length - 2; j++) {
+      const x = a.slice(0, i) + b.slice(j)
+      if (!pronunciabile(x) || x === a || x === b) continue
+      // meglio se l'incastro cade tra consonante e vocale, e se si sentono entrambe le parole
+      const giunto = voc.test(x[i]) !== voc.test(x[i - 1]) ? 1 : 0
+      cand.push({ nome: x, a, b, sc: giunto + Math.min(i, b.length - j) * 0.3 - Math.abs(x.length - 7) * 0.2 + (conta.get(a) ?? 0) * 0.1 + (conta.get(b) ?? 0) * 0.1 })
+    }
+  }
+  const best = cand.sort((p, q) => q.sc - p.sc)[0]
+  if (!best) return { nome: st.name, perche: `Resto ${st.name}: le mie parole non si lasciano fondere in un nome.`, why: '' }
+  const nome = best.nome[0].toUpperCase() + best.nome.slice(1)
+  const ctx = new Set([best.a, best.b])
+  return {
+    nome,
+    perche: `Mi chiamo ${nome}. Viene da «${best.a}» e «${best.b}», le parole su cui torno più spesso: l'inizio dell'una e la fine dell'altra, come quando due cose che leggo si toccano.${st.name && st.name !== nome ? ` Prima mi chiamavo ${st.name}.` : ''}`,
+    why: `My name is ${nome}: it grows from two Italian words I keep coming back to, ${best.a} (${inglese(best.a, ctx) ?? '?'}) and ${best.b} (${inglese(best.b, ctx) ?? '?'}).`,
+  }
+}
+
+/** applica il nome scelto: cambia il nome, lo scrive nella storia del profilo */
+export function battezza(st: AgentState, works: Work[] = []): { nome: string; perche: string } {
+  const r = chiediNome(st, works)
+  const vecchio = st.name
+  if (r.why) {
+    st.name = r.nome
+    const W = st as WithP
+    const P = aggiornaProfilo(st, works)
+    W.profilo = { ...P, perche: r.perche, why: r.why, storia: [...P.storia, { day: st.day, cosa: vecchio !== r.nome ? `nome: ${r.nome} (prima ${vecchio})` : `nome confermato: ${r.nome}` }].slice(-30) }
+    aggiornaProfilo(st, works)
+  }
+  return r
 }

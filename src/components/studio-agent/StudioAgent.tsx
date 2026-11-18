@@ -16,7 +16,7 @@ import { getVetrina, type Post } from '@/lib/studio-agent/mind/vetrina'
 import { getScuola, MAESTRI } from '@/lib/studio-agent/mind/scuola'
 import { getAtlante } from '@/lib/studio-agent/mind/atlante'
 import { getEpisodi, getVisione } from '@/lib/studio-agent/mind/episodio'
-import { getProfilo } from '@/lib/studio-agent/mind/profilo'
+import { getProfilo, cura, battezza } from '@/lib/studio-agent/mind/profilo'
 import JSZip from 'jszip'
 import { suona, wav } from '@/lib/studio-agent/suono/musica'
 import { puoVideo, videoFermo } from '@/lib/studio-agent/suono/video'
@@ -42,11 +42,13 @@ export function StudioAgent() {
   const [fast, setFast] = useState(true)
   const [nDays, setNDays] = useState(10)
   const [epMode, setEpMode] = useState(false)
-  const [epN, setEpN] = useState(12)
+  const [epN, setEpN] = useState(14)
   const [ogni, setOgni] = useState<'giorno' | '30' | '60'>('giorno')
   const [igS, setIgS] = useState<T.IgStato | null>(null)
   const [igAuto, setIgAuto] = useState(false)
   const [igFormato, setIgFormato] = useState<'video' | 'immagini'>('video')
+  const [studi, setStudi] = useState(5)
+  const [igN, setIgN] = useState(10)
   const [progress, setProgress] = useState('')
   // le scelte di lancio restano anche se la pagina si ricarica
   const caricato = useRef(false)
@@ -58,13 +60,15 @@ export function StudioAgent() {
       if (k.epN) setEpN(k.epN)
       if (k.ogni) setOgni(k.ogni)
       if (k.igFormato) setIgFormato(k.igFormato)
+      if (typeof k.studi === 'number') setStudi(k.studi)
+      if (k.igN) setIgN(k.igN)
       if (typeof k.igAuto === 'boolean') setIgAuto(k.igAuto)
       if (typeof k.auto === 'boolean') setAuto(k.auto)
     } catch { /* niente */ }
     caricato.current = true
     T.igStato().then(setIgS).catch(() => {})
   }, [])
-  useEffect(() => { if (caricato.current) try { localStorage.setItem('artista-lancio', JSON.stringify({ fast, epMode, epN, ogni, igFormato, igAuto, auto })) } catch { /* niente */ } }, [fast, epMode, epN, ogni, igFormato, igAuto, auto])
+  useEffect(() => { if (caricato.current) try { localStorage.setItem('artista-lancio', JSON.stringify({ fast, epMode, epN, ogni, igFormato, igAuto, auto, studi, igN })) } catch { /* niente */ } }, [fast, epMode, epN, ogni, igFormato, igAuto, auto, studi, igN])
   // in automatico: chiede di non far spegnere lo schermo (se il PC va in sospensione si ferma tutto)
   useEffect(() => {
     if (!auto || !('wakeLock' in navigator)) return
@@ -85,9 +89,10 @@ export function StudioAgent() {
   useEffect(() => { refresh() }, [refresh])
 
   /** lancia una o più giornate di fila; la galleria si aggiorna a ogni tavola */
-  const run = useCallback(async (days = 1) => {
+  const run = useCallback(async (days = 1, seq: boolean = epMode) => {
     if (!st || running) return
     setRunning(true); setLog([]); setTab('galleria'); stop.current = false
+    if (seq) { try { localStorage.setItem('artista-ultima-seq', String(Date.now())) } catch { /* niente */ } }
     let cur = st
     const t0 = performance.now()
     try {
@@ -96,7 +101,7 @@ export function StudioAgent() {
         let res: Awaited<ReturnType<typeof runDay>>
         try {
         res = await runDay(cur, {
-          fast, episodio: epMode ? epN : undefined,
+          fast, episodio: seq ? epN : undefined,
           log: m => setLog(l => [...l, m].slice(-300)),
           preview: c => {
             const p = preview.current; if (!p) return
@@ -120,7 +125,7 @@ export function StudioAgent() {
           const ep = getEpisodi(state).slice(-1)[0] as Ep | undefined
           if (ep && ep.day === state.day && !ep.instagram) {
             const ws = (await T.listWorks()).filter(w => ep.schede.includes(w.id)).sort((a, b) => ep.schede.indexOf(a.id) - ep.schede.indexOf(b.id))
-            const r = await pubblicaSuInstagram(ep, ws, igFormato, m => setLog(l => [...l, m]))
+            const r = await pubblicaSuInstagram(ep, ws, igFormato, m => setLog(l => [...l, m]), igN)
             ep.instagram = { ...r, quando: new Date().toISOString(), errore: r.error }
             await T.putState(state)
             setLog(l => [...l, r.error ? `Instagram: errore — ${r.error}` : `Instagram: pubblicato ${r.permalink ?? r.id}`])
@@ -132,21 +137,29 @@ export function StudioAgent() {
     } catch (e) {
       setLog(l => [...l, `Errore: ${e instanceof Error ? e.message : String(e)}`])
     } finally { setRunning(false); setProgress('') }
-  }, [st, running, fast, epMode, epN, igAuto, igS, igFormato])
+  }, [st, running, fast, epMode, epN, igAuto, igS, igFormato, igN])
 
   // giornata automatica: una al giorno, finché la pagina è aperta
   useEffect(() => {
     if (!auto) return
     const tick = () => {
       if (!st || running) return
-      if (ogni !== 'giorno') { const ms = Number(ogni) * 60 * 1000; if (!st.lastRun || Date.now() - new Date(st.lastRun).getTime() >= ms - 30000) run(1); return }
+      if (ogni !== 'giorno') {
+        // ogni 30/60 minuti una sequenza (il post); nel mezzo, ogni pochi minuti, uno studio che resta nel quaderno
+        const ms = Number(ogni) * 60 * 1000
+        const ultimaSeq = Number((() => { try { return localStorage.getItem('artista-ultima-seq') } catch { return null } })() ?? 0)
+        const ultima = st.lastRun ? new Date(st.lastRun).getTime() : 0
+        if (Date.now() - ultimaSeq >= ms - 30000) { run(1, epMode); return }
+        if (studi && Date.now() - ultima >= studi * 60 * 1000) run(1, false)
+        return
+      }
       const last = st.lastRun ? new Date(st.lastRun).toDateString() : ''
       if (last !== new Date().toDateString()) run(1)
     }
     tick()
     const t = setInterval(tick, ogni === 'giorno' ? 10 * 60 * 1000 : 60 * 1000)
     return () => clearInterval(t)
-  }, [auto, st, running, run, ogni])
+  }, [auto, st, running, run, ogni, epMode, studi])
 
   if (!st) return <div className="p-8 text-white/60">Apro lo studio…</div>
 
@@ -155,7 +168,7 @@ export function StudioAgent() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold">{st.name || 'Artista senza nome'}</div>
-          <div className="text-sm text-white/50">versione 18/11c · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
+          <div className="text-sm text-white/50">versione 18/11d · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
@@ -164,6 +177,7 @@ export function StudioAgent() {
           <span className="text-sm text-white/60">tavole</span>
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> in automatico</label>
           <select value={ogni} onChange={e => setOgni(e.target.value as 'giorno' | '30' | '60')} className="rounded border border-white/15 bg-black px-2 py-1 text-sm"><option value="giorno">una volta al giorno</option><option value="30">ogni 30 minuti</option><option value="60">ogni ora</option></select>
+          {ogni !== 'giorno' && <select value={studi} onChange={e => setStudi(Number(e.target.value))} className="rounded border border-white/15 bg-black px-2 py-1 text-sm" title="tra un post e l'altro"><option value={0}>e nel mezzo riposa</option><option value={3}>e nel mezzo studia ogni 3 min</option><option value={5}>e nel mezzo studia ogni 5 min</option><option value={10}>e nel mezzo studia ogni 10 min</option></select>}
           <button className={btn} disabled={running} onClick={() => run(1)}>Avvia giornata</button>
           <input type="number" min={1} max={2000} value={nDays} onChange={e => setNDays(Math.max(1, Number(e.target.value) || 1))} className="w-20 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
           <button className={btn} disabled={running} onClick={() => run(nDays)}>giornate di fila</button>
@@ -188,9 +202,9 @@ export function StudioAgent() {
       </div>
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
-      {tab === 'profilo' && <ProfiloView st={st} works={works} ig={!!igS?.collegato} />}
+      {tab === 'profilo' && <ProfiloView st={st} works={works} ig={!!igS?.collegato} onSalva={refresh} />}
       {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
-      {tab === 'sequenze' && <EpisodiView st={st} works={works} ig={!!igS?.collegato} formato={igFormato} onSalva={refresh} />}
+      {tab === 'sequenze' && <EpisodiView st={st} works={works} ig={!!igS?.collegato} formato={igFormato} n={igN} onSalva={refresh} />}
       {tab === 'cantiere' && <CantiereView st={st} />}
       {tab === 'mente' && <Mind st={st} />}
       {tab === 'quaderno' && <Notebook st={st} works={works} open={w => { setSel(w); setTab('galleria') }} />}
@@ -199,6 +213,7 @@ export function StudioAgent() {
         <div className={`${box} mb-4 flex flex-wrap items-center gap-3 text-sm`}>
           <label className="flex items-center gap-2"><input type="checkbox" checked={igAuto} onChange={e => setIgAuto(e.target.checked)} disabled={!igS?.collegato} /> pubblica su Instagram ogni sequenza appena è pronta</label>
           <select value={igFormato} onChange={e => setIgFormato(e.target.value as 'video' | 'immagini')} className="rounded border border-white/15 bg-black px-2 py-1"><option value="video">come video con la musica</option><option value="immagini">come immagini</option></select>
+          <select value={igN} onChange={e => setIgN(Number(e.target.value))} className="rounded border border-white/15 bg-black px-2 py-1">{[6, 8, 10, 12, 15, 20].map(n => <option key={n} value={n}>{n} tavole per post</option>)}</select>
           <span className="text-white/50">Instagram accetta fino a 20 tavole per post e 50–100 post al giorno (dipende dall'account): ogni 30 minuti sono 48 post, si sta dentro. Prima di pubblicare controllo comunque il limite.</span>
         </div>
         <Settings st={st} onSaved={refresh} />
@@ -369,8 +384,9 @@ function VetrinaView({ st, works }: { st: AgentState; works: Work[] }) {
 
 type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; permalink?: string; quando: string; errore?: string } }
 /** prepara i file (JPEG 1080×1350 o MP4 con il suo pezzo di brano), li passa al server e pubblica il carosello */
-async function pubblicaSuInstagram(ep: Ep, ws: Work[], formato: 'video' | 'immagini', log: (m: string) => void): Promise<{ id?: string; permalink?: string; error?: string }> {
-  const scelte = ws.slice(0, 20)
+async function pubblicaSuInstagram(ep: Ep, ws: Work[], formato: 'video' | 'immagini', log: (m: string) => void, n = 10): Promise<{ id?: string; permalink?: string; error?: string }> {
+  const scelte = cura(ws, n)
+  if (ws.length > scelte.length) log(`Instagram: delle ${ws.length} tavole ne scelgo ${scelte.length} (apertura, chiusura e le più forti, in ordine).`)
   if (!scelte.length) return { error: 'nessuna tavola' }
   const v = formato === 'video' && ep.musica ? await puoVideo() : { ok: false, perche: formato === 'video' ? 'nessuna musica' : '' }
   if (formato === 'video' && !v.ok) log(`Video non possibili qui (${v.perche}): pubblico le immagini.`)
@@ -378,9 +394,10 @@ async function pubblicaSuInstagram(ep: Ep, ws: Work[], formato: 'video' | 'immag
   for (const [i, w] of scelte.entries()) {
     const blob = await fetch(w.image).then(r => r.blob())
     const bmp = await createImageBitmap(blob)
+    const k = ep.schede.indexOf(w.id)
     let file: Blob, nome: string
-    if (v.ok && ep.musica?.partitura.sezioni[i]) {
-      file = await videoFermo(bmp, await suona(ep.musica.partitura, i)); nome = `${ep.id}-${i + 1}.mp4`
+    if (v.ok && k >= 0 && ep.musica?.partitura.sezioni[k]) {
+      file = await videoFermo(bmp, await suona(ep.musica.partitura, k)); nome = `${ep.id}-${i + 1}.mp4`
     } else {
       const cv = new OffscreenCanvas(1080, 1350); cv.getContext('2d')!.drawImage(bmp, 0, 0, 1080, 1350)
       file = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 }); nome = `${ep.id}-${i + 1}.jpg`
@@ -416,7 +433,7 @@ function InstagramPanel({ onCambia }: { onCambia: (s: T.IgStato) => void }) {
   )
 }
 
-function EpisodiView({ st, works, ig, formato, onSalva }: { st: AgentState; works: Work[]; ig: boolean; formato: 'video' | 'immagini'; onSalva: () => void }) {
+function EpisodiView({ st, works, ig, formato, n, onSalva }: { st: AgentState; works: Work[]; ig: boolean; formato: 'video' | 'immagini'; n: number; onSalva: () => void }) {
   const eps = getEpisodi(st).slice().reverse()
   const V = getVisione(st)
   const byId = useMemo(() => new Map(works.map(w => [w.id, w])), [works])
@@ -437,6 +454,17 @@ function EpisodiView({ st, works, ig, formato, onSalva }: { st: AgentState; work
     }
   }
   const ferma = () => { audioRef.current?.close(); audioRef.current = null; setStato('') }
+  // anteprima: clic su una tavola = suona il suo pezzo di brano, come sarà nel post
+  const [suonaId, setSuonaId] = useState<string | null>(null)
+  const ascoltaTavola = async (ep: (typeof eps)[number], id: string) => {
+    audioRef.current?.close(); audioRef.current = null
+    if (suonaId === id || !ep.musica) { setSuonaId(null); return }
+    const k = ep.schede.indexOf(id)
+    if (!ep.musica.partitura.sezioni[k]) return
+    const ac = new AudioContext(); audioRef.current = ac; setSuonaId(id)
+    const src = ac.createBufferSource(); src.buffer = await suona(ep.musica.partitura, k); src.connect(ac.destination); src.start()
+    src.onended = () => setSuonaId(x => (x === id ? null : x))
+  }
   const scarica = async (ep: (typeof eps)[number]) => {
     const zip = new JSZip()
     const ws = ep.schede.map(id => byId.get(id)).filter(Boolean) as Work[]
@@ -475,7 +503,7 @@ function EpisodiView({ st, works, ig, formato, onSalva }: { st: AgentState; work
             <div className="flex gap-2">
               {ig && !(ep as Ep).instagram?.id && <button className={btn} onClick={async () => {
                 const ws = ep.schede.map(id => byId.get(id)).filter(Boolean) as Work[]
-                const r = await pubblicaSuInstagram(ep as Ep, ws, formato, setStato)
+                const r = await pubblicaSuInstagram(ep as Ep, ws, formato, setStato, n)
                 ;(ep as Ep).instagram = { ...r, quando: new Date().toISOString(), errore: r.error }
                 await T.putState(st); setStato(r.error ? `errore: ${r.error}` : 'pubblicato'); onSalva()
               }}>Pubblica su Instagram</button>}
@@ -485,12 +513,22 @@ function EpisodiView({ st, works, ig, formato, onSalva }: { st: AgentState; work
             </div>
           </div>
           {aperto === ep.id && <>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {ep.schede.map(id => byId.get(id)).filter(Boolean).map(w => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={w!.id} src={w!.image} alt={w!.title} title={w!.title} className="aspect-[4/5] h-64 shrink-0 rounded object-cover" />
-              ))}
-            </div>
+            {(() => {
+              const ws = ep.schede.map(id => byId.get(id)).filter(Boolean) as Work[]
+              const sc = new Set(cura(ws, n).map(w => w.id))
+              return <>
+                <div className="mb-1 text-xs text-white/50">{ws.length > sc.size ? `Nel post vanno le ${sc.size} evidenziate (su ${ws.length}). ` : ''}{ep.musica ? 'Clic su una tavola per sentire il suo pezzo di musica.' : ''}</div>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {ws.map(w => (
+                    <button key={w.id} onClick={() => ascoltaTavola(ep, w.id)} className={`relative shrink-0 rounded ${sc.has(w.id) ? '' : 'opacity-35'} ${suonaId === w.id ? 'ring-2 ring-emerald-300' : ''}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={w.image} alt={w.title} title={w.title} className="aspect-[4/5] h-64 rounded object-cover" />
+                      {suonaId === w.id && <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 text-xs">♪ suona</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            })()}
             <pre className="mt-2 whitespace-pre-wrap text-xs text-white/60">{ep.caption}</pre>
           </>}
         </div>
@@ -847,7 +885,7 @@ function Settings({ st, onSaved }: { st: AgentState; onSaved: () => void }) {
 }
 
 /** il profilo che si dà: nome, bio, presentazione, foto. Instagram non lascia cambiarli via API: si copiano a mano */
-function ProfiloView({ st, works, ig }: { st: AgentState; works: Work[]; ig: boolean }) {
+function ProfiloView({ st, works, ig, onSalva }: { st: AgentState; works: Work[]; ig: boolean; onSalva: () => void }) {
   const P = getProfilo(st)
   const [msg, setMsg] = useState('')
   if (!P) return <div className="text-sm text-white/50">Si scrive il profilo dopo la prima sequenza.</div>
@@ -887,6 +925,8 @@ function ProfiloView({ st, works, ig }: { st: AgentState; works: Work[]; ig: boo
       <div className={box}>
         <div className={h}>Il profilo che si è dato (giorno {P.day})</div>
         {riga('Nome', P.nome, 30)}
+        {P.perche && <div className="-mt-2 mb-3 text-sm italic text-emerald-200/80">{P.perche}</div>}
+        <button className={`${btn} mb-4`} onClick={async () => { const r = battezza(st, works.filter(w => w.day >= st.day - 20)); await T.putState(st); setMsg(r.perche); onSalva() }}>Chiedigli come si chiama</button>
         {riga('Nome utente (suggerito)', P.username, 30)}
         {riga('Bio', P.bio, 150)}
         {riga('Presentazione (primo post)', P.presentazione, 2200)}
