@@ -59,8 +59,13 @@ const head = (s: string) => s.trim().toLowerCase().split(/[\s']/)[0] ?? ''
 export const isNome = (w: string) => !!LEX && LEX.get(w)?.sg === w
 /** nome, anche al plurale */
 export const isNomeQ = (w: string) => !!LEX?.get(w)
+/** il genere visto nei testi letti («la fine», «il fine»): vince su quello del dizionario */
+const VISTO = new Map<string, { m: number; f: number }>()
+export function osservaGenere(w: string, g: G) { const x = VISTO.get(w) ?? { m: 0, f: 0 }; x[g]++; VISTO.set(w, x) }
 export function genere(s: string) {
   const h = head(s)
+  const vis = VISTO.get(h)
+  if (vis && vis.m !== vis.f) { const v0 = LEX?.get(h); const x0 = v0 ?? indovina(h); return { g: (vis.f > vis.m ? 'f' : 'm') as G, n: x0.n, noto: true } }
   const v = LEX?.get(h)
   const x = v ?? indovina(h)
   return { g: x.g, n: x.n, noto: !!v }

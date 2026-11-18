@@ -17,7 +17,7 @@ import type { AgentState } from '../core/types'
 import { pick, type Rnd } from '../core/rng'
 import { sentences } from '../reader/tokenize'
 import { describe, iperonimo, sinonimi, verbi, conceptsReady, type Verbo } from '../reader/concepts'
-import { accorda, art, concorda, genere, isNome, isNomeQ, realizza } from './lingua'
+import { accorda, art, concorda, genere, isNome, isNomeQ, osservaGenere, realizza } from './lingua'
 
 export interface Fatto { s: string; v: Verbo; forma: string; o?: string; compl: { prep: string; n: string; pre?: string }[]; neg: boolean; rifl: boolean; fonte: string }
 
@@ -51,7 +51,12 @@ function fattiClausola(frase: string, fonte: string): Fatto[] {
     while (pi >= 0 && ART.has(toks[pi])) pi--
     const prev = toks[i - 1]
     const prevW = toks[pi]
-    if (nome(w) && (!V.has(w) || ART.has(prev))) {
+    if (nome(w) && ART.has(prev)) osservaGenere(w, /^(la|le|una|un')$/.test(prev) ? 'f' : 'm')
+    // parola che può essere nome o verbo («porta», «lotta», «lavoro»): è verbo se c'è già un soggetto,
+    // non segue articolo o preposizione, e dopo viene un articolo, una preposizione o un nome
+    const nx = toks[i + 1]
+    const ambiguaVerbo = V.has(w) && soggetto && !ART.has(prev) && !(prev && PREP[prev]) && !!nx && (ART.has(nx) || !!PREP[nx] || nome(nx))
+    if (nome(w) && (!V.has(w) || ART.has(prev)) && !ambiguaVerbo) {
       if (!(prevW && PREP[prevW] && soggetto)) soggetto = w
       continue
     }
@@ -77,6 +82,7 @@ function fattiClausola(frase: string, fonte: string): Fatto[] {
       if (t === 'e' && toks.slice(j + 1, j + 4).some(x => V.has(x) && !isNomeQ(x))) break
       if (PREP[t]) { prep = prep && ['intorno', 'vicino', 'davanti', 'oltre', 'lontano'].includes(prep) ? `${prep}+${PREP[t]}` : PREP[t]; continue }
       if (ART.has(t)) continue
+      if (nome(t) && ART.has(toks[j - 1])) osservaGenere(t, /^(la|le|una|un')$/.test(toks[j - 1]) ? 'f' : 'm')
       if (nome(t) && (!V.has(t) || prep || ART.has(toks[j - 1]))) {
         if (prep) { const [pre, pp] = prep.includes('+') ? prep.split('+') : [undefined, prep]; compl.push({ prep: pp, n: t, pre }); prep = null } else if (!o) o = t
       }
@@ -91,6 +97,16 @@ function fattiClausola(frase: string, fonte: string): Fatto[] {
 
 /** i fatti su un concetto, da tutte le letture in memoria */
 export function fattiSu(st: AgentState, concetto: string, max = 40): Fatto[] {
+  const k = `${concetto}|${st.readings.length}|${st.readings[st.readings.length - 1]?.title ?? ''}`
+  const hit = CACHE.get(k)
+  if (hit) return hit
+  const res = fattiSuRaw(st, concetto, max)
+  if (CACHE.size > 300) CACHE.clear()
+  CACHE.set(k, res)
+  return res
+}
+const CACHE = new Map<string, Fatto[]>()
+function fattiSuRaw(st: AgentState, concetto: string, max: number): Fatto[] {
   if (!conceptsReady()) return []
   const out: Fatto[] = []
   const seen = new Set<string>()
@@ -137,7 +153,7 @@ function riscrivi(r: Rnd, f: Fatto, usate: Set<string>, forza?: 'attiva' | 'pass
   const p = part(f.v)
   const trans = !!O && !COPULA.test(f.v.inf)
   const h = O ? iperonimo(O) : null
-  const scelte = ['attiva', 'attiva', 'scissa', ...(trans ? ['domanda'] : []), ...(trans && p && !f.rifl ? ['passiva', 'passiva'] : []), ...(trans && h && h !== O && isNome(h) && r() < 0.3 ? ['generale'] : [])]
+  const scelte = ['attiva', 'attiva', 'scissa', ...(trans ? ['domanda'] : []), ...(trans && p && !f.rifl ? ['passiva', 'passiva'] : []), ...(trans && h && h !== O && isNome(h) && sinonimi(O!).length && r() < 0.3 ? ['generale'] : [])]
   const k = forza && scelte.includes(forza) ? forza : pick(r, scelte)
   switch (k) {
     case 'passiva': return `${d(O!)} ${non}${genere(O!).n === 'p' ? 'vengono' : 'viene'} ${accorda(p!, O!)} ${art(S, 'da')}${comp}`
@@ -165,19 +181,21 @@ function aggrega(r: Rnd, fs: Fatto[], usate: Set<string>): string[] {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const fine = (s: string) => (/[.?!:]$/.test(s) ? s : s + '.')
 
-export interface Contesto { tesi?: string; prima?: string; segno?: string; altri?: string[]; contro?: boolean; usati?: Set<string> }
+export interface Contesto { tesi?: string; prima?: string; segno?: string; altri?: string[]; contro?: boolean; usati?: Set<string>; dedotte?: Set<string> }
 export const chiaveFatto = (f: Fatto) => `${f.s}|${f.v.inf}|${f.o ?? ''}|${f.compl[0]?.n ?? ''}`
 const pulisciTesi = (t: string) => t.replace(/^(ancora|forse|e poi|e invece|e)\s*:?\s+/i, '')
 
 /** un paragrafo scritto da lui sul concetto */
-export function scriviParagrafo(st: AgentState, r: Rnd, c: string, ctx: Contesto = {}): { testo: string; fonti: string[]; punti: string[]; fatti: number; chiavi: string[] } {
+export function scriviParagrafo(st: AgentState, r: Rnd, c: string, ctx: Contesto = {}): { testo: string; fonti: string[]; punti: string[]; fatti: number; chiavi: string[]; dedotta?: Deduzione } {
   const usate = new Set<string>()
   const fs = fattiSu(st, c).filter(f => !ctx.usati?.has(chiaveFatto(f))).sort(() => r() - 0.5)
   const frasi: string[] = []
   const punti: string[] = []
+  let dedotta: Deduzione | undefined
   // 1. da dove parte: la definizione, detta a modo suo
-  const D = describe(c)
-  if (D && r() < 0.45) {
+  const ctxSet = new Set([...fs.flatMap(f => [f.s, f.o, ...f.compl.map(z => z.n)]).filter(Boolean) as string[], ...(ctx.altri ?? [])])
+  const D = describe(c, ctxSet)
+  if (D && D.sicuro && r() < 0.45) {
     const h = D.text.match(/un tipo di ([^;(]+)/)?.[1]?.split(',')[0]?.trim()
     const ha = D.text.match(/ha ([^;(]+)/)?.[1]?.split(',')[0]?.trim()
     const contr = D.text.match(/contrario di ([^;(]+)/)?.[1]?.split(',')[0]?.trim()
@@ -217,6 +235,9 @@ export function scriviParagrafo(st: AgentState, r: Rnd, c: string, ctx: Contesto
       scelti.push(ponte)
       break
     }
+    // 2c. dedurre: qualcosa che non ha letto da nessuna parte
+    const ded = deduci(st, r, [c, ...(ctx.altri ?? [])].slice(0, 6)).filter(x => (x.a === c || x.b === c) && !ctx.dedotte?.has(x.testo))
+    if (ded.length) { frasi.push(diciDeduzione(r, ded[0]).replace(/\.$/, '')); dedotta = ded[0] }
     // 3. sintesi: che cosa fa questo concetto, nel complesso
     const verbiS = [...new Set(scelti.filter(f => f.s === c).map(f => f.v.inf))].slice(0, 3)
     const subisce = [...new Set(scelti.filter(f => f.o === c).map(f => f.s))].slice(0, 3)
@@ -231,7 +252,8 @@ export function scriviParagrafo(st: AgentState, r: Rnd, c: string, ctx: Contesto
   if (ctx.altri?.length && r() < 0.6) frasi.push(realizza(pick(r, ['resta da capire che cosa c\'entri {det:x}', 'e {det:x}, dove sta in tutto questo?', 'non so ancora cosa farmene {di:x}']), { x: pick(r, ctx.altri) }))
   const fonti = [...new Set(scelti.map(f => f.fonte))]
   const testo = concorda(frasi.map(x => fine(cap(x.trim()))).join(' ')) + (fonti.length ? ` (Letto in: ${fonti.map(x => `«${x}»`).join(', ')}.)` : '')
-  return { testo, fonti, punti, fatti: scelti.length, chiavi: scelti.map(chiaveFatto) }
+  if (dedotta) punti.push(cap(dedotta.testo))
+  return { testo, fonti, punti, fatti: scelti.length, chiavi: scelti.map(chiaveFatto), dedotta }
 }
 
 /** un'obiezione: un fatto che va contro, riscritto */
@@ -244,4 +266,71 @@ export function scriviObiezione(st: AgentState, r: Rnd, c: string, sua?: string)
     testo: concorda(`${pick(r, ['Ma c\'è un\'altra lettura', 'Qualcosa non torna', 'Devo contraddirmi'])}: in «${f.fonte}» viene fuori che ${x}. ${sua ? `Se è così, quello che sostenevo (${sua}) regge meno di quanto credevo.` : 'Se è così, quello che ho scritto sopra regge meno.'} Ci devo tornare.`),
     fonte: f.fonte,
   }
+}
+
+
+// ─── dedurre: frasi che non ha letto da nessuna parte ──────────────────────
+export interface Deduzione { testo: string; premesse: string[]; tipo: 'catena' | 'dipendenza' | 'contesa' | 'disaccordo' | 'eredita'; a: string; b: string }
+
+const DIPENDE = /^(dipendere|vivere|nascere|derivare|crescere|nutrire|reggere)$/
+/** ragiona sui fatti di più concetti: catene, dipendenze, contese, disaccordi tra fonti, eredità dal genere */
+export function deduci(st: AgentState, r: Rnd, concetti: string[]): Deduzione[] {
+  const fs = [...new Map(concetti.flatMap(c => fattiSu(st, c, 30)).map(f => [chiaveFatto(f), f])).values()]
+  const out: Deduzione[] = []
+  const frase = (f: Fatto) => riscrivi(r, f, new Set(), 'attiva')
+  // dipendenze: «senza A, X si svuota» → X dipende da A; «X nasce intorno a A», «X vive di A»
+  const dip: { x: string; a: string; f: Fatto }[] = []
+  for (const f of fs) {
+    for (const k of f.compl) {
+      if (k.prep === 'senza') dip.push({ x: f.s, a: k.n, f })
+      else if (DIPENDE.test(f.v.inf) && ['da', 'di', 'a', 'intorno'].includes(k.prep)) dip.push({ x: f.s, a: k.n, f })
+    }
+  }
+  for (const t of st.readings) for (const s0 of sentences(t.text).slice(0, 150)) {
+    const m = s0.toLowerCase().match(/senza (?:il |lo |la |l'|i |gli |le )?([a-zàèéìòù]+)[ ,]+(?:il |lo |la |l'|i |gli |le )?([a-zàèéìòù]+) (?:si |non )?([a-zàèéìòù]+)/)
+    if (m && isNomeQ(m[1]) && isNomeQ(m[2]) && concetti.some(c => c === m[1] || c === m[2])) {
+      const v = verbi().get(m[3])
+      if (v) dip.push({ x: m[2], a: m[1], f: { s: m[2], v, forma: m[3], compl: [{ prep: 'senza', n: m[1] }], neg: false, rifl: /\bsi\b/.test(s0), fonte: t.title } })
+    }
+  }
+  // 1. dipendenza + ciò che fa la cosa da cui si dipende → «X vive del B di A»
+  for (const d0 of dip) for (const f of fs) {
+    if (f.s !== d0.a || !f.o || f.o === d0.x) continue
+    out.push({ tipo: 'dipendenza', a: d0.x, b: f.o, premesse: [frase(d0.f), frase(f)], testo: realizza(pick(r, ['{det:x} vive {di:b} {di:a}', 'quello che regge {det:x} è {det:b} che {det:a} decide', 'tolto {det:a}, {a:x} manca {det:b}']), { x: d0.x, a: d0.a, b: f.o }) })
+  }
+  // 2. catena: A fa B, B fa C → A arriva a C passando per B
+  for (const f1 of fs) for (const f2 of fs) {
+    if (f1 === f2 || !f1.o || f1.o !== f2.s || !(f2.o || f2.compl[0]) || f1.s === (f2.o ?? f2.compl[0]?.n)) continue
+    const c = f2.o ?? f2.compl[0].n
+    out.push({ tipo: 'catena', a: f1.s, b: c, premesse: [frase(f1), frase(f2)], testo: realizza(pick(r, ['{det:a} arriva fino {a:c}, passando per {det:b}', 'dietro {a:c} c\'è {det:a}, anche se non si vede: in mezzo sta {det:b}', 'se tocchi {det:a} si muove anche {det:c}']), { a: f1.s, b: f1.o, c }) })
+  }
+  // 3. contesa: due soggetti agiscono sulla stessa cosa
+  const perO = new Map<string, Fatto[]>()
+  for (const f of fs) if (f.o) perO.set(f.o, [...(perO.get(f.o) ?? []), f])
+  for (const [o, g] of perO) {
+    const sogg = [...new Set(g.map(f => f.s))]
+    if (sogg.length < 2) continue
+    out.push({ tipo: 'contesa', a: sogg[0], b: sogg[1], premesse: g.slice(0, 2).map(frase), testo: realizza(pick(r, ['{det:a} e {det:b} si contendono {det:o}', '{det:o} sta in mezzo, tirato da {det:a} e da {det:b}']), { a: sogg[0], b: sogg[1], o }) })
+  }
+  // 4. disaccordo: stessa cosa detta e negata da fonti diverse
+  for (const f1 of fs) for (const f2 of fs) {
+    if (f1.s === f2.s && f1.v.inf === f2.v.inf && f1.o === f2.o && f1.neg !== f2.neg && f1.fonte !== f2.fonte) {
+      out.push({ tipo: 'disaccordo', a: f1.s, b: f1.o ?? '', premesse: [frase(f1), frase(f2)], testo: `su questo le fonti non sono d'accordo: per «${f1.fonte}» sì, per «${f2.fonte}» no` })
+    }
+  }
+  // 5. eredità: A è un tipo di H, e di H si dice che fa X → forse anche A
+  for (const c of concetti) {
+    const h = iperonimo(c, new Set(concetti))
+    if (!h || h === c) continue
+    const fh = fattiSu(st, h, 10).find(f => f.s === h && f.o)
+    if (fh) out.push({ tipo: 'eredita', a: c, b: fh.o!, premesse: [`${art(c, 'det')} è un tipo ${art(h, 'di')}`, frase(fh)], testo: realizza('forse anche {det:a} {v} {det:b}: se è un tipo {di:h}, gli tocca', { a: c, b: fh.o!, h, v: pres3(fh.v, fh.forma) }) })
+  }
+  const seen = new Set<string>()
+  return out.filter(d => { const k = d.testo; if (seen.has(k)) return false; seen.add(k); return true }).sort(() => r() - 0.5)
+}
+
+/** una deduzione detta per esteso: le premesse e la conclusione */
+export function diciDeduzione(r: Rnd, d: Deduzione): string {
+  const intro = pick(r, ['Metto insieme due cose', 'Provo a ragionare', 'Ne ricavo una cosa che non ho letto da nessuna parte'])
+  return concorda(`${intro}: ${d.premesse.join(', e ')}. ${pick(r, ['Allora', 'Quindi', 'Ne viene che'])} ${d.testo}.`)
 }

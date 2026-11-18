@@ -40,8 +40,8 @@ export type Rel = 'contro' | 'causa' | 'dentro' | 'identita' | 'diventa' | 'acca
 export interface Motivo { forma: Sogg | 'ricetta' | 'codice'; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
 export interface Concetto { word: string; motivo?: Motivo; frasi: number; usi: number; ultima: number }
 export interface Frase { t: string; fonte: string; nomi: string[]; day: number; usata?: number; rel?: Rel }
-export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita'; riuscita?: number }
-export interface Atlante { concetti: Record<string, Concetto>; frasi: Frase[]; tesi: Tesi[] }
+export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita' | 'deduce'; riuscita?: number }
+export interface Atlante { concetti: Record<string, Concetto>; frasi: Frase[]; tesi: Tesi[]; deduzioni?: { day: number; a: string; b: string; tipo: string; testo: string; premesse: string[] }[] }
 export interface Enunciato { a: string; b: string; rel: Rel; citazione: string; fonte: string; frase: string; postura: Tesi['postura']; perche: string }
 
 type WithA = AgentState & { atlante?: Atlante }
@@ -119,6 +119,13 @@ export function enunciato(st: AgentState, r: Rnd, parola: string, precedente?: E
     const postura: Tesi['postura'] = r() < 0.5 ? 'dubita' : 'conferma'
     return { ...precedente, postura, frase: dire(r, precedente.a, precedente.b, precedente.rel, postura), perche: 'la stessa cosa, detta un\'altra volta' }
   }
+  // a volte la tavola dice una cosa che ha dedotto lui, non letta
+  const ds = (A.deduzioni ?? []).filter(x => st.day - x.day < 6 && !A.tesi.some(t => t.frase === x.testo))
+  if (ds.length && r() < 0.4) {
+    const x = pick(r, ds)
+    const rel: Rel = x.tipo === 'contesa' || x.tipo === 'disaccordo' ? 'contro' : x.tipo === 'dipendenza' ? 'dentro' : x.tipo === 'catena' ? 'causa' : 'identita'
+    return { a: x.a, b: x.b || x.a, rel, citazione: x.premesse.join('; ').slice(0, 120), fonte: 'ragionamento mio', frase: x.testo, postura: 'deduce', perche: `l'ho dedotto io: ${x.premesse.join(', e ')}` }
+  }
   // da dove partire: il filo di ieri (prosegue da B), la parola del giorno, o un concetto ricco
   const filo = last && r() < 0.5 ? last.b : null
   const peso = (w: string) => Math.min(8, A.concetti[w]?.frasi ?? 0) + (A.concetti[w]?.motivo ? 2 : 0) + (anchorOf(w) ? 1 : 0)
@@ -170,7 +177,7 @@ function dire(r: Rnd, a: string, b: string, rel: Rel, postura: Tesi['postura']):
     diventa: ['{det:a} diventa {det:b}', '{det:a} si consuma in {b}', 'da {a} a {b}, lentamente'],
     accanto: ['{det:a} accanto {a:b}', '{det:a} e {det:b}, vicini senza saperlo', 'mettere {det:a} vicino {a:b}'],
   }
-  const pre = { legge: '', conferma: 'ancora: ', rovescia: 'e invece ', prosegue: 'e poi ', dubita: 'forse ' }[postura]
+  const pre = { legge: '', conferma: 'ancora: ', rovescia: 'e invece ', prosegue: 'e poi ', dubita: 'forse ', deduce: 'allora ' }[postura]
   return pre + realizza(pick(r, T[rel]), { a, b })
 }
 

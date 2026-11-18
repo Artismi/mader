@@ -94,9 +94,37 @@ function relationsRaw(word: string, maxSenses: number): Triple[] {
 }
 
 /** definizione per genere prossimo: "è un tipo di X (categoria); ha come parte …; contrario di …" */
-export function describe(word: string): { text: string; words: string[]; category: string } | null {
+/**
+ * Il significato giusto: tra i sensi di un nome sceglie quello che sta meglio nel contesto
+ * (parole lette intorno), preferendo i sensi in cui la parola è il lemma principale.
+ * Restituisce anche quanto è sicuro, per non dire cose a caso quando non lo è.
+ */
+export function senso(word: string, ctx?: Set<string>): { i: number; sicuro: boolean } | null {
   if (!data) return null
-  const s = senses(word)[0]
+  const all = senses(word).length ? (() => { for (const f of [word.toLowerCase()]) { const s = data!.lex[f]; if (s?.length) return s } return senses(word) })() : []
+  const nomi = all.filter(i => data!.syn[i][2] === 'n')
+  if (!nomi.length) return all.length ? { i: all[0], sicuro: false } : null
+  const lem = (i: number) => (data!.syn[i][0] as string[]).flatMap(x => x.split(' '))
+  const score = nomi.map(i => {
+    const syn = data!.syn[i]
+    const bag = new Set([...lem(i), ...KEYS.flatMap(k => rels(i, k)).flatMap(j => lem(j))])
+    for (const h of rels(i, 'h')) for (const hh of rels(h, 'h')) lem(hh).forEach(x => bag.add(x))
+    let sc = 0
+    if (ctx) for (const w of ctx) if (w !== word && bag.has(w)) sc += 3
+    if ((syn[0] as string[])[0] === word) sc += 1.5
+    sc += Math.min(1, KEYS.reduce((a, k) => a + rels(i, k).length, 0) * 0.15)
+    if (['luogo', 'oggetto fatto', 'evento', 'tempo', 'cosa naturale', 'gruppo', 'stato'].includes(syn[1] as string)) sc += 0.4
+    if (rels(i, 'h').some(h => lemma(h).startsWith('('))) sc -= 1
+    return { i, sc }
+  }).sort((a, b) => b.sc - a.sc)
+  const sicuro = score.length === 1 || score[0].sc - score[1].sc >= 1 || score[0].sc >= 3
+  return { i: score[0].i, sicuro }
+}
+
+export function describe(word: string, ctx?: Set<string>): { text: string; words: string[]; category: string; sicuro?: boolean } | null {
+  if (!data) return null
+  const ss = senso(word, ctx)
+  const s = ss?.i
   if (s === undefined) return null
   const syn = data.syn[s]
   const words: string[] = []
@@ -111,7 +139,7 @@ export function describe(word: string): { text: string; words: string[]; categor
     if (xs.length) { bits.push(`${lab} ${xs.join(', ')}`); words.push(...xs) }
   }
   if (!bits.length) return null
-  return { text: `${word}: ${bits.join('; ')} (${syn[1]})`, words: words.flatMap(w => w.split(' ')).filter(w => w.length > 2), category: syn[1] }
+  return { text: `${word}: ${bits.join('; ')} (${syn[1]})`, words: words.flatMap(w => w.split(' ')).filter(w => w.length > 2), category: syn[1], sicuro: ss?.sicuro }
 }
 
 /** campo semantico: parole raggiungibili in pochi passi, con la strada fatta */
@@ -184,10 +212,10 @@ export function verbi(): Map<string, Verbo> {
       if (!['are', 'ere', 'ire', 'rre'].includes(con)) continue
       const stem = l.slice(0, -3)
       const v: Verbo = { inf: l, con, stem }
-      const fs = con === 'are' ? ['a', 'ano', 'ato', 'ava', 'avano', 'ò', 'erà', 'ata', 'ati', 'ate']
-        : con === 'ere' ? ['e', 'ono', 'uto', 'eva', 'evano', 'erà', 'uta']
-        : con === 'ire' ? ['e', 'ono', 'isce', 'iscono', 'ito', 'iva', 'ivano', 'irà', 'ita']
-        : ['ce', 'cono', 'ceva', 'cevano']
+      const fs = con === 'are' ? ['a', 'ano', 'ato', 'ava', 'avano', 'ò', 'arono', 'erà', 'eranno', 'erebbe', 'ata', 'ati', 'ate']
+        : con === 'ere' ? ['e', 'ono', 'uto', 'eva', 'evano', 'é', 'ette', 'erono', 'ettero', 'erà', 'eranno', 'erebbe', 'uta']
+        : con === 'ire' ? ['e', 'ono', 'isce', 'iscono', 'ito', 'iva', 'ivano', 'ì', 'irono', 'irà', 'iranno', 'irebbe', 'ita']
+        : ['ce', 'cono', 'ceva', 'cevano', 'sse', 'ssero', 'rrà']
       m.set(l, v)
       for (const f of fs) if (!m.has(stem + f)) m.set(stem + f, v)
     }
@@ -196,15 +224,18 @@ export function verbi(): Map<string, Verbo> {
   return m
 }
 /** sinonimi nominali e iperonimo di una parola (per variare il lessico quando riscrive) */
-export function sinonimi(w: string): string[] {
+export function sinonimi(w: string, ctx?: Set<string>): string[] {
   if (!data) return []
-  const s = senses(w).find(i => data!.syn[i][2] === 'n')
+  const ss = senso(w, ctx)
+  if (!ss?.sicuro) return []
+  const s = ss.i
   return s === undefined ? [] : (data.syn[s][0] as string[]).filter(x => x !== w && !x.includes(' ')).slice(0, 4)
 }
-export function iperonimo(w: string): string | null {
+export function iperonimo(w: string, ctx?: Set<string>): string | null {
   if (!data) return null
-  const s = senses(w).find(i => data!.syn[i][2] === 'n')
-  if (s === undefined) return null
+  const ss = senso(w, ctx)
+  if (!ss) return null
+  const s = ss.i
   const h = rels(s, 'h')[0]
   return h === undefined ? null : lemma(h)
 }
