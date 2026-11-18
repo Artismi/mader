@@ -16,11 +16,11 @@ import { sentences } from '../reader/tokenize'
 import { pick, range, uid, weighted, type Rnd } from '../core/rng'
 import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 import type { Tone } from '@/components/studio/genera/recipes'
-import { newCanvas, withLayer, fullLayer, emptySheet, type Sheet } from '../hands/sheet'
+import { newCanvas, withLayer, fullLayer, emptySheet, flatten, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
 import { ensureAtlante, mettiInScena, segnoDi, type Enunciato, type Rel } from './atlante'
-import { coerenza, deduci, diciDeduzione, fattiDi, fattiSu, scriviObiezione, type Deduzione, type Fatto } from '../voice/scrittura'
+import { coerenza, deduci, diciDeduzione, fattiDi, fattiSu, scriviObiezione, scriviParagrafo, type Deduzione, type Fatto } from '../voice/scrittura'
 import { art, concorda, realizza } from '../voice/lingua'
 import { getCantieri } from './cantiere'
 import { APERTURE } from '../voice/conclusioni'
@@ -110,28 +110,55 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const forma = weighted(r, forme, pesoF, 0.8)
   ;(st as WithV & { formeUsate?: FormaSeq[] }).formeUsate = [...usate, forma].slice(-20)
 
+  const centro = d?.a ?? filo ?? nodi[0] ?? ''
+  /** il suo commento a un fatto: che cosa vuol dire, e perché gli interessa */
+  const glossa = (f?: Fatto): string => {
+    if (!f) return ''
+    const o0 = f.o ?? f.compl[0]?.n ?? ''
+    // «X nasce da Y»: la causa è Y, l'effetto X
+    const origine = !f.o && (f.compl[0]?.prep === 'da' || /^(nascere|derivare|venire|dipendere)$/.test(f.v.inf))
+    const v = origine ? { s: o0, o: f.s, c: centro } : { s: f.s, o: o0, c: centro }
+    const o = v.o
+    const T: Record<Rel, string[]> = {
+      causa: ['quindi {det:o} non viene dal nulla: dietro c\'è {det:s}', 'se cambia {det:s}, cambia anche {det:o}', 'chi tocca {det:s} tocca anche {det:o}, anche senza volerlo'],
+      contro: ['qui c\'è un no: {det:s} e {det:o} non stanno insieme', 'tra {det:s} e {det:o} non passa niente', 'è una frattura, non un legame'],
+      dentro: ['{det:o} è il posto dove {det:s} succede', '{det:s} non si capisce fuori {da:o}', 'uno contiene l\'altro: {det:s} sta {in:o}'],
+      identita: ['due nomi per quasi la stessa cosa', 'dire {det:s} è già un po\' dire {det:o}', '{det:s} e {det:o} si somigliano più di quanto pensavo'],
+      diventa: ['niente resta com\'è: {det:s} passa {in:o}', 'è un passaggio, non uno stato', 'oggi {det:s}, domani {det:o}'],
+      accanto: ['stanno vicini, e la vicinanza conta', '{det:s} e {det:o} non si toccano, ma si guardano'],
+    }
+    const g = o ? realizza(pick(r, T[REL_VERBO(f)]), v) : ''
+    const perche = centro && centro !== f.s && centro !== o && r() < 0.5 ? realizza(pick(r, [' E mi serve per capire {det:c}.', ' Lo tengo perché parlo {di:c}.', ' Questo sposta qualcosa {in:c}.']), v) : ''
+    return concorda(cap(g) + '.' + perche + ` (${f.fonte})`)
+  }
+  /** due frasi sue su una parola: quello che sa di lei, riscritto */
+  const riassunto = (w: string) => {
+    const p = scriviParagrafo(st, r, w, { altri: nodi.filter(x => x !== w).slice(0, 3) })
+    return p.testo.replace(/\s*\(Letto in:.*$/, '').split(/(?<=[.?!])\s+/).slice(0, 2).join(' ')
+  }
+  let mute = 0
   const S: Scheda[] = []
-  const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: x.f ? pick(r, [`Da «${x.f.fonte}».`, '', `Così dice «${x.f.fonte}».`]) : '', a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
-  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: d.conf < 0.4 ? pick(r, ['(Non ne sono sicuro.)', '(È un\'ipotesi.)', '']) : '', catena: [d.a, d.b], a: d.a, b: d.b } : null)
-  const muta = (a?: string, b?: string): Scheda => ({ ruolo: 'silenzio', titolo: '', corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
-  const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: '', a: w })
+  const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: glossa(x.f), a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
+  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`), catena: [d.a, d.b], a: d.a, b: d.b } : null)
+  const muta = (a?: string, b?: string): Scheda | null => (mute++ >= 1 ? null : { ruolo: 'silenzio', titolo: d ? cap(senzaAttacco(d.testo).split(/[,:;]/)[0]) : tesi.length ? cap(pick(r, tesi).testo.split(/[,:;]/)[0]) : cap(V.titolo), corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
+  const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: riassunto(w), a: w })
   const ritorno = (): Scheda | null => (prev && r() < 0.35 ? { ruolo: 'prima', titolo: pick(r, ['Torno su una cosa', 'Me lo ero già chiesto', 'Ancora']), corpo: `${cap(prev.conclusione)}.`, a: d?.a } : null)
   const dub = (): Scheda[] => [co.ritrattazione ? { ruolo: 'controllo', titolo: 'Non torna', corpo: diciDeduzione(r, co.ritrattazione), a: d?.a, b: d?.b, rel: 'contro' as Rel } : null, ob ? { ruolo: 'obiezione', titolo: pick(r, ['Però', 'Eppure', 'Qualcuno direbbe di no']), corpo: ob.testo, a: d?.a, b: d?.b, rel: 'contro' as Rel, fonte: ob.fonte } : null].filter(Boolean) as Scheda[]
   const push = (...xs: (Scheda | null | undefined)[]) => { for (const x of xs) if (x) S.push(x) }
 
   switch (forma) {
     case 'lineare':
-      push(r() < 0.5 ? { ruolo: 'domanda', titolo: cap(domanda), corpo: '', a: d?.a, b: d?.b } : muta(), ritorno())
-      fatti.forEach((x, i) => { push(pre(x)); if (i > 0 && r() < 0.5) push({ ruolo: 'passaggio', titolo: pick(r, ['Metto insieme', 'E quindi', 'Qui si toccano']), corpo: '', catena: nodi.slice(0, 4) }) })
+      push(r() < 0.6 ? { ruolo: 'domanda', titolo: cap(domanda), corpo: pick(r, ['Provo a rispondere con quello che ho letto.', 'Parto dalle fonti, il resto lo deduco io.', 'Non lo so ancora. Vediamo.']), a: d?.a, b: d?.b } : muta(), ritorno())
+      fatti.forEach((x, i) => { push(pre(x)); if (i > 0 && r() < 0.5) push({ ruolo: 'passaggio', titolo: pick(r, ['Metto insieme', 'E quindi', 'Qui si toccano']), corpo: concorda(`${cap(fatti[i - 1].titolo)}; ${fatti[i].titolo}.`), catena: nodi.slice(0, 4) }) })
       push(conc(), ...dub())
       break
     case 'a ritroso':
-      push(conc() && { ...conc()!, ruolo: 'copertina' as Ruolo }, { ruolo: 'risposta', titolo: pick(r, ['Perché lo dico?', 'Da dove viene?', 'Come ci arrivo']), corpo: '', a: d?.a })
+      push(conc() && { ...conc()!, ruolo: 'copertina' as Ruolo, corpo: '' }, { ruolo: 'risposta', titolo: pick(r, ['Perché lo dico?', 'Da dove viene?', 'Come ci arrivo']), corpo: pick(r, ['Torno indietro, un fatto alla volta.', 'Smonto la frase nei pezzi che la reggono.']), a: d?.a })
       fatti.slice().reverse().forEach(x => push(pre(x)))
       push(...dub(), r() < 0.5 ? muta(d?.a, d?.b) : null)
       break
     case 'contrappunto':
-      for (const x of fatti) push(muta(x.f?.s, x.f?.o), pre(x))
+      fatti.forEach((x, i) => { if (i % 2 === 0) push(muta(x.f?.s, x.f?.o)); push(pre(x)) })
       push(muta(d?.a, d?.b), conc())
       break
     case 'crescendo':
@@ -140,7 +167,7 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
       push(conc() && { ...conc()!, catena: nodi.slice(0, 6) })
       break
     case 'frammenti': {
-      const pezzi: Scheda[] = [...fatti.map(pre), ...(conc() ? [conc()!] : []), ...nodi.slice(0, 3).map(w => parola(w)), muta(), muta()]
+      const pezzi: Scheda[] = [...fatti.map(pre), ...(conc() ? [conc()!] : []), ...nodi.slice(0, 2).map(w => parola(w)), muta()].filter(Boolean) as Scheda[]
       for (let i = pezzi.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pezzi[i], pezzi[j]] = [pezzi[j], pezzi[i]] }
       push(...pezzi)
       break
@@ -152,9 +179,9 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
     case 'catalogo':
       for (const w of nodi.slice(0, Math.max(3, N - 2))) {
         const f = allFs.find(x => x.s === w) ?? fatti.find(x => x.f?.s === w)?.f
-        push({ ruolo: 'definizione', titolo: cap(w), corpo: f ? cap(frase(f)) + '.' : '', a: w })
+        push({ ruolo: 'definizione', titolo: cap(w), corpo: riassunto(w) || (f ? cap(frase(f)) + '.' : ''), a: w })
       }
-      push(d ? { ruolo: 'passaggio', titolo: cap(senzaAttacco(d.testo)), corpo: '', catena: nodi.slice(0, 6) } : muta())
+      push(d ? { ruolo: 'passaggio', titolo: cap(senzaAttacco(d.testo)), corpo: d.premesse.join('; ') + '.', catena: nodi.slice(0, 6) } : muta())
       break
     case 'manifesto':
       for (const t of [...tesi.slice(-3).map(t => t.testo), ...(d ? [d.testo] : [])]) push({ ruolo: 'copertina', titolo: cap(senzaAttacco(t)).toUpperCase(), corpo: '', a: tesi.find(x => x.testo === t)?.a ?? d?.a, b: tesi.find(x => x.testo === t)?.b ?? d?.b, rel: 'causa' })
@@ -162,10 +189,10 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
       break
   }
   // chiusa: a volte una domanda, a volte un'immagine sola, a volte niente
-  if (r() < 0.35 && S.length < N) push({ ruolo: 'coda', titolo: cap(domanda), corpo: '', a: d?.b })
+  if (r() < 0.35 && S.length < N) push({ ruolo: 'coda', titolo: cap(domanda), corpo: pick(r, ['Per ora resta aperta.', 'Non ho ancora la risposta.', 'Ci torno.']), a: d?.b })
   else if (r() < 0.3 && S.length < N) push(muta(d?.b))
-  const schede = S.filter(x => x.titolo || x.ruolo === 'silenzio').slice(0, N)
-  if (!schede.length) schede.push(muta())
+  const schede = S.filter(x => x.titolo).slice(0, N)
+  if (!schede.length) { mute = 0; schede.push(muta()!) }
   return { schede, d, titolo, domanda, lettura, forma }
 }
 
@@ -211,6 +238,16 @@ const LAY_REL: Record<Rel, Lay[]> = {
   identita: ['sovrapposti', 'griglia', 'zoom'], diventa: ['coppia', 'griglia', 'vuoto'], accanto: ['coppia', 'vuoto', 'griglia', 'diviso'],
 }
 let ultimoLay: Lay | null = null
+const hx = (a: number, b: number, c: number) => '#' + [a, b, c].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
+function mediaSotto(s: Sheet, x0: number, y0: number, x1: number, y1: number): string {
+  const c = flatten(s, 0.2), g = c.getContext('2d')!
+  const X = Math.max(0, Math.floor(x0 * c.width)), Y = Math.max(0, Math.floor(y0 * c.height))
+  const w = Math.max(1, Math.min(c.width - X, Math.ceil((x1 - x0) * c.width))), h = Math.max(1, Math.min(c.height - Y, Math.ceil((y1 - y0) * c.height)))
+  const d = g.getImageData(X, Y, w, h).data
+  let R = 0, G = 0, B = 0, n = 0
+  for (let i = 0; i < d.length; i += 16) { R += d[i]; G += d[i + 1]; B += d[i + 2]; n++ }
+  return hx(R / n, G / n, B / n)
+}
 const lid2 = () => `e${Math.random().toString(36).slice(2, 9)}`
 
 export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number, N: number, nEp: number, ctx0: ToolCtx, face: FaceId): Promise<Sheet> {
@@ -266,13 +303,20 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
   } else {
     zona = { x0: 0.07, y0: 0.4, x1: 0.93 }
   }
-  if (sc.ruolo === 'parola') zona = { x0: 0.07, y0: pick(r, [0.12, 0.42, 0.7]), x1: 0.93 }
+  if (sc.ruolo === 'parola') zona = { x0: 0.07, y0: pick(r, [0.5, 0.6]), x1: 0.93 }
+  if (sc.corpo.length > 160 && zona.y0 > 0.6) zona = { ...zona, y0: 0.56 }
   // 3. il testo: intestazione, titolo, corpo; la piastra solo se sotto c'è troppa materia
   const ink = [t.ink, t.acc, t.bg, '#111111', '#f4f2ec'].sort((a, b) => ratio(b, t.bg) - ratio(a, t.bg))[0]
   const prova = { ...s, layers: [] }
-  const scrivi = async (text: string, left: number, top: number, size: number, maxW: number, f: FaceId, color = ink, piastra = false) => {
-    const L = (await textLayer(prova, { text, face: f, sizePx: size * M, color, x: 0, y: 0, maxW })).layers[0]
-    const w = L.canvas.width / s.W, h = L.canvas.height / s.H
+  const scrivi = async (text: string, left: number, top: number, size: number, maxW: number, f: FaceId, color0 = ink, piastra0 = false) => {
+    const L0 = (await textLayer(prova, { text, face: f, sizePx: size * M, color: '#000', x: 0, y: 0, maxW })).layers[0]
+    const w = L0.canvas.width / s.W, h = L0.canvas.height / s.H
+    // guarda che cosa c'è davvero sotto il testo e sceglie il colore che si legge; se nessuno basta, mette un fondo
+    const sotto = mediaSotto(s, left, top, left + w, top + h)
+    const cands = [color0, t.ink, t.bg, t.acc, '#111111', '#f4f2ec']
+    const color = cands.sort((a, b) => ratio(b, sotto) - ratio(a, sotto))[0]
+    const piastra = piastra0 || ratio(color, sotto) < 4.5
+    const L = (await textLayer(prova, { text, face: f, sizePx: size * M, color: piastra ? ([t.ink, '#111111', '#f4f2ec'].sort((a, b) => ratio(b, t.bg) - ratio(a, t.bg))[0]) : color, x: 0, y: 0, maxW })).layers[0]
     if (piastra) {
       const cv = newCanvas(Math.round(w * s.W), Math.round(h * s.H)); const g = cv.getContext('2d')!; g.fillStyle = t.bg; g.fillRect(0, 0, cv.width, cv.height)
       s = withLayer(s, { id: lid2(), kind: 'piastra', canvas: cv, x: left + w / 2, y: top + h / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: 0.86, blend: 'source-over' })
@@ -282,16 +326,16 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number,
   }
   const RUOLO: Record<Ruolo, string> = { silenzio: '', parola: '', definizione: '', risposta: '', copertina: 'episodio', prima: 'prima', domanda: 'domanda', premessa: 'premessa', passaggio: 'passaggio', conclusione: 'conclusione', controllo: 'controllo', obiezione: 'obiezione', fiducia: 'fiducia', visione: 'visione', immagine: 'immagine', altra: 'altra strada', coda: 'prossima puntata' }
   void RUOLO
-  if (r() < 0.6) await scrivi(`${i}/${N}`, 0.07, 0.035, 0.016, 0.3, 'mono')
+  if (r() < 0.6) await scrivi(`${i}/${N}`, 0.07, 0.035, 0.018, 0.3, 'mono')
   const big = sc.ruolo === 'copertina' || sc.ruolo === 'domanda' || sc.ruolo === 'coda' || sc.ruolo === 'conclusione' || sc.ruolo === 'parola' || sc.ruolo === 'definizione'
   const pesante = s.layers.filter(l => ['ricetta', 'shader', 'pattern', 'grana'].includes(l.kind)).length > 0 || ultimoLay === 'zoom' || ultimoLay === 'sovrapposti'
-  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, zona.y0, sc.ruolo === 'parola' ? 0.14 : big ? (sc.titolo.length > 50 ? 0.05 : 0.066) : sc.titolo.length > 60 ? 0.034 : 0.044, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, pesante)
+  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, zona.y0, sc.ruolo === 'parola' ? 0.12 : big ? (sc.titolo.length > 50 ? 0.054 : 0.07) : sc.titolo.length > 60 ? 0.04 : 0.05, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, pesante)
   if (sc.corpo) {
     let corpo = sc.corpo
     if (corpo.length > 480) corpo = corpo.slice(0, 480).replace(/\s\S*$/, '') + '…'
-    await scrivi(corpo, zona.x0, Math.min(0.9, zona.y0 + h + 0.012), corpo.length > 300 ? 0.02 : 0.024, Math.min(0.82, zona.x1 - zona.x0), lettura, ink, pesante)
+    await scrivi(corpo, zona.x0, Math.min(0.86, zona.y0 + h + 0.014), corpo.length > 300 ? 0.025 : 0.03, Math.min(0.84, zona.x1 - zona.x0), lettura, ink, pesante)
   }
-  if (sc.fonte) await scrivi(`fonte: ${sc.fonte}`, 0.07, 0.955, 0.013, 0.6, 'mono')
+  if (sc.fonte) await scrivi(`fonte: ${sc.fonte}`, 0.07, 0.95, 0.016, 0.7, 'mono')
   return s
 }
 
