@@ -43,146 +43,255 @@ function ensureVisione(st: AgentState, r: Rnd): Visione {
 }
 
 // ─── il piano di un episodio ───────────────────────────────────────────────
-type Ruolo = 'copertina' | 'prima' | 'domanda' | 'premessa' | 'passaggio' | 'conclusione' | 'controllo' | 'obiezione' | 'fiducia' | 'visione' | 'immagine' | 'altra' | 'coda'
+type Ruolo = 'copertina' | 'prima' | 'domanda' | 'premessa' | 'passaggio' | 'conclusione' | 'controllo' | 'obiezione' | 'fiducia' | 'visione' | 'immagine' | 'altra' | 'coda' | 'silenzio' | 'parola' | 'definizione' | 'risposta'
 interface Scheda { ruolo: Ruolo; titolo: string; corpo: string; a?: string; b?: string; rel?: Rel; catena?: string[]; fonte?: string }
 
 const REL_VERBO = (f: Fatto): Rel => (f.neg ? 'contro' : /^(divent|trasform|cambi|passa)/.test(f.v.inf) ? 'diventa' : /^(restare|stare|vivere|abitare|contenere)/.test(f.v.inf) ? 'dentro' : /^(essere|sembrare)/.test(f.v.inf) ? 'identita' : 'causa')
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null, frase: (f: Fatto) => string, letture: Reading[] = []): { schede: Scheda[]; d: Deduzione | null; titolo: string; domanda: string; lettura?: string } {
+export type FormaSeq = 'lineare' | 'a ritroso' | 'contrappunto' | 'crescendo' | 'frammenti' | 'dialogo' | 'catalogo' | 'manifesto'
+
+/**
+ * Il piano di una sequenza. Non c'è una scaletta fissa: raccoglie il materiale (fatti letti,
+ * la deduzione, il controllo, un'obiezione, le sue tesi) e sceglie lui una FORMA per dirlo:
+ * lineare, a ritroso (prima la conclusione), contrappunto (immagini mute e frasi alternate),
+ * crescendo (da una parola sola a tutto), frammenti (in disordine, senza spiegare), dialogo
+ * (lui contro le fonti), catalogo (un concetto per tavola), manifesto (poche frasi grandi).
+ * La lunghezza la decide la forma, fino al massimo indicato.
+ */
+export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null, frase: (f: Fatto) => string, letture: Reading[] = []): { schede: Scheda[]; d: Deduzione | null; titolo: string; domanda: string; lettura?: string; forma: FormaSeq } {
   const V = ensureVisione(st, r)
   const A = ensureAtlante(st)
   const ep = getEpisodi(st)
   const prev = ep[ep.length - 1]
   const C = getCantieri(st).slice(-1)[0]
   const concetti = [...new Set([filo, ...(C?.capitoli.map(k => k.concetto) ?? []), ...V.tesi.slice(-4).flatMap(t => [t.a, t.b]), ...Object.values(A.concetti).sort((a, b) => b.frasi - a.frasi).slice(0, 6).map(c => c.word)].filter(Boolean) as string[])].slice(0, 8)
-  // niente coppie già raccontate; si riparte dalla domanda con cui era finito l'episodio prima
   const giaFatte = new Set(ep.map(e => e.coppia).filter(Boolean))
   const dallaDomanda = new Set((prev?.domanda ?? '').toLowerCase().split(/[^a-zàèéìòù]+/))
-  const ds = deduci(st, r, [...new Set([...dallaDomanda].filter(w => w.length > 3 && ensureAtlante(st).concetti[w]).concat(concetti))].slice(0, 9))
+  const ds = deduci(st, r, [...new Set([...dallaDomanda].filter(w => w.length > 3 && A.concetti[w]).concat(concetti))].slice(0, 9))
     .filter(d => !V.tesi.some(t => t.testo === d.testo) && !giaFatte.has(`${d.a}|${d.b}`) && !giaFatte.has(`${d.b}|${d.a}`))
-  // la deduzione centrale: preferisce quelle lunghe, che toccano la domanda aperta, abbastanza credibili
   const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1), 0.7) : null
-  const schede: Scheda[] = []
-  let lettura: string | undefined
-  const domanda = d ? realizza(pick(r, ['che cosa lega {det:a} {a:b}?', 'da dove viene {det:b}?', 'chi muove {det:b}?', 'cosa c\'entra {det:a} con {det:b}?']), { a: d.a, b: d.b }) : V.domanda
   const senzaAttacco = (x: string) => { let t = x; for (const a of APERTURE.slice().sort((p, q) => q.length - p.length)) if (t.toLowerCase().startsWith(a.toLowerCase())) { t = t.slice(a.length).trim(); break } return t }
-  let titolo = d ? cap(senzaAttacco(d.testo).split(/[:;]/)[0].split(/, (?:e|ma|anche|almeno) /)[0]) : cap(domanda)
-  schede.push({ ruolo: 'copertina', titolo, corpo: `${V.titolo}. Episodio ${ep.length + 1}.`, a: d?.a, b: d?.b })
-  if (prev) schede.push({ ruolo: 'prima', titolo: 'Nella puntata precedente', corpo: `${cap(prev.conclusione)}. E restava una domanda: ${prev.domanda}`, a: d?.a })
-  schede.push({ ruolo: 'domanda', titolo: cap(domanda), corpo: pick(r, ['Provo a rispondere solo con quello che ho letto, e con quello che ne ricavo.', 'Metto in fila quello che so. Poi vedo dove porta.', 'Parto dalle fonti. Il resto lo deduco io, e lo dico quando non sono sicuro.']), a: d?.a, b: d?.b })
-  if (d) {
-    // premesse: i fatti su cui poggia la deduzione, uno per tavola, con la sua fonte
-    const fs = [...new Map(concetti.flatMap(c => fattiSu(st, c, 30)).map(f => [frase(f), f])).values()]
-    const usate = d.premesse.map(p => fs.find(f => frase(f) === p || p.includes(f.s) && (f.o ? p.includes(f.o) : true))).filter(Boolean) as Fatto[]
-    d.premesse.forEach((p, i) => {
-      const f = usate[i]
-      schede.push({ ruolo: 'premessa', titolo: cap(p), corpo: f ? `Lo leggo in «${f.fonte}». ${pick(r, ['È un fatto, non un\'opinione mia.', 'Lo prendo così com\'è.', 'Per ora lo do per buono.'])}` : 'È una cosa che ho già stabilito prima.', a: f?.s, b: f?.o ?? f?.compl[0]?.n, rel: f ? REL_VERBO(f) : 'accanto', fonte: f?.fonte })
-      if (i > 0 && i < d.premesse.length) schede.push({ ruolo: 'passaggio', titolo: pick(r, ['Metto insieme', 'Il passaggio', 'Qui si collega']), corpo: `${cap(d.premesse[i - 1])}; ${p}. ${pick(r, ['Le due cose hanno un punto in comune.', 'Il pezzo che le unisce è lo stesso.', 'Una finisce dove comincia l\'altra.'])}`, catena: [d.a, ...(usate[i - 1]?.o ? [usate[i - 1].o!] : []), ...(f?.o ? [f.o] : []), d.b].filter((x, k, xs) => xs.indexOf(x) === k) })
-    })
-    schede.push({ ruolo: 'conclusione', titolo: cap(d.testo), corpo: diciDeduzione(r, d), catena: [d.a, d.b], a: d.a, b: d.b })
-    // controllo di coerenza contro le tesi e le deduzioni passate
-    const co = coerenza(st, r, d, A.deduzioni ?? [])
-    schede.push({ ruolo: 'controllo', titolo: co.ritrattazione ? 'Non torna' : 'Controllo', corpo: co.ritrattazione ? diciDeduzione(r, co.ritrattazione) : `Ho confrontato questa conclusione con le ${(A.deduzioni ?? []).length} cose che avevo già dedotto: non ne contraddice nessuna.`, a: d.a, b: d.b, rel: co.ritrattazione ? 'contro' : 'identita' })
-    const ob = scriviObiezione(st, r, d.a) ?? scriviObiezione(st, r, d.b)
-    if (ob) schede.push({ ruolo: 'obiezione', titolo: 'Un\'obiezione', corpo: ob.testo, a: d.a, b: d.b, rel: 'contro', fonte: ob.fonte })
-    const pct = Math.round(d.conf * 100)
-    schede.push({ ruolo: 'fiducia', titolo: `Ci credo al ${pct}%`, corpo: `${d.passi} passaggi, ${new Set(usate.map(f => f.fonte)).size} fonti. ${pct > 50 ? 'Abbastanza per tenerla.' : pct > 25 ? 'La tengo, ma come ipotesi.' : 'È poco: la segno, ma non ci costruisco sopra.'}`, catena: [d.a, d.b] })
-    // altre strade, se c'è posto
-    for (const x of ds.filter(y => y !== d && (y.a === d.a || y.b === d.b)).slice(0, Math.max(0, N - schede.length - 3))) schede.push({ ruolo: 'altra', titolo: cap(x.testo.split(/[:;]/)[0]), corpo: `Un'altra strada dagli stessi fatti. ${diciDeduzione(r, x)}`, a: x.a, b: x.b, rel: x.segno < 0 ? 'contro' : 'causa' })
-  }
-  // niente di nuovo da dedurre: l'episodio racconta una lettura, e la collega alla visione
-  if (!d) {
+
+  // ── il materiale ──
+  type Fat = { titolo: string; f?: Fatto }
+  let fatti: Fat[] = []
+  let lettura: string | undefined
+  const allFs = [...new Map(concetti.flatMap(c => fattiSu(st, c, 30)).map(f => [frase(f), f])).values()]
+  if (d) fatti = d.premesse.map(p => ({ titolo: p, f: allFs.find(f => frase(f) === p || (p.includes(f.s) && (f.o ? p.includes(f.o) : true))) }))
+  else {
     const lette = new Set(ep.map(e => e.lettura).filter(Boolean))
     const tutte = [...letture, ...st.readings.slice().reverse()].filter(x => x.text.length > 200)
-    const usoDi = (t: string) => ep.filter(e => e.lettura === t).length
-    const nuovaLettura = tutte.find(x => !lette.has(x.title))
-    const ripassabili = (A.deduzioni ?? []).filter(x => !x.ritirata && x.tipo !== 'ritrattazione').length
-    // se ha già letto tutto, ma ha conclusioni da rimettere alla prova, alterna: un ripasso, poi una rilettura
-    const ultimoRipasso = ep.length && !ep[ep.length - 1].lettura && !ep[ep.length - 1].coppia
-    const rd = nuovaLettura ?? (ripassabili >= 2 && !ultimoRipasso ? undefined : tutte.slice().sort((a, b) => usoDi(a.title) - usoDi(b.title))[0])
-    if (rd && lette.has(rd.title)) schede.push({ ruolo: 'prima', titolo: 'Lo rileggo', corpo: `Avevo già letto «${rd.title}». Lo riprendo: con quello che so adesso, forse dice altro.` })
-    if (rd) {
-      const fs = sentences(rd.text).slice(0, 80).flatMap(x => fattiDi(x, rd.title)).slice(0, Math.max(3, N - 7))
-      titolo = cap(rd.title); lettura = rd.title
-      schede[0] = { ruolo: 'copertina', titolo: cap(rd.title), corpo: `Oggi leggo. ${V.titolo}: episodio ${ep.length + 1}.`, a: fs[0]?.s, b: fs[0]?.o }
-      const qi = schede.findIndex(x => x.ruolo === 'domanda')
-      const dq: Scheda = { ruolo: 'domanda', titolo: 'Che cosa dice questo testo?', corpo: `Non ho ancora niente da dedurre. Allora leggo «${rd.title}» e lo smonto in fatti, uno per tavola.` }
-      if (qi >= 0) schede[qi] = dq; else schede.push(dq)
-      for (const f of fs) schede.push({ ruolo: 'premessa', titolo: cap(frase(f)), corpo: `Da «${rd.title}».`, a: f.s, b: f.o ?? f.compl[0]?.n, rel: REL_VERBO(f), fonte: rd.title })
-      const tocca = [...new Set(fs.flatMap(f => [f.s, f.o]).filter(w => w && V.tesi.some(t => t.a === w || t.b === w)))] as string[]
-      schede.push({ ruolo: 'visione', titolo: tocca.length ? 'Dove tocca la mia visione' : 'Materiale nuovo', corpo: tocca.length ? `Questo testo parla anche di ${tocca.join(', ')}: lo stesso terreno delle mie tesi (${V.tesi.filter(t => !t.ritirata).slice(-2).map(t => t.testo).join('; ')}).` : 'Per ora non tocca le mie tesi. Lo tengo da parte: domani ci ragiono sopra.', catena: tocca.slice(0, 4) })
+    const rd = tutte.find(x => !lette.has(x.title)) ?? tutte[Math.floor(r() * Math.max(1, tutte.length))]
+    if (rd) { lettura = rd.title; fatti = sentences(rd.text).slice(0, 80).flatMap(x => fattiDi(x, rd.title)).slice(0, 7).map(f => ({ titolo: frase(f), f })) }
+  }
+  const co = d ? coerenza(st, r, d, A.deduzioni ?? []) : {}
+  const ob = d ? scriviObiezione(st, r, d.a) ?? scriviObiezione(st, r, d.b) : null
+  const tesi = V.tesi.filter(t => !t.ritirata)
+  const nodi = [...new Set([d?.a, d?.b, ...fatti.flatMap(x => [x.f?.s, x.f?.o])].filter(Boolean) as string[])]
+  const domanda = d ? realizza(pick(r, ['che cosa lega {det:a} {a:b}?', 'da dove viene {det:b}?', 'chi muove {det:b}?', 'cosa c\'entra {det:a} con {det:b}?', 'e se fosse {det:b} a muovere {det:a}?']), { a: d.a, b: d.b }) : V.domanda
+  const titolo = d ? cap(senzaAttacco(d.testo).split(/[:;]/)[0].split(/, (?:e|ma|anche|almeno) /)[0]) : lettura ? cap(lettura) : cap(V.titolo)
+
+  // ── la forma: la sceglie lui (umore, materiale, e non la stessa di prima) ──
+  const forme: FormaSeq[] = ['lineare', 'a ritroso', 'contrappunto', 'crescendo', 'frammenti', 'dialogo', 'catalogo', 'manifesto']
+  const usate = (st as WithV & { formeUsate?: FormaSeq[] }).formeUsate ?? []
+  const pesoF = (f: FormaSeq) => {
+    let w = 1
+    if (usate.slice(-3).includes(f)) w *= 0.25
+    if (!d && (f === 'a ritroso' || f === 'dialogo' || f === 'lineare')) w *= 0.3
+    if (f === 'dialogo' && ob) w *= 2
+    if (f === 'catalogo') w *= nodi.length >= 4 ? 1.6 : 0.2
+    if (f === 'manifesto') w *= tesi.length + (d ? 1 : 0) >= 2 ? 1.5 : 0
+    if (f === 'frammenti' && (st.mood === 'inquieto' || st.mood === 'giocoso')) w *= 2
+    if (f === 'contrappunto' && (st.mood === 'calmo' || st.mood === 'cupo')) w *= 1.8
+    if (f === 'crescendo' && d && d.passi >= 3) w *= 2
+    return w
+  }
+  const forma = weighted(r, forme, pesoF, 0.8)
+  ;(st as WithV & { formeUsate?: FormaSeq[] }).formeUsate = [...usate, forma].slice(-20)
+
+  const S: Scheda[] = []
+  const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: x.f ? pick(r, [`Da «${x.f.fonte}».`, '', `Così dice «${x.f.fonte}».`]) : '', a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
+  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: d.conf < 0.4 ? pick(r, ['(Non ne sono sicuro.)', '(È un\'ipotesi.)', '']) : '', catena: [d.a, d.b], a: d.a, b: d.b } : null)
+  const muta = (a?: string, b?: string): Scheda => ({ ruolo: 'silenzio', titolo: '', corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
+  const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: '', a: w })
+  const ritorno = (): Scheda | null => (prev && r() < 0.35 ? { ruolo: 'prima', titolo: pick(r, ['Torno su una cosa', 'Me lo ero già chiesto', 'Ancora']), corpo: `${cap(prev.conclusione)}.`, a: d?.a } : null)
+  const dub = (): Scheda[] => [co.ritrattazione ? { ruolo: 'controllo', titolo: 'Non torna', corpo: diciDeduzione(r, co.ritrattazione), a: d?.a, b: d?.b, rel: 'contro' as Rel } : null, ob ? { ruolo: 'obiezione', titolo: pick(r, ['Però', 'Eppure', 'Qualcuno direbbe di no']), corpo: ob.testo, a: d?.a, b: d?.b, rel: 'contro' as Rel, fonte: ob.fonte } : null].filter(Boolean) as Scheda[]
+  const push = (...xs: (Scheda | null | undefined)[]) => { for (const x of xs) if (x) S.push(x) }
+
+  switch (forma) {
+    case 'lineare':
+      push(r() < 0.5 ? { ruolo: 'domanda', titolo: cap(domanda), corpo: '', a: d?.a, b: d?.b } : muta(), ritorno())
+      fatti.forEach((x, i) => { push(pre(x)); if (i > 0 && r() < 0.5) push({ ruolo: 'passaggio', titolo: pick(r, ['Metto insieme', 'E quindi', 'Qui si toccano']), corpo: '', catena: nodi.slice(0, 4) }) })
+      push(conc(), ...dub())
+      break
+    case 'a ritroso':
+      push(conc() && { ...conc()!, ruolo: 'copertina' as Ruolo }, { ruolo: 'risposta', titolo: pick(r, ['Perché lo dico?', 'Da dove viene?', 'Come ci arrivo']), corpo: '', a: d?.a })
+      fatti.slice().reverse().forEach(x => push(pre(x)))
+      push(...dub(), r() < 0.5 ? muta(d?.a, d?.b) : null)
+      break
+    case 'contrappunto':
+      for (const x of fatti) push(muta(x.f?.s, x.f?.o), pre(x))
+      push(muta(d?.a, d?.b), conc())
+      break
+    case 'crescendo':
+      push(parola(d?.a ?? nodi[0] ?? V.titolo.split(' ').slice(-1)[0]))
+      fatti.forEach((x, i) => push({ ...pre(x), catena: nodi.slice(0, i + 2) }))
+      push(conc() && { ...conc()!, catena: nodi.slice(0, 6) })
+      break
+    case 'frammenti': {
+      const pezzi: Scheda[] = [...fatti.map(pre), ...(conc() ? [conc()!] : []), ...nodi.slice(0, 3).map(w => parola(w)), muta(), muta()]
+      for (let i = pezzi.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pezzi[i], pezzi[j]] = [pezzi[j], pezzi[i]] }
+      push(...pezzi)
+      break
     }
+    case 'dialogo':
+      fatti.forEach((x, i) => { push(pre(x)); if (i === 0 && ob) push({ ruolo: 'obiezione', titolo: 'No.', corpo: ob.testo, a: x.f?.s, b: x.f?.o, rel: 'contro', fonte: ob.fonte }) })
+      push(conc(), { ruolo: 'risposta', titolo: pick(r, ['E tu cosa dici?', 'Rispondo così', 'Lo tengo lo stesso']), corpo: d ? `${d.conf > 0.4 ? 'Lo tengo' : 'Lo tengo come ipotesi'}: ${senzaAttacco(d.testo)}.` : '', a: d?.a, b: d?.b })
+      break
+    case 'catalogo':
+      for (const w of nodi.slice(0, Math.max(3, N - 2))) {
+        const f = allFs.find(x => x.s === w) ?? fatti.find(x => x.f?.s === w)?.f
+        push({ ruolo: 'definizione', titolo: cap(w), corpo: f ? cap(frase(f)) + '.' : '', a: w })
+      }
+      push(d ? { ruolo: 'passaggio', titolo: cap(senzaAttacco(d.testo)), corpo: '', catena: nodi.slice(0, 6) } : muta())
+      break
+    case 'manifesto':
+      for (const t of [...tesi.slice(-3).map(t => t.testo), ...(d ? [d.testo] : [])]) push({ ruolo: 'copertina', titolo: cap(senzaAttacco(t)).toUpperCase(), corpo: '', a: tesi.find(x => x.testo === t)?.a ?? d?.a, b: tesi.find(x => x.testo === t)?.b ?? d?.b, rel: 'causa' })
+      if (r() < 0.5) push(muta(d?.a, d?.b))
+      break
   }
-  // né deduzioni nuove né letture: ripassa quello che ha dedotto, e lo mette alla prova
-  if (!d && !lettura) {
-    const vecchie = (A.deduzioni ?? []).filter(x => !x.ritirata && x.tipo !== 'ritrattazione').slice(-6)
-    titolo = 'Ripasso quello che penso'
-    schede[0] = { ruolo: 'copertina', titolo, corpo: `${V.titolo}. Episodio ${ep.length + 1}: rimetto in fila le mie conclusioni e le metto alla prova.`, a: vecchie[0]?.a, b: vecchie[0]?.b }
-    for (const x of vecchie) schede.push({ ruolo: 'conclusione', titolo: cap(x.testo.split(/[:;]/)[0]), corpo: `Lo avevo dedotto il giorno ${x.day}, con fiducia ${Math.round(x.conf * 100)}%.`, catena: [x.a, x.b], a: x.a, b: x.b })
-    const bersaglio = vecchie[vecchie.length - 1]
-    const ob = bersaglio ? scriviObiezione(st, r, bersaglio.a) ?? scriviObiezione(st, r, bersaglio.b) : null
-    if (ob) { schede.push({ ruolo: 'obiezione', titolo: 'Regge?', corpo: ob.testo, a: bersaglio!.a, b: bersaglio!.b, rel: 'contro', fonte: ob.fonte }); bersaglio!.conf *= 0.8 }
-  }
-  // cosa cambia nella visione
-  const nuova = d && !d.ritirata && d.conf > 0.3
-  if (!lettura) schede.push({ ruolo: 'visione', titolo: nuova ? 'Cosa cambia' : 'Niente di nuovo, per ora', corpo: nuova ? `La mia visione («${V.titolo}») si allarga: ${d!.testo}. Le tesi che tengo adesso: ${[...V.tesi.filter(t => !t.ritirata).slice(-3).map(t => t.testo), d!.testo].join('; ')}.` : `La visione resta quella: ${V.titolo}. Mi manca ancora materiale.`, catena: [...new Set(V.tesi.filter(t => !t.ritirata).slice(-4).flatMap(t => [t.a, t.b]).concat(d ? [d.a, d.b] : []))].slice(0, 6) })
-  const coppie = [...new Set(schede.filter(x => x.a && x.b).map(x => `${x.a}|${x.b}`))].map(k => k.split('|'))
-  let riempi = 0
-  while (schede.length < N - 1 && riempi++ < 2 && coppie.length) { const [a0, b0] = pick(r, coppie); schede.push({ ruolo: 'immagine', titolo: cap(pick(r, [a0, b0])), corpo: '', a: a0, b: b0, rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) }) }
-  const nextQ = d ? realizza(pick(r, ['e se fosse {det:b} a muovere {det:a}?', 'che cosa succede {a:a} quando manca {det:b}?', 'chi altro tocca {det:b}?']), { a: d.a, b: d.b }) : V.domanda
-  schede.push({ ruolo: 'coda', titolo: 'Prossima puntata', corpo: cap(nextQ), a: d?.b })
-  return { schede: schede.slice(0, N), d, titolo, domanda: nextQ, lettura }
+  // chiusa: a volte una domanda, a volte un'immagine sola, a volte niente
+  if (r() < 0.35 && S.length < N) push({ ruolo: 'coda', titolo: cap(domanda), corpo: '', a: d?.b })
+  else if (r() < 0.3 && S.length < N) push(muta(d?.b))
+  const schede = S.filter(x => x.titolo || x.ruolo === 'silenzio').slice(0, N)
+  if (!schede.length) schede.push(muta())
+  return { schede, d, titolo, domanda, lettura, forma }
 }
 
 // ─── rendere una scheda ─────────────────────────────────────────────────────
 const lid = () => `e${Math.random().toString(36).slice(2, 9)}`
 
-export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number, N: number, nEp: number, ctx: ToolCtx, face: FaceId): Promise<Sheet> {
-  const t: Tone = ctx.tone
+// ─── variazioni: lo stesso segno, trattato in modi diversi a seconda di cosa succede ──
+type Modo = 'intero' | 'frammento' | 'ripetuto' | 'specchio' | 'spezzato' | 'sbiadito' | 'contorno' | 'ibrido' | 'pennello' | 'negativo'
+function cv0(w: number, h: number) { const c = newCanvas(w, h); return { c, g: c.getContext('2d')! } }
+function variante(src: HTMLCanvasElement, modo: Modo, r: Rnd, colore: string, altro?: HTMLCanvasElement): HTMLCanvasElement {
+  const W = src.width, H = src.height
+  const { c, g } = cv0(W, H)
+  switch (modo) {
+    case 'frammento': { const k = range(r, 0.35, 0.6); const x = r() * W * (1 - k), y = r() * H * (1 - k); g.drawImage(src, x, y, W * k, H * k, 0, 0, W, H); break }
+    case 'ripetuto': { const n = 2 + Math.floor(r() * 3); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { g.globalAlpha = 0.35 + 0.65 * ((i + j) % 2); g.drawImage(src, (i * W) / n, (j * H) / n, W / n, H / n) } break }
+    case 'specchio': g.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H); g.save(); g.translate(W, 0); g.scale(-1, 1); g.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H); g.restore(); break
+    case 'spezzato': { const n = 5 + Math.floor(r() * 6); for (let i = 0; i < n; i++) { const y0 = (i * H) / n, dx = (r() - 0.5) * W * 0.25; g.drawImage(src, 0, y0, W, H / n, dx, y0, W, H / n) } break }
+    case 'sbiadito': g.globalAlpha = 0.28; g.drawImage(src, 0, 0); g.globalAlpha = 1; for (let i = 0; i < 400; i++) { g.clearRect(r() * W, r() * H, 3 + r() * 9, 3 + r() * 9) } break
+    case 'contorno': { g.drawImage(src, 0, 0); g.globalCompositeOperation = 'destination-out'; g.drawImage(src, W * 0.035, H * 0.035, W * 0.93, H * 0.93); g.globalCompositeOperation = 'source-in'; g.fillStyle = colore; g.fillRect(0, 0, W, H); break }
+    case 'ibrido': if (altro) { g.drawImage(altro, 0, 0, W, H); g.globalCompositeOperation = 'destination-in'; g.drawImage(src, 0, 0) } else g.drawImage(src, 0, 0); break
+    case 'negativo': g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = colore; g.fillRect(0, 0, W, H); break
+    case 'pennello': {
+      g.lineCap = 'round'; g.strokeStyle = colore
+      for (let i = 0; i < 90; i++) { g.lineWidth = W * range(r, 0.008, 0.04); g.globalAlpha = range(r, 0.5, 1); let x = r() * W, y = r() * H, a = r() * 6.3; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 10; k++) { a += (r() - 0.5) * 0.4; x += Math.cos(a) * W * 0.03; y += Math.sin(a) * H * 0.03; g.lineTo(x, y) } g.stroke() }
+      g.globalAlpha = 1; g.globalCompositeOperation = 'destination-in'; g.drawImage(src, 0, 0); break
+    }
+    default: g.drawImage(src, 0, 0)
+  }
+  return c
+}
+const MODI_RUOLO: Record<Ruolo, Modo[]> = {
+  copertina: ['intero', 'frammento', 'pennello'], prima: ['sbiadito', 'contorno'], domanda: ['frammento', 'contorno', 'negativo'],
+  premessa: ['intero', 'pennello', 'negativo', 'specchio'], passaggio: ['ripetuto', 'spezzato', 'contorno'], conclusione: ['ibrido', 'intero', 'pennello'],
+  controllo: ['contorno', 'specchio'], obiezione: ['spezzato', 'frammento', 'negativo'], fiducia: ['sbiadito', 'ripetuto'], visione: ['ripetuto', 'contorno', 'intero'],
+  immagine: ['pennello', 'frammento', 'ibrido', 'spezzato', 'ripetuto'], altra: ['specchio', 'negativo', 'pennello'], coda: ['frammento', 'contorno'],
+  silenzio: ['pennello', 'frammento', 'ibrido', 'spezzato', 'ripetuto', 'negativo', 'specchio'], parola: ['contorno', 'frammento', 'sbiadito'], definizione: ['intero', 'negativo', 'pennello'], risposta: ['frammento', 'contorno', 'specchio'],
+}
+
+// ─── composizioni: ognuna dice la relazione in un altro modo ──────────────────
+type Lay = 'coppia' | 'zoom' | 'vuoto' | 'griglia' | 'sovrapposti' | 'diviso' | 'orbita' | 'solo'
+const LAY_REL: Record<Rel, Lay[]> = {
+  causa: ['coppia', 'zoom', 'vuoto', 'orbita'], contro: ['diviso', 'coppia', 'zoom'], dentro: ['orbita', 'sovrapposti', 'griglia'],
+  identita: ['sovrapposti', 'griglia', 'zoom'], diventa: ['coppia', 'griglia', 'vuoto'], accanto: ['coppia', 'vuoto', 'griglia', 'diviso'],
+}
+let ultimoLay: Lay | null = null
+const lid2 = () => `e${Math.random().toString(36).slice(2, 9)}`
+
+export async function rendiScheda(st: AgentState, r: Rnd, sc: Scheda, i: number, N: number, nEp: number, ctx0: ToolCtx, face: FaceId): Promise<Sheet> {
+  // il colore cambia lungo l'episodio: la conclusione al negativo, l'obiezione sul colore acceso, le altre leggermente diverse
+  const t0: Tone = ctx0.tone
+  const t: Tone = sc.ruolo === 'conclusione' ? { ...t0, bg: t0.ink, ink: t0.bg, dark: !t0.dark } : sc.ruolo === 'obiezione' ? { ...t0, bg: t0.acc, acc: t0.ink, ink: ratio(t0.ink, t0.acc) > ratio(t0.bg, t0.acc) ? t0.ink : t0.bg } : t0
+  const ctx: ToolCtx = { ...ctx0, tone: t }
   let s = emptySheet(800, 1000, t.bg)
   const M = Math.min(s.W, s.H)
   const lettura: FaceId = (FACES[face] as { upper?: boolean }).upper ? ((Object.keys(FACES) as FaceId[]).find(id => !(FACES[id] as { upper?: boolean }).upper && id !== 'mono') ?? face) : face
-  let zona = { x0: 0.07, y0: 0.66, x1: 0.93 }
-  // il visivo, secondo il ruolo
-  if (!(sc.catena?.length && (sc.ruolo === 'passaggio' || sc.ruolo === 'conclusione' || sc.ruolo === 'fiducia')) && sc.a && sc.b && sc.a !== sc.b) {
-    const en: Enunciato = { a: sc.a, b: sc.b, rel: sc.rel ?? 'causa', citazione: '', fonte: sc.fonte ?? '', frase: sc.titolo, postura: 'legge', perche: '' }
-    const m = await mettiInScena(st, r, en, s, ctx)
-    s = m.sheet
-    const z = m.libere[0]
-    zona = { x0: z.x0, y0: Math.min(z.y0, 0.7), x1: z.x1 }
-  } else if (sc.catena?.length) {
-    s = await catena(st, r, s, sc.catena, ctx, sc.ruolo === 'conclusione')
-    zona = { x0: 0.07, y0: 0.64, x1: 0.93 }
-  } else {
-    const tool = toolById(pick(r, ['grana', 'pattern']))
-    if (tool) s = await tool.apply(s, { ...tool.propose(s, ctx), alpha: 0.25 }, ctx)
-    if (sc.a) { const cv = await segnoDi(st, r, sc.a, t, ctx); s = withLayer(s, { id: lid(), kind: 'motivo', canvas: cv, x: 0.72, y: 0.3, scale: 0.36, rot: 0, alpha: 0.9, blend: 'source-over' }) }
-    zona = { x0: 0.07, y0: sc.ruolo === 'domanda' || sc.ruolo === 'coda' ? 0.5 : 0.56, x1: 0.93 }
+  // 1. il campo: una materia diversa a ogni tavola
+  const mat = ['shader', 'pattern', 'grana', 'semina', 'pattern', 'shader'][(i + nEp) % 6]
+  const tool = toolById(mat)
+  if (tool && tool.available(s, ctx) && r() < 0.85) {
+    const p = tool.propose(s, ctx)
+    s = await tool.apply(s, { ...p, piece: false, alpha: range(r, 0.25, 0.75), blend: pick(r, ['source-over', 'multiply', 'overlay', 'screen']) }, ctx)
   }
-  // il testo: intestazione, titolo, corpo
-  const ink = [t.ink, t.acc, '#111111', '#f4f2ec'].sort((a, b) => ratio(b, t.bg) - ratio(a, t.bg))[0]
+  let zona = { x0: 0.07, y0: 0.66, x1: 0.93 }
+  const col = (x?: string) => (x ? (ensureAtlante(st).concetti[x]?.motivo?.colore === 'acc' ? t.acc : t.ink) : t.ink)
+  const segno = async (w: string, modo: Modo, altro?: string) => {
+    const base = await segnoDi(st, r, w, t, ctx)
+    const b2 = altro ? await segnoDi(st, r, altro, t, ctx) : undefined
+    return variante(base, modo, r, col(w), b2)
+  }
+  const metti = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
+    s = withLayer(s, { id: lid2(), kind: 'motivo', canvas: cv, x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
+  }
+  // 2. i segni, in una composizione scelta dalla relazione (e diversa dalla tavola prima)
+  if (sc.catena?.length && sc.catena.length > 1 && (sc.ruolo === 'passaggio' || sc.ruolo === 'conclusione' || sc.ruolo === 'fiducia' || sc.ruolo === 'visione' || (sc.ruolo === 'premessa' && r() < 0.5))) {
+    s = await catena(st, r, s, sc.catena, ctx, sc.ruolo === 'conclusione')
+    if (sc.ruolo === 'conclusione' && sc.a && sc.b) metti(await segno(sc.a, 'ibrido', sc.b), 0.5, 0.36, 0.3, { blend: 'source-over', alpha: 0.9 })
+    zona = { x0: 0.07, y0: 0.64, x1: 0.93 }
+    ultimoLay = null
+  } else if (sc.a) {
+    const modi = MODI_RUOLO[sc.ruolo]
+    const ma = pick(r, modi), mb = pick(r, modi)
+    const opts = sc.b && sc.a !== sc.b ? LAY_REL[sc.rel ?? 'accanto'].filter(l => l !== ultimoLay) : (['zoom', 'vuoto', 'griglia', 'solo'] as Lay[]).filter(l => l !== ultimoLay)
+    const lay = pick(r, opts.length ? opts : ['solo']) as Lay
+    ultimoLay = lay
+    const A = await segno(sc.a, ma, sc.b)
+    const B = sc.b && sc.b !== sc.a ? await segno(sc.b, mb, sc.a) : null
+    const alto = r() < 0.5
+    switch (lay) {
+      case 'zoom': { const cx = pick(r, [0.15, 0.85]), cy = pick(r, [0.2, 0.45]); metti(A, cx, cy, range(r, 0.9, 1.3), { rot: (r() - 0.5) * 0.4 }); if (B) metti(B, 1 - cx * 0.9, 0.5, 0.16); zona = { x0: 0.07, y0: 0.68, x1: 0.93 }; break }
+      case 'vuoto': { const x = pick(r, [1 / 3, 2 / 3]), y = alto ? 0.3 : 0.62; metti(A, x, y, 0.12); if (B) metti(B, 1 - x, y + 0.06, 0.07); zona = alto ? { x0: 0.07, y0: 0.6, x1: 0.93 } : { x0: 0.07, y0: 0.14, x1: 0.93 }; break }
+      case 'griglia': { const n = 3 + Math.floor(r() * 2); const kk = Math.floor(r() * n * n); for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) metti(a * n + b === kk && B ? B : A, 0.18 + (a * 0.64) / (n - 1), 0.12 + (b * 0.42) / (n - 1), 0.5 / n, { alpha: a * n + b === kk ? 1 : 0.85 }); zona = { x0: 0.07, y0: 0.7, x1: 0.93 }; break }
+      case 'sovrapposti': metti(A, 0.45, 0.36, 0.55); if (B) metti(B, 0.56, 0.42, 0.5, { blend: pick(r, ['difference', 'multiply', 'screen', 'exclusion']) }); zona = { x0: 0.07, y0: 0.72, x1: 0.93 }; break
+      case 'diviso': { const cv = newCanvas(s.W, s.H); const g = cv.getContext('2d')!; g.fillStyle = t.acc; g.globalAlpha = 0.85; const sx = alto; if (sx) g.fillRect(0, 0, s.W / 2, s.H * 0.62); else g.fillRect(s.W / 2, 0, s.W / 2, s.H * 0.62); s = withLayer(s, fullLayer(s, lid2(), 'campo', cv)); metti(A, 0.25, 0.32, 0.36); if (B) metti(B, 0.75, 0.32, 0.36, { rot: r() < 0.3 ? Math.PI : 0 }); zona = { x0: 0.07, y0: 0.68, x1: 0.93 }; break }
+      case 'orbita': { const cxo = 0.5, cyo = 0.36; if (B) metti(B, cxo, cyo, 0.26); const n = 5 + Math.floor(r() * 5); for (let k = 0; k < n; k++) { const an = (k / n) * Math.PI * 2; metti(A, cxo + Math.cos(an) * 0.3, cyo + Math.sin(an) * 0.24, 0.09, { rot: an }) } zona = { x0: 0.07, y0: 0.7, x1: 0.93 }; break }
+      case 'coppia': { metti(A, 0.3, alto ? 0.3 : 0.4, range(r, 0.28, 0.4)); if (B) metti(B, 0.7, alto ? 0.42 : 0.3, range(r, 0.2, 0.34)); zona = { x0: 0.07, y0: 0.66, x1: 0.93 }; break }
+      default: metti(A, pick(r, [0.5, 0.36, 0.64]), 0.36, range(r, 0.3, 0.55)); zona = { x0: 0.07, y0: 0.68, x1: 0.93 }
+    }
+  } else {
+    zona = { x0: 0.07, y0: 0.4, x1: 0.93 }
+  }
+  if (sc.ruolo === 'parola') zona = { x0: 0.07, y0: pick(r, [0.12, 0.42, 0.7]), x1: 0.93 }
+  // 3. il testo: intestazione, titolo, corpo; la piastra solo se sotto c'è troppa materia
+  const ink = [t.ink, t.acc, t.bg, '#111111', '#f4f2ec'].sort((a, b) => ratio(b, t.bg) - ratio(a, t.bg))[0]
   const prova = { ...s, layers: [] }
-  const metti = async (text: string, left: number, top: number, size: number, maxW: number, f: FaceId, color = ink, piastra = false) => {
+  const scrivi = async (text: string, left: number, top: number, size: number, maxW: number, f: FaceId, color = ink, piastra = false) => {
     const L = (await textLayer(prova, { text, face: f, sizePx: size * M, color, x: 0, y: 0, maxW })).layers[0]
     const w = L.canvas.width / s.W, h = L.canvas.height / s.H
     if (piastra) {
       const cv = newCanvas(Math.round(w * s.W), Math.round(h * s.H)); const g = cv.getContext('2d')!; g.fillStyle = t.bg; g.fillRect(0, 0, cv.width, cv.height)
-      s = withLayer(s, { id: lid(), kind: 'piastra', canvas: cv, x: left + w / 2, y: top + h / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: 0.88, blend: 'source-over' })
+      s = withLayer(s, { id: lid2(), kind: 'piastra', canvas: cv, x: left + w / 2, y: top + h / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: 0.86, blend: 'source-over' })
     }
     s = withLayer(s, { ...L, x: left + w / 2, y: top + h / 2 })
     return h
   }
-  const RUOLO: Record<Ruolo, string> = { copertina: 'episodio', prima: 'prima', domanda: 'domanda', premessa: 'premessa', passaggio: 'passaggio', conclusione: 'conclusione', controllo: 'controllo', obiezione: 'obiezione', fiducia: 'fiducia', visione: 'visione', immagine: 'immagine', altra: 'altra strada', coda: 'prossima puntata' }
-  await metti(`EP. ${nEp} · ${i}/${N} · ${RUOLO[sc.ruolo].toUpperCase()}`, 0.07, 0.04, 0.016, 0.8, 'mono')
-  const big = sc.ruolo === 'copertina' || sc.ruolo === 'domanda' || sc.ruolo === 'coda'
-  const h = await metti(sc.titolo, zona.x0, zona.y0, big ? (sc.titolo.length > 40 ? 0.055 : 0.07) : sc.titolo.length > 60 ? 0.034 : 0.044, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, true)
+  const RUOLO: Record<Ruolo, string> = { silenzio: '', parola: '', definizione: '', risposta: '', copertina: 'episodio', prima: 'prima', domanda: 'domanda', premessa: 'premessa', passaggio: 'passaggio', conclusione: 'conclusione', controllo: 'controllo', obiezione: 'obiezione', fiducia: 'fiducia', visione: 'visione', immagine: 'immagine', altra: 'altra strada', coda: 'prossima puntata' }
+  void RUOLO
+  if (r() < 0.6) await scrivi(`${i}/${N}`, 0.07, 0.035, 0.016, 0.3, 'mono')
+  const big = sc.ruolo === 'copertina' || sc.ruolo === 'domanda' || sc.ruolo === 'coda' || sc.ruolo === 'conclusione' || sc.ruolo === 'parola' || sc.ruolo === 'definizione'
+  const pesante = s.layers.filter(l => ['ricetta', 'shader', 'pattern', 'grana'].includes(l.kind)).length > 0 || ultimoLay === 'zoom' || ultimoLay === 'sovrapposti'
+  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, zona.y0, sc.ruolo === 'parola' ? 0.14 : big ? (sc.titolo.length > 50 ? 0.05 : 0.066) : sc.titolo.length > 60 ? 0.034 : 0.044, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, pesante)
   if (sc.corpo) {
     let corpo = sc.corpo
-    if (corpo.length > 520) corpo = corpo.slice(0, 520).replace(/\s\S*$/, '') + '…'
-    await metti(corpo, zona.x0, Math.min(0.9, zona.y0 + h + 0.012), corpo.length > 300 ? 0.02 : 0.024, Math.min(0.82, zona.x1 - zona.x0), lettura, ink, true)
+    if (corpo.length > 480) corpo = corpo.slice(0, 480).replace(/\s\S*$/, '') + '…'
+    await scrivi(corpo, zona.x0, Math.min(0.9, zona.y0 + h + 0.012), corpo.length > 300 ? 0.02 : 0.024, Math.min(0.82, zona.x1 - zona.x0), lettura, ink, pesante)
   }
-  if (sc.fonte) await metti(`fonte: ${sc.fonte}`, 0.07, 0.955, 0.013, 0.6, 'mono')
+  if (sc.fonte) await scrivi(`fonte: ${sc.fonte}`, 0.07, 0.955, 0.013, 0.6, 'mono')
   return s
 }
 
@@ -240,6 +349,6 @@ export function chiudiEpisodio(st: AgentState, r: Rnd, info: Omit<EpisodioInfo, 
 
 export function didascalia(st: AgentState, titolo: string, d: Deduzione | null, domanda: string): string {
   const V = getVisione(st)
-  return concorda(`${titolo}.\n\n${d ? `${d.premesse.map((p, i) => `${i + 1}. ${cap(p)}`).join('\n')}\n→ ${cap(d.testo)} (ci credo al ${Math.round(d.conf * 100)}%).` : ''}\n\nProssima puntata: ${domanda}\n\n${V ? `#${V.titolo.split(' ').slice(-1)[0]} ` : ''}#generatoreprocedurale #artistaosservatore`)
+  return concorda(`${titolo}.\n\n${d ? `${d.premesse.map((p, i) => `${i + 1}. ${cap(p)}`).join('\n')}\n→ ${cap(d.testo)} (ci credo al ${Math.round(d.conf * 100)}%).` : ''}\n\n${Math.random() < 0.4 ? cap(domanda) + '\n\n' : ''}${V ? `#${V.titolo.split(' ').slice(-1)[0]} ` : ''}#generatoreprocedurale #artistaosservatore`)
 }
 void art

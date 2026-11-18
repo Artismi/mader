@@ -39,7 +39,7 @@ import { chiudiEpisodio, didascalia, getVisione, pianifica, rendiScheda } from '
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
-import { aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
+import { diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
 import { conceptsReady, describe, loadConcepts } from './reader/concepts'
@@ -336,9 +336,11 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const F = getScuola(st)!.firma
   const tone = weighted(r, TONES, t => (t.id === F.tone ? 2 : 1), 0.8)
   const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => '', shaders: st.shaders, quality: hooks.fast ? 0.35 : 0.5, noText: true }
+  const cambiati = diversifica(st, r)
+  if (cambiati.length) log(`Alcuni segni si somigliavano troppo: ${cambiati.join(', ')} ne hanno uno nuovo.`)
   const plan = pianifica(st, r, N, thread ?? intention.word, fraseDi, readings)
   const nEp = ((st as AgentState & { episodi?: unknown[] }).episodi?.length ?? 0) + 1
-  log(`Episodio ${nEp}: «${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ' Non ho ancora una deduzione: racconto la visione.'}`)
+  log(`Sequenza ${nEp} in forma «${plan.forma}»: «${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ` Niente da dedurre oggi: leggo${plan.lettura ? ` «${plan.lettura}»` : ''}.`}`)
   const works: Work[] = []
   const epId = uid()
   for (let i = 0; i < plan.schede.length; i++) {
@@ -366,16 +368,16 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     works.push(saved)
     hooks.onWork?.(saved)
     hooks.preview?.(flatten(sheet, 0.5))
-    log(`${i + 1}/${plan.schede.length} ${sc.ruolo}: ${sc.titolo}`)
+    log(`${i + 1}/${plan.schede.length} ${sc.ruolo}${sc.titolo ? `: ${sc.titolo}` : ''}`)
   }
   if (!works.length) return works
   const caption = didascalia(st, plan.titolo, plan.d, plan.domanda)
   const ep = chiudiEpisodio(st, r, { lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
   const post = publish(st, r, works[0], [plan.d?.a, plan.d?.b].filter(Boolean) as string[], caption, [])
   post.carosello = works.map(w => w.id)
-  post.title = `Episodio ${ep.n}: ${plan.titolo}`
+  post.title = plan.titolo
   post.caption = caption
-  log(`Episodio ${ep.n} pubblicato: ${post.views} visualizzazioni, ${post.likes} like${post.virale ? ' — virale' : ''}. Prossima puntata: ${plan.domanda}`)
+  log(`Pubblicata la sequenza ${ep.n}: ${post.views} visualizzazioni, ${post.likes} like${post.virale ? ' — virale' : ''}`)
   return works
 }
 let paginaOggi: Lavoro | null = null

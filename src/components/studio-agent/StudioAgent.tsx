@@ -21,7 +21,7 @@ import { getRepertorio } from '@/lib/studio-agent/voice/conclusioni'
 import { esporta, getCantieri } from '@/lib/studio-agent/mind/cantiere'
 import { getOfficina, disegnaGeneratore } from '@/lib/studio-agent/mind/officina'
 
-type Tab = 'galleria' | 'episodi' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
+type Tab = 'galleria' | 'sequenze' | 'vetrina' | 'cantiere' | 'mente' | 'quaderno' | 'impostazioni'
 
 const box = 'rounded-xl border border-white/10 bg-white/[0.03] p-4'
 const btn = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40'
@@ -115,7 +115,7 @@ export function StudioAgent() {
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
-          <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={epMode} onChange={e => setEpMode(e.target.checked)} /> episodi da</label>
+          <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={epMode} onChange={e => setEpMode(e.target.checked)} /> sequenze fino a</label>
           <input type="number" min={4} max={20} value={epN} onChange={e => setEpN(Math.max(4, Math.min(20, Number(e.target.value) || 12)))} className="w-14 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
           <span className="text-sm text-white/60">tavole</span>
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> in automatico</label>
@@ -138,14 +138,14 @@ export function StudioAgent() {
       )}
 
       <div className="mb-4 flex gap-1">
-        {(['galleria', 'episodi', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
+        {(['galleria', 'sequenze', 'vetrina', 'cantiere', 'mente', 'quaderno', 'impostazioni'] as Tab[]).map(t => (
           <button key={t} className={`${btn} ${tab === t ? 'bg-white/10' : ''}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
       {tab === 'galleria' && <Gallery works={works} sel={sel} setSel={setSel} />}
       {tab === 'vetrina' && <VetrinaView st={st} works={works} />}
-      {tab === 'episodi' && <EpisodiView st={st} works={works} />}
+      {tab === 'sequenze' && <EpisodiView st={st} works={works} />}
       {tab === 'cantiere' && <CantiereView st={st} />}
       {tab === 'mente' && <Mind st={st} />}
       {tab === 'quaderno' && <Notebook st={st} works={works} open={w => { setSel(w); setTab('galleria') }} />}
@@ -332,7 +332,7 @@ function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
     const blob = await zip.generateAsync({ type: 'blob' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `episodio-${ep.n}.zip`; a.click()
   }
-  if (!eps.length) return <div className="text-sm text-white/50">Nessun episodio ancora. Spunta «episodi da N tavole» e avvia una giornata.</div>
+  if (!eps.length) return <div className="text-sm text-white/50">Nessuna sequenza ancora. Spunta «sequenze fino a N tavole» e avvia una giornata.</div>
   return (
     <div className="grid gap-4">
       {V && (
@@ -345,7 +345,7 @@ function EpisodiView({ st, works }: { st: AgentState; works: Work[] }) {
       {eps.map(ep => (
         <div key={ep.id} className={box}>
           <div className="mb-2 flex items-start justify-between gap-4">
-            <button className="text-left" onClick={() => setAperto(aperto === ep.id ? null : ep.id)}><div className="text-lg font-semibold">Episodio {ep.n}: {ep.titolo}</div><div className="text-xs text-white/50">giorno {ep.day} · {ep.schede.length} tavole · prossima puntata: {ep.domanda}</div></button>
+            <button className="text-left" onClick={() => setAperto(aperto === ep.id ? null : ep.id)}><div className="text-lg font-semibold">{ep.titolo}</div><div className="text-xs text-white/50">sequenza {ep.n} · giorno {ep.day} · {ep.schede.length} tavole</div></button>
             <button className={btn} onClick={() => scarica(ep)}>Scarica (.zip)</button>
           </div>
           {aperto === ep.id && <>

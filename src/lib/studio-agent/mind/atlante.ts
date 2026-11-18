@@ -218,6 +218,26 @@ const shapeOf = (w: string): Sogg | null => {
 }
 const TEXTLESS = () => RECIPES.filter(rc => !rc.params.some(p => p.type === 'text'))
 
+/** la ricetta che meno concetti hanno già come segno: concetti diversi, segni diversi */
+function menoUsata(A: Atlante, r: Rnd, ids: string[]): string {
+  const uso = new Map<string, number>()
+  for (const c of Object.values(A.concetti)) if (c.motivo?.recipe) uso.set(c.motivo.recipe, (uso.get(c.motivo.recipe) ?? 0) + 1)
+  return weighted(r, ids, id => 1 / (1 + (uso.get(id) ?? 0) * 3) ** 2, 0.5)
+}
+
+/** se troppi concetti hanno lo stesso disegno, i meno usati ne ricevono uno nuovo */
+export function diversifica(st: AgentState, r: Rnd): string[] {
+  const A = ensureAtlante(st)
+  const per = new Map<string, Concetto[]>()
+  for (const c of Object.values(A.concetti)) if (c.motivo?.forma === 'ricetta' && c.motivo.recipe) per.set(c.motivo.recipe, [...(per.get(c.motivo.recipe) ?? []), c])
+  const cambiati: string[] = []
+  for (const cs of per.values()) {
+    if (cs.length < 2) continue
+    for (const c of cs.sort((a, b) => b.usi - a.usi).slice(1)) { c.motivo = undefined; motivoDi(st, r, c.word); cambiati.push(c.word) }
+  }
+  return cambiati
+}
+
 export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   const A = ensureAtlante(st)
   const c = (A.concetti[w] ??= { word: w, frasi: 0, usi: 0, ultima: 0 })
@@ -227,7 +247,7 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   const trama = a?.feature === 'linee' || a?.feature === 'orizzontali' ? 'righe' : a?.feature === 'punti' || a?.feature === 'elementi' ? 'punti' : a?.feature === 'vuoto' ? 'contorno' : a?.feature === 'complessita' ? 'tratteggio' : pick(r, ['pieno', 'pieno', 'righe', 'punti', 'tratteggio', 'contorno'] as const)
   const pool = TEXTLESS()
   // niente forma nota: a volte scrive un generatore suo per questo concetto
-  if (!sh && r() < 0.55) {
+  if (!sh && r() < 0.65) {
     const vuole: Features = {}
     if (a?.feature) vuole[a.feature] = (a.dir ?? 1) > 0 ? 0.7 : 0.15
     const g = scriviGeneratore(st, r, w, vuole)
@@ -236,7 +256,7 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   }
   c.motivo = sh
     ? { forma: sh, trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
-    : { forma: 'ricetta', trama, colore: r() < 0.35 ? 'acc' : 'ink', recipe: pick(r, pool).id, seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+    : { forma: 'ricetta', trama, colore: r() < 0.35 ? 'acc' : 'ink', recipe: menoUsata(A, r, pool.map(x => x.id)), seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
   return c.motivo
 }
 
