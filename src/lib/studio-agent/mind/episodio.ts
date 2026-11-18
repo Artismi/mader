@@ -16,7 +16,7 @@ import { sentences } from '../reader/tokenize'
 import { pick, range, uid, weighted, type Rnd } from '../core/rng'
 import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 import type { Tone } from '@/components/studio/genera/recipes'
-import { newCanvas, withLayer, fullLayer, emptySheet, flatten, type Sheet } from '../hands/sheet'
+import { newCanvas, withLayer, fullLayer, emptySheet, flatten, sfuma, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
 import { campoColore, ensureAtlante, maschera, pennella, segnoDi, type Rel } from './atlante'
@@ -283,7 +283,7 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
     return variante(base, modo, r, col(w), b2)
   }
   const metti = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
-    s = withLayer(s, { id: lid2(), kind: 'motivo', canvas: cv, x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
+    s = withLayer(s, { id: lid2(), kind: 'motivo', canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
   }
   // 2. i segni, in una composizione scelta dalla relazione (e diversa dalla tavola prima)
   if (sc.catena?.length && sc.catena.length > 1 && (sc.ruolo === 'passaggio' || sc.ruolo === 'conclusione' || sc.ruolo === 'fiducia' || sc.ruolo === 'visione' || (sc.ruolo === 'premessa' && r() < 0.5))) {
@@ -361,12 +361,25 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   if (sc.follia === 'istruzione' && sc.a) { sc = { ...sc, titolo: realizza(pick(r, ['prendi {det:a}. mettilo accanto {a:b}. aspetta.', 'cerca {det:a} dove non c\'è {det:b}. scrivilo.', 'togli {det:b} {da:a}. guarda cosa resta.', 'ripeti {det:a} finché non diventa {det:b}.']), { a: sc.a, b: sc.b ?? sc.a }).toUpperCase(), corpo: sc.titolo } ; zona = { x0: 0.07, y0: 0.2, x1: 0.93 } }
   if (sc.follia === 'assenza' && sc.a) sc = { ...sc, corpo: `${sc.corpo} ${realizza('(Qui doveva esserci {det:a}. Non c\'è.)', { a: sc.a })}`.trim() }
   if (L?.tipo.maiuscolo && sc.titolo.length < 90) sc = { ...sc, titolo: sc.titolo.toUpperCase() }
-  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, zona.y0, sc.follia === 'istruzione' ? 0.07 : sc.ruolo === 'parola' ? 0.12 : big ? (sc.titolo.length > 50 ? 0.054 : 0.07) : sc.titolo.length > 60 ? 0.04 : 0.05, Math.min(0.86, zona.x1 - zona.x0), big ? face : lettura, ink, pesante)
-  if (sc.corpo) {
-    let corpo = sc.corpo
-    if (corpo.length > 480) corpo = corpo.slice(0, 480).replace(/\s\S*$/, '') + '…'
-    await scrivi(corpo, zona.x0, Math.min(0.86, zona.y0 + h + 0.014), corpo.length > 300 ? 0.025 : 0.03, Math.min(0.84, zona.x1 - zona.x0), lettura, ink, pesante)
+  // titolo, corpo e fonte come un blocco: misurati prima, poi messi senza sovrapporsi
+  const misura = async (text: string, size: number, maxW: number, f: FaceId) => (await textLayer(prova, { text, face: f, sizePx: size * M, color: '#000', x: 0, y: 0, maxW })).layers[0].canvas.height / s.H
+  let sT = sc.follia === 'istruzione' ? 0.07 : sc.ruolo === 'parola' ? 0.12 : big ? (sc.titolo.length > 50 ? 0.054 : 0.07) : sc.titolo.length > 60 ? 0.04 : 0.05
+  let corpo = sc.corpo
+  if (corpo.length > 480) corpo = corpo.slice(0, 480).replace(/\s\S*$/, '') + '…'
+  let sC = corpo.length > 300 ? 0.025 : 0.03
+  const wT = Math.min(0.86, zona.x1 - zona.x0), wC = Math.min(0.84, zona.x1 - zona.x0)
+  const fT = big ? face : lettura
+  let hT = 0, hC = 0
+  const gap = 0.014, fondo = sc.fonte ? 0.935 : 0.955
+  for (let k = 0; k < 5; k++) {
+    hT = sc.titolo ? await misura(sc.titolo, sT, wT, fT) : 0
+    hC = corpo ? await misura(corpo, sC, wC, lettura) : 0
+    if (hT + hC + gap <= fondo - 0.08) break
+    sT *= 0.86; sC *= 0.9
   }
+  const top = Math.max(0.07, Math.min(zona.y0, fondo - (hT + (corpo ? gap + hC : 0))))
+  const h = !sc.titolo ? 0 : await scrivi(sc.titolo, zona.x0, top, sT, wT, fT, ink, pesante)
+  if (corpo) await scrivi(corpo, zona.x0, top + h + gap, sC, wC, lettura, ink, pesante)
   if (sc.fonte) await scrivi(`fonte: ${sc.fonte}`, 0.07, 0.95, 0.016, 0.7, 'mono')
   return s
 }

@@ -69,3 +69,21 @@ export function flatten(s: Sheet, scale = 1): HTMLCanvasElement {
 export function fullLayer(s: Sheet, id: string, kind: string, canvas: HTMLCanvasElement, blend: Blend = 'source-over', alpha = 1): Layer {
   return { id, kind, canvas, x: 0.5, y: 0.5, scale: Math.max(s.W, s.H) / Math.min(s.W, s.H), rot: 0, alpha, blend }
 }
+
+/**
+ * Bordi morbidi: un'immagine che arriva fino al bordo del suo riquadro viene tagliata di netto
+ * quando la si appoggia sul foglio. Qui i bordi sfumano (frac = quota del lato che sfuma).
+ */
+export function sfuma(src: HTMLCanvasElement, frac = 0.12): HTMLCanvasElement {
+  const W = src.width, H = src.height
+  const c = newCanvas(W, H), g = c.getContext('2d')!
+  g.drawImage(src, 0, 0)
+  g.globalCompositeOperation = 'destination-in'
+  const gx = g.createLinearGradient(0, 0, W, 0)
+  gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(frac, 'rgba(0,0,0,1)'); gx.addColorStop(1 - frac, 'rgba(0,0,0,1)'); gx.addColorStop(1, 'rgba(0,0,0,0)')
+  g.fillStyle = gx; g.fillRect(0, 0, W, H)
+  const gy = g.createLinearGradient(0, 0, 0, H)
+  gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(frac, 'rgba(0,0,0,1)'); gy.addColorStop(1 - frac, 'rgba(0,0,0,1)'); gy.addColorStop(1, 'rgba(0,0,0,0)')
+  g.fillStyle = gy; g.fillRect(0, 0, W, H)
+  return c
+}

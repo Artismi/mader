@@ -27,7 +27,7 @@ import { LOOKS } from '@/components/studio/fx/catalog'
 import { sentences, words, looksItalian } from '../reader/tokenize'
 import { anchorOf } from '../reader/lexicon'
 import { conceptsReady, relationsOf, REL_LABEL } from '../reader/concepts'
-import { newCanvas, withLayer, fullLayer, flatten, type Layer, type Sheet } from '../hands/sheet'
+import { newCanvas, withLayer, fullLayer, flatten, sfuma, type Layer, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { runShader } from '../hands/shader'
 import { ratio } from '../eyes/judgement'
@@ -473,7 +473,7 @@ export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: 
   const cA = rendi(bA, colA), cB = stile === 'maschera' && r() < 0.5 ? bB : rendi(bB, colB)
   passi.push({ tool: 'scena:stile', params: { stile, armonia }, kept: true, delta: 0 })
   const lay = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
-    s = withLayer(s, { id: lid(), kind: 'motivo', canvas: cv, x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
+    s = withLayer(s, { id: lid(), kind: 'motivo', canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
   }
   let posA: [number, number] = [0.33, 0.45], posB: [number, number] = [0.66, 0.45]
   let libere: Messa['libere'] = []
@@ -576,33 +576,33 @@ export async function scriviEnunciato(s: Sheet, r: Rnd, e: Enunciato, m: Messa, 
   }
   const z = m.libere[0], z2 = m.libere[1] ?? m.libere[0]
   const fonte = `«${e.citazione}» — ${e.fonte}`
+  const misura = async (text: string, size: number, maxW: number, f: FaceId = face) => { const L = (await textLayer(prova, { text, face: f, sizePx: size * M, color: '#000', x: 0, y: 0, maxW })).layers[0]; return L.canvas.height / s.H }
+  /** frase e fonte in un blocco unico: misura prima, poi sistema; se non ci sta, sale o rimpicciolisce. Mai testo sopra testo. */
+  const blocco = async (o: Sheet, left: number, top: number, maxW: number, sizeF: number, sizeS: number): Promise<Sheet> => {
+    let sf = sizeF, ss = sizeS, hF = 0, hS = 0
+    for (let k = 0; k < 4; k++) {
+      hF = await misura(e.frase, sf, maxW); hS = await misura(fonte, ss, Math.min(0.8, maxW + 0.1), 'mono')
+      if (hF + hS + 0.015 <= 0.9) break
+      sf *= 0.85; ss *= 0.9
+    }
+    const tot = hF + 0.015 + hS
+    const y = Math.max(0.05, Math.min(top, 0.95 - tot))
+    const a = await metti(o, e.frase, left, y, sf, maxW)
+    return (await metti(a.out, fonte, left, y + a.h + 0.015, ss, Math.min(0.8, maxW + 0.1), 'left', 'mono')).out
+  }
   let out = s
   switch (modo) {
-    case 'grande': {
-      const a = await metti(out, e.frase, z.x0, z.y0, e.frase.length > 34 ? 0.06 : 0.075, Math.min(0.86, z.x1 - z.x0))
-      out = a.out
-      out = (await metti(out, fonte, z.x0, Math.min(0.89, z.y0 + a.h + 0.012), 0.017, 0.6, 'left', 'mono')).out
-      break
-    }
-    case 'colonna': {
-      const colW = 0.3, left = r() < 0.5 ? 0.07 : 0.93 - colW
-      const a = await metti(out, e.frase, left, z2.y0, 0.034, colW)
-      out = (await metti(a.out, fonte, left, Math.min(0.9, z2.y0 + a.h + 0.01), 0.015, colW, 'left', 'mono')).out
-      break
-    }
+    case 'grande': out = await blocco(out, z.x0, z.y0, Math.min(0.86, z.x1 - z.x0), e.frase.length > 34 ? 0.06 : 0.075, 0.017); break
+    case 'colonna': { const colW = 0.3, left = r() < 0.5 ? 0.07 : 0.93 - colW; out = await blocco(out, left, z2.y0, colW, 0.034, 0.015); break }
     case 'etichette': {
       // le due parole accanto ai loro segni, la frase in basso
       const lab = async (o: Sheet, w: string, p: [number, number], dy: number) => (p[0] > 0.6 ? metti(o, w, p[0] - 0.02, p[1] + dy, 0.03, 0.4, 'right') : metti(o, w, p[0] + 0.02, p[1] + dy, 0.03, 0.4))
       out = (await lab(out, e.a, m.posA, -0.2)).out
       out = (await lab(out, e.b, m.posB, 0.16)).out
-      const a = await metti(out, e.frase, z.x0, z.y0 + 0.02, 0.04, z.x1 - z.x0)
-      out = (await metti(a.out, fonte, z.x0, Math.min(0.89, z.y0 + 0.03 + a.h), 0.015, 0.7, 'left', 'mono')).out
+      out = await blocco(out, z.x0, z.y0 + 0.02, z.x1 - z.x0, 0.04, 0.015)
       break
     }
-    default: {
-      const a = await metti(out, e.frase, z.x0, z.y0 + 0.02, 0.045, z.x1 - z.x0)
-      out = (await metti(a.out, fonte, z.x0, Math.min(0.89, z.y0 + 0.03 + a.h), 0.016, 0.7, 'left', 'mono')).out
-    }
+    default: out = await blocco(out, z.x0, z.y0 + 0.02, z.x1 - z.x0, 0.045, 0.016)
   }
   return out
 }

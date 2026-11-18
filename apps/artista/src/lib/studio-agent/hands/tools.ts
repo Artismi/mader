@@ -11,7 +11,7 @@ import { FACES, loadLabFonts, type FaceId } from '@/components/studio/genera/fon
 import { fontCss, type Face } from '@/components/studio/genera/raster'
 import { pick, range, chance, type Rnd } from '../core/rng'
 import type { Intention, Mood, ShaderSource } from '../core/types'
-import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, type Sheet, type Layer, type Blend } from './sheet'
+import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, sfuma, type Sheet, type Layer, type Blend } from './sheet'
 import { runShader } from './shader'
 import { NUOVI } from './tools2'
 
@@ -83,7 +83,7 @@ const semina: Tool = {
     await loadLabFonts()
     const canvas = runRecipe(rc, values, p.seed as number, p.piece ? 'pezzo' : '4:5', c.quality)
     if (!p.piece) return withLayer(s, fullLayer(s, lid(), 'ricetta', canvas, p.blend as Blend))
-    return withLayer(s, { id: lid(), kind: 'ricetta', canvas, x: p.x as number, y: p.y as number, scale: p.scale as number, rot: p.rot as number, alpha: 1, blend: p.blend as Blend })
+    return withLayer(s, { id: lid(), kind: 'ricetta', canvas: sfuma(canvas, 0.14), x: p.x as number, y: p.y as number, scale: p.scale as number, rot: p.rot as number, alpha: 1, blend: p.blend as Blend })
   },
 }
 
@@ -173,9 +173,7 @@ const pattern: Tool = {
     const reg = p.region as string
     const rx = reg === 'destra' ? s.W / 2 : 0, ry = reg === 'basso' ? s.H / 2 : 0
     const rw = reg === 'sinistra' || reg === 'destra' ? s.W / 2 : s.W, rh = reg === 'alto' || reg === 'basso' ? s.H / 2 : s.H
-    g.beginPath()
-    if (reg === 'centro') g.rect(s.W * 0.2, s.H * 0.2, s.W * 0.6, s.H * 0.6); else g.rect(rx, ry, rw, rh)
-    g.clip()
+    void rx; void ry; void rw; void rh
     g.translate(s.W / 2, s.H / 2); g.rotate(p.angle as number); g.translate(-s.W, -s.H)
     g.fillStyle = g.strokeStyle = p.color as string
     g.lineWidth = p.weight as number
@@ -189,6 +187,14 @@ const pattern: Tool = {
       case 'scacchi': for (let y = 0; y < L; y += st) for (let x = 0; x < L; x += st) if (((x + y) / st) % 2 === 0) g.fillRect(x, y, st, st); break
     }
     g.restore()
+    // la regione sfuma invece di finire con un taglio netto
+    if (reg !== 'tutto') {
+      g.globalCompositeOperation = 'destination-in'
+      const gr = reg === 'alto' ? g.createLinearGradient(0, 0, 0, s.H) : reg === 'basso' ? g.createLinearGradient(0, s.H, 0, 0) : reg === 'sinistra' ? g.createLinearGradient(0, 0, s.W, 0) : reg === 'destra' ? g.createLinearGradient(s.W, 0, 0, 0) : null
+      if (gr) { gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.35, 'rgba(0,0,0,1)'); gr.addColorStop(0.65, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr }
+      else { const rg = g.createRadialGradient(s.W / 2, s.H / 2, 0, s.W / 2, s.H / 2, s.H * 0.5); rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(0.6, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg }
+      g.fillRect(0, 0, s.W, s.H)
+    }
     return withLayer(s, fullLayer(s, lid(), 'pattern', cv, p.blend as Blend, p.alpha as number))
   },
 }
