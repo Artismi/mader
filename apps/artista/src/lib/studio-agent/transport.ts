@@ -97,9 +97,10 @@ export async function exportArchive(): Promise<Blob> {
 }
 
 // ─── Instagram (la parte che parla con Instagram sta sul server locale) ──────
-export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; scade?: string; error?: string }
+export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; scade?: string; via?: string; error?: string }
 const j = (r: Response) => r.json()
 export const igStato = (): Promise<IgStato> => fetch('/api/studio-agent/ig-stato').then(j).catch(e => ({ collegato: false, error: String(e) }))
+export const upChiave = (key: string, user: string): Promise<IgStato> => fetch('/api/studio-agent/up-chiave', { method: 'POST', body: JSON.stringify({ key, user }) }).then(j)
 export const igToken = (token: string): Promise<IgStato> => fetch('/api/studio-agent/ig-token', { method: 'POST', body: JSON.stringify({ token }) }).then(j)
 export const igTunnel = (): Promise<{ tunnel?: string; error?: string }> => fetch('/api/studio-agent/ig-tunnel', { method: 'POST', body: '{}' }).then(j)
 export const igMedia = (nome: string, b: Blob): Promise<{ nome?: string; error?: string }> => fetch(`/api/studio-agent/ig-media?nome=${encodeURIComponent(nome)}`, { method: 'POST', body: b }).then(j)

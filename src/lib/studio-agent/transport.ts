@@ -29,9 +29,10 @@ export const esplora = (url: string, word: string, skip: string[]) => call<Raw[]
 export const shader = (url: string) => call<{ code: string | null }>('/shader', { method: 'POST', body: JSON.stringify({ url }) }).catch(() => ({ code: null }))
 
 // Instagram: in Creative OS non è ancora collegato (c'è nell'app autonoma)
-export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; scade?: string; error?: string }
+export interface IgStato { collegato: boolean; username?: string; userId?: string; tunnel?: string | null; usati24h?: number; limite24h?: number; scade?: string; via?: string; error?: string }
 const noIg = { error: 'Instagram è disponibile nell\'app autonoma' }
 export const igStato = async (): Promise<IgStato> => ({ collegato: false, ...noIg })
+export const upChiave = async (_k: string, _u: string): Promise<IgStato> => ({ collegato: false, ...noIg })
 export const igToken = async (_t: string): Promise<IgStato> => ({ collegato: false, ...noIg })
 export const igTunnel = async (): Promise<{ tunnel?: string; error?: string }> => noIg
 export const igMedia = async (_n: string, _b: Blob): Promise<{ nome?: string; error?: string }> => noIg

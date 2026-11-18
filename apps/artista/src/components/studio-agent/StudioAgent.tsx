@@ -168,7 +168,7 @@ export function StudioAgent() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold">{st.name || 'Artista senza nome'}</div>
-          <div className="text-sm text-white/50">versione 18/11d · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
+          <div className="text-sm text-white/50">versione 18/11e · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
@@ -417,10 +417,22 @@ function InstagramPanel({ onCambia }: { onCambia: (s: T.IgStato) => void }) {
   const [msg, setMsg] = useState('')
   useEffect(() => { T.igStato().then(x => { setS(x); onCambia(x) }) }, [onCambia])
   const collega = async () => { setMsg('verifico…'); const x = await T.igToken(token); setS(x); onCambia(x); setMsg(x.error ?? (x.collegato ? 'collegato' : 'non collegato')); setToken('') }
+  const [upKey, setUpKey] = useState('')
+  const [upUser, setUpUser] = useState('')
+  const collegaUP = async () => { setMsg('verifico…'); const x = await T.upChiave(upKey, upUser); setS(x); onCambia(x); setMsg(x.error ?? (x.collegato ? 'collegato' : 'non collegato')); setUpKey('') }
   const tunnel = async () => { setMsg('apro il tunnel (la prima volta scarica cloudflared)…'); const x = await T.igTunnel(); setMsg(x.error ?? `tunnel aperto: ${x.tunnel}`) }
   return (
     <div className={`${box} lg:col-span-2`}>
       <div className={h}>Instagram</div>
+      <div className="mb-1 text-sm font-semibold">Modo semplice: Upload-Post</div>
+      <p className="mb-2 text-xs text-white/50">Colleghi Instagram sul sito di Upload-Post con un clic, crei un profilo (un nome qualsiasi), copi la chiave API e la incolli qui. Le tavole partono direttamente dal tuo PC: niente token di Meta, niente tunnel. Massimo 10 tavole per post.</p>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input type="password" placeholder="chiave API di Upload-Post" value={upKey} onChange={e => setUpKey(e.target.value)} className="w-80 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
+        <input placeholder="nome del profilo su Upload-Post" value={upUser} onChange={e => setUpUser(e.target.value)} className="w-56 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
+        <button className={btn} onClick={collegaUP} disabled={!upKey || !upUser}>Collega</button>
+        <a className={btn} href="https://app.upload-post.com/manage-users" target="_blank" rel="noreferrer">Apri Upload-Post</a>
+      </div>
+      <div className="mb-1 text-sm font-semibold">Modo diretto: token di Meta</div>
       <p className="mb-2 text-xs text-white/50">Incolla il token generato nella dashboard di Meta (Instagram API con login Instagram). Resta sul tuo PC, in un file nella tua cartella utente. Per pubblicare il PC deve restare acceso con questa pagina aperta: Instagram scarica le tavole dal tuo PC attraverso un tunnel gratuito di Cloudflare.</p>
       <div className="flex flex-wrap items-center gap-2">
         <input type="password" placeholder="token di accesso" value={token} onChange={e => setToken(e.target.value)} className="w-96 rounded border border-white/15 bg-transparent px-2 py-1 text-sm" />
@@ -428,7 +440,7 @@ function InstagramPanel({ onCambia }: { onCambia: (s: T.IgStato) => void }) {
         <button className={btn} onClick={tunnel}>Prova il tunnel</button>
         <span className="text-sm text-white/60">{msg}</span>
       </div>
-      {s && <div className="mt-2 text-sm">{s.collegato ? <>collegato come <b>@{s.username}</b>{s.limite24h ? ` · ${s.usati24h ?? 0}/${s.limite24h} post nelle ultime 24 ore` : ''}{s.tunnel ? ` · tunnel ${s.tunnel}` : ''}{s.scade ? ` · il token scade circa il ${new Date(s.scade).toLocaleDateString('it-IT')} (lo rinnovo da solo se il programma gira almeno una volta dopo 50 giorni)` : ''}</> : <span className="text-white/50">non collegato{s.error ? ` (${s.error})` : ''}</span>}</div>}
+      {s && <div className="mt-2 text-sm">{s.collegato ? <>collegato{s.via ? ` via ${s.via}, profilo` : ' come'} <b>{s.via ? s.username : `@${s.username}`}</b>{s.limite24h ? ` · ${s.usati24h ?? 0}/${s.limite24h} post nelle ultime 24 ore` : ''}{s.tunnel ? ` · tunnel ${s.tunnel}` : ''}{s.scade ? ` · il token scade circa il ${new Date(s.scade).toLocaleDateString('it-IT')} (lo rinnovo da solo se il programma gira almeno una volta dopo 50 giorni)` : ''}</> : <span className="text-white/50">non collegato{s.error ? ` (${s.error})` : ''}</span>}</div>}
     </div>
   )
 }

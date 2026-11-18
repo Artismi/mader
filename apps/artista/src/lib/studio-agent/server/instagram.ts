@@ -22,7 +22,7 @@ const CONF = join(DIR, 'instagram.json')
 mkdirSync(MEDIA, { recursive: true })
 
 const G = 'https://graph.instagram.com/v27.0'
-export interface Conf { token?: string; userId?: string; username?: string; tokenDel?: number }
+export interface Conf { token?: string; userId?: string; username?: string; tokenDel?: number; upKey?: string; upUser?: string }
 export const leggiConf = (): Conf => { try { return JSON.parse(readFileSync(CONF, 'utf8')) } catch { return {} } }
 const scriviConf = (c: Conf) => writeFileSync(CONF, JSON.stringify(c, null, 2))
 
@@ -60,6 +60,7 @@ export async function rinnovaSeServe() {
 }
 export async function stato() {
   const c = leggiConf()
+  if (c.upKey && c.upUser) return { collegato: true, via: 'upload-post', username: c.upUser }
   if (!c.token) return { collegato: false, tunnel: tunnelUrl }
   await rinnovaSeServe()
   const me = await ig('me', { fields: 'user_id,username' }) as { user_id?: string; id?: string; username?: string }
@@ -182,4 +183,47 @@ async function pubblicaCon(base: string, file: string[], didascalia: string): Pr
   const pub = await ig(`${c.userId}/media_publish`, { creation_id: contenitore }, 'POST') as { id: string }
   const info = await ig(pub.id, { fields: 'permalink' }).catch(() => ({})) as { permalink?: string }
   return { id: pub.id, permalink: info.permalink }
+}
+
+// ─── modo semplice: Upload-Post (upload-post.com) ───────────────────────────
+// Upload-Post ha già la sua app Meta approvata: colleghi Instagram con un clic sul loro sito,
+// copi la chiave API, e da qui gli mandiamo direttamente i file. Niente token Meta, niente tunnel.
+const UP = 'https://api.upload-post.com/api'
+export async function salvaUploadPost(key: string, user: string) {
+  key = key.trim(); user = user.trim()
+  if (!key || !user) { scriviConf({ ...leggiConf(), upKey: undefined, upUser: undefined }); return stato() }
+  // la chiave è buona se il server la riconosce (uno stato inesistente risponde "non trovato", non "non autorizzato")
+  const r = await fetch(`${UP}/uploadposts/status?request_id=prova-chiave`, { headers: { Authorization: `Apikey ${key}` } })
+  if (r.status === 401 || r.status === 403) throw new Error('Upload-Post non riconosce questa chiave API.')
+  scriviConf({ ...leggiConf(), upKey: key, upUser: user })
+  return stato()
+}
+export async function pubblicaUploadPost(file: string[], didascalia: string): Promise<{ id: string; permalink?: string }> {
+  const c = leggiConf()
+  if (!c.upKey || !c.upUser) throw new Error('Upload-Post non è collegato')
+  const fd = new FormData()
+  fd.append('user', c.upUser)
+  fd.append('platform[]', 'instagram')
+  fd.append('title', didascalia.slice(0, 2200))
+  fd.append('async_upload', 'true')
+  for (const f of file.slice(0, 10)) {
+    const m = leggiMedia(f)
+    if (!m) throw new Error(`manca il file ${f}`)
+    fd.append('photos[]', new Blob([new Uint8Array(m.dati)], { type: m.tipo }), f)
+  }
+  const res = await fetch(`${UP}/upload_photos`, { method: 'POST', headers: { Authorization: `Apikey ${c.upKey}` }, body: fd })
+  const j = await res.json().catch(() => ({})) as { request_id?: string; success?: boolean; message?: string; error?: string; results?: Record<string, { url?: string; post_url?: string }> }
+  if (res.status === 429) throw new Error('Upload-Post: limite raggiunto (piano gratuito: 10 post al mese; Instagram: 50 al giorno).')
+  if (!res.ok) throw new Error(`Upload-Post: ${j.message ?? j.error ?? res.status}`)
+  const id = j.request_id ?? ''
+  // aspetta che Instagram l'abbia pubblicato (fino a 10 minuti)
+  for (let i = 0; i < 60 && id; i++) {
+    await pausa(10000)
+    const s = await fetch(`${UP}/uploadposts/status?request_id=${encodeURIComponent(id)}`, { headers: { Authorization: `Apikey ${c.upKey}` } }).then(r => r.json()).catch(() => null) as { status?: string; message?: string; results?: { platform?: string; success?: boolean; message?: string; post_url?: string | null }[] } | null
+    if (!s) continue
+    const ri = s.results?.find(x => x.platform === 'instagram')
+    if (s.status === 'completed' || ri?.success) { if (ri && ri.success === false) throw new Error(`Instagram: ${ri.message ?? 'non pubblicato'}`); return { id, permalink: ri?.post_url ?? undefined } }
+    if (s.status === 'failed') throw new Error(`Upload-Post: ${s.message ?? ri?.message ?? 'non pubblicato'}`)
+  }
+  return { id }
 }
