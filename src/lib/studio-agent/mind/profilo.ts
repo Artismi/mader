@@ -11,7 +11,8 @@ import { getEpisodi, getVisione, type FormaSeq } from './episodio'
 import type { Deduzione } from '../voice/scrittura'
 import { inglese } from '../reader/concepts'
 import type { Linguaggio } from './linguaggi'
-import type { Partitura } from '../suono/musica'
+import { GENERE_NOME, type Partitura } from '../suono/musica'
+import { concorda } from '../voice/lingua'
 
 export interface Profilo { perche?: string; why?: string; nome: string; username: string; bio: string; presentazione: string; temi: string[]; day: number; foto?: string; storia: { day: number; cosa: string }[] }
 type WithP = AgentState & { profilo?: Profilo }
@@ -171,4 +172,72 @@ export function battezza(st: AgentState, works: Work[] = []): { nome: string; pe
     aggiornaProfilo(st, works)
   }
   return r
+}
+
+// ─── la didascalia in italiano, come la scrive lui: cosa ha fatto nelle tavole, non come ci è arrivato ───
+const GESTO: Record<string, string[]> = {
+  svizzero: ['dentro una griglia severa', 'con le righe in ordine, come un orario'],
+  costruttivista: ['a colpi di diagonali', 'come manifesti da attaccare ai muri'],
+  riso: ['con inchiostri che sbavano', 'come stampe passate due volte'],
+  glitch: ['facendole inciampare', 'lasciando che si rompessero'],
+  organico: ['lasciandole crescere da sole', 'come cose che respirano'],
+  collage: ['ritagliando e incollando', 'con pezzi presi da altre pagine'],
+  concettuale: ['quasi solo con le parole', 'togliendo le immagini e tenendo le frasi'],
+  datapoesia: ['contando', 'trasformando le parole in numeri'],
+  acido: ['con colori che bruciano', 'fino a farle girare'],
+  brutalista: ['a blocchi pesanti', 'senza chiedere scusa'],
+  ornamento: ['ripetendo un motivo finché diventa una preghiera', 'come una carta da parati che ricorda'],
+  minimo: ['togliendo quasi tutto', 'con pochissimo'],
+}
+const scegli = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]
+const pulisci = (t: string) => t.replace(/\s+/g, ' ').replace(/[.:;,\s]+$/, '').trim()
+const minuscola = (t: string) => (/^[A-ZÀ-Ý]{2,}/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1))
+const maiuscola = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+
+export function didascaliaIT(st: AgentState, o: { n: number; titolo: string; schede: { titolo: string; corpo?: string; ruolo?: string; a?: string }[]; d: Deduzione | null; domanda: string; lettura?: string; forma: FormaSeq; L: Pick<Linguaggio, 'id' | 'nome'>; partitura: Partitura }): string {
+  const dom = pulisci(o.domanda ?? '').replace(/\?+$/, '').toLowerCase()
+  const versi = [...new Set(o.schede.map(s => pulisci(s.titolo).replace(/\?+$/, '')).filter(t => t && t.length < 90 && t.toLowerCase() !== o.titolo.toLowerCase() && t.toLowerCase() !== dom))]
+  // il titolo di una lettura può essere un nome di file: lo rendo leggibile
+  const lettura = o.lettura ? o.lettura.split('/').pop()!.replace(/\.(md|txt|pdf)$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim() : undefined
+  const parole = [...new Set(o.schede.map(s => s.a).filter((x): x is string => !!x))]
+  const a = o.d?.a ?? parole[0], b = o.d?.b ?? parole[parole.length - 1]
+  const pulisciNome = (t: string) => (/[/_]/.test(t) ? t.split('/').pop()!.replace(/\.(md|txt|pdf)$/i, '').replace(/_+/g, ' ').trim() : t)
+  const righe: string[] = [maiuscola(pulisciNome(o.titolo)), '']
+  // come comincia: lo decide la forma
+  const aperture = [
+    lettura ? `Ho letto «${lettura}» e mi sono fermato su una parola: ${a}.` : '',
+    a && b && a !== b ? `Sono partito da ${a} e sono arrivato a ${b}, senza sapere che strada avrei fatto.` : '',
+    a ? `Oggi ho girato intorno a ${a}.` : '',
+    lettura ? `Da «${lettura}» mi è rimasta addosso una cosa sola.` : '',
+  ].filter(Boolean)
+  if (o.forma === 'a ritroso' && o.d) righe.push(`Comincio dalla fine: ${minuscola(pulisci(o.d.testo))}. Poi torno indietro.`)
+  else if (o.forma !== 'frammenti' && aperture.length) righe.push(scegli(aperture))
+  // le tavole come versi
+  const k = Math.min(versi.length, o.forma === 'manifesto' ? 3 : o.forma === 'frammenti' ? 5 : 4)
+  const scelti = o.forma === 'frammenti' ? versi.slice().sort(() => Math.random() - 0.5).slice(0, k) : versi.slice(0, k)
+  if (scelti.length) {
+    righe.push('')
+    if (o.forma === 'dialogo') righe.push(...scelti.map(v => `— ${maiuscola(v)}`))
+    else if (o.forma === 'catalogo' && parole.length > 2) righe.push(parole.slice(0, 8).join(', ') + '.')
+    else if (o.forma === 'frammenti') righe.push(scelti.map(minuscola).join(' / '))
+    else righe.push(...scelti.map(v => maiuscola(v)))
+  }
+  // cosa ne pensa, detto da lui
+  if (o.d) {
+    righe.push('')
+    const t = minuscola(pulisci(o.d.testo)), p = o.d.conf
+    righe.push(o.d.ritirata ? `A metà mi sono contraddetto, e ho lasciato la contraddizione dov'era.`
+      : p >= 0.7 ? scegli([`Ne sono quasi sicuro: ${t}.`, `Lo dico piano, ma lo dico: ${t}.`])
+      : p >= 0.4 ? scegli([`Forse ${t}.`, `Può darsi che ${t}. Non lo so ancora.`])
+      : scegli([`Non ci credo, ma lo scrivo lo stesso: ${t}.`, `È solo un'ipotesi: ${t}.`]))
+  }
+  // come l'ha fatto: immagini e suono, in poche parole
+  const gesti = o.L.id.split('×').map(x => GESTO[x]).filter(Boolean).map(g => scegli(g!))
+  const suono = `${GENERE_NOME[o.partitura.genere] ?? o.partitura.genere} che ${o.partitura.risolve ? 'alla fine trova pace' : 'resta sospesa'}`
+  righe.push('', gesti.length ? `Le ho disegnate ${gesti.join(' e ')}; sotto c'è musica ${suono}.` : `Sotto le tavole c'è musica ${suono}.`)
+  if (o.domanda && Math.random() < 0.6) righe.push('', maiuscola(pulisci(o.domanda).replace(/\?+$/, '')) + '?')
+  if (o.n === 1 || o.n % 8 === 0) righe.push('', `(Sono ${st.name}: un programma che legge, ragiona con delle regole e disegna. Nessuna intelligenza artificiale.)`)
+  const tag = (w: string) => '#' + w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+  righe.push('', [...new Set([a, b].filter((w): w is string => !!w && !w.includes(' ')).map(w => tag(w)).concat(['#artegenerativa', '#artistaosservatore']))].join(' '))
+  return righe.map(r => (r ? concorda(r) : r)).join('\n').replace(/\?\?/g, '?').slice(0, 2150)
 }
