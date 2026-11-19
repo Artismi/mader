@@ -70,3 +70,18 @@ export async function perIlSito() {
 }
 
 export const memoria = { importa: T.importaMemoria, esporta: T.esportaMemoria }
+
+/** il brano intero di una sequenza (tutte le sezioni in fila), caricato sul server come WAV */
+export async function branoSequenza(epId: string) {
+  const st = await loadOrCreate()
+  const ep = getEpisodi(st).find(e => e.id === epId) as Ep | undefined
+  if (!ep?.musica) return null
+  const parti: AudioBuffer[] = []
+  for (let i = 0; i < ep.musica.partitura.sezioni.length; i++) parti.push(await suona(ep.musica.partitura, i, 44100))
+  const ch = Math.max(...parti.map(p => p.numberOfChannels)), len = parti.reduce((a, p) => a + p.length, 0)
+  const tutto = new AudioBuffer({ length: len, numberOfChannels: ch, sampleRate: 44100 })
+  let o = 0
+  for (const p of parti) { for (let c = 0; c < ch; c++) tutto.getChannelData(c).set(p.getChannelData(Math.min(c, p.numberOfChannels - 1)), o); o += p.length }
+  const r = await T.igMedia(`${ep.id}-brano.wav`, wav(tutto))
+  return r.nome ?? null
+}

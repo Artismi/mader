@@ -80,12 +80,25 @@ try {
     } catch (e) { log('Instagram: errore —', e.message) }
   } else if (r.episodio) log('Instagram non collegato: la sequenza resta nel sito')
 
+  // il brano della sequenza, per il sito (mp3)
+  if (r.episodio) {
+    try {
+      const nome = await pg.evaluate(id => window.__artista.branoSequenza(id), r.episodio)
+      if (nome) { mkdirSync(join(MEM, 'audio'), { recursive: true }); execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, nome), '-c:a', 'libmp3lame', '-b:a', '128k', join(MEM, 'audio', `${r.episodio}.mp3`)]) }
+    } catch (e) { log('brano non salvato:', e.message) }
+  }
+
   // salva la memoria (immagini solo delle opere recenti, il resto vive su Instagram e nel sito)
   const m = await pg.evaluate(() => window.__artista.memoria.esporta(160))
   const tenere = new Set(Object.keys(m.images))
   for (const [id, url] of Object.entries(m.images)) writeFileSync(join(MEM, 'img', `${id}.jpg`), Buffer.from(url.split(',')[1], 'base64'))
   for (const f of readdirSync(join(MEM, 'img'))) if (!tenere.has(f.replace(/\.jpg$/, ''))) rmSync(join(MEM, 'img', f))
   writeFileSync(arch, JSON.stringify({ state: m.state, works: m.works }))
+  // i brani: solo delle ultime 12 sequenze
+  if (existsSync(join(MEM, 'audio'))) {
+    const tieni = new Set((await pg.evaluate(() => window.__artista.perIlSito())).sequenze.slice(0, 12).map(e => `${e.id}.mp3`))
+    for (const f of readdirSync(join(MEM, 'audio'))) if (!tieni.has(f)) rmSync(join(MEM, 'audio', f))
+  }
   // il sito
   const s = await pg.evaluate(() => window.__artista.perIlSito())
   writeFileSync(join(MEM, 'index.html'), sito(s, tenere))
@@ -109,6 +122,7 @@ function sito(s, img) {
   <section>
     <h2>${esc(e.titolo)}</h2>
     <p class="meta">giorno ${e.giorno}${e.musica ? ` · ${esc(e.musica)}` : ''}${e.instagram?.permalink ? ` · <a href="${esc(e.instagram.permalink)}">su Instagram</a>` : ''}</p>
+    ${existsSync(join(MEM, 'audio', `${e.id}.mp3`)) ? `<audio controls preload="none" src="audio/${e.id}.mp3"></audio>` : ''}
     <div class="strip">${e.schede.filter(id => img.has(id)).map(id => `<img loading="lazy" src="img/${id}.jpg" alt="">`).join('')}</div>
     <details><summary>didascalia</summary><pre>${esc(e.didascalia)}</pre></details>
   </section>`).join('')
@@ -117,7 +131,7 @@ function sito(s, img) {
 <style>body{margin:0;background:#0d0d0d;color:#eee;font:16px/1.5 system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:32px}
 h1{font-size:44px;margin:0}h2{font-size:22px;margin:28px 0 4px}.meta{color:#999;font-size:13px;margin:0 0 8px}a{color:#9fe}
 .strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.strip img{height:300px;aspect-ratio:4/5;object-fit:cover;border-radius:4px}
-pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace;color:#bbb}.bio{color:#ccc;max-width:720px;white-space:pre-wrap}</style></head>
+audio{width:100%;max-width:520px;margin:4px 0 8px}pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace;color:#bbb}.bio{color:#ccc;max-width:720px;white-space:pre-wrap}</style></head>
 <body><main>
 <h1>${esc(s.nome)}</h1>
 <p class="meta">giorno ${s.giorno} · aggiornato ${new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}</p>
