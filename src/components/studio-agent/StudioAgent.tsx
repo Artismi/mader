@@ -168,7 +168,7 @@ export function StudioAgent() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold">{st.name || 'Artista senza nome'}</div>
-          <div className="text-sm text-white/50">versione 18/11e · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
+          <div className="text-sm text-white/50">versione 19/11 · Giorno {st.day} · umore {st.mood} · {works.length} opere{st.lastRun ? ` · ultima giornata ${new Date(st.lastRun).toLocaleString('it-IT')}` : ''}</div>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-white/60"><input type="checkbox" checked={fast} onChange={e => setFast(e.target.checked)} /> veloce</label>
@@ -456,14 +456,19 @@ function EpisodiView({ st, works, ig, formato, n, onSalva }: { st: AgentState; w
     if (!ep.musica) return
     audioRef.current?.close()
     const ac = new AudioContext(); audioRef.current = ac
+    ac.resume().catch(() => {})
     let t = ac.currentTime + 0.1
     setStato('compongo…')
+    try {
     for (let i = 0; i < ep.musica.partitura.sezioni.length; i++) {
       const b = await suona(ep.musica.partitura, i)
+      if (audioRef.current !== ac) return
+      if (ac.currentTime > t) t = ac.currentTime + 0.05
       const src = ac.createBufferSource(); src.buffer = b; src.connect(ac.destination); src.start(t)
       t += b.duration - (ep.musica.partitura.sezioni[i].ultimo ? 1.5 : 0)
       if (i === 0) setStato('suona')
     }
+    } catch (e) { setStato(`la musica non parte: ${e instanceof Error ? e.message : String(e)}`) }
   }
   const ferma = () => { audioRef.current?.close(); audioRef.current = null; setStato('') }
   // anteprima: clic su una tavola = suona il suo pezzo di brano, come sarà nel post
@@ -474,7 +479,10 @@ function EpisodiView({ st, works, ig, formato, n, onSalva }: { st: AgentState; w
     const k = ep.schede.indexOf(id)
     if (!ep.musica.partitura.sezioni[k]) return
     const ac = new AudioContext(); audioRef.current = ac; setSuonaId(id)
-    const src = ac.createBufferSource(); src.buffer = await suona(ep.musica.partitura, k); src.connect(ac.destination); src.start()
+    ac.resume().catch(() => {})
+    let buf: AudioBuffer
+    try { buf = await suona(ep.musica.partitura, k) } catch (e) { setStato(`la musica non parte: ${e instanceof Error ? e.message : String(e)}`); setSuonaId(null); return }
+    const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.start()
     src.onended = () => setSuonaId(x => (x === id ? null : x))
   }
   const scarica = async (ep: (typeof eps)[number]) => {
@@ -520,6 +528,7 @@ function EpisodiView({ st, works, ig, formato, n, onSalva }: { st: AgentState; w
                 await T.putState(st); setStato(r.error ? `errore: ${r.error}` : 'pubblicato'); onSalva()
               }}>Pubblica su Instagram</button>}
               {(ep as Ep).instagram?.permalink && <a className={btn} href={(ep as Ep).instagram!.permalink} target="_blank" rel="noreferrer">Vedi su Instagram</a>}
+              {!ep.musica && <span className="text-xs text-white/50">questa sequenza non ha musica</span>}
               {ep.musica && <button className={btn} onClick={() => (stato ? ferma() : ascolta(ep))}>{stato ? 'Ferma' : 'Ascolta'}</button>}
               <button className={btn} onClick={() => scarica(ep)}>Scarica (.zip)</button>
             </div>

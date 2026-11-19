@@ -105,3 +105,30 @@ export const igToken = (token: string): Promise<IgStato> => fetch('/api/studio-a
 export const igTunnel = (): Promise<{ tunnel?: string; error?: string }> => fetch('/api/studio-agent/ig-tunnel', { method: 'POST', body: '{}' }).then(j)
 export const igMedia = (nome: string, b: Blob): Promise<{ nome?: string; error?: string }> => fetch(`/api/studio-agent/ig-media?nome=${encodeURIComponent(nome)}`, { method: 'POST', body: b }).then(j)
 export const igPubblica = (file: string[], didascalia: string): Promise<{ id?: string; permalink?: string; error?: string }> => fetch('/api/studio-agent/ig-pubblica', { method: 'POST', body: JSON.stringify({ file, didascalia }) }).then(j)
+
+// ─── memoria portatile (per il giro senza schermo: la memoria vive in un file, non nel browser) ───
+type Archivio = { state: AgentState | null; works: Work[]; images: Record<string, string> }
+/** svuota l'archivio del browser e ci rimette dentro la memoria salvata */
+export async function importaMemoria(a: Archivio) {
+  await tx('state', 'readwrite', s => s.clear()); await tx('works', 'readwrite', s => s.clear()); await tx('images', 'readwrite', s => s.clear())
+  if (a.state) await putState(a.state)
+  for (const w of a.works) await tx('works', 'readwrite', s => s.put({ ...w, image: '' }))
+  for (const [id, url] of Object.entries(a.images)) { const b = await (await fetch(url)).blob(); await tx('images', 'readwrite', s => s.put(b, id)) }
+  urls.clear()
+}
+/** la memoria da salvare: stato e tutte le opere, ma le immagini solo delle più recenti (in JPEG) */
+export async function esportaMemoria(maxImmagini = 160): Promise<Archivio> {
+  const st = await getState()
+  const works = await tx<Work[]>('works', 'readonly', s => s.getAll())
+  works.sort((a, b) => b.day - a.day || b.createdAt.localeCompare(a.createdAt))
+  const images: Record<string, string> = {}
+  for (const w of works.slice(0, maxImmagini)) {
+    const blob = await tx<Blob | undefined>('images', 'readonly', s => s.get(w.id))
+    if (!blob) continue
+    const bmp = await createImageBitmap(blob)
+    const cv = new OffscreenCanvas(bmp.width, bmp.height); cv.getContext('2d')!.drawImage(bmp, 0, 0)
+    const j = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.82 })
+    images[w.id] = await new Promise<string>(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.readAsDataURL(j) })
+  }
+  return { state: st, works: works.map(w => ({ ...w, image: '' })), images }
+}

@@ -1,0 +1,43 @@
+name: giro
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+concurrency:
+  group: giro
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  giro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: strumenti
+        run: |
+          which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          npm install --no-audit --no-fund
+      - name: memoria
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git clone --depth 1 --branch memoria "$URL" memoria || (mkdir -p memoria && cd memoria && git init -q -b memoria && git remote add origin "$URL")
+      - name: giro
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+        run: node giro.mjs
+      - name: salva
+        if: always()
+        run: |
+          cd memoria
+          git config user.name "artista-osservatore"
+          git config user.email "artista@users.noreply.github.com"
+          git checkout -q --orphan nuova
+          git add -A
+          git commit -q -m "giro $(date -u +%FT%TZ)" || exit 0
+          git push -q -f origin HEAD:memoria
