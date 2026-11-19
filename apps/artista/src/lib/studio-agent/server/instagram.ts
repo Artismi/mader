@@ -36,7 +36,7 @@ async function ig(path: string, params: Record<string, string> = {}, method: 'GE
     const e = j.error ?? {}
     if (e.code === 190) throw new Error('Il token non vale più (scaduto o revocato): generane uno nuovo nella dashboard di Meta e incollalo qui.')
     if (e.code === 10 || e.code === 200) throw new Error(`Instagram nega il permesso (${e.message}). Controlla che il token sia stato generato con instagram_business_content_publish.`)
-    if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613) throw new Error('Troppe richieste a Instagram: riprovo più tardi.')
+    if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613) throw new Error(`Troppe richieste a Instagram (${e.message}): riprovo al prossimo giro.`)
     if (e.code === 9 && /limit/i.test(e.message ?? '')) throw new Error('Raggiunto il limite di post nelle 24 ore.')
     const err = new Error(`${e.error_user_msg ?? e.message ?? `Instagram ha risposto ${res.status}`}${e.code ? ` [${e.code}${e.error_subcode ? '/' + e.error_subcode : ''}]` : ''}`) as Error & { scarico?: boolean }
     // Instagram non è riuscito a scaricare il file: quasi sempre il tunnel
@@ -134,21 +134,26 @@ export async function apriTunnel(porta = Number(process.env.PORT ?? 3123)): Prom
 export function chiudiTunnel() { tunnel?.kill(); tunnel = null; tunnelUrl = null }
 
 // ─── pubblicazione ──────────────────────────────────────────────────────────
-/** aspetta che Instagram abbia scaricato ed elaborato tutti i file (i video possono metterci minuti) */
+/**
+ * aspetta che Instagram abbia scaricato ed elaborato tutti i file (i video possono metterci minuti).
+ * Instagram concede poche richieste all'ora: prima aspetta un po', poi chiede di un file alla volta
+ * (li elabora in parallelo, quindi quando il primo è pronto di solito lo sono anche gli altri), ogni 20 secondi.
+ */
 async function aspettaPronto(ids: string | string[], minuti = 12) {
-  const resto = new Set(Array.isArray(ids) ? ids : [ids])
-  const stati = new Map<string, string>()
+  const lista = Array.isArray(ids) ? ids : [ids]
   const fine = Date.now() + minuti * 60e3
-  while (resto.size && Date.now() < fine) {
-    for (const id of [...resto]) {
+  let ultimo = ''
+  await pausa(lista.length > 1 ? 45000 : 15000)
+  for (const id of lista) {
+    for (;;) {
       const j = await ig(id, { fields: 'status_code,status' }) as { status_code?: string; status?: string }
-      stati.set(id, `${j.status_code ?? '?'}${j.status ? ` (${j.status})` : ''}`)
-      if (j.status_code === 'FINISHED') resto.delete(id)
-      else if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') { const e = new Error(`Instagram non ha accettato un file: ${stati.get(id)}`) as Error & { scarico?: boolean }; e.scarico = true; throw e }
+      ultimo = `${j.status_code ?? '?'}${j.status ? ` (${j.status})` : ''}`
+      if (j.status_code === 'FINISHED' || j.status_code === 'PUBLISHED') break
+      if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') { const e = new Error(`Instagram non ha accettato un file: ${ultimo}`) as Error & { scarico?: boolean }; e.scarico = true; throw e }
+      if (Date.now() > fine) throw new Error(`Instagram ci mette troppo a elaborare i video (ultimo stato: ${ultimo})`)
+      await pausa(20000)
     }
-    if (resto.size) await pausa(6000)
   }
-  if (resto.size) throw new Error(`Instagram ci mette troppo a elaborare i video (${resto.size} non pronti: ${[...resto].map(i => stati.get(i)).join(', ')})`)
 }
 
 /** pubblica un carosello (2–20 elementi) o un elemento singolo; i file sono già in ~/.artista-osservatore/media */
