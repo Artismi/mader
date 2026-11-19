@@ -134,14 +134,21 @@ export async function apriTunnel(porta = Number(process.env.PORT ?? 3123)): Prom
 export function chiudiTunnel() { tunnel?.kill(); tunnel = null; tunnelUrl = null }
 
 // ─── pubblicazione ──────────────────────────────────────────────────────────
-async function aspettaPronto(id: string) {
-  for (let i = 0; i < 40; i++) {
-    const j = await ig(id, { fields: 'status_code' }) as { status_code?: string }
-    if (j.status_code === 'FINISHED') return
-    if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') { const e = new Error(`Instagram non ha accettato un file (${j.status_code})`) as Error & { scarico?: boolean }; e.scarico = true; throw e }
-    await pausa(3000)
+/** aspetta che Instagram abbia scaricato ed elaborato tutti i file (i video possono metterci minuti) */
+async function aspettaPronto(ids: string | string[], minuti = 12) {
+  const resto = new Set(Array.isArray(ids) ? ids : [ids])
+  const stati = new Map<string, string>()
+  const fine = Date.now() + minuti * 60e3
+  while (resto.size && Date.now() < fine) {
+    for (const id of [...resto]) {
+      const j = await ig(id, { fields: 'status_code,status' }) as { status_code?: string; status?: string }
+      stati.set(id, `${j.status_code ?? '?'}${j.status ? ` (${j.status})` : ''}`)
+      if (j.status_code === 'FINISHED') resto.delete(id)
+      else if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') { const e = new Error(`Instagram non ha accettato un file: ${stati.get(id)}`) as Error & { scarico?: boolean }; e.scarico = true; throw e }
+    }
+    if (resto.size) await pausa(6000)
   }
-  throw new Error('Instagram ci mette troppo a elaborare i video')
+  if (resto.size) throw new Error(`Instagram ci mette troppo a elaborare i video (${resto.size} non pronti: ${[...resto].map(i => stati.get(i)).join(', ')})`)
 }
 
 /** pubblica un carosello (2–20 elementi) o un elemento singolo; i file sono già in ~/.artista-osservatore/media */
@@ -175,7 +182,7 @@ async function pubblicaCon(base: string, file: string[], didascalia: string): Pr
       const j = await ig(`${c.userId}/media`, video(f) ? { media_type: 'VIDEO', video_url: url(f), is_carousel_item: 'true' } : { image_url: url(f), is_carousel_item: 'true' }, 'POST') as { id: string }
       figli.push(j.id)
     }
-    for (const id of figli) await aspettaPronto(id)
+    await aspettaPronto(figli)
     const j = await ig(`${c.userId}/media`, { media_type: 'CAROUSEL', children: figli.join(','), caption }, 'POST') as { id: string }
     contenitore = j.id
   }
