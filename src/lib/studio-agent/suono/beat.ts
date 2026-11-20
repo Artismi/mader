@@ -191,8 +191,18 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
   bus.connect(sat).connect(lp).connect(comp).connect(limit).connect(ctx.destination)
   const rev = ctx.createConvolver(); rev.buffer = stanza(ctx, 1.4 + st.polvere, r)
   const revG = ctx.createGain(); revG.gain.value = 0.08 + st.polvere * 0.06; rev.connect(revG).connect(bus)
-  // sidechain: gli accordi e il campione scendono sotto la cassa
-  const duck = ctx.createGain(); duck.connect(bus); duck.connect(rev)
+  // sidechain: gli accordi e il campione scendono sotto la cassa (poco: -4 dB), passano da un passa-alto che lascia il basso al basso,
+  // e si allargano nello stereo con un piccolo ritardo tra i canali (effetto Haas)
+  const duck = ctx.createGain()
+  const hpA = ctx.createBiquadFilter(); hpA.type = 'highpass'; hpA.frequency.value = 200; hpA.Q.value = 0.6
+  const split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2), haas = ctx.createDelay(0.05); haas.delayTime.value = 0.012
+  duck.connect(hpA); hpA.connect(merge, 0, 0); hpA.connect(haas).connect(merge, 0, 1); merge.connect(bus); hpA.connect(rev)
+  void split
+  // il basso ha il suo canale: passa-basso, e anche lui si scosta sotto la cassa
+  const busB = ctx.createGain(); const lpB = ctx.createBiquadFilter(); lpB.type = 'lowpass'; lpB.frequency.value = 220; busB.connect(lpB).connect(bus)
+  // armoniche del basso in parallelo (si sente anche sul telefono)
+  const armB = ctx.createWaveShaper(); armB.curve = curva(6); const bpB = ctx.createBiquadFilter(); bpB.type = 'bandpass'; bpB.frequency.value = 700; bpB.Q.value = 0.8; const gArm = ctx.createGain(); gArm.gain.value = 0.18
+  busB.connect(armB).connect(bpB).connect(gArm).connect(bus)
   const NB = rumore(ctx, r)
 
   const cassaT: number[] = [], rullT: number[] = [], hatT: number[] = [], battT: number[] = []
@@ -207,25 +217,26 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
   const kick = (t: number, v: number) => {
     const o1 = ctx.createOscillator(), g1 = ctx.createGain()
     o1.frequency.setValueAtTime(150 + st.durezza * 60, t); o1.frequency.exponentialRampToValueAtTime(48, t + 0.08)
-    g1.gain.setValueAtTime(v, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.35 + (1 - st.sub) * 0.1)
+    g1.gain.setValueAtTime(1.6 * v, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.32 + (1 - st.sub) * 0.1)
     o1.connect(g1).connect(bus); o1.start(t); o1.stop(t + 0.5)
     const cl = ctx.createBufferSource(); cl.buffer = NB; const cf = ctx.createBiquadFilter(); cf.type = 'highpass'; cf.frequency.value = 3000; const cg = ctx.createGain()
     cg.gain.setValueAtTime(0.25 * v * (0.5 + st.durezza), t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.012)
     cl.connect(cf).connect(cg).connect(bus); cl.start(t, r() * 0.5); cl.stop(t + 0.02)
-    duck.gain.setValueAtTime(1, t); duck.gain.linearRampToValueAtTime(0.35, t + 0.01); duck.gain.linearRampToValueAtTime(1, t + beat * 0.6)
+    duck.gain.setValueAtTime(1, t); duck.gain.linearRampToValueAtTime(0.63, t + 0.008); duck.gain.linearRampToValueAtTime(1, t + beat * 0.45)
+    busB.gain.setValueAtTime(1, t); busB.gain.linearRampToValueAtTime(0.45, t + 0.004); busB.gain.linearRampToValueAtTime(1, t + 0.09)
   }
   const snare = (t: number, v: number) => {
     const o1 = ctx.createOscillator(); o1.type = 'triangle'; const g1 = ctx.createGain()
     o1.frequency.setValueAtTime(220, t); o1.frequency.exponentialRampToValueAtTime(170, t + 0.05)
-    g1.gain.setValueAtTime(0.75 * v, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.14)
+    g1.gain.setValueAtTime(1.2 * v, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.14)
     o1.connect(g1).connect(bus); o1.start(t); o1.stop(t + 0.15)
-    const n = ctx.createBufferSource(); n.buffer = NB; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200 + st.durezza * 2500; bp.Q.value = 0.7
-    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.7 * v, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.16 + st.polvere * 0.08)
+    const n = ctx.createBufferSource(); n.buffer = NB; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200 + st.durezza * 2500; bp.Q.value = 0.5
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(2.6 * v, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.16 + st.polvere * 0.08)
     n.connect(bp).connect(ng); ng.connect(bus); ng.connect(rev); n.start(t, r() * 0.5); n.stop(t + 0.3)
     // clap a strati: tre colpi ravvicinati
     if (st.meta || st.durezza > 0.5) for (let k = 0; k < 3; k++) {
       const c = ctx.createBufferSource(); c.buffer = NB; const cb = ctx.createBiquadFilter(); cb.type = 'bandpass'; cb.frequency.value = 1400; cb.Q.value = 1.2
-      const cg = ctx.createGain(), tt = t + k * 0.011; cg.gain.setValueAtTime(0.45 * v, tt); cg.gain.exponentialRampToValueAtTime(0.001, tt + (k === 2 ? 0.14 : 0.02))
+      const cg = ctx.createGain(), tt = t + k * 0.011; cg.gain.setValueAtTime(0.9 * v, tt); cg.gain.exponentialRampToValueAtTime(0.001, tt + (k === 2 ? 0.14 : 0.02))
       c.connect(cb).connect(cg); cg.connect(bus); cg.connect(rev); c.start(tt, r() * 0.5); c.stop(tt + 0.2)
     }
   }
@@ -235,13 +246,14 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
     const g1 = ctx.createGain(), hp = ctx.createBiquadFilter(), bp = ctx.createBiquadFilter()
     hp.type = 'highpass'; hp.frequency.value = 7000; bp.type = 'bandpass'; bp.frequency.value = 10000 - st.polvere * 2500; bp.Q.value = 0.6
     const d = aperto ? 0.28 : 0.035 + st.polvere * 0.02
-    g1.gain.setValueAtTime(0.0001, t); g1.gain.linearRampToValueAtTime(0.09 * v, t + 0.001); g1.gain.exponentialRampToValueAtTime(0.0001, t + d)
-    g1.connect(bp).connect(hp).connect(bus)
+    g1.gain.setValueAtTime(0.0001, t); g1.gain.linearRampToValueAtTime(0.6 * v, t + 0.001); g1.gain.exponentialRampToValueAtTime(0.0001, t + d)
+    const pan = ctx.createStereoPanner(); pan.pan.value = 0.25
+    g1.connect(bp).connect(hp).connect(pan).connect(bus)
     for (const k of RAP) { const o1 = ctx.createOscillator(); o1.type = 'square'; o1.frequency.value = 40 * k; o1.connect(g1); o1.start(t); o1.stop(t + d + 0.02) }
   }
   const perc = (t: number, v: number) => { // rim o campanaccio
     if (st.campanaccio > 0.5) return
-    const o1 = ctx.createOscillator(); o1.type = 'square'; o1.frequency.value = 1700; const g1 = ctx.createGain(); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 4
+    const o1 = ctx.createOscillator(); o1.type = 'square'; o1.frequency.value = 1700; const g1 = ctx.createGain(); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 4
     g1.gain.setValueAtTime(0.12 * v, t); g1.gain.exponentialRampToValueAtTime(0.001, t + 0.03); o1.connect(bp).connect(g1).connect(bus); o1.start(t); o1.stop(t + 0.05)
   }
   // il basso: 808 lungo che scivola, o basso corto che segue la cassa
@@ -251,15 +263,16 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
     if (ultimaBasso && st.glide > 0.5 && r() < st.glide) { ultimaBasso.frequency.setTargetAtTime(hz(m), t, 0.03) }
     o1.frequency.setValueAtTime(hz(m), t)
     const lungo = dur * (0.4 + st.sub * 0.6)
-    g1.gain.setValueAtTime(0.0001, t); g1.gain.linearRampToValueAtTime(0.55 * v, t + 0.005); g1.gain.setTargetAtTime(0.0001, t + lungo * 0.7, lungo * 0.25)
-    o1.connect(ds).connect(g1).connect(bus); o1.start(t); o1.stop(t + lungo + 0.3)
+    g1.gain.setValueAtTime(0.0001, t); g1.gain.linearRampToValueAtTime(0.3 * v, t + 0.005); g1.gain.setTargetAtTime(0.0001, t + lungo * 0.7, lungo * 0.25)
+    if (ultimaBasso && !(st.glide > 0.5)) { try { ultimaBasso.stop(t + 0.005) } catch { /* già fermo */ } }
+    o1.connect(ds).connect(g1).connect(busB); o1.start(t); o1.stop(t + lungo + 0.3)
     ultimaBasso = o1
   }
   // piano elettrico FM (portante e modulante 1:1, indice che decade): per gli accordi e il campione
   const ep = (dest: AudioNode, t: number, m: number, dur: number, v: number) => {
     const c = ctx.createOscillator(), mo = ctx.createOscillator(), mg = ctx.createGain(), g1 = ctx.createGain()
     c.frequency.value = hz(m); mo.frequency.value = hz(m) * (st.colore > 0.5 ? 1 : 2)
-    mg.gain.setValueAtTime(hz(m) * 2.2, t); mg.gain.exponentialRampToValueAtTime(hz(m) * 0.2, t + 0.4)
+    mg.gain.setValueAtTime(hz(m) * 3.5, t); mg.gain.exponentialRampToValueAtTime(hz(m) * 0.5, t + 0.5)
     g1.gain.setValueAtTime(0.0001, t); g1.gain.linearRampToValueAtTime(0.09 * v, t + 0.006); g1.gain.setTargetAtTime(0.0001, t + dur * 0.6, dur * 0.3)
     mo.connect(mg).connect(c.frequency); c.connect(g1).connect(dest)
     c.start(t); mo.start(t); c.stop(t + dur + 0.5); mo.stop(t + dur + 0.5)
@@ -278,7 +291,7 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
     const epc = (t: number, m: number, d: number, v: number) => {
       const c = c2.createOscillator(), mo = c2.createOscillator(), mg = c2.createGain(), g1 = c2.createGain()
       c.frequency.value = hz(m); mo.frequency.value = hz(m) * (st.colore > 0.5 ? 1 : 2)
-      mg.gain.setValueAtTime(hz(m) * 2.4, t); mg.gain.exponentialRampToValueAtTime(hz(m) * 0.25, t + 0.5)
+      mg.gain.setValueAtTime(hz(m) * 3.5, t); mg.gain.exponentialRampToValueAtTime(hz(m) * 0.5, t + 0.6)
       g1.gain.setValueAtTime(0.0001, t); g1.gain.linearRampToValueAtTime(0.08 * v, t + 0.008); g1.gain.setTargetAtTime(0.0001, t + d * 0.7, d * 0.3)
       mo.connect(mg).connect(c.frequency); c.connect(g1).connect(out); c.start(t); mo.start(t); c.stop(t + d + 0.5); mo.stop(t + d + 0.5)
     }
@@ -338,7 +351,7 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
       const t = tempo(b + (m.step >= 16 ? 1 : 0), m.step % 16, 'x')
       if (t >= durata) continue
       if (st.campanaccio > 0.5) campanaccio(t, nota(g + m.grado, 1), 1)
-      else ep(duck, t, nota(m.grado, 3), s16 * 3, 0.9)
+      else ep(duck, t, nota(g + m.grado, 3), s16 * 3, 0.9)
     }
   }
   // nastro: un fruscio leggero
@@ -352,8 +365,8 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
   {
     let e = 0, n = 0
     for (let c = 0; c < audio.numberOfChannels; c++) { const d = audio.getChannelData(c); for (let i = 0; i < d.length; i += 4) { e += d[i] * d[i]; n++ } }
-    const k = 0.22 / Math.max(1e-4, Math.sqrt(e / n))
-    for (let c = 0; c < audio.numberOfChannels; c++) { const d = audio.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.tanh(d[i] * k * 1.1) / Math.tanh(1.1) * 0.95 }
+    const k = 0.17 / Math.max(1e-4, Math.sqrt(e / n))
+    for (let c = 0; c < audio.numberOfChannels; c++) { const d = audio.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.tanh(d[i] * k * 1.1) / Math.tanh(1.1) * 0.89 }
   }
   const descr = descrivi(st)
   const energia = (t: number) => (t < cambio ? 0.65 : 1) * (t > durata - bar ? 0.85 : 1)

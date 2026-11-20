@@ -38,6 +38,7 @@ import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione } from './mind/episodio'
 import { smonta, evolviCoreografia, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
+import { ascoltaBeat } from './suono/ascolto'
 import { testoGrafico } from './hands/testiReel'
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
@@ -644,22 +645,37 @@ export async function loadOrCreate(): Promise<AgentState> {
 type ConMovimento = AgentState & { beat?: Gusto; movimento?: { memoria: Coreografia[]; rel: Record<string, Partial<Record<Accoppiamento, number>>>; diario: string[] } }
 async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: { rel?: string; interesse: number }[], t: { domanda?: string; conclusione?: string; face: FaceId; parola: string }, log: (m: string) => void): Promise<{ video: Blob; audio: Blob } | null> {
   const st = st0 as ConMovimento
+  // le tavole che hanno poco da far vedere (solo testo su un fondo) restano fuori dal reel, se ne restano almeno due
+  {
+    const TESTI = new Set(['testo', 'tipografia', 'etichette', 'firma', 'piastra'])
+    const corpo = (s: Sheet) => s.layers.filter(l => !TESTI.has(l.kind) && l.scale < 0.99).length
+    const tieni = fogli.map((f, i) => ({ i, c: corpo(f) })).filter(x => x.c >= 2).map(x => x.i)
+    if (tieni.length >= 2 && tieni.length < fogli.length) { log(`Reel: lascio fuori ${fogli.length - tieni.length} tavole che sono solo parole.`); fogli = tieni.map(i => fogli[i]); info = tieni.map(i => info[i]) }
+  }
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
-  const stile = scegliStile(gusto, r, st.day)
+  // l'orecchio sceglie: tre beat candidati (stili diversi), vince quello che suona meglio; tutti gli stili prendono il loro voto
   // il tempo di lettura di ogni tavola (parole dei suoi testi), e del reel intero: la musica dura quanto serve
   const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
   const legge = (n: number) => (n ? 1.2 + n * 0.35 : 0)
   const lettura = fogli.map(f => legge(parole(f)))
   const forte0 = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
   const servono = lettura.slice().sort((a, b) => b - a).slice(0, 4).reduce((a, b) => a + Math.max(b, 2.5), 0) + legge((t.domanda ?? '').split(/\s+/).length) + legge((t.conclusione ?? '').split(/\s+/).length)
-  const { audio, brano } = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(15, Math.min(40, servono)), memoria: gusto.pattern })
+  let migliore: { audio: AudioBuffer; brano: Awaited<ReturnType<typeof suonaBeat>>['brano']; voto: number; stile: ReturnType<typeof scegliStile>; orecchio: ReturnType<typeof ascoltaBeat> } | null = null
+  for (let k = 0; k < 3; k++) {
+    const stile = scegliStile(gusto, r, st.day)
+    const b = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(15, Math.min(40, servono)), memoria: gusto.pattern })
+    const o = ascoltaBeat(b.audio, b.brano.cassa, b.brano.rullante)
+    premiaStile(gusto, stile.id, Math.max(0, Math.min(1, (o.voto + 1) / 3)))
+    if (!migliore || o.voto > migliore.voto) migliore = { ...b, voto: o.voto, stile, orecchio: o }
+  }
+  const { audio, brano, stile, orecchio } = migliore!
   gusto.pattern = [...gusto.pattern, brano.pattern].slice(-24)
   const scena = smonta(fogli, r)
   const forte = forte0
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
   const lett2 = lettura.slice(); lett2[forte] = Math.max(lett2[forte], legge((t.domanda ?? '').split(/\s+/).length))
-  const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2.map(x => Math.max(x, legge((t.conclusione ?? '').split(/\s+/).length) * 0)))
+  const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2)
   // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni
   const testi: { t0: number; t1: number; cv: HTMLCanvasElement }[] = []
   const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }
@@ -668,14 +684,16 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   if (t.domanda) await conImg(ev.riprese[0].tav, t.domanda, 0, ev.riprese[0].t1)
   void bar
   if (t.conclusione) { const need = legge(t.conclusione.split(/\s+/).length); const rp = [...ev.riprese].slice(1).reverse().find(x => x.t1 - x.t0 >= need) ?? ev.riprese[Math.max(0, ev.riprese.length - 2)]; await conImg(rp.tav, t.conclusione, rp.t0, rp.t1) }
-  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi })
+  let copertinaMs = 0
+  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, copertina: ms => { copertinaMs = ms } })
   if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
   // memoria del movimento: la coreografia scelta, e gli accoppiamenti che hanno funzionato si rafforzano
   M.memoria = [...M.memoria, ev.coreografia].slice(-20)
   for (const [rel, a] of Object.entries(ev.coreografia.accoppia)) { const x = M.rel[rel] ?? (M.rel[rel] = {}); x[a] = (x[a] ?? 0) * 0.9 + Math.max(0, ev.voto) * 0.1 }
-  premiaStile(gusto, stile.id, 0.5)
+  void stile
   const descr = descriviCoreografia(ev.coreografia)
   M.diario = [...M.diario, descr].slice(-30)
-  log(`Reel: beat ${brano.descr}; ${descr}. ${(video.size / 1e6).toFixed(1)} MB.`)
+  log(`Reel: beat ${brano.descr} (orecchio: punch cassa ${orecchio.punchCassa.toFixed(1)} dB, rullante ${orecchio.punchRullante.toFixed(1)} dB, baricentro ${Math.round(orecchio.baricentro)} Hz); ${descr}. Copertina a ${(copertinaMs / 1000).toFixed(1)} s. ${(video.size / 1e6).toFixed(1)} MB.`)
+  ;(st as ConMovimento & { copertine?: Record<string, number> }).copertine = { ...((st as ConMovimento & { copertine?: Record<string, number> }).copertine ?? {}), ultima: copertinaMs }
   return { video, audio: wav(audio) }
 }

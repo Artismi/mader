@@ -114,6 +114,7 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
       const kc = pieno ? Math.max(W / l.canvas.width, H / l.canvas.height) : kk
       const intero = (): Nodo => ({ id: id++, ruolo, tav: ti, gruppo: (li % 2) as 0 | 1, sprite: l.canvas, x: pieno ? W / 2 : cx, y: pieno ? H / 2 : cy, w: l.canvas.width * kc, h: l.canvas.height * kc, rot: l.rot, alpha: l.alpha, blend: l.blend, padre: radice.id, indice: li, area: l.canvas.width * kk * l.canvas.height * kk })
       // le parole: solo le lettere (il colore del testo), senza aloni né piastre che la tavola aveva messo per leggerle
+      if (ruolo === 'testo' && (/^\s*fonte\s*:|wikipedia|campione/i.test(l.meta?.text ?? '') || (l.meta?.size ?? 99) * kk < 24)) return // illeggibile su un telefono: nel reel non entra
       if (ruolo === 'testo' && l.meta?.color) {
         const c = document.createElement('canvas'); c.width = l.canvas.width; c.height = l.canvas.height; const q = c.getContext('2d')!; q.drawImage(l.canvas, 0, 0)
         const d = q.getImageData(0, 0, c.width, c.height), m = l.meta.color.replace('#', ''), R = parseInt(m.slice(0, 2), 16), G = parseInt(m.slice(2, 4), 16), B = parseInt(m.slice(4, 6), 16)
@@ -157,6 +158,22 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
       }
       nodi.push(intero())
     })
+    // i due gruppi: le figure si dividono per vicinanza di posizione e di colore (k-medie, k = 2)
+    {
+      const fs = nodi.filter(n => n.tav === ti && (n.ruolo === 'figura' || n.ruolo === 'trama') && (n.sprite || n.vivo))
+      const col = (n: Nodo) => { const c = document.createElement('canvas'); c.width = 4; c.height = 4; const q = c.getContext('2d')!; try { q.drawImage((n.sprite ?? n.vivo!.layer.canvas), 0, 0, 4, 4) } catch { return [0, 0, 0] } const d = q.getImageData(0, 0, 4, 4).data; let R = 0, G = 0, B = 0, a = 0; for (let i = 0; i < d.length; i += 4) { const w = d[i + 3] / 255; R += d[i] * w; G += d[i + 1] * w; B += d[i + 2] * w; a += w } return a ? [R / a, G / a, B / a] : [0, 0, 0] }
+      const v = fs.map(n => { const c = col(n); return [n.x / W, n.y / H, c[0] / 255 * 0.7, c[1] / 255 * 0.7, c[2] / 255 * 0.7] })
+      if (fs.length >= 2) {
+        let c0 = v[0], c1 = v.reduce((m, x) => (dist2(x, v[0]) > dist2(m, v[0]) ? x : m), v[0])
+        let lab: number[] = []
+        for (let it = 0; it < 8; it++) {
+          lab = v.map(x => (dist2(x, c0) <= dist2(x, c1) ? 0 : 1))
+          const media = (k: number) => { const xs = v.filter((_, i) => lab[i] === k); return xs.length ? xs[0].map((_, j) => xs.reduce((a, x) => a + x[j], 0) / xs.length) : (k ? c1 : c0) }
+          c0 = media(0); c1 = media(1)
+        }
+        fs.forEach((n, i) => { n.gruppo = lab[i] as 0 | 1 })
+      }
+    }
     // i legami: linee tra i centri dei tre oggetti di figura più grandi della tavola
     const fig = nodi.filter(n => n.tav === ti && n.ruolo === 'figura' && n.sprite).sort((a, b) => b.area - a.area).slice(0, 3)
     const ink = lum(s.bg) > 0.5 ? '#111111' : '#f4f2ec'
@@ -191,6 +208,7 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
   }
   return { nodi, bg: fogli.map(bordo), tavole: fogli.length }
 }
+const dist2 = (a: number[], b: number[]) => a.reduce((s, x, i) => s + (x - b[i]) ** 2, 0)
 function lum(h: string) { const m = h.replace('#', ''); if (m.length < 6) return 0.5; const v = [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] }
 
 // ── il genoma della coreografia ──
@@ -236,30 +254,28 @@ const inv = (ts: number[], t: number, dec: number) => { let v = 0; for (const x 
 interface Stato { dx: number; dy: number; rot: number; sc: number; alpha: number; traccia: number; sfalda: number; scrivi: number; crescita?: number; fase?: number }
 
 /** la sceneggiatura: quali tavole, in che ordine, quando entrano ed escono */
-interface Ripresa { tav: number; t0: number; t1: number; rel?: string }
+interface Ripresa { tav: number; t0: number; t1: number; rel?: string; anello?: boolean }
 function riprese(c: Coreografia, br: Brano, n: number, forte: number, rels: (string | undefined)[], lettura: number[] = []): Ripresa[] {
   const bar = br.beat * 4, out: Ripresa[] = []
-  const scelte = [forte, ...Array.from({ length: n }, (_, i) => i).filter(i => i !== forte)].slice(0, Math.min(n, c.quante))
-  let t = 0, k = 0
-  while (t < br.durata - 1e-6) {
-    const tv = scelte[k % scelte.length]
-    // ogni tavola resta almeno quanto serve a leggerla (in battute intere)
-    const len = Math.max(c.battutePerTavola, Math.ceil((lettura[tv] ?? 0) / bar)) * bar
-    out.push({ tav: tv, t0: t, t1: Math.min(br.durata, t + len), rel: rels[tv] }); t += len; k++
-  }
-  if (out.length > 1) {
-    // l'ultima ripresa torna sulla prima tavola (il video si richiude), e se è troppo corta per leggerla si unisce alla precedente
-    const u = out[out.length - 1]
-    if (u.t1 - u.t0 < Math.min(lettura[scelte[0]] ?? 0, 2 * bar)) { out.pop(); out[out.length - 1].t1 = br.durata }
-    else u.tav = scelte[0]
-  }
+  // quante tavole entrano: nell'ordine del racconto (premesse → conclusione), senza ripetizioni; la più forte c'è sempre
+  const durata = (tv: number) => Math.max(c.battutePerTavola, Math.ceil((lettura[tv] ?? 0) / bar)) * bar
+  const tutte = Array.from({ length: n }, (_, i) => i)
+  let scelte = tutte.slice(0, Math.max(2, c.quante))
+  if (!scelte.includes(forte)) scelte = [...scelte.slice(0, -1), forte].sort((a, b) => a - b)
+  // se non ci stanno nel brano, si tolgono quelle in mezzo (mai la prima, l'ultima, la più forte)
+  while (scelte.length > 2 && scelte.reduce((a, tv) => a + durata(tv), 0) > br.durata - bar) { const via = scelte.slice(1, -1).filter(x => x !== forte)[0]; if (via === undefined) break; scelte = scelte.filter(x => x !== via) }
+  let t = 0
+  for (const tv of scelte) { if (t >= br.durata - 1e-6) break; const len = durata(tv); out.push({ tav: tv, t0: t, t1: Math.min(br.durata, t + len), rel: rels[tv] }); t += len }
+  // il tempo che avanza: allunga l'ultima, oppure (se basta una battuta) riprende la prima per chiudere ad anello
+  if (t < br.durata - 1e-6) { if (br.durata - t >= bar - 1e-6) out.push({ tav: scelte[0], t0: t, t1: br.durata, rel: rels[scelte[0]], anello: true }); else out[out.length - 1].t1 = br.durata }
   return out
 }
 
 /** lo stato di un nodo al tempo t (dentro la sua ripresa) */
 function stato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano, rango: number, quanti: number, scena: Scena, accoppia: Accoppiamento): Stato {
   const g = c.gesti[n.ruolo], beat = br.beat, bar = beat * 4
-  const tl = t - rp.t0, dur = rp.t1 - rp.t0
+  const avanti = rp.t0 === 0 ? beat * 1.5 : rp.anello ? beat * 6 : 0 // il primo fotogramma e il ritorno ad anello partono già costruiti
+  const tl = t - rp.t0 + avanti, dur = rp.t1 - rp.t0 + avanti
   // sfalsamento: il rango nell'ordine scelto, distribuito nel primo battito o due
   const principale = rango < 8 || n.ruolo === 'testo' || n.ruolo === 'linea'
   if (n.ruolo === 'testo') { const sT = { dx: 0, dy: 0, rot: 0, sc: 1, alpha: n.alpha, traccia: 1, sfalda: 0, scrivi: 1 }; const pT = tl; if (g.ingresso === 'scrivi') sT.scrivi = clamp(pT / (beat * 1)); else if (g.ingresso === 'cresci') sT.sc = Math.max(0.001, molla(pT, 12, 0.6)); else sT.alpha *= clamp(pT / (beat * 0.25)); if (g.vita === 'respira') sT.sc *= 1 + 0.015 * inv(br.cassa, t, 0.1); return sT }
@@ -268,7 +284,7 @@ function stato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano, rango
   if (accoppia === 'causa' && n.gruppo === 1) ritardo += beat * 1.5
   if (accoppia === 'canone') ritardo += n.gruppo * beat
   // ingresso agganciato al battito più vicino dopo il ritardo
-  const tIn = Math.ceil((ritardo - 1e-4) / (beat / 2)) * (beat / 2)
+  const tIn = Math.ceil((ritardo - 1e-4) / (beat / 2)) * (beat / 2) - (g.ingresso === 'appari' || g.ingresso === 'traccia' ? 0 : 0.2)
   const s: Stato = { dx: 0, dy: 0, rot: 0, sc: 1, alpha: n.alpha, traccia: 1, sfalda: 0, scrivi: 1 }
   const pi = tl - tIn
   if (pi < 0) { s.alpha = 0; s.traccia = 0; s.scrivi = 0; return s }
@@ -334,7 +350,8 @@ function stato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano, rango
 
 // ── la misura (senza disegnare) ──
 function misura(c: Coreografia, scena: Scena, br: Brano, rp: Ripresa[], memoria: Coreografia[]): number {
-  const campioni: number[] = [], attivi: number[] = []
+  const campioni: number[] = [], attivi: number[] = [], coperture: number[] = [], equilibri: number[] = [], pieni: number[] = []
+  const arrivi: { t: number; v: number; peso: number }[] = [], vel = new Map<number, number>()
   const prec = new Map<number, Stato>()
   const dt = 1 / 15
   for (let t = 0; t < br.durata; t += dt) {
@@ -342,12 +359,20 @@ function misura(c: Coreografia, scena: Scena, br: Brano, rp: Ripresa[], memoria:
     const nodi = scena.nodi.filter(n => n.tav === p.tav && n.ruolo !== 'fondo')
     const acc = c.accoppia[p.rel ?? 'sequenza'] ?? 'libero'
     let mov = 0, att = 0
+    const scatole: { x0: number; y0: number; x1: number; y1: number; testo: boolean; a: number }[] = []
     nodi.forEach((n, i) => {
       const s = stato(n, c, p, t, br, i, nodi.length, scena, acc), q = prec.get(n.id)
-      if (q) { const v = Math.hypot(s.dx - q.dx, s.dy - q.dy) + Math.abs(s.rot - q.rot) * 200 + Math.abs(s.sc - q.sc) * 300; const peso = Math.sqrt(n.area + 1) / 100; mov += v * peso; if (v > 2 && n.area > 4000) att++ }
+      if (q) { const v = Math.hypot(s.dx - q.dx, s.dy - q.dy) + Math.abs(s.rot - q.rot) * 200 + Math.abs(s.sc - q.sc) * 300; const peso = Math.sqrt(n.area + 1) / 100; mov += v * peso; if (v > 2 && n.area > 4000) att++; arrivi.push({ t, v: (vel.get(n.id) ?? 0) - v, peso }); vel.set(n.id, v) }
       prec.set(n.id, s)
+      if (s.alpha > 0.1 && (n.sprite || n.vivo) && n.area > 2000) { const w = n.w * s.sc / 2, h = n.h * s.sc / 2, x = n.x + s.dx, y = n.y + s.dy; scatole.push({ x0: x - w, y0: y - h, x1: x + w, y1: y + h, testo: n.ruolo === 'testo', a: n.area }) }
     })
     campioni.push(mov); attivi.push(att)
+    // gli occhi (geometrici): quanto i testi sono coperti da figure, quanto il quadro è pieno ed equilibrato
+    let cop = 0, aT = 0
+    for (const tx of scatole.filter(b => b.testo)) { aT += (tx.x1 - tx.x0) * (tx.y1 - tx.y0); for (const f of scatole.filter(b => !b.testo)) cop += Math.max(0, Math.min(tx.x1, f.x1) - Math.max(tx.x0, f.x0)) * Math.max(0, Math.min(tx.y1, f.y1) - Math.max(tx.y0, f.y0)) }
+    if (aT) coperture.push(Math.min(1, cop / aT))
+    let cx = 0, cy = 0, aa = 0; for (const b of scatole) { const a = (b.x1 - b.x0) * (b.y1 - b.y0); cx += (b.x0 + b.x1) / 2 * a; cy += (b.y0 + b.y1) / 2 * a; aa += a }
+    if (aa) { equilibri.push(Math.hypot(cx / aa / W - 0.5, cy / aa / H - 0.5)); pieni.push(Math.min(1, aa / (W * H))) }
   }
   const onset = campioni.map((_, i) => Math.max(inv(br.cassa, i * dt, 0.08), inv(br.rullante, i * dt, 0.1)))
   const ma = campioni.reduce((a, b) => a + b, 0) / campioni.length, mb = onset.reduce((a, b) => a + b, 0) / onset.length
@@ -357,10 +382,18 @@ function misura(c: Coreografia, scena: Scena, br: Brano, rp: Ripresa[], memoria:
   const quiete = campioni.filter(x => x < ma * 0.3).length / campioni.length
   const gesti = new Set(RUOLI.flatMap(ru => [c.gesti[ru].ingresso, c.gesti[ru].vita, c.gesti[ru].uscita]))
   const coerenza = (c.gesti.figura.direzione === c.gesti.trama.direzione ? 0.5 : 0) + (c.gesti.figura.ingresso === 'componi' || c.gesti.figura.ingresso === 'cresci' ? 0.3 : 0)
-  let v = coerenza + sync * 3 - Math.abs(attMedia - 3) * 0.6 - Math.abs(quiete - 0.3) * 3 + Math.min(10, gesti.size) * 0.15
+  // gli arrivi (le frenate) cadono sui colpi? distanza media della frenata pesata dal colpo più vicino
+  const colpi = [...br.cassa, ...br.rullante]
+  const fren = arrivi.filter(x => x.v > 3).sort((a, b) => b.v * b.peso - a.v * a.peso).slice(0, 40)
+  const sulColpo = fren.length ? fren.reduce((a, x) => a + Math.exp(-Math.min(...colpi.map(cc => Math.abs(cc - x.t))) / 0.06), 0) / fren.length : 0
+  const media = (xs: number[], d = 0) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : d)
+  // economia: pochi gesti con variazioni (non un campionario)
+  const economia = -Math.max(0, gesti.size - 6) * 0.25
+  let v = coerenza + economia + sync * 1.5 + sulColpo * 3 - Math.abs(attMedia - 2) * 0.6 - Math.abs(quiete - 0.3) * 3
+    - media(coperture) * 4 - media(equilibri) * 3 - Math.abs(media(pieni, 0.4) - 0.45) * 2
   // una ripresa deve durare abbastanza per costruirsi e farsi vedere
   if (c.battutePerTavola * br.beat * 4 < 1.6) v -= 2
-  if (memoria.length) { const dist = (a: Coreografia, b: Coreografia) => RUOLI.reduce((d, ru) => d + (['ingresso', 'vita', 'uscita', 'segnale'] as const).filter(k => a.gesti[ru][k] !== b.gesti[ru][k]).length, 0) / (RUOLI.length * 4); v += Math.min(...memoria.slice(-10).map(m => dist(c, m))) * 2 }
+  if (memoria.length) { const dist = (a: Coreografia, b: Coreografia) => RUOLI.reduce((d, ru) => d + (['ingresso', 'vita', 'uscita', 'segnale'] as const).filter(k => a.gesti[ru][k] !== b.gesti[ru][k]).length, 0) / (RUOLI.length * 4); const d = Math.min(...memoria.slice(-10).map(m => dist(c, m))); v -= Math.abs(d - 0.45) * 2 } // novità in una fascia: né copia né estraneo
   return v
 }
 
@@ -385,7 +418,7 @@ export function descriviCoreografia(c: Coreografia): string {
 }
 
 // ── il disegno ──
-export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreografia; riprese: Ripresa[]; testi?: { t0: number; t1: number; cv: HTMLCanvasElement }[]; finitura?: (cv: HTMLCanvasElement, t: number) => HTMLCanvasElement | null }): Promise<Blob | null> {
+export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreografia; riprese: Ripresa[]; testi?: { t0: number; t1: number; cv: HTMLCanvasElement }[]; finitura?: (cv: HTMLCanvasElement, t: number) => HTMLCanvasElement | null; copertina?: (ms: number) => void }): Promise<Blob | null> {
   if (typeof VideoEncoder === 'undefined') return null
   const { scena, brano: br, coreografia: c } = o
   const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H, frameRate: FPS }, fastStart: 'in-memory' })
@@ -393,7 +426,8 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   const ve = new VideoEncoder({ output: (ch, m) => muxer.addVideoChunk(ch, m), error: e => { errore = e } })
   ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 6_000_000, framerate: FPS })
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H
-  const g = cv.getContext('2d')!
+  const g = cv.getContext('2d', { willReadFrequently: true })!
+  let copertina = { v: -1, ms: 0 }
   // il ridisegno dei livelli vivi: lo strumento rifà il livello al suo momento (con una piccola memoria dei momenti già fatti)
   const cache = new Map<number, Map<string, HTMLCanvasElement>>()
   let rr = 1
@@ -440,6 +474,17 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     for (let i = 0; i < d.data.length; i += 4) { o.data[i] = o.data[i + 1] = o.data[i + 2] = 255; o.data[i + 3] = d.data[i] > 127 ? 255 : 0 }
     gM.putImageData(o, 0, 0); return tM
   }
+  // il colore di un testo: scuro se sotto è chiaro, chiaro se sotto è scuro (media della sua scatola, una volta sola)
+  const inchiostri = new Map<string, string>()
+  const inchiostro = (b: { x0: number; y0: number; x1: number; y1: number }) => {
+    const x0 = Math.max(0, Math.floor(b.x0)), y0 = Math.max(0, Math.floor(b.y0)), w = Math.max(1, Math.min(W - x0, Math.ceil(b.x1 - b.x0))), h = Math.max(1, Math.min(H - y0, Math.ceil(b.y1 - b.y0)))
+    const d = g.getImageData(x0, y0, w, h).data; let l = 0, c = 0; for (let i = 0; i < d.length; i += 4 * 9) { l += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255; c++ }
+    return l / Math.max(1, c) > 0.5 ? '#111111' : '#f4f2ec'
+  }
+  const tinte = new Map<HTMLCanvasElement, Map<string, HTMLCanvasElement>>()
+  const tinta = (src: HTMLCanvasElement, col: string) => { const m = tinte.get(src) ?? new Map(); tinte.set(src, m); if (m.has(col)) return m.get(col)!; const c = document.createElement('canvas'); c.width = src.width; c.height = src.height; const q = c.getContext('2d')!; q.drawImage(src, 0, 0); q.globalCompositeOperation = 'source-in'; q.fillStyle = col; q.fillRect(0, 0, c.width, c.height); m.set(col, c); return c }
+  const scatole = new Map<HTMLCanvasElement, { x0: number; y0: number; x1: number; y1: number }>()
+  const scatola = (cvT: HTMLCanvasElement) => { if (scatole.has(cvT)) return scatole.get(cvT)!; const q = cvT.getContext('2d')!; const d = q.getImageData(0, 0, cvT.width, cvT.height).data; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1; for (let y = 0; y < cvT.height; y += 4) for (let x = 0; x < cvT.width; x += 4) if (d[(y * cvT.width + x) * 4 + 3] > 40) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) } const k = W / cvT.width; const b = x1 < 0 ? { x0: 0, y0: 0, x1: 0, y1: 0 } : { x0: x0 * k, y0: y0 * k, x1: x1 * k, y1: y1 * k }; scatole.set(cvT, b); return b }
   const ordine = (nodi: Nodo[], o: Ordine) => nodi.slice().sort((a, b) => o === 'grandezza' ? b.area - a.area : o === 'sinistra' ? a.x - b.x : o === 'alto' ? a.y - b.y : o === 'centro' ? Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2) : ((a.id * 7919) % 97) - ((b.id * 7919) % 97))
   for (let f = 0; f < Math.round(br.durata * FPS); f++) {
     const t = f / FPS
@@ -456,11 +501,18 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     const rango = new Map<number, number>(), quanti = new Map<Ruolo, number>()
     for (const ru of RUOLI) { const xs = ordine(nodi.filter(n => n.ruolo === ru), c.gesti[ru].ordine); xs.forEach((n, i) => rango.set(n.id, i)); quanti.set(ru, xs.length) }
     // se sopra c'è un testo del reel (domanda, conclusione), i testi della tavola tacciono: uno alla volta si legge
-    const testoReel = (o.testi ?? []).some(x => t >= x.t0 && t < x.t1)
+    const testoReel = (o.testi ?? []).find(x => t >= x.t0 && t < x.t1)
+    // le scatole dei testi di questo istante: le figure che ci passano sotto si fanno indietro (come il sidechain nel suono)
+    const sotto: { x0: number; y0: number; x1: number; y1: number }[] = []
+    if (testoReel) sotto.push(scatola(testoReel.cv))
+    else for (const n of nodi.filter(x => x.ruolo === 'testo' && x.sprite)) { const s0 = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc); if (s0.alpha > 0.05) sotto.push({ x0: n.x + s0.dx - n.w / 2, y0: n.y + s0.dy - n.h / 2, x1: n.x + s0.dx + n.w / 2, y1: n.y + s0.dy + n.h / 2 }) }
+    const testi: { n: Nodo; s: Stato }[] = []
     for (const n of nodi) {
-      if (testoReel && n.ruolo === 'testo') continue
+      if (n.ruolo === 'testo') { if (!testoReel) testi.push({ n, s: stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc) }); continue }
       const s = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc)
       if (s.alpha <= 0.002 || s.sc <= 0.002) continue
+      // indietro se passa sotto un testo
+      if (n.ruolo !== 'fondo' && sotto.length) { const x0 = n.x + s.dx - n.w * s.sc / 2, y0 = n.y + s.dy - n.h * s.sc / 2, x1 = x0 + n.w * s.sc, y1 = y0 + n.h * s.sc; const ov = sotto.reduce((a, b) => a + Math.max(0, Math.min(x1, b.x1) - Math.max(x0, b.x0)) * Math.max(0, Math.min(y1, b.y1) - Math.max(y0, b.y0)), 0) / Math.max(1, (x1 - x0) * (y1 - y0)); if (ov > 0.05) s.alpha *= 1 - 0.65 * Math.min(1, ov * 2) }
       g.save()
       g.globalAlpha = clamp(s.alpha); g.globalCompositeOperation = n.blend
       if (n.linea) {
@@ -470,10 +522,6 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       } else if (n.vivo) {
         const vc = await vivo(n, s.crescita ?? 1, s.fase ?? 0)
         if (vc) { g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); g.drawImage(vc, -n.w / 2, -n.h / 2, n.w, n.h) }
-      } else if (n.ruolo === 'testo' && n.sprite) {
-        const sp = n.sprite
-        g.restore(); g.save()
-        contrappunto(q => { q.globalAlpha = clamp(s.alpha); q.translate(n.x + s.dx, n.y + s.dy); q.rotate(n.rot + s.rot); q.scale(s.sc, s.sc); if (s.scrivi < 1) { q.beginPath(); q.rect(-n.w / 2, -n.h / 2, n.w * s.scrivi, n.h); q.clip() } q.drawImage(sp, -n.w / 2, -n.h / 2, n.w, n.h) })
       } else if (n.sprite) {
         g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
         if (s.sfalda > 0 && n.particelle?.length) {
@@ -488,9 +536,19 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       }
       g.restore()
     }
-    // i testi del reel (domanda, conclusione), impaginati dai suoi generatori
+    // i testi, sopra a tutto: un solo colore per testo, deciso su quello che c'è sotto quando entra (e tenuto fino al taglio)
     g.setTransform(1, 0, 0, 1, 0, 0)
-    for (const x of o.testi ?? []) if (t >= x.t0 && t < x.t1) contrappunto(q => q.drawImage(x.cv, 0, 0, W, H))
+    for (const { n, s } of testi) {
+      if (s.alpha <= 0.002 || !n.sprite) continue
+      const k = `${rp.t0}|${n.id}`
+      if (!inchiostri.has(k)) inchiostri.set(k, inchiostro({ x0: n.x + s.dx - n.w / 2, y0: n.y + s.dy - n.h / 2, x1: n.x + s.dx + n.w / 2, y1: n.y + s.dy + n.h / 2 }))
+      g.save(); g.globalAlpha = clamp(s.alpha); g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
+      if (s.scrivi < 1) { g.beginPath(); g.rect(-n.w / 2, -n.h / 2, n.w * s.scrivi, n.h); g.clip() }
+      g.drawImage(tinta(n.sprite, inchiostri.get(k)!), -n.w / 2, -n.h / 2, n.w, n.h); g.restore()
+    }
+    if (testoReel) { const k = `r${testoReel.t0}`; if (!inchiostri.has(k)) inchiostri.set(k, inchiostro(scatola(testoReel.cv))); g.drawImage(tinta(testoReel.cv, inchiostri.get(k)!), 0, 0, W, H) }
+    // la copertina: il fotogramma più pieno e più vario (si controlla ogni mezzo secondo)
+    if (f % 15 === 7) { const q = document.createElement('canvas'); q.width = 36; q.height = 64; const qg = q.getContext('2d')!; qg.drawImage(cv, 0, 0, 36, 64); const d = qg.getImageData(0, 0, 36, 64).data; let m = 0, m2 = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m += l; m2 += l * l } const n0 = d.length / 4, v = Math.sqrt(Math.max(0, m2 / n0 - (m / n0) ** 2)); if (v > copertina.v) copertina = { v, ms: Math.round(t * 1000) } }
     const out = o.finitura ? o.finitura(cv, t) ?? cv : cv
     const fr = new VideoFrame(out, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) })
     ve.encode(fr, { keyFrame: f % (FPS * 2) === 0 }); fr.close()
@@ -500,5 +558,6 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   await ve.flush()
   if (errore) return null
   muxer.finalize()
+  o.copertina?.(copertina.ms)
   return new Blob([muxer.target.buffer], { type: 'video/mp4' })
 }

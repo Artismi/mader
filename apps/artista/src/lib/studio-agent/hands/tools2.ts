@@ -136,7 +136,7 @@ const flusso: Tool = {
     const T = tempoDi(c)
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
     // vita: il campo deriva lentamente (la fase sposta il seme); crescita: le linee si allungano tutte insieme lungo il campo
-    const sc = p.scala as number, gi = p.giro as number, se = (p.seme as number) + Math.sin(T.fase * 6.283) * 0.6
+    const sc = p.scala as number, gi = (p.giro as number) * (1 + 0.04 * T.a * Math.sin(T.fase * 6.283)), se = p.seme as number
     const ang = (x: number, y: number) => (Math.sin(x * sc + se) + Math.cos(y * sc * 1.3 - se) + Math.sin((x + y) * sc * 0.7)) * gi
     let a = Math.floor((p.seme as number) * 1e6) >>> 0
     const rnd = () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296)
