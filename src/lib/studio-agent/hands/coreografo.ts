@@ -22,6 +22,7 @@ import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import type { Layer, Sheet } from './sheet'
 import type { Brano } from '../suono/beat'
 import { toolById, ANIMABILI, type ToolCtx } from './tools'
+import { fontCss } from '@/components/studio/genera/raster'
 
 const W = 720, H = 1280, FPS = 30
 
@@ -54,7 +55,7 @@ interface Nodo {
   /** un livello vivo: il suo generatore lo ridisegna a ogni momento (crescita, fase) */
   vivo?: { tool: string; p: Record<string, unknown>; fonte?: HTMLCanvasElement; W: number; H: number; layer: Layer }
 }
-interface Scena { nodi: Nodo[]; bg: string[]; tavole: number }
+interface Scena { nodi: Nodo[]; bg: string[]; tavole: number; parole: number[] }
 
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296) }
 const uno = <T,>(r: () => number, a: T[]) => a[Math.floor(r() * a.length)]
@@ -109,13 +110,61 @@ function righeDi(src: HTMLCanvasElement): [number, number][] {
 export function smonta(fogli: Sheet[], r: () => number): Scena {
   const nodi: Nodo[] = []
   let id = 0
+  // la griglia delle parole, una per tutto il reel: nella fascia libera sopra o sotto la tavola, stessi margini, allineate a sinistra
+  const fascia: 'alto' | 'basso' = r() < 0.5 ? 'alto' : 'basso'
+  const bordo = (s: Sheet) => {
+    const c = document.createElement('canvas'); c.width = 24; c.height = Math.max(2, Math.round(24 * s.H / s.W)); const g = c.getContext('2d')!
+    g.fillStyle = s.bg; g.fillRect(0, 0, c.width, c.height)
+    const M = Math.min(s.W, s.H)
+    for (const l of s.layers) { const k = (M * l.scale) / Math.max(l.canvas.width, l.canvas.height) * (c.width / s.W); g.save(); g.globalAlpha = l.alpha; g.globalCompositeOperation = l.blend; g.translate(l.x * c.width, l.y * c.height); g.rotate(l.rot); g.scale(k, k); g.drawImage(l.canvas, -l.canvas.width / 2, -l.canvas.height / 2); g.restore() }
+    const d = g.getImageData(0, 0, c.width, c.height).data; let R = 0, G = 0, B = 0, n = 0
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (x === 0 || y === 0 || x === c.width - 1 || y === c.height - 1) { const i = (y * c.width + x) * 4; R += d[i]; G += d[i + 1]; B += d[i + 2]; n++ }
+    return '#' + [R / n, G / n, B / n].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
+  }
+  const parole: number[] = []
   for (const [ti, s] of fogli.entries()) {
     const k = W / s.W // la tavola occupa la larghezza del video, centrata in altezza
     const oy = (H - s.H * k) / 2
     const radice: Nodo = { id: id++, ruolo: 'fondo', tav: ti, gruppo: 0, x: W / 2, y: H / 2, w: W, h: H, rot: 0, alpha: 1, blend: 'source-over', padre: null, indice: 0, area: 0 }
     nodi.push(radice)
     const M = Math.min(s.W, s.H)
+    // le parole nuove (con il loro ruolo): titolo e sottotitolo sempre, ogni tanto il paragrafo intero; nel carattere e nel colore della tavola
+    const tit = s.layers.find(l => l.meta?.ruolo === 'titolo'), corpo = s.layers.find(l => l.meta?.ruolo === 'corpo')
+    parole[ti] = 0
+    const dopo: Nodo[] = [] // le parole della griglia: si disegnano sopra a tutto quello della tavola
+    if (tit) {
+      const sotto = corpo?.meta?.text.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim() ?? '' // le parentesi (fonti, rimandi) nel reel non servono
+      const nParole = sotto.split(' ').filter(Boolean).length
+      const paragrafo = !!sotto && nParole <= 28 && ti % 3 === 1
+      const frase = (sotto.match(/^[^.;:!?…]+[.;:!?…]?/)?.[0] ?? '').split(' ').slice(0, 12).join(' ').replace(/[,;:]$/, '')
+      const blocchi: { testo: string; font: NonNullable<NonNullable<Layer['meta']>['font']>; px: number; colore: string }[] = [{ testo: tit.meta!.text, font: tit.meta!.font ?? { family: 'serif', weight: 400 }, px: 0, colore: tit.meta!.color }]
+      const fCorpo = corpo?.meta?.font ?? blocchi[0].font
+      if (sotto) blocchi.push({ testo: paragrafo ? sotto : frase, font: fCorpo, px: paragrafo ? 26 : 30, colore: corpo!.meta!.color })
+      // il colore della tavola, se si stacca dal fondo; se no il chiaro o lo scuro
+      const lb = lum(bordo(s))
+      for (const b of blocchi) if (Math.abs(lum(b.colore) - lb) < 0.5) b.colore = lb > 0.5 ? '#111111' : '#f4f2ec'
+      const mis = document.createElement('canvas').getContext('2d')!
+      const a_capo = (testo: string, f: typeof blocchi[0]['font'], px: number, larg: number) => { mis.font = fontCss(f as never, px); const out: string[] = []; let riga = ''; for (const w of testo.split(' ')) { const prova = riga ? riga + ' ' + w : w; if (mis.measureText(prova).width > larg && riga) { out.push(riga); riga = w } else riga = prova } if (riga) out.push(riga); return out }
+      const m = 44, larg = W - 2 * m
+      // il titolo: il più grande che sta in tre righe
+      let px = 64, righeT = a_capo(blocchi[0].font.upper ? blocchi[0].testo.toUpperCase() : blocchi[0].testo, blocchi[0].font, px, larg)
+      while (righeT.length > 3 && px > 34) { px -= 4; righeT = a_capo(blocchi[0].font.upper ? blocchi[0].testo.toUpperCase() : blocchi[0].testo, blocchi[0].font, px, larg) }
+      blocchi[0].px = px
+      const tutte: { t: string; f: typeof blocchi[0]['font']; px: number; col: string; dopo: number }[] = righeT.map((t, i) => ({ t, f: blocchi[0].font, px, col: blocchi[0].colore, dopo: i === righeT.length - 1 ? px * 0.45 : px * 0.08 }))
+      if (blocchi[1]) for (const t of a_capo(blocchi[1].testo, blocchi[1].font, blocchi[1].px, larg * 0.92)) tutte.push({ t, f: blocchi[1].font, px: blocchi[1].px, col: blocchi[1].colore, dopo: blocchi[1].px * 0.28 })
+      const alto = tutte.reduce((a, x) => a + x.px * 1.1 + x.dopo, 0)
+      let y = fascia === 'alto' ? m + 30 : H - m - 40 - alto
+      tutte.forEach((x, i) => {
+        const c = document.createElement('canvas'), q0 = c.getContext('2d')!; q0.font = fontCss(x.f as never, x.px)
+        c.width = Math.ceil(q0.measureText(x.t).width + 8); c.height = Math.ceil(x.px * 1.3)
+        const q = c.getContext('2d')!; q.font = fontCss(x.f as never, x.px); q.fillStyle = x.col; q.textBaseline = 'top'; q.fillText(x.t, 4, x.px * 0.1)
+        dopo.push({ id: id++, ruolo: 'testo', tav: ti, gruppo: 0, sprite: c, x: m + c.width / 2, y: y + c.height / 2, w: c.width, h: c.height, rot: 0, alpha: 1, blend: 'source-over', padre: radice.id, indice: 1000 + i, area: c.width * c.height })
+        y += x.px * 1.1 + x.dopo
+      })
+      parole[ti] = tit.meta!.text.split(/\s+/).length + (blocchi[1]?.testo.split(/\s+/).length ?? 0)
+    }
     s.layers.forEach((l: Layer, li) => {
+      if (tit && TESTO.has(l.kind)) return // le parole di questa tavola le ha già messe la griglia
       const side = M * l.scale * k, kk = side / Math.max(l.canvas.width, l.canvas.height)
       const cx = l.x * s.W * k, cy = oy + l.y * s.H * k
       const ruolo: Ruolo = TESTO.has(l.kind) ? 'testo' : ATMO.has(l.kind) ? 'fondo' : TRAMA.has(l.kind) || (l.scale >= 1.15 && l.blend !== 'source-over') ? 'trama' : 'figura'
@@ -176,6 +225,7 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
       }
       nodi.push(intero())
     })
+    nodi.push(...dopo)
     // i due gruppi: le figure si dividono per vicinanza di posizione e di colore (k-medie, k = 2)
     {
       const fs = nodi.filter(n => n.tav === ti && (n.ruolo === 'figura' || n.ruolo === 'trama') && (n.sprite || n.vivo))
@@ -215,16 +265,10 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
     }
   }
   // il fondo del video: il colore dei bordi della tavola (così la tavola non sembra una finestra appoggiata)
-  const bordo = (s: Sheet) => {
-    const c = document.createElement('canvas'); c.width = 24; c.height = Math.max(2, Math.round(24 * s.H / s.W)); const g = c.getContext('2d')!
-    g.fillStyle = s.bg; g.fillRect(0, 0, c.width, c.height)
-    const M = Math.min(s.W, s.H)
-    for (const l of s.layers) { const k = (M * l.scale) / Math.max(l.canvas.width, l.canvas.height) * (c.width / s.W); g.save(); g.globalAlpha = l.alpha; g.globalCompositeOperation = l.blend; g.translate(l.x * c.width, l.y * c.height); g.rotate(l.rot); g.scale(k, k); g.drawImage(l.canvas, -l.canvas.width / 2, -l.canvas.height / 2); g.restore() }
-    const d = g.getImageData(0, 0, c.width, c.height).data; let R = 0, G = 0, B = 0, n = 0
-    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (x === 0 || y === 0 || x === c.width - 1 || y === c.height - 1) { const i = (y * c.width + x) * 4; R += d[i]; G += d[i + 1]; B += d[i + 2]; n++ }
-    return '#' + [R / n, G / n, B / n].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
-  }
-  return { nodi, bg: fogli.map(bordo), tavole: fogli.length }
+
+  // le tavole vecchie (senza ruoli nelle parole): si contano le parole leggibili
+  fogli.forEach((s, ti) => { if (!parole[ti]) parole[ti] = s.layers.filter(l => l.meta?.text && l.meta.size * (W / s.W) >= 24).reduce((a, l) => a + l.meta!.text.split(/\s+/).length, 0) })
+  return { nodi, bg: fogli.map(bordo), tavole: fogli.length, parole }
 }
 const dist2 = (a: number[], b: number[]) => a.reduce((s, x, i) => s + (x - b[i]) ** 2, 0)
 function lum(h: string) { const m = h.replace('#', ''); if (m.length < 6) return 0.5; const v = [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] }

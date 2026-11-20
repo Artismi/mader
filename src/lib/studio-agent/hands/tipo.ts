@@ -10,7 +10,7 @@
 import { pick, range, type Rnd } from '../core/rng'
 import { FACES, loadLabFonts, perCarattere, type FaceId } from '@/components/studio/genera/fonts'
 import { fontCss, type Face } from '@/components/studio/genera/raster'
-import { newCanvas, withLayer, flatten, type Sheet } from './sheet'
+import { newCanvas, withLayer, flatten, type Sheet, type Layer } from './sheet'
 import { ratio } from '../eyes/judgement'
 
 export type Impagina = 'blocco' | 'gigante' | 'impilato' | 'verticale' | 'colonna' | 'divaricato' | 'centrato'
@@ -85,7 +85,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
   const modo: Impagina = modi.length ? pickPesato(r, modi, pesi) : 'blocco'
   const occupati: Rett[] = []
   // cosa dice e quanto è grande il prossimo testo che si mette (serve a chi lo rilegge: il reel, il tempo di lettura)
-  let prossimo: { text: string; color: string; size: number } | undefined
+  let prossimo: Layer['meta'] | undefined
   const metti = (cv: HTMLCanvasElement, x0: number, y0: number, rot = 0, kind = 'testo') => {
     const w = cv.width / s.W, h = cv.height / s.H
     const rw = rot ? h * (s.H / s.W) : w, rh = rot ? w * (s.W / s.H) : h
@@ -131,7 +131,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       const rect = { x0, y0, x1: x0 + p.w / W, y1: y0 + p.h / H }
       const tr = leggibile(rect, true)
       const fin = righe(titolo, FT, size * M, 0.9 * W, tr.color, { lead: 0.92, align: modo === 'centrato' ? 'center' : 'left', stroke: tr.stroke, alone: tr.alone, evid: tr.evid })
-      prossimo = { text: titolo, color: tr.color, size: size * M }; rTit = metti(fin.cv, x0, y0)
+      prossimo = { text: titolo, color: tr.color, size: size * M, font: FT, ruolo: 'titolo' }; rTit = metti(fin.cv, x0, y0)
       // il titolo cambia colore dove passa sopra i segni
       contrappunto(s, fin, rTit, st, (cv) => { s = withLayer(s, { id: lid(), kind: 'testo', canvas: cv, x: (rTit.x0 + rTit.x1) / 2, y: (rTit.y0 + rTit.y1) / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: 1, blend: 'source-over' }) })
       break
@@ -143,7 +143,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       const x0 = pick(r, [0.05, 0.95 - p.w / W]), y0 = pick(r, [0.06, 0.94 - p.h / H])
       const tr = leggibile({ x0, y0, x1: x0 + p.w / W, y1: y0 + p.h / H }, true)
       const fin = righe(titolo, FT, size * M, 0.9 * W, tr.color, { impila: true, lead: 0.9, stroke: tr.stroke, alone: tr.alone, evid: tr.evid })
-      prossimo = { text: titolo, color: tr.color, size: size * M }; rTit = metti(fin.cv, x0, y0)
+      prossimo = { text: titolo, color: tr.color, size: size * M, font: FT, ruolo: 'titolo' }; rTit = metti(fin.cv, x0, y0)
       contrappunto(s, fin, rTit, st, (cv) => { s = withLayer(s, { id: lid(), kind: 'testo', canvas: cv, x: (rTit.x0 + rTit.x1) / 2, y: (rTit.y0 + rTit.y1) / 2, scale: Math.max(cv.width, cv.height) / M, rot: 0, alpha: 1, blend: 'source-over' }) })
       break
     }
@@ -156,7 +156,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       const y0 = 0.5 - lung / 2
       const tr = leggibile({ x0: sx, y0, x1: sx + larg, y1: y0 + lung }, true)
       const fin = righe(titolo, FT, size * M, 1.1 * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid })
-      prossimo = { text: titolo, color: tr.color, size: size * M }; rTit = metti(fin.cv, sx, y0, sx < 0.5 ? -Math.PI / 2 : Math.PI / 2)
+      prossimo = { text: titolo, color: tr.color, size: size * M, font: FT, ruolo: 'titolo' }; rTit = metti(fin.cv, sx, y0, sx < 0.5 ? -Math.PI / 2 : Math.PI / 2)
       break
     }
     case 'colonna': {
@@ -166,7 +166,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       while (p.h / H > 0.4 && size > 0.03) { size *= 0.9; p = prova(size, colW) }
       const y0 = pick(r, [0.08, 0.3])
       const tr = leggibile({ x0, y0, x1: x0 + p.w / W, y1: y0 + p.h / H }, true)
-      prossimo = { text: titolo, color: tr.color, size: size * M }; rTit = metti(righe(titolo, FT, size * M, colW * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid }).cv, x0, y0)
+      prossimo = { text: titolo, color: tr.color, size: size * M, font: FT, ruolo: 'titolo' }; rTit = metti(righe(titolo, FT, size * M, colW * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid }).cv, x0, y0)
       break
     }
     case 'divaricato': {
@@ -175,7 +175,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       while (p.h / H > 0.3 && size > 0.03) { size *= 0.9; p = prova(size, 0.86) }
       const x0 = 0.06, y0 = 0.05
       const tr = leggibile({ x0, y0, x1: x0 + p.w / W, y1: y0 + p.h / H }, true)
-      prossimo = { text: titolo, color: tr.color, size: size * M }; rTit = metti(righe(titolo, FT, size * M, 0.86 * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid }).cv, x0, y0)
+      prossimo = { text: titolo, color: tr.color, size: size * M, font: FT, ruolo: 'titolo' }; rTit = metti(righe(titolo, FT, size * M, 0.86 * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid }).cv, x0, y0)
       break
     }
     default: {
@@ -184,7 +184,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       while (p.h / H > 0.3 && size > 0.03) { size *= 0.9; p = prova(size, Math.min(0.86, z.x1 - z.x0)) }
       const y0 = Math.min(z.y0, 0.93 - p.h / H - 0.12)
       const tr = leggibile({ x0: z.x0, y0, x1: z.x0 + p.w / W, y1: y0 + p.h / H }, true)
-      prossimo = { text: titolo, color: tr.color, size: size * M }; rTit = metti(righe(titolo, FT, size * M, Math.min(0.86, z.x1 - z.x0) * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid }).cv, z.x0, y0)
+      prossimo = { text: titolo, color: tr.color, size: size * M, font: FT, ruolo: 'titolo' }; rTit = metti(righe(titolo, FT, size * M, Math.min(0.86, z.x1 - z.x0) * W, tr.color, { stroke: tr.stroke, alone: tr.alone, evid: tr.evid }).cv, z.x0, y0)
     }
   }
 
@@ -210,13 +210,13 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
     }
     if (!posto) continue
     const tr = leggibile(posto, false)
-    prossimo = { text: p.text, color: tr.color, size: size * M }
+    prossimo = { text: p.text, color: tr.color, size: size * M, font: p.F, ruolo: p.F === FACES.mono ? 'fonte' : 'corpo' }
     metti(righe(p.text, p.F, size * M, p.maxW * W, tr.color, { alone: tr.alone }).cv, posto.x0, posto.y0)
   }
   if (t.numero) {
     const n = righe(t.numero, FACES.mono, 0.016 * M, 0.2 * W, '#000')
     const q = [{ x0: 0.05, y0: 0.03 }, { x0: 0.95 - n.w / W, y0: 0.03 }, { x0: 0.95 - n.w / W, y0: 0.96 - n.h / H }].map(a => ({ ...a, x1: a.x0 + n.w / W, y1: a.y0 + n.h / H })).find(a => !occupati.some(o => tocca(o, a, 0)))
-    if (q) { const tr = leggibile(q, false); prossimo = { text: t.numero, color: tr.color, size: 0.016 * M }; metti(righe(t.numero, FACES.mono, 0.016 * M, 0.2 * W, tr.color).cv, q.x0, q.y0) }
+    if (q) { const tr = leggibile(q, false); prossimo = { text: t.numero, color: tr.color, size: 0.016 * M, ruolo: 'numero' }; metti(righe(t.numero, FACES.mono, 0.016 * M, 0.2 * W, tr.color).cv, q.x0, q.y0) }
   }
   return { sheet: s, modo }
 }

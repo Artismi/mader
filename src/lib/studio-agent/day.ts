@@ -662,8 +662,10 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   // l'orecchio sceglie: tre beat candidati (stili diversi), vince quello che suona meglio; tutti gli stili prendono il loro voto
   // il tempo di lettura di ogni tavola (parole dei suoi testi), e del reel intero: la musica dura quanto serve
   const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text && l.meta.size * (720 / s.W) >= 24).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
-  const legge = (n: number) => (n ? 1.2 + n * 0.35 : 0)
-  const lettura = fogli.map(f => legge(parole(f)))
+  const legge = (n: number) => (n ? 1 + n * 0.28 : 0) // il ritmo dei sottotitoli
+  const scena = smonta(fogli, r)
+  void parole
+  const lettura = scena.parole.map(legge)
   const forte0 = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
   const servono = lettura.slice().sort((a, b) => b - a).slice(0, 4).reduce((a, b) => a + Math.max(b, 2.5), 0) + legge((t.domanda ?? '').split(/\s+/).length) + legge((t.conclusione ?? '').split(/\s+/).length)
   let migliore: { audio: AudioBuffer; brano: Awaited<ReturnType<typeof suonaBeat>>['brano']; voto: number; stile: ReturnType<typeof scegliStile>; orecchio: ReturnType<typeof ascoltaBeat> } | null = null
@@ -676,7 +678,6 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   }
   const { audio, brano, stile, orecchio } = migliore!
   gusto.pattern = [...gusto.pattern, brano.pattern].slice(-24)
-  const scena = smonta(fogli, r)
   const forte = forte0
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
   const lett2 = lettura.slice()
