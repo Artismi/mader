@@ -222,7 +222,12 @@ export interface Coreografia {
   quante: number // quante tavole nel reel
   /** la regia: ogni quanti battiti stacca (base), quanta voglia di dettagli, quanta spinta sui colpi */
   regia?: Regia
+  /** la partitura: cosa succede sui colpi del rullante, alla fine di ogni frase, sul cambio */
+  partitura?: Partitura
 }
+export interface Partitura { rullante: 'pop' | 'scatto' | 'spinta' | 'eco' | 'niente'; fineFrase: 'balbetta' | 'vuoto' | 'niente'; cambio: 'inverti' | 'esplodi' | 'tinta' | 'specchia'; forza: number }
+const partituraACaso = (r: () => number): Partitura => ({ rullante: uno(r, ['pop', 'scatto', 'spinta', 'eco', 'pop', 'eco'] as Partitura['rullante'][]), fineFrase: uno(r, ['balbetta', 'vuoto', 'niente'] as Partitura['fineFrase'][]), cambio: uno(r, ['inverti', 'esplodi', 'tinta', 'specchia'] as Partitura['cambio'][]), forza: 0.4 + r() * 0.6 })
+const PART0: Partitura = { rullante: 'pop', fineFrase: 'niente', cambio: 'esplodi', forza: 0.6 }
 export interface Regia { taglio: 1 | 2 | 4; dettaglio: number; impulso: number }
 const regiaACaso = (r: () => number): Regia => ({ taglio: uno(r, [1, 2, 2, 4] as (1 | 2 | 4)[]), dettaglio: 0.3 + r() * 0.6, impulso: 0.3 + r() * 0.7 })
 const REGIA0: Regia = { taglio: 2, dettaglio: 0.55, impulso: 0.6 }
@@ -238,7 +243,7 @@ export function coreografiaACaso(r: () => number, pesiRel?: Record<string, Parti
     let x = r() * Object.values(p).reduce((a, b) => a + b, 0); accoppia[rel] = 'libero'
     for (const [k, w] of Object.entries(p) as [Accoppiamento, number][]) if ((x -= w) <= 0) { accoppia[rel] = k; break }
   }
-  return { gesti: Object.fromEntries(RUOLI.map(ru => [ru, gestoACaso(r, ru)])) as Record<Ruolo, Gesto>, accoppia, camera: uno(r, ['ferma', 'deriva', 'avvicina', 'segue']), battutePerTavola: uno(r, [1, 2, 2, 3]), quante: 3 + Math.floor(r() * 4), regia: regiaACaso(r) }
+  return { gesti: Object.fromEntries(RUOLI.map(ru => [ru, gestoACaso(r, ru)])) as Record<Ruolo, Gesto>, accoppia, camera: uno(r, ['ferma', 'deriva', 'avvicina', 'segue']), battutePerTavola: uno(r, [1, 2, 2, 3]), quante: 3 + Math.floor(r() * 4), regia: regiaACaso(r), partitura: partituraACaso(r) }
 }
 function mutaC(c: Coreografia, r: () => number): Coreografia {
   const x: Coreografia = { ...c, gesti: { ...c.gesti }, accoppia: { ...c.accoppia } }
@@ -249,6 +254,7 @@ function mutaC(c: Coreografia, r: () => number): Coreografia {
   else if (k === 6) x.camera = uno(r, ['ferma', 'deriva', 'avvicina', 'segue']); else if (k === 7) { x.battutePerTavola = uno(r, [1, 2, 3]); x.quante = Math.max(2, Math.min(7, x.quante + (r() < 0.5 ? -1 : 1))) }
   else { const rel = uno(r, Object.keys(x.accoppia)); x.accoppia[rel] = uno(r, ACCOPPIAMENTI) }
   if (r() < 0.35) { const q = { ...(x.regia ?? REGIA0) }; const j = Math.floor(r() * 3); if (j === 0) q.taglio = uno(r, [1, 2, 4] as (1 | 2 | 4)[]); else if (j === 1) q.dettaglio = clamp(q.dettaglio + (r() - 0.5) * 0.4); else q.impulso = clamp(q.impulso + (r() - 0.5) * 0.4); x.regia = q }
+  if (r() < 0.3) { const q = { ...(x.partitura ?? PART0) }, a = partituraACaso(r), j = Math.floor(r() * 4); if (j === 0) q.rullante = a.rullante; else if (j === 1) q.fineFrase = a.fineFrase; else if (j === 2) q.cambio = a.cambio; else q.forza = clamp(q.forza + (r() - 0.5) * 0.4, 0.2, 1); x.partitura = q }
   x.gesti[ru] = g
   return x
 }
@@ -306,7 +312,8 @@ interface Ripresa { tav: number; t0: number; t1: number; rel?: string; anello?: 
 function riprese(c: Coreografia, br: Brano, n: number, forte: number, rels: (string | undefined)[], lettura: number[] = []): Ripresa[] {
   const bar = br.beat * 4, out: Ripresa[] = []
   // quante tavole entrano: nell'ordine del racconto (premesse → conclusione), senza ripetizioni; la più forte c'è sempre
-  const durata = (tv: number) => Math.max(c.battutePerTavola, Math.ceil((lettura[tv] ?? 0) / bar)) * bar
+  const bp = Math.max(1, Math.min(c.battutePerTavola, Math.floor(5.2 / bar))) // una tavola senza niente da leggere non tiene più di 5 secondi
+  const durata = (tv: number) => Math.max(bp, Math.ceil((lettura[tv] ?? 0) / bar)) * bar
   const tutte = Array.from({ length: n }, (_, i) => i)
   let scelte = tutte.slice(0, Math.max(2, c.quante))
   if (!scelte.includes(forte)) scelte = [...scelte.slice(0, -1), forte].sort((a, b) => a - b)
@@ -464,8 +471,10 @@ export function evolviCoreografia(scena: Scena, br: Brano, forte: number, rels: 
 }
 
 export function descriviCoreografia(c: Coreografia): string {
+  const P = c.partitura ?? PART0
+  const extra = `; sul rullante ${({ pop: 'una figura si gonfia', scatto: 'una figura scatta di lato', spinta: 'una figura viene spinta', eco: 'una figura lascia la sua eco', niente: 'niente' })[P.rullante]}, a fine frase ${({ balbetta: 'balbetta', vuoto: 'si svuota', niente: 'tira dritto' })[P.fineFrase]}, sul cambio ${({ inverti: 'si inverte', esplodi: 'esplode e si ricompone', tinta: 'si tinge', specchia: 'si specchia' })[P.cambio]}`
   const R: Record<Ruolo, string> = { fondo: 'i fondi', trama: 'le trame', figura: 'le figure', testo: 'le parole', linea: 'le linee' }
-  return RUOLI.map(ru => `${R[ru]}: ${c.gesti[ru].ingresso}, poi ${c.gesti[ru].vita} ${({ k: 'con la cassa', s: 'con il rullante', h: 'con il charleston', bar: 'con la battuta', energia: "con l'energia", padre: 'dietro al padre' } as Record<Segnale, string>)[c.gesti[ru].segnale]}, ${c.gesti[ru].uscita}`).join('; ')
+  return extra.slice(2) + '; ' + RUOLI.map(ru => `${R[ru]}: ${c.gesti[ru].ingresso}, poi ${c.gesti[ru].vita} ${({ k: 'con la cassa', s: 'con il rullante', h: 'con il charleston', bar: 'con la battuta', energia: "con l'energia", padre: 'dietro al padre' } as Record<Segnale, string>)[c.gesti[ru].segnale]}, ${c.gesti[ru].uscita}`).join('; ')
 }
 
 // ── il disegno ──
@@ -562,8 +571,19 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       g.save(); g.globalAlpha *= e; g.drawImage(src, 0, a, src.width, b - a, x0, y0 + a * ky + sale, w, (b - a) * ky); g.restore()
     })
   }
+  const P = c.partitura ?? PART0, beat = br.beat, frase = beat * 16
+  // l'ultimo battito di ogni frase (non dell'ultima): lì succede la cosa di fine frase
+  const fineFrase = (t: number) => { const k = Math.floor(t / frase), tb = (k + 1) * frase - beat; return t >= tb && (k + 1) * frase < br.durata - 1e-3 ? tb : -1 }
+  // il colpo di rullante più recente (e quale è, per scegliere a turno la figura colpita)
+  const colpo = (t: number) => { let i = -1; for (let j = 0; j < br.rullante.length; j++) if (br.rullante[j] <= t) i = j; return i >= 0 && t - br.rullante[i] < 0.5 ? { i, e: Math.exp(-(t - br.rullante[i]) / 0.09) } : null }
+  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; const gtmp = tmp.getContext('2d')!
+  let tintaCambio = ''
   for (let f = 0; f < Math.round(br.durata * FPS); f++) {
-    const t = f / FPS
+    const tReale = f / FPS
+    // balbetta: l'ultimo battito della frase ripete il suo primo sedicesimo (come un giradischi che salta)
+    const tb = fineFrase(tReale)
+    const t = P.fineFrase === 'balbetta' && tb >= 0 ? tb + ((tReale - tb) % (beat / 4)) : tReale
+    const vuoto = P.fineFrase === 'vuoto' && tb >= 0
     const rp = o.riprese.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? o.riprese[o.riprese.length - 1]
     const acc = c.accoppia[rp.rel ?? 'sequenza'] ?? 'libero'
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'
@@ -583,10 +603,27 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     if (testoReel) sotto.push(scatola(testoReel.cv))
     else for (const n of nodi.filter(x => x.ruolo === 'testo' && x.sprite)) { const s0 = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc); if (s0.alpha > 0.05) sotto.push({ x0: n.x + s0.dx - n.w / 2, y0: n.y + s0.dy - n.h / 2, x1: n.x + s0.dx + n.w / 2, y1: n.y + s0.dy + n.h / 2 }) }
     const testi: { n: Nodo; s: Stato }[] = []
+    // chi viene colpito dal rullante: le figure principali di questa tavola, a turno
+    const bersagli = nodi.filter(n => (n.ruolo === 'figura' || n.ruolo === 'trama') && (n.sprite || n.vivo) && n.area > 3000 && n.area < W * H * 0.6).sort((a, b) => b.area - a.area).slice(0, 4)
+    const cp = P.rullante !== 'niente' ? colpo(t) : null
+    const colpito = cp && bersagli.length ? bersagli[cp.i % bersagli.length].id : -1
     for (const n of nodi) {
       if (n.ruolo === 'testo') { if (!testoReel) testi.push({ n, s: stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc) }); continue }
       const s = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc)
+      // la partitura sulle figure
+      if (vuoto && n.ruolo !== 'fondo') continue
+      if (n.id === colpito && cp) {
+        const e = cp.e * P.forza, verso = cp.i % 2 ? 1 : -1
+        if (P.rullante === 'pop') s.sc *= 1 + 0.22 * e
+        else if (P.rullante === 'scatto') { s.rot += verso * 0.25 * e; s.dx += verso * 30 * e }
+        else if (P.rullante === 'spinta') { s.dx += verso * 90 * e * (1 - e); s.dy -= 40 * e }
+      }
+      if (P.cambio === 'esplodi' && t >= br.cambio && t < br.cambio + beat * 4 && n.ruolo !== 'fondo') { const ts = br.cambio + ((rango.get(n.id) ?? 0) % 8) * beat / 4; const m = t < ts ? 0 : molla(t - ts, 16, 0.32); s.sc *= m; s.rot += (1 - m) * 0.6 }
       if (s.alpha <= 0.002 || s.sc <= 0.002) continue
+      // l'eco: la figura colpita lascia dietro di sé tre copie che svaniscono
+      if (P.rullante === 'eco' && n.id === colpito && cp && n.sprite && cp.e > 0.05) {
+        for (let k = 3; k >= 1; k--) { g.save(); g.globalAlpha = clamp(s.alpha) * 0.28 * cp.e / k * 2; g.globalCompositeOperation = n.blend; g.translate(n.x + s.dx - (cp.i % 2 ? 1 : -1) * k * 26 * P.forza * (1 - cp.e * 0.5), n.y + s.dy + k * 6); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); g.drawImage(n.sprite, -n.w / 2, -n.h / 2, n.w, n.h); g.restore() }
+      }
       // indietro se passa sotto un testo
       if (n.ruolo !== 'fondo' && sotto.length) { const x0 = n.x + s.dx - n.w * s.sc / 2, y0 = n.y + s.dy - n.h * s.sc / 2, x1 = x0 + n.w * s.sc, y1 = y0 + n.h * s.sc; const ov = sotto.reduce((a, b) => a + Math.max(0, Math.min(x1, b.x1) - Math.max(x0, b.x0)) * Math.max(0, Math.min(y1, b.y1) - Math.max(y0, b.y0)), 0) / Math.max(1, (x1 - x0) * (y1 - y0)); if (ov > 0.05) s.alpha *= 1 - 0.65 * Math.min(1, ov * 2) }
       g.save()
@@ -611,6 +648,17 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
         }
       }
       g.restore()
+    }
+    // il cambio: la trasformazione grande (sul quadro intero, sotto ai testi)
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    if (t >= br.cambio && t < br.cambio + beat * 2) {
+      const u = (t - br.cambio) / (beat * 2)
+      if (P.cambio === 'inverti') { g.save(); g.globalCompositeOperation = 'difference'; g.globalAlpha = u < 0.5 ? 1 : clamp((1 - u) * 2); g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); g.restore() }
+      else if (P.cambio === 'specchia' && u < 0.5) { gtmp.clearRect(0, 0, W, H); gtmp.drawImage(cv, 0, 0); g.save(); g.setTransform(-1, 0, 0, 1, W, 0); g.drawImage(tmp, 0, 0); g.restore() }
+      else if (P.cambio === 'tinta') {
+        if (!tintaCambio) { gtmp.drawImage(cv, 0, 0, 16, 16); const d = gtmp.getImageData(0, 0, 16, 16).data; let best = -1; for (let i = 0; i < d.length; i += 4) { const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]), sat = mx ? (mx - mn) / mx : 0; if (sat * mx > best) { best = sat * mx; tintaCambio = `rgb(${d[i]},${d[i + 1]},${d[i + 2]})` } } }
+        g.save(); g.globalCompositeOperation = 'color'; g.globalAlpha = clamp(1 - u); g.fillStyle = tintaCambio; g.fillRect(0, 0, W, H); g.restore()
+      }
     }
     // i testi, sopra a tutto: un solo colore per testo, deciso su quello che c'è sotto quando entra (e tenuto fino al taglio)
     g.setTransform(1, 0, 0, 1, 0, 0)

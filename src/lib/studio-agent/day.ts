@@ -650,13 +650,18 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     const TESTI = new Set(['testo', 'tipografia', 'etichette', 'firma', 'piastra'])
     const corpo = (s: Sheet) => s.layers.filter(l => !TESTI.has(l.kind) && l.scale < 0.99).length
     const tieni = fogli.map((f, i) => ({ i, c: corpo(f) })).filter(x => x.c >= 2).map(x => x.i)
+    // e quelle povere a vedersi (poco contrasto, pochi bordi) cedono il posto alle più ricche, se ce ne sono abbastanza
+    const ricco = (s: Sheet) => { const c = flatten(s, 0.04), d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data, w = c.width; let m = 0, m2 = 0, bordi = 0, n = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m += l; m2 += l * l; n++; if ((i / 4) % w && Math.abs(l - (d[i - 4] + d[i - 3] + d[i - 2]) / 765) > 0.12) bordi++ } return Math.sqrt(Math.max(0, m2 / n - (m / n) ** 2)) + (bordi / n) * 0.8 }
+    const rv = tieni.map(i => ricco(fogli[i])), top = Math.max(...rv, 1e-6)
+    const ricche = tieni.filter((_, k) => rv[k] >= top * 0.45)
+    if (ricche.length >= 3) tieni.splice(0, tieni.length, ...ricche)
     if (tieni.length >= 2 && tieni.length < fogli.length) { log(`Reel: lascio fuori ${fogli.length - tieni.length} tavole che sono solo parole.`); fogli = tieni.map(i => fogli[i]); info = tieni.map(i => info[i]) }
   }
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
   // l'orecchio sceglie: tre beat candidati (stili diversi), vince quello che suona meglio; tutti gli stili prendono il loro voto
   // il tempo di lettura di ogni tavola (parole dei suoi testi), e del reel intero: la musica dura quanto serve
-  const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
+  const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text && l.meta.size * (720 / s.W) >= 24).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
   const legge = (n: number) => (n ? 1.2 + n * 0.35 : 0)
   const lettura = fogli.map(f => legge(parole(f)))
   const forte0 = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
@@ -674,16 +679,22 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const scena = smonta(fogli, r)
   const forte = forte0
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
-  const lett2 = lettura.slice(); lett2[forte] = Math.max(lett2[forte], legge((t.domanda ?? '').split(/\s+/).length))
+  const lett2 = lettura.slice()
   const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2)
   // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni
   const testi: { t0: number; t1: number; cv: HTMLCanvasElement }[] = []
   const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }
   const bar = brano.beat * 4
-  const conImg = async (tav: number, s: string, t0: number, t1: number) => { const f = flatten(fogli[tav], 0.5); const p = palette(fogli[tav]); const { cv } = await testoGrafico(f, s, { face: t.face, lettura: 'corsivo', colori: p.slice(0, 5), bg: fogli[tav].bg }, r, ['blocco', 'colonna', 'divaricato']); testi.push({ t0, t1, cv }) }
-  if (t.domanda) await conImg(ev.riprese[0].tav, t.domanda, 0, ev.riprese[0].t1)
+  const conImg = async (tav: number, s: string, t0: number, t1: number) => { const f = flatten(fogli[tav], 0.5); const p = palette(fogli[tav]); const { cv } = await testoGrafico(f, s, { face: t.face, lettura: 'corsivo', colori: p.slice(0, 5), bg: fogli[tav].bg }, r, ['blocco', 'colonna', 'divaricato', 'verticale']); testi.push({ t0, t1, cv }) }
+  if (t.domanda) { const need = legge(t.domanda.split(/\s+/).length) + 0.6; const fine = ev.riprese.find(x => x.t1 >= need)?.t1 ?? ev.riprese[ev.riprese.length - 1].t1; await conImg(ev.riprese[0].tav, t.domanda, 0, fine) }
   void bar
   if (t.conclusione) { const need = legge(t.conclusione.split(/\s+/).length); const rp = [...ev.riprese].slice(1).reverse().find(x => x.t1 - x.t0 >= need) ?? ev.riprese[Math.max(0, ev.riprese.length - 2)]; await conImg(rp.tav, t.conclusione, rp.t0, rp.t1) }
+  // i titoli delle tavole: nel reel si reimpaginano grandi, per il formato verticale (quelli del foglio quadrato sul telefono restano piccoli)
+  for (const rp of ev.riprese) {
+    if (testi.some(x => x.t0 < rp.t1 && x.t1 > rp.t0)) continue
+    const tit = fogli[rp.tav].layers.filter(l => l.meta?.text && l.meta.text.split(/\s+/).length <= 10 && !/^\s*fonte\s*:/i.test(l.meta.text)).sort((a, b) => b.meta!.size - a.meta!.size)[0]
+    if (tit) await conImg(rp.tav, tit.meta!.text, rp.t0, rp.t1)
+  }
   let copertinaMs = 0
   const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, copertina: ms => { copertinaMs = ms } })
   if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
