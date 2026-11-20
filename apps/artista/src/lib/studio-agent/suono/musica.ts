@@ -19,7 +19,7 @@
  * saturazione, compressione e "pompaggio" sulla cassa.
  */
 export type Genere = 'lofi' | 'techno' | 'acid' | 'glitch' | 'downtempo' | 'minimalhouse' | 'synthwave' | 'breakbeat' | 'ambient' | 'pop' | 'rock' | 'hiphop' | 'jazz' | 'funk' | 'hardtechno' | 'dnb'
-export interface Sezione { strumenti: string[]; motivo?: string; follia?: string; ultimo?: boolean; energia?: number }
+export interface Sezione { strumenti: string[]; motivo?: string; follia?: string; ultimo?: boolean; energia?: number; battute?: number }
 export interface Partitura {
   genere: Genere; bpm: number; swing: number; radice: number; scala: number[]; accordi: number[][]
   battute: number; sezioni: Sezione[]; motivi: Record<string, number[]>; risolve: boolean; seme: number
@@ -93,13 +93,13 @@ export function colpi(p: Partitura, S: Sezione, st: number) {
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296) }
 const hash = (w: string) => [...w].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 17)
 
-export interface SpecMusica { linguaggio: string; forma: string; scuro: boolean; conf: number; mood: string; schede: { concetto?: string; follia?: string }[]; seme: number }
+export interface SpecMusica { linguaggio: string; forma: string; scuro: boolean; conf: number; mood: string; schede: { concetto?: string; follia?: string; parole?: number }[]; seme: number }
 
 /** compone il brano: tutto deciso da linguaggio, forma, tono, fiducia, concetti e follie */
 export function componi(s: SpecMusica): Partitura {
   const r = rng(s.seme)
   // l'energia della sequenza: dall'umore, dalla forma e da quanto è sicuro di sé
-  const energia = Math.max(0, Math.min(1, 0.45 + ({ inquieto: 0.3, giocoso: 0.2, curioso: 0.1, annoiato: 0, calmo: -0.2, cupo: -0.1 }[s.mood] ?? 0) + (s.forma === 'manifesto' || s.forma === 'crescendo' ? 0.2 : s.forma === 'frammenti' ? 0.1 : 0) + (s.scuro ? 0.1 : 0) + (r() - 0.5) * 0.3))
+  const energia = Math.max(0, Math.min(1, 0.35 + ({ inquieto: 0.3, giocoso: 0.2, curioso: 0.1, annoiato: 0, calmo: -0.2, cupo: -0.1 }[s.mood] ?? 0) + (s.forma === 'manifesto' || s.forma === 'crescendo' ? 0.2 : s.forma === 'frammenti' ? 0.1 : 0) + (s.scuro ? 0.1 : 0) + (r() - 0.5) * 0.3))
   const cand = [...new Set(s.linguaggio.split('×').flatMap(x => GENERI_LING[x] ?? []))]
   const genere: Genere = cand.length ? cand[Math.min(cand.length - 1, Math.floor(energia * cand.length))] : 'pop'
   const [b0, b1] = BPM[genere]
@@ -131,7 +131,9 @@ export function componi(s: SpecMusica): Partitura {
     const set = pieno(k)
     if (s.forma === 'dialogo') { if (i % 2) set.delete('melodia'); else set.add('melodia') }
     if (sc.concetto) set.add('motivo')
-    return { strumenti: [...set], motivo: sc.concetto, follia: sc.follia, energia: Math.min(1, (k / ord.length) * (0.6 + energia * 0.6)) }
+    const secBattuta = (4 * 60) / bpm, serve = 2.5 + (sc.parole ?? 0) / 2.6
+    const bt = Math.min(12, Math.max(4, Math.ceil(serve / secBattuta / 2) * 2))
+    return { battute: bt, strumenti: [...set], motivo: sc.concetto, follia: sc.follia, energia: Math.min(1, (k / ord.length) * (0.6 + energia * 0.6)) }
   })
   if (s.forma === 'frammenti') sezioni = sezioni.map(x => ({ ...x, follia: x.follia ?? (r() < 0.35 ? 'ossessione' : undefined) }))
   if (sezioni.length) sezioni[sezioni.length - 1].ultimo = true
@@ -148,7 +150,7 @@ export function componi(s: SpecMusica): Partitura {
 }
 
 /** quanto dura una sezione (una tavola) in secondi */
-export const durata = (p: Partitura) => (p.battute * 4 * 60) / p.bpm
+export const durata = (p: Partitura, i?: number) => (((i !== undefined ? p.sezioni[i]?.battute : undefined) ?? p.battute) * 4 * 60) / p.bpm
 
 // ─── sintesi ────────────────────────────────────────────────────────────────
 const f = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12)
@@ -163,18 +165,19 @@ function rumoreBuffer(ctx: BaseAudioContext) { const b = ctx.createBuffer(1, ctx
 
 /** suona una sezione (una tavola) della partitura; restituisce l'audio stereo */
 export async function suona(p: Partitura, i: number, sampleRate = 48000): Promise<AudioBuffer> {
-  const sec = durata(p) + (p.sezioni[i]?.ultimo ? 1.5 : 0)
+  const sec = durata(p, i) + (p.sezioni[i]?.ultimo ? 1.5 : 0)
   const ctx = new OfflineAudioContext(2, Math.ceil(sec * sampleRate), sampleRate)
   const S = p.sezioni[i]
   const r = rng(p.seme + i * 977)
   const beat = 60 / p.bpm, sedic = beat / 4
   const T = (step: number) => step * sedic + (step % 2 ? p.swing * sedic : 0)
-  const steps = p.battute * 16
+  const steps = (S?.battute ?? p.battute) * 16
   // catena master: bus → saturazione → compressore → uscita; riverbero e eco in mandata
   const master = ctx.createGain(); master.gain.value = 0.8
   const sat = ctx.createWaveShaper(); sat.curve = curvaSaturazione(p.genere === 'hardtechno' ? 14 : p.genere === 'techno' || p.genere === 'rock' ? 6 : p.genere === 'hiphop' ? 4 : 2)
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4
-  master.connect(sat).connect(comp).connect(ctx.destination)
+  const morbido = ctx.createBiquadFilter(); morbido.type = 'lowpass'; morbido.frequency.value = p.genere === 'hardtechno' || p.genere === 'rock' ? 11000 : 8500
+  master.connect(sat).connect(comp).connect(morbido).connect(ctx.destination)
   const rev = ctx.createConvolver(); rev.buffer = impulso(ctx, p.genere === 'ambient' ? 5 : 2.4, 3)
   const revG = ctx.createGain(); revG.gain.value = p.genere === 'ambient' || p.genere === 'downtempo' ? 0.45 : 0.22
   rev.connect(revG).connect(master)
@@ -205,7 +208,7 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
   }
   const rullante = (t: number, v = 0.5) => { rum(t, 0.18, 1800, v, true); rum(t, 0.25, 300, v * 0.6, true, rev); const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 190; g.gain.setValueAtTime(v * 0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.1); o.connect(g).connect(master); o.start(t); o.stop(t + 0.12) }
   const clap = (t: number) => { for (let k = 0; k < 3; k++) rum(t + k * 0.012, 0.12, 1200, 0.35, true); rum(t + 0.03, 0.3, 1500, 0.2, true, rev) }
-  const hat = (t: number, aperto = false, v = 1) => rum(t, aperto ? 0.25 : 0.05, 8000, (aperto ? 0.18 : 0.12) * v)
+  const hat = (t: number, aperto = false, v = 1) => rum(t, aperto ? 0.22 : 0.04, 9000, (aperto ? 0.1 : 0.06) * v)
   // chitarra distorta: quinta di potenza (fondamentale, quinta, ottava) dentro un distorsore
   const dist = ctx.createWaveShaper(); dist.curve = curvaSaturazione(60); const cabina = ctx.createBiquadFilter(); cabina.type = 'lowpass'; cabina.frequency.value = 3200
   const chitG = ctx.createGain(); chitG.gain.value = 0.55; dist.connect(cabina).connect(chitG).connect(pompa)
@@ -240,22 +243,22 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
     if (has('keys') && (s16 === 0 || s16 === 7 || s16 === 10)) for (const gg of chN) voce(t, sedic * (s16 === 0 ? 5 : 2.5), nota(gg, 2), 'triangle', 0.06, 1700, pompa, { att: 0.01, detune: 6 })
     if (has('walking') && s16 % 4 === 0) { const q = s16 / 4, nx = accordo(bar + 1)[0]; const gr = q === 0 ? chN[0] : q === 1 ? chN[1] : q === 2 ? chN[2] : nx - 1; voce(t, beat * 0.9, nota(gr, 0), 'triangle', 0.34, 900, master, { env: 1 }) }
     if (has('piano') && (s16 === 6 || s16 === 14 || (s16 === 3 && bar % 2))) for (const gg of chN) voce(t, sedic * 1.4, nota(gg, 2), 'sine', 0.07, 3000, rev, { att: 0.004 })
-    if (has('slap') && [0, 3, 6, 8, 10, 11, 14].includes(s16)) voce(t, sedic * 0.8, nota(chN[0], s16 === 6 || s16 === 14 ? 1 : 0), 'square', 0.28, 700, pompa, { res: 6, env: 5 })
-    if (has('clav') && [2, 5, 7, 10, 13, 15].includes(s16)) for (const gg of chN.slice(0, 3)) voce(t, sedic * 0.5, nota(gg, 2), 'square', 0.035, 2600, pompa, { res: 2, env: 2 })
+    if (has('slap') && [0, 3, 6, 8, 10, 11, 14].includes(s16)) voce(t, sedic * 0.8, nota(chN[0], s16 === 6 || s16 === 14 ? 1 : 0), 'sawtooth', 0.26, 600, pompa, { res: 3, env: 3 })
+    if (has('clav') && [2, 5, 7, 10, 13, 15].includes(s16)) for (const gg of chN.slice(0, 3)) voce(t, sedic * 0.5, nota(gg, 2), 'triangle', 0.035, 2200, pompa, { res: 1, env: 1 })
     if (has('fiati') && bar % 2 === 1 && (s16 === 4 || s16 === 10)) for (const gg of chN.slice(0, 3)) voce(t, sedic * 2.5, nota(gg, 2), 'sawtooth', 0.06, 1400, rev, { att: 0.02, detune: 10, env: 2 })
     if (has('rombo') && C.cassa) { voce(t + sedic, sedic * 2.6, nota(chN[0], -1), 'sawtooth', 0.18, 160, rev, { res: 2 }) }
     if (has('reese') && s16 === 0) voce(t, beat * 3.9, nota(chN[0], 0), 'sawtooth', 0.22, 380, pompa, { detune: 22, res: 3 })
     if (has('glitch') && r() < 0.35) rum(t, 0.03 + r() * 0.06, 2000 + r() * 8000, 0.25, true)
     // basso
     const ch = accordo(bar)
-    if (has('basso') && (four ? s16 % 4 === 2 : s16 === 0 || s16 === 8 || s16 === 11)) voce(t, sedic * (four ? 1.8 : 3), nota(ch[0], 0), p.genere === 'synthwave' ? 'sawtooth' : 'square', 0.35, 420, pompa, { res: 4, env: 3 })
+    if (has('basso') && (four ? s16 % 4 === 2 : s16 === 0 || s16 === 8 || s16 === 11)) voce(t, sedic * (four ? 1.8 : 3), nota(ch[0], 0), p.genere === 'synthwave' || p.genere === 'techno' ? 'sawtooth' : 'triangle', 0.38, 320, pompa, { res: 2, env: 1.5 })
     if (has('acid') && r() < 0.75) voce(t, sedic * 0.9, nota(ch[0] + (r() < 0.3 ? 7 : r() < 0.5 ? 2 : 0), r() < 0.25 ? 1 : 0), 'sawtooth', 0.32, 300 + 1400 * (0.5 + 0.5 * Math.sin(st / 9)), pompa, { res: 18, env: 6 })
     // accordi
     if (s16 === 0 && has('pad')) for (const g of ch) voce(t, beat * 4 - 0.05, nota(g, 2), 'sawtooth', 0.06, p.genere === 'lofi' ? 1400 : 2400, pompa, { att: beat * 0.8, detune: 12 })
-    if (has('stab') && (s16 === 3 || s16 === 10)) for (const g of ch) voce(t, sedic * 1.5, nota(g, 2), 'square', 0.07, 2600, eco, { res: 3, env: 2 })
+    if (has('stab') && (s16 === 3 || s16 === 10)) for (const g of ch) voce(t, sedic * 1.5, nota(g, 2), 'sawtooth', 0.045, 1500, eco, { res: 1, env: 1 })
     // arpeggio e melodia
-    if (has('arpeggio') && s16 % 2 === 0) voce(t, sedic * 1.6, nota(ch[(st / 2) % ch.length | 0] + (st % 16 >= 8 ? 7 : 0), 3), 'triangle', 0.09, 3200, eco, { env: 1 })
-    if (has('melodia') && (s16 === 0 || s16 === 6 || s16 === 10 || (s16 === 14 && r() < 0.5))) voce(t, sedic * (s16 === 0 ? 4 : 2), nota(ch[Math.floor(r() * ch.length)] + (r() < 0.3 ? 1 : 0), 3), p.genere === 'lofi' ? 'sine' : 'square', 0.08, 2200, pompa, { att: 0.02 })
+    if (has('arpeggio') && s16 % 2 === 0 && bar % 2 === 0) voce(t, sedic * 1.6, nota(ch[(st / 2) % ch.length | 0] + (st % 16 >= 8 ? 7 : 0), 3), 'triangle', 0.05, 2000, eco, { env: 0.5 })
+    if (has('melodia') && bar % 4 < 2 && (s16 === 0 || s16 === 6 || (s16 === 10 && bar % 2 === 0))) voce(t, sedic * (s16 === 0 ? 6 : 3), nota(ch[(bar + s16) % ch.length], 3), p.genere === 'rock' ? 'sawtooth' : 'triangle', 0.06, 1600, rev, { att: 0.03 })
     // il leitmotiv del concetto in scena, sulle prime due battute
     if (has('motivo') && S.motivo && bar < 2 && s16 % 4 === 0) { const m = p.motivi[S.motivo]; voce(t, sedic * 3, nota(m[(s16 / 4) | 0] + ch[0], 3), 'triangle', 0.13, 3500, eco, { att: 0.01 }) }
     if (has('vinile') && st % 3 === 0) rum(t, 0.01, 3000, 0.04)
@@ -263,7 +266,7 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
   }
   // cadenza: l'ultima tavola risolve o resta sospesa
   if (S.ultimo) {
-    const tf = durata(p)
+    const tf = durata(p, i)
     const finale = p.risolve ? [0, 2, 4] : [0, 3, 4]
     for (const g of finale) voce(tf - beat, 1.8, nota(g, 2), 'sawtooth', 0.08, 2000, rev, { att: 0.05, detune: 8 })
   }
@@ -305,8 +308,8 @@ export function eventi(p: Partitura, i: number): Eventi {
   const beat = 60 / p.bpm, sedic = beat / 4
   const T = (step: number) => step * sedic + (step % 2 ? p.swing * sedic : 0)
   const has = (x: string) => S.strumenti.includes(x)
-  const e: Eventi = { beat, battute: p.battute, cassa: [], rullante: [], basso: [], accordi: [], stab: [], durata: durata(p) + (S.ultimo ? 1.5 : 0), energia: S.energia ?? 0.5, crash: [] }
-  for (let st = 0; st < p.battute * 16; st++) {
+  const e: Eventi = { beat, battute: p.battute, cassa: [], rullante: [], basso: [], accordi: [], stab: [], durata: durata(p, i) + (S.ultimo ? 1.5 : 0), energia: S.energia ?? 0.5, crash: [] }
+  for (let st = 0; st < (S.battute ?? p.battute) * 16; st++) {
     const t = T(st), s16 = st % 16, C = colpi(p, S, st)
     if (C.cassa) e.cassa.push(t)
     if (C.rullante) e.rullante.push(t)
@@ -316,6 +319,6 @@ export function eventi(p: Partitura, i: number): Eventi {
     if ((has('stab') || has('clav') || has('fiati') || has('chitarra')) && (s16 === 3 || s16 === 10)) e.stab.push(t)
   }
   // senza batteria: i battiti diventano i quarti, così c'è sempre un ritmo a cui appoggiarsi
-  if (!e.cassa.length) for (let b = 0; b < p.battute * 4; b++) e.cassa.push(b * beat)
+  if (!e.cassa.length) for (let b = 0; b < (S.battute ?? p.battute) * 4; b++) e.cassa.push(b * beat)
   return e
 }

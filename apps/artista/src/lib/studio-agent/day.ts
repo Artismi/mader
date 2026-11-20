@@ -377,7 +377,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const works: Work[] = []
   const epId = uid()
   // la musica si compone prima: così il reel può montare le tavole a tempo mentre le disegna
-  const partitura0 = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.map(x => ({ concetto: x.a, follia: x.follia })), seme: Math.floor(r() * 1e9) })
+  const partitura0 = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.map(x => ({ concetto: x.a, follia: x.follia, parole: `${x.titolo} ${x.corpo ?? ''}`.split(/\s+/).filter(Boolean).length })), seme: Math.floor(r() * 1e9) })
   const riuscite: number[] = []
   const reel = hooks.reel ? await nuovoReel({ linguaggio: L.id, nome: st.name, N: plan.schede.length, seme: Math.floor(r() * 1e9) }).catch(() => null) : null
   if (hooks.reel && !reel) log('Il reel non si può fare in questo browser (manca la codifica video).')
@@ -416,7 +416,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   let video: Blob | null = null
   if (reel) { try { video = await reel.fine(); if (video) log(`Reel montato: ${(video.size / 1e6).toFixed(1)} MB.`) } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) } }
   const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
-  log(`Musica: ${descrMusica}. Ogni tavola ha ${durata(partitura).toFixed(1)} secondi del brano.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
+  log(`Musica: ${descrMusica}. Le tavole durano da ${Math.min(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} a ${Math.max(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} secondi, quanto serve per leggerle.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
   const prec = getEpisodi(st).slice(-1)[0] as ({ conclusione?: string; domanda?: string } | undefined)
   const caption = didascaliaIT(st, { prima: prec ? { conclusione: prec.conclusione, domanda: prec.domanda } : undefined, n: getEpisodi(st).length + 1, titolo: plan.titolo, schede: plan.schede.slice(0, works.length), d: plan.d, domanda: plan.domanda, lettura: plan.lettura, forma: plan.forma, L, partitura })
   esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
