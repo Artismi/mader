@@ -93,8 +93,9 @@ try {
   // il reel: video + brano intero, per il sito (non si pubblica finché non lo decidiamo)
   if (r.episodio && REEL) {
     try {
-      const v = await pg.evaluate(id => window.__artista.reelSequenza(id), r.episodio)
-      const brano = join(MEDIA, `${r.episodio}-brano.wav`)
+      const rv = await pg.evaluate(id => window.__artista.reelSequenza(id), r.episodio)
+      const v = rv?.video ?? (typeof rv === 'string' ? rv : null)
+      const brano = rv?.audio ? join(MEDIA, rv.audio) : join(MEDIA, `${r.episodio}-brano.wav`)
       if (v && existsSync(brano)) {
         mkdirSync(join(MEM, 'reel'), { recursive: true })
         execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, v), '-i', brano, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest', '-movflags', '+faststart', join(MEM, 'reel', `${r.episodio}.mp4`)])

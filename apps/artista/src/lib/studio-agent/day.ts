@@ -36,12 +36,14 @@ import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione } from './mind/episodio'
-import { nuovaRegia, ascolta } from './hands/regia'
+import { smonta, evolviCoreografia, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
+import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
+import { testoGrafico } from './hands/testiReel'
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
 import { scegliLinguaggio, esitoLinguaggio } from './mind/linguaggi'
-import { componi, durata, eventi, suona, GENERE_NOME } from './suono/musica'
+import { componi, durata, GENERE_NOME, wav } from './suono/musica'
 import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
@@ -382,8 +384,8 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   // la musica si compone prima: così il reel può montare le tavole a tempo mentre le disegna
   const partitura0 = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.map(x => ({ rel: x.rel, concetto: x.a, follia: x.follia, parole: `${x.titolo} ${x.corpo ?? ''}`.split(/\s+/).filter(Boolean).length })), seme: Math.floor(r() * 1e9) })
   const riuscite: number[] = []
-  const reel = hooks.reel ? await nuovaRegia({ linguaggio: L.id, nome: st.name, N: plan.schede.length, seme: Math.floor(r() * 1e9), bpm: partitura0.bpm, carattere: FACES[F.face as FaceId]?.family }).catch(() => null) : null
-  if (hooks.reel && !reel) log('Il reel non si può fare in questo browser (manca la codifica video).')
+  // per il reel le tavole restano smontate: si tengono i fogli con i loro livelli
+  const fogli: Sheet[] = [], infoReel: { rel?: string; interesse: number }[] = []
   for (let i = 0; i < plan.schede.length; i++) {
     if (hooks.shouldStop?.()) break
     const sc = plan.schede[i]
@@ -408,13 +410,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     const saved = await T.saveWork(work, final.toDataURL('image/png'))
     works.push(saved); riuscite.push(i)
     if (sc.b && ultimaImpaginazione()) esitoVisivo(st, sc.rel ?? 'accanto', ultimaImpaginazione()!, saved.interest)
-    if (reel) {
-      try {
-        // il reel ascolta il pezzo vero di questa tavola, così ogni movimento cade sul colpo che si sente
-        const audio = await suona(partitura0, i, 22050).catch(() => null)
-        await reel.tavola(sheet, eventi(partitura0, i), { titolo: sc.titolo, frase: sc.corpo, rel: sc.rel, ascolto: audio ? ascolta(audio) : null, ultima: i === plan.schede.length - 1 })
-      } catch (e) { log(`Reel: ${e instanceof Error ? e.message : e}`) }
-    }
+    if (hooks.reel) { fogli.push(sheet); infoReel.push({ rel: sc.rel, interesse: saved.interest }) }
     hooks.onWork?.(saved)
     hooks.preview?.(flatten(sheet, 0.5))
     log(`${i + 1}/${plan.schede.length} ${sc.ruolo}${sc.titolo ? `: ${sc.titolo}` : ''}`)
@@ -424,7 +420,13 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   // le sezioni delle tavole saltate si tolgono; l'ultima rimasta chiude il brano
   const partitura = { ...partitura0, sezioni: riuscite.map((i, k) => ({ ...partitura0.sezioni[i], ultimo: k === riuscite.length - 1 })) }
   let video: Blob | null = null
-  if (reel) { try { video = await reel.fine(); if (video) log(`Reel montato: ${(video.size / 1e6).toFixed(1)} MB.`) } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) } }
+  let audioReel: Blob | null = null
+  if (hooks.reel && fogli.length >= 2) {
+    try {
+      const rr = await faiReel(st, r, fogli, infoReel, { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log)
+      if (rr) { video = rr.video; audioReel = rr.audio }
+    } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
+  }
   const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
   log(`Musica: ${descrMusica}. Le tavole durano da ${Math.min(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} a ${Math.max(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} secondi, quanto serve per leggerle.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
   const prec = getEpisodi(st).slice(-1)[0] as ({ conclusione?: string; domanda?: string } | undefined)
@@ -432,6 +434,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
   const ep = chiudiEpisodio(st, r, { musica: { partitura, descr: descrMusica }, lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
   if (video) await T.salvaReel(ep.id, video).catch(() => {})
+  if (audioReel) await T.salvaReel(`${ep.id}:audio`, audioReel).catch(() => {})
   ricorda(st, caption)
   {
     const recenti = (await T.listWorks()).filter(w => w.day >= st.day - 20)
@@ -635,3 +638,35 @@ export async function loadOrCreate(): Promise<AgentState> {
   return fresh
 }
 
+
+
+// ── il reel: un beat suo, la scena smontata, una coreografia che si evolve ──
+type ConMovimento = AgentState & { beat?: Gusto; movimento?: { memoria: Coreografia[]; rel: Record<string, Partial<Record<Accoppiamento, number>>>; diario: string[] } }
+async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: { rel?: string; interesse: number }[], t: { domanda?: string; conclusione?: string; face: FaceId; parola: string }, log: (m: string) => void): Promise<{ video: Blob; audio: Blob } | null> {
+  const st = st0 as ConMovimento
+  const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
+  const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
+  const stile = scegliStile(gusto, r, st.day)
+  const { audio, brano } = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: 20, memoria: gusto.pattern })
+  gusto.pattern = [...gusto.pattern, brano.pattern].slice(-24)
+  const scena = smonta(fogli, r)
+  const forte = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
+  const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel)
+  // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni
+  const testi: { t0: number; t1: number; cv: HTMLCanvasElement }[] = []
+  const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }
+  const bar = brano.beat * 4
+  const conImg = async (tav: number, s: string, t0: number, t1: number) => { const f = flatten(fogli[tav], 0.5); const p = palette(fogli[tav]); const { cv } = await testoGrafico(f, s, { face: t.face, lettura: 'corsivo', colori: p.slice(0, 5), bg: fogli[tav].bg }, r, ['blocco', 'colonna', 'divaricato']); testi.push({ t0, t1, cv }) }
+  if (t.domanda) await conImg(ev.riprese[0].tav, t.domanda, 0, Math.min(ev.riprese[0].t1, 3 * bar))
+  if (t.conclusione) { const rp = ev.riprese[Math.max(0, ev.riprese.length - 2)]; await conImg(rp.tav, t.conclusione, rp.t0, rp.t1) }
+  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi })
+  if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
+  // memoria del movimento: la coreografia scelta, e gli accoppiamenti che hanno funzionato si rafforzano
+  M.memoria = [...M.memoria, ev.coreografia].slice(-20)
+  for (const [rel, a] of Object.entries(ev.coreografia.accoppia)) { const x = M.rel[rel] ?? (M.rel[rel] = {}); x[a] = (x[a] ?? 0) * 0.9 + Math.max(0, ev.voto) * 0.1 }
+  premiaStile(gusto, stile.id, 0.5)
+  const descr = descriviCoreografia(ev.coreografia)
+  M.diario = [...M.diario, descr].slice(-30)
+  log(`Reel: beat ${brano.descr}; ${descr}. ${(video.size / 1e6).toFixed(1)} MB.`)
+  return { video, audio: wav(audio) }
+}

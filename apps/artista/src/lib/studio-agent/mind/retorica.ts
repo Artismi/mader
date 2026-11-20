@@ -13,16 +13,23 @@
  * 4. La stessa relazione si dice anche con l'immagine: per ogni relazione impara quali impaginazioni la dicono meglio,
  *    dal giudizio del suo occhio sulle tavole, con un po' di esplorazione.
  * 5. Si stanca: connettivi, mosse e impaginazioni usate di recente valgono meno.
+ * 6. La voce del profeta, se gli viene: dalle letture raccoglie frasi al futuro e racconti al passato remoto.
+ *    Solo dopo averne letti abbastanza può usarli: volgere una conclusione al futuro (profezia), ridire il suo
+ *    processo come un racconto letto altrove con dentro le sue parole (parabola), risalire dal concetto a ciò che lo
+ *    contiene, gradino per gradino nel lessico, fino al tutto. Quanto ci tiene a questa voce (la vocazione) cambia
+ *    con quello che succede ai testi che la usano.
  */
 import type { AgentState } from '../core/types'
 import { pick, type Rnd } from '../core/rng'
 import { categorie, iperonimo, verbi } from '../reader/concepts'
+import { art } from '../voice/lingua'
 
 export type RelR = 'contrasto' | 'causa' | 'somiglianza' | 'sequenza' | 'dubbio' | 'esempio'
 const RELS: RelR[] = ['contrasto', 'causa', 'somiglianza', 'sequenza', 'dubbio', 'esempio']
-export type Op = 'A' | 'B' | 'C' | 'L' | 'E' | 'D' | 'Q' | 'R' | 'N'
+export type Op = 'A' | 'B' | 'C' | 'L' | 'E' | 'D' | 'Q' | 'R' | 'N' | 'F' | 'P' | 'U'
 // A = prima premessa, B = seconda premessa, C = conclusione, L = legame (un connettivo), E = esempio concreto dalla lettura,
-// D = dubbio (un segnale di incertezza), Q = domanda, R = citazione breve, N = negazione/ripensamento
+// D = dubbio (un segnale di incertezza), Q = domanda, R = citazione breve, N = negazione/ripensamento,
+// F = la conclusione volta al futuro (profezia), P = parabola (un racconto letto, con dentro i suoi concetti), U = risalita verso il tutto
 export interface Mossa { ops: Op[]; rel: RelR; peso: number; usi: number; nata: number; ultimo: number }
 interface Connettivo { n: number; rel: Partial<Record<RelR, number>>; usi: number; ultimo: number; doc?: string[] }
 interface Immagine { colori: Record<string, number>; moti: Record<string, number>; docs?: Record<string, string[]> }
@@ -35,6 +42,8 @@ export interface Retorica {
   memoria: string[] // le ultime cose scritte, per non ripetersi
   fonti?: Record<string, string[]> // per ogni lettura recente, le frasi concrete (nomi, date, luoghi): la materia degli esempi
   diario: { day: number; nota: string }[]
+  voci?: { futuro: string[]; racconto: string[] }
+  vocazione?: number
 }
 type WithR = AgentState & { retorica?: Retorica }
 export function getRetorica(st: AgentState): Retorica {
@@ -81,6 +90,17 @@ export function osservaRetorica(st: AgentState, testo: string, concetti: string[
     const ks = Object.keys(F); if (ks.length > 30) for (const k of ks.slice(0, ks.length - 30)) delete F[k]
   }
   const frasi = testo.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).slice(0, 400)
+  // le voci: frasi al futuro e racconti al passato remoto, brevi, senza parentesi e numeri
+  {
+    const V = R.voci ?? (R.voci = { futuro: [], racconto: [] })
+    for (const f of frasi) {
+      if (f.length < 40 || f.length > 170 || /[()\[\]\d"]/.test(f)) continue
+      if (FUT.test(f) && V.futuro.length < 400 && !V.futuro.includes(f)) V.futuro.push(f)
+      else if (REM.test(f) && V.racconto.length < 400 && !V.racconto.includes(f)) V.racconto.push(f)
+    }
+    if (V.futuro.length > 120) V.futuro.splice(0, V.futuro.length - 120)
+    if (V.racconto.length > 120) V.racconto.splice(0, V.racconto.length - 120)
+  }
   const nuovi: string[] = []
   const concettiSet = new Set(concetti.filter(c => categorie(c).includes('n')))
   const visti = new Set<string>()
@@ -171,6 +191,56 @@ export function connettivo(st: AgentState, r: Rnd, rel: RelR): string | null {
   return cs[0][0]
 }
 
+// ── 6. la voce del profeta ──
+const FUT = /\b[a-zà-ü]{2,}(?:erà|irà|arà|eranno|iranno|aranno|eremo|iremo|vrà|vranno|rrà|rranno)\b/
+const REM = /\b[a-zà-ü]{3,}(?:ò|arono|erono|irono|ette|ettero)\b/
+const IRR: Record<string, string> = { 'è': 'sarà', sono: 'saranno', ha: 'avrà', hanno: 'avranno', fa: 'farà', fanno: 'faranno', va: 'andrà', vanno: 'andranno', può: 'potrà', possono: 'potranno', deve: 'dovrà', devono: 'dovranno', viene: 'verrà', vengono: 'verranno', resta: 'resterà', restano: 'resteranno', sa: 'saprà', dà: 'darà', sta: 'starà', stanno: 'staranno', vuole: 'vorrà', tiene: 'terrà', porta: 'porterà', portano: 'porteranno' }
+/** volge al futuro il primo verbo al presente (regole di morfologia, verbi riconosciuti nel lessico) */
+export function alFuturo(t: string): string | null {
+  const V = verbi()
+  const ws = t.split(/(\s+)/)
+  for (let i = 0; i < ws.length; i++) {
+    const w = ws[i], lw = w.toLowerCase().replace(/[.,;:]$/, ''), punt = w.slice(lw.length)
+    let f: string | null = IRR[lw] ?? null
+    if (!f) {
+      const st = (x: string) => V.has(x)
+      if (/a$/.test(lw) && st(lw.slice(0, -1) + 'are')) f = lw.slice(0, -1) + 'erà'
+      else if (/ano$/.test(lw) && st(lw.slice(0, -3) + 'are')) f = lw.slice(0, -3) + 'eranno'
+      else if (/e$/.test(lw) && st(lw.slice(0, -1) + 'ere')) f = lw.slice(0, -1) + 'erà'
+      else if (/e$/.test(lw) && st(lw.slice(0, -1) + 'ire')) f = lw.slice(0, -1) + 'irà'
+      else if (/ono$/.test(lw) && st(lw.slice(0, -3) + 'ere')) f = lw.slice(0, -3) + 'eranno'
+      else if (/ono$/.test(lw) && st(lw.slice(0, -3) + 'ire')) f = lw.slice(0, -3) + 'iranno'
+    }
+    if (f && lw.length > 1) { ws[i] = (/^[A-ZÀ-Ü]/.test(w) ? f.charAt(0).toUpperCase() + f.slice(1) : f) + punt; return ws.join('') }
+  }
+  return null
+}
+/** una parabola: un racconto letto altrove, con i suoi nomi sostituiti dai concetti di adesso */
+function parabola(R: Retorica, r: Rnd, a: string, b: string): string | null {
+  const V = R.voci?.racconto ?? []
+  for (let tent = 0; tent < 12 && V.length; tent++) {
+    const f = V[Math.floor(r() * V.length)]
+    let k = 0
+    const out = f.replace(/\b(il|lo|la|l'|i|gli|le|un|uno|una|un')\s?([a-zà-ü]{4,})\b/g, (m, _d, n: string) => {
+      if (k >= 2 || !categorie(n).includes('n')) return m
+      const c = k++ === 0 ? a : b
+      return art(c, /^(un|uno|una|un')$/.test(_d) ? 'ind' : 'det')
+    })
+    if (k === 2) return pulisci(out)
+  }
+  return null
+}
+/** risale dal concetto a ciò che lo contiene, nel lessico, fino a tre gradini */
+function scala(st: AgentState, r: Rnd, a: string): string | null {
+  const g: string[] = [a]
+  let x: string | null = a
+  for (let i = 0; i < 4 && x; i++) { x = iperonimo(x); if (x && !g.includes(x) && !x.includes('_')) g.push(x) }
+  if (g.length < 3) return null
+  const c = connettivo(st, r, 'somiglianza') ?? connettivo(st, r, 'sequenza')
+  if (!c) return null
+  return g.slice(0, 4).map((w, i) => (i ? `${c} ${art(w)}` : art(w))).join(', ')
+}
+
 // ── 3. dire: le mosse ──
 export interface Materia { a: string; b: string; premesse: string[]; conclusione: string; nuda?: string; conf: number; segno: 1 | -1; tipo: string; fonte?: string; esempio?: string; citazione?: string }
 const REL_TIPO: Record<string, RelR> = { catena: 'causa', lunga: 'causa', dipendenza: 'causa', interrotta: 'contrasto', contesa: 'contrasto', disaccordo: 'contrasto', eredita: 'somiglianza', ritrattazione: 'contrasto' }
@@ -185,7 +255,7 @@ function scrivi(st: AgentState, r: Rnd, ops: Op[], rel: RelR, m: Materia, nuda =
   const premessa = (k: number) => { const p = m.premesse[k]; if (!p || usati.has(k)) return null; usati.add(k); return pulisci(p) }
   const metti = (t: string | null) => { if (!t) return false; pezzi.push(attacco ? `${mai(attacco)}, ${min(t)}` : mai(t)); attacco = ''; return true }
   const conta = (o: Op) => ops.filter(x => x === o).length
-  if (conta('C') !== 1 || conta('E') > 1 || conta('R') > 1 || conta('Q') > 1 || conta('A') > 1 || conta('B') > 1) return null
+  if (conta('C') + conta('F') !== 1 || conta('P') > 1 || conta('U') > 1 || conta('E') > 1 || conta('R') > 1 || conta('Q') > 1 || conta('A') > 1 || conta('B') > 1) return null
   for (const op of ops) {
     switch (op) {
       case 'A': if (!metti(premessa(0))) return null; break
@@ -197,6 +267,9 @@ function scrivi(st: AgentState, r: Rnd, ops: Op[], rel: RelR, m: Materia, nuda =
       case 'R': if (!m.citazione) return null; pezzi.push(`«${m.citazione}»${m.fonte ? `, dice ${m.fonte}` : ''}`); break
       case 'Q': pezzi.push(`${mai(m.b)}${m.segno > 0 ? '' : ' no'}, davvero?`); break
       case 'N': { const c = connettivo(st, r, 'contrasto'); if (!c) return null; attacco = c; break }
+      case 'F': { if ((getRetorica(st).voci?.futuro.length ?? 0) < 3) return null; const f = alFuturo(pulisci(nuda ? (m.nuda ?? m.conclusione) : m.conclusione)); if (!f || !metti(f)) return null; break }
+      case 'P': { if ((getRetorica(st).voci?.racconto.length ?? 0) < 3) return null; const p = parabola(getRetorica(st), r, m.a, m.b); if (!p || !metti(p)) return null; break }
+      case 'U': { const u = scala(st, r, r() < 0.5 ? m.a : m.b); if (!u || !metti(u)) return null; break }
     }
   }
   if (attacco || !pezzi.length) return null
@@ -214,7 +287,7 @@ export function novita(st: AgentState, t: string): number {
   return 1 - peggio
 }
 function muta(r: Rnd, ops: Op[]): Op[] {
-  const ALF: Op[] = ['A', 'B', 'C', 'L', 'E', 'D', 'Q', 'R', 'N']
+  const ALF: Op[] = ['A', 'B', 'C', 'L', 'E', 'D', 'Q', 'R', 'N', 'F', 'P', 'U']
   const o = ops.slice()
   const k = r()
   if (k < 0.3 && o.length < 6) o.splice(Math.floor(r() * (o.length + 1)), 0, pick(r, ALF))
@@ -247,7 +320,8 @@ export function dici(st: AgentState, r: Rnd, m: Materia): { testo: string; mossa
     const n = parole(t).length
     const lung = n < 8 ? 0.3 : n > 55 ? 0.4 : 1
     const varieta = new Set(c.ops).size / c.ops.length
-    const voto = novita(st, t) * 1.4 + lung + varieta * 0.4 + (c.ops.includes('E') || c.ops.includes('R') ? 0.25 : 0) + r() * 0.1
+    const profeta = c.ops.filter(o => o === 'F' || o === 'P' || o === 'U').length
+    const voto = novita(st, t) * 1.4 + lung + varieta * 0.4 + (c.ops.includes('E') || c.ops.includes('R') ? 0.25 : 0) + profeta * (R.vocazione ?? 0.35) * 0.5 + r() * 0.1
     if (!best || voto > best.voto) best = { testo: t, ops: c.ops, voto, da: c.da }
   }
   if (!best) return null
@@ -259,9 +333,12 @@ export function dici(st: AgentState, r: Rnd, m: Materia): { testo: string; mossa
   for (const x of R.mosse) if (x !== mo) x.peso = Math.max(0.05, x.peso * 0.995)
   if (R.mosse.length > 40) { const via = R.mosse.sort((a, b) => b.peso - a.peso).splice(40); if (via[0]) nota(st, `Lascio perdere un modo di dire che non funzionava più: ${descriviMossa(via[0].ops)}.`) }
   R.memoria = [...R.memoria, best.testo].slice(-80)
+  // la vocazione profetica si muove: cresce se i testi profetici vengono nuovi, si stanca se li usa troppo di fila
+  const prof = best.ops.some(o => o === 'F' || o === 'P' || o === 'U')
+  R.vocazione = Math.max(0.05, Math.min(1, (R.vocazione ?? 0.35) + (prof ? (novita(st, best.testo) > 0.6 ? 0.02 : -0.03) : 0.005) + (r() - 0.5) * 0.02))
   return { testo: best.testo, mossa: k }
 }
-const NOMI_OP: Record<Op, string> = { A: 'un fatto', B: 'un altro fatto', C: 'la conclusione', L: 'un legame', E: 'un esempio dalla lettura', D: 'un dubbio', Q: 'una domanda', R: 'una citazione', N: 'un ripensamento' }
+const NOMI_OP: Record<Op, string> = { A: 'un fatto', B: 'un altro fatto', C: 'la conclusione', L: 'un legame', E: 'un esempio dalla lettura', D: 'un dubbio', Q: 'una domanda', R: 'una citazione', N: 'un ripensamento', F: 'la conclusione come profezia', P: 'una parabola', U: 'la risalita verso il tutto' }
 export const descriviMossa = (ops: Op[]) => ops.map(o => NOMI_OP[o]).join(' → ')
 /** ricorda anche i testi scritti in altri modi, così la novità si misura su tutto */
 export function ricorda(st: AgentState, t: string) { const R = getRetorica(st); R.memoria = [...R.memoria, t].slice(-80) }

@@ -165,5 +165,8 @@ export async function reelSequenza(epId: string) {
   const v = await T.leggiReel(epId)
   if (!v) return null
   const r = await T.igMedia(`${epId}-reel.mp4`, v)
-  return r.nome ?? null
+  // il beat del reel (se c'è): il reel ha la sua musica, non il brano della sequenza
+  const a = await T.leggiReel(`${epId}:audio`)
+  const ra = a ? await T.igMedia(`${epId}-reel.wav`, a) : null
+  return r.nome ? { video: r.nome, audio: ra?.nome ?? null } : null
 }
