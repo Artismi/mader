@@ -2,6 +2,7 @@
 // Anche l'aspetto viene da lui: carattere dei titoli, colori e margini sono quelli della sua firma, e cambiano con lei.
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { programma, scriviParete } from './parete.mjs'
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const para = t => esc(t).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
@@ -15,7 +16,7 @@ export function scriviBlog(MEM, s, img) {
   const css = `
 @import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, '+')}:wght@400;700;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=JetBrains+Mono&display=swap');
 :root{--bg:${S.bg ?? '#ebe6dc'};--ink:${S.ink ?? '#121212'};--acc:${S.acc ?? '#e3361b'};--m:${Math.round((S.margine ?? 0.06) * 100)}vw}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:19px/1.6 Newsreader,Georgia,serif}
+*{box-sizing:border-box}main.pieno{max-width:none;padding:0}.striscia{display:block;width:100%;height:110px}body{margin:0;background:var(--bg);color:var(--ink);font:19px/1.6 Newsreader,Georgia,serif}
 a{color:var(--acc)}header,main,footer{max-width:1100px;margin:auto;padding:0 max(20px,var(--m))}
 header{padding-top:48px}h1,h2,h3,.titolo{font-family:'${esc(fam)}',Georgia,serif;font-weight:${S.pesoTitoli ?? 700};line-height:1.05;letter-spacing:-.01em}
 h1{font-size:clamp(44px,8vw,96px);margin:0}h2{font-size:clamp(26px,3.6vw,40px);margin:1.4em 0 .3em}h3{font-size:22px;margin:1.2em 0 .2em}
@@ -36,10 +37,13 @@ table{border-collapse:collapse}td{padding:4px 14px 4px 0;vertical-align:top}foot
 `
   writeFileSync(join(MEM, 'stile.css'), css)
   const ig = s.sequenze.find(x => x.instagram?.permalink)?.instagram.permalink?.replace(/\/p\/.*$/, '/') ?? null
-  const testa = (titolo, sotto = '') => `<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(titolo)}</title><link rel="stylesheet" href="${sotto}stile.css"><link rel="alternate" type="application/rss+xml" href="${sotto}feed.xml" title="${esc(s.nome)}"></head><body>
-<header><a href="${sotto}index.html" style="text-decoration:none;color:inherit"><h1>${esc(s.nome)}</h1></a>
-<nav><a href="${sotto}index.html">diario di bordo</a><a href="${sotto}archivio.html">archivio</a><a href="${sotto}libro.html">il libro</a><a href="${sotto}appunti.html">appunti</a><a href="${sotto}letture.html">letture</a><a href="${sotto}come-parlo.html">come parlo</a>${ig ? `<a href="${esc(ig)}">instagram</a>` : ''}<a href="${sotto}feed.xml">rss</a></nav></header><main>`
+  const PR = programma({ ...s, MEM }, img)
+  const mini = JSON.stringify({ ...PR, mini: true, ops: PR.ops.filter(o => o.op === 'fondo' || o.op === 'campo') }).replace(/</g, '\\u003c')
+  const testa = (titolo, sotto = '', o = {}) => `<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(titolo)}</title><link rel="stylesheet" href="${sotto}stile.css"><link rel="alternate" type="application/rss+xml" href="${sotto}feed.xml" title="${esc(s.nome)}">${o.css ?? ''}</head><body>
+${o.parete ? '' : `<a href="${sotto}index.html"><canvas id="campo" class="striscia"></canvas></a><script>window.PROGRAMMA=${mini}</script><script defer src="${sotto}parete.js"></script>`}
+<header${o.parete ? ' class="parete"' : ''}><a href="${sotto}index.html" style="text-decoration:none;color:inherit"><h1${o.parete ? ' class="nome"' : ''}>${esc(s.nome)}</h1></a>
+<nav><a href="${sotto}diario.html">diario di bordo</a><a href="${sotto}archivio.html">archivio</a><a href="${sotto}libro.html">il libro</a><a href="${sotto}appunti.html">appunti</a><a href="${sotto}letture.html">letture</a><a href="${sotto}come-parlo.html">come parlo</a>${ig ? `<a href="${esc(ig)}">instagram</a>` : ''}<a href="${sotto}feed.xml">rss</a></nav></header><main${o.parete ? ' class="pieno"' : ''}>`
   const piede = `</main><footer>${esc(s.nome)} è un generatore procedurale: legge, ragiona con regole e disegna. Nessuna intelligenza artificiale. Questo sito lo scrive e lo impagina lui, a ogni giro. Giorno ${s.giorno}, aggiornato ${data(new Date().toISOString())}.</footer></body></html>`
   const prima = id => (img.has(id) ? `img/${id}.jpg` : null)
   const perGiorno = new Map()
@@ -58,11 +62,13 @@ table{border-collapse:collapse}td{padding:4px 14px 4px 0;vertical-align:top}foot
     ...s.diario.filter(x => x.tipo !== 'quaderno').slice(0, 30).map(x => ({ g: x.giorno, html: `<article class="voce nota"><div class="meta">giorno ${x.giorno} · ${x.tipo === 'retorica' ? 'nota sul mio modo di dire' : 'poetica'}</div><div class="breve">${para(x.testo)}</div></article>` })),
   ].sort((a, b) => b.g - a.g)
   const P = s.profilo
-  writeFileSync(join(MEM, 'index.html'), testa(s.nome) + `
+  writeFileSync(join(MEM, 'diario.html'), testa(`Diario di bordo — ${s.nome}`) + `
 ${P ? `<p class="bio">${esc(P.bio)}</p>${P.perche ? `<p class="meta">${esc(P.perche)}</p>` : ''}` : ''}
 ${ora ? `<div class="ora">${esc(ora)}</div>` : ''}
 ${s.visione ? `<div class="visione"><div class="meta">la mia visione, adesso</div><h3>${esc(s.visione.titolo)}</h3>${s.visione.domanda ? `<p>${esc(s.visione.domanda)}</p>` : ''}</div>` : ''}
 ${voci.map(v => v.html).join('') || '<p>Ancora niente.</p>'}` + piede)
+
+  scriviParete(MEM, s, img, testa, piede)
 
   // ── una pagina per sequenza: le tavole con i loro testi, il brano, il reel, le fonti ──
   mkdirSync(join(MEM, 'p'), { recursive: true })

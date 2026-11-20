@@ -108,13 +108,15 @@ export async function perIlSito() {
   const works = await T.listWorks()
   const byId = new Map(works.map(w => [w.id, w]))
   const eps = getEpisodi(st).slice(-60).reverse() as Ep[]
-  const S = st as unknown as Record<string, unknown> & { scuola?: { firma?: { face: FaceId; tone: string; margine: number; griglia: number; regole?: string[] } }; cantieri?: { titolo: string; tema: string; nato: number; capitoli: { titolo: string; paragrafi: { tipo: string; testo: string }[] }[] }[]; visione?: { titolo: string; domanda?: string; tesi?: { testo: string; conf: number; da: number }[]; storia?: unknown[] }; notebook?: { day: number; date: string; intention: string }[]; poetics?: { day: number; date: string; text: string }[]; attesa?: { accumulo: number; soglia: number; pronta?: string; ultimoPost?: string } }
+  const S = st as unknown as Record<string, unknown> & { scuola?: { firma?: { face: FaceId; tone: string; margine: number; griglia: number; regole?: string[] } }; cantieri?: { titolo: string; tema: string; nato: number; capitoli: { titolo: string; paragrafi: { tipo: string; testo: string }[] }[] }[]; visione?: { titolo: string; domanda?: string; tesi?: { testo: string; conf: number; da: number }[]; storia?: unknown[] }; notebook?: { day: number; date: string; intention: string }[]; poetics?: { day: number; date: string; text: string }[]; attesa?: { giri?: number; accumulo: number; soglia: number; pronta?: string; ultimoPost?: string } }
   const F = S.scuola?.firma
   const tono = TONES.find(t => t.id === F?.tone) ?? TONES[1]
   const R = getRetorica(st)
   const quando = (e: Ep) => e.instagram?.quando ?? byId.get(e.schede[0])?.createdAt ?? null
   return {
     nome: st.name, giorno: st.day, profilo: getProfilo(st) ?? null,
+    umore: st.mood, temperatura: st.temperature, giri: (S.attesa as { giri?: number } | undefined)?.giri ?? 0,
+    toni: [...new Set(((S as { toniRecenti?: string[] }).toniRecenti ?? []).slice(-4))].map(id => TONES.find(t => t.id === id)).filter(Boolean).map(t => ({ bg: t!.bg, ink: t!.ink, acc: t!.acc, scuro: t!.dark })),
     stile: { titoli: FACES[F?.face ?? 'grotesk']?.family ?? 'Inter', pesoTitoli: FACES[F?.face ?? 'grotesk']?.weight ?? 700, bg: tono.bg, ink: tono.ink, acc: tono.acc, scuro: tono.dark, margine: F?.margine ?? 0.06, regole: (F?.regole ?? []).slice(0, 6) },
     visione: S.visione ? { titolo: S.visione.titolo, domanda: S.visione.domanda, tesi: (S.visione.tesi ?? []).slice(-8) } : null,
     attesa: S.attesa ? { accumulo: S.attesa.accumulo, soglia: S.attesa.soglia, pronta: !!S.attesa.pronta, ultimoPost: S.attesa.ultimoPost ?? null } : null,

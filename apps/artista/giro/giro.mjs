@@ -118,7 +118,7 @@ try {
   }
   // il sito
   const s = await pg.evaluate(() => window.__artista.perIlSito())
-  scriviBlog(MEM, s, tenere)
+  try { scriviBlog(MEM, s, tenere) } catch (e) { console.error('sito non scritto:', e) } // il sito non deve mai far perdere la memoria
   writeFileSync(join(MEM, '.nojekyll'), '')
   // il token rinnovato, cifrato
   try {
