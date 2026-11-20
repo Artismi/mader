@@ -80,7 +80,7 @@ precision highp float; precision highp sampler2DArray;
 in vec2 vUv; out vec4 o;
 uniform sampler2D uSrc, uPrev, uTav, uTav2, uGlifi, uTesto;
 uniform sampler2DArray uStoria;
-uniform vec2 uRes; uniform float uT, uLeva, uA, uB, uC, uQ, uStoriaN, uStoriaI, uBarF;
+uniform vec2 uRes; uniform float uT, uLeva, uA, uB, uC, uQ, uStoriaN, uStoriaI, uBarF, uRivela, uVerso, uSopra;
 uniform vec3 uC0, uC1, uC2, uC3;
 float luma(vec3 c){ return dot(c, vec3(0.2126,0.7152,0.0722)); }
 float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
@@ -92,7 +92,8 @@ float K(){ return uQ*uLeva; }
 const FS: Record<string, string> = {
   copia: HEAD + `void main(){ o = texture(uSrc, vUv); }`,
   // la tavola, con una deriva lenta
-  sorgente: HEAD + `void main(){ vec2 uv = (vUv-.5)/(1.0+0.04*uT/8.0 + 0.03*K()) + .5; o = texture(uTav, uv); }`,
+  sorgente: HEAD + `float riv(){ float a = uVerso < .25 ? vUv.x : uVerso < .5 ? 1.0-vUv.y : uVerso < .75 ? 1.0-vUv.x : vUv.y; float n = fbm(vUv*vec2(6.,10.))*0.25; return smoothstep(uRivela*1.3-0.15, uRivela*1.3-0.05, a + n); }
+    void main(){ vec2 uv = (vUv-.5)/(1.0+0.04*uT/8.0 + 0.03*K()) + .5; vec4 c = texture(uTav, uv); vec4 t = texture(uTesto, vUv); float m = t.a*(1.0-riv()); o = vec4(mix(c.rgb, t.rgb, m), 1.); }`,
   feedback: HEAD + `void main(){
     vec2 c = vUv-.5; float z = 1.0 - (0.004 + 0.02*uA)*(1.0+2.0*K()); float an = (uB-.5)*0.03*(1.0+K());
     c = mat2(cos(an),-sin(an),sin(an),cos(an))*c*z; vec2 d = (vec2(fbm(vUv*3.+uT*.2), fbm(vUv*3.+5.+uT*.2))-.5)*0.006*uC;
@@ -150,7 +151,9 @@ const FS: Record<string, string> = {
     o = vec4(a, 1.); }`,
   rgb: HEAD + `void main(){ vec2 d = vec2(0.002+0.012*uA*K(), 0.0); o = vec4(texture(uSrc, vUv+d).r, texture(uSrc, vUv).g, texture(uSrc, vUv-d).b, 1.); }`,
   // il testo: piastra e lettere sopra, sempre leggibile
-  testo: HEAD + `void main(){ vec4 s = texture(uSrc, vUv), t = texture(uTesto, vUv); o = vec4(mix(s.rgb, t.rgb, t.a), 1.); }`,
+  testo: HEAD + `void main(){ vec4 s = texture(uSrc, vUv), t = texture(uTesto, vUv);
+    float a = uVerso < .25 ? vUv.x : uVerso < .5 ? 1.0-vUv.y : uVerso < .75 ? 1.0-vUv.x : vUv.y; float vis = 1.0-smoothstep(uRivela*1.3-0.15, uRivela*1.3-0.05, a + fbm(vUv*vec2(6.,10.))*0.25);
+    o = vec4(mix(s.rgb, t.rgb, t.a*vis*uSopra), 1.); }`,
 }
 
 interface T2 { t: WebGLTexture; f?: WebGLFramebuffer; w: number; h: number }
@@ -184,7 +187,7 @@ class Motore {
     const p = gl.createProgram()!; gl.attachShader(p, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p)
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? 'link')
     const u: Record<string, WebGLUniformLocation | null> = {}
-    for (const n of ['uSrc', 'uPrev', 'uTav', 'uTav2', 'uGlifi', 'uTesto', 'uStoria', 'uRes', 'uT', 'uLeva', 'uA', 'uB', 'uC', 'uQ', 'uStoriaN', 'uStoriaI', 'uBarF', 'uC0', 'uC1', 'uC2', 'uC3']) u[n] = gl.getUniformLocation(p, n)
+    for (const n of ['uSrc', 'uPrev', 'uTav', 'uTav2', 'uGlifi', 'uTesto', 'uStoria', 'uRes', 'uT', 'uLeva', 'uA', 'uB', 'uC', 'uQ', 'uStoriaN', 'uStoriaI', 'uBarF', 'uC0', 'uC1', 'uC2', 'uC3', 'uRivela', 'uVerso', 'uSopra']) u[n] = gl.getUniformLocation(p, n)
     return { p, u }
   }
   rt(): T2 {
@@ -203,7 +206,7 @@ class Motore {
   }
   aggiorna(t: T2, src: TexImageSource) { const gl = this.gl; gl.bindTexture(gl.TEXTURE_2D, t.t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src) }
   /** un passaggio: legge src, scrive dst */
-  passa(nome: string, src: T2, dst: T2 | null, u: { tav: T2; tav2: T2; t: number; leva: number; g?: Gene; col: number[][]; barF: number }) {
+  passa(nome: string, src: T2, dst: T2 | null, u: { tav: T2; tav2: T2; t: number; leva: number; g?: Gene; col: number[][]; barF: number; rivela?: number; verso?: number; sopra?: number }) {
     const gl = this.gl, P = this.prog[nome]
     gl.useProgram(P.p); gl.bindFramebuffer(gl.FRAMEBUFFER, dst ? dst.f! : null); gl.viewport(0, 0, this.w, this.h)
     const bind = (i: number, n: string, t: WebGLTexture, arr = false) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(arr ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, t); gl.uniform1i(P.u[n], i) }
@@ -211,19 +214,20 @@ class Motore {
     gl.uniform2f(P.u.uRes, this.w, this.h); gl.uniform1f(P.u.uT, u.t); gl.uniform1f(P.u.uLeva, u.leva); gl.uniform1f(P.u.uBarF, u.barF)
     gl.uniform1f(P.u.uA, u.g?.a ?? 0.5); gl.uniform1f(P.u.uB, u.g?.b ?? 0.5); gl.uniform1f(P.u.uC, u.g?.c ?? 0.5); gl.uniform1f(P.u.uQ, u.g?.quanto ?? 0.5)
     gl.uniform1f(P.u.uStoriaN, this.storiaN); gl.uniform1f(P.u.uStoriaI, this.storiaI)
+    gl.uniform1f(P.u.uRivela, u.rivela ?? 1); gl.uniform1f(P.u.uVerso, u.verso ?? 0); gl.uniform1f(P.u.uSopra, u.sopra ?? 0)
     for (let i = 0; i < 4; i++) gl.uniform3fv(P.u[`uC${i}`], u.col[i])
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
   }
   /** un fotogramma: sorgente → passaggi del programma → (testo) → schermo; aggiorna feedback e storia */
-  fotogramma(pr: Programma, u: { tav: T2; tav2: T2; t: number; lev: Record<Leva, number>; col: number[][]; barF: number; testo: boolean }) {
+  fotogramma(pr: Programma, u: { tav: T2; tav2: T2; t: number; lev: Record<Leva, number>; col: number[][]; barF: number; testo: boolean; rivela?: number; verso?: number; sopra?: number }) {
     const gl = this.gl
     this.passa('sorgente', this.a, this.b, { ...u, leva: u.lev.k, g: { p: 'fluido', a: 0, b: 0, c: 0, leva: 'k', quanto: 0.3 } })
     let src = this.b, dst = this.a
     for (const g of pr) {
       this.passa(g.p, src, dst, { ...u, leva: u.lev[g.leva], g }); [src, dst] = [dst, src]
     }
-    if (u.testo) { this.passa('testo', src, dst, { ...u, leva: 0 }); [src, dst] = [dst, src] }
+    if (u.testo && (u.sopra ?? 0) > 0.01) { this.passa('testo', src, dst, { ...u, leva: 0 }); [src, dst] = [dst, src] }
     // al canvas e alla memoria del feedback
     this.passa('copia', src, this.prev, { ...u, leva: 0 })
     this.passa('copia', src, null, { ...u, leva: 0 })
@@ -307,19 +311,32 @@ function misuraPixel(fr: Uint8Array[], w: number, h: number, lev: number[], sorg
   // colori estranei: saturazione media dell'uscita oltre quella della tavola
   let satO = 0, satS = 0, cc = 0
   if (sorg) for (let i = 0; i < d.length; i += 4 * 11) { const so = Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); const ss = Math.max(sorg[i], sorg[i + 1], sorg[i + 2]) - Math.min(sorg[i], sorg[i + 1], sorg[i + 2]); satO += so; satS += ss; cc++ }
-  const estranei = cc ? Math.max(0, (satO - satS) / cc / 255) : 0
+  // tinte estranee: pixel colorati la cui tinta non c'è nella tavola (le iridescenze del moiré)
+  const tinta = (r: number, g: number, b: number) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx - mn < 40) return -1; let h = mx === r ? (g - b) / (mx - mn) : mx === g ? 2 + (b - r) / (mx - mn) : 4 + (r - g) / (mx - mn); h *= 60; return h < 0 ? h + 360 : h }
+  const tinte = new Array(36).fill(0)
+  if (sorg) for (let i = 0; i < sorg.length; i += 4 * 5) { const h = tinta(sorg[i], sorg[i + 1], sorg[i + 2]); if (h >= 0) tinte[Math.floor(h / 10) % 36]++ }
+  let fuori = 0, tot = 0
+  for (let i = 0; i < d.length; i += 4 * 5) { const h = tinta(d[i], d[i + 1], d[i + 2]); tot++; if (h < 0) continue; const k = Math.floor(h / 10) % 36; if (!(tinte[k] + tinte[(k + 1) % 36] + tinte[(k + 35) % 36])) fuori++ }
+  const estranei = (cc ? Math.max(0, (satO - satS) / cc / 255) : 0) + (tot ? fuori / tot : 0) * 3
   return { ent, std, mov, lampo, sync, ponte, trasf, estranei }
 }
 const distanza = (a: Programma, b: Programma) => { const A = new Set(a.map(x => x.p)), B = new Set(b.map(x => x.p)); const u = new Set([...A, ...B]); let s = 0; for (const x of u) if (A.has(x) !== B.has(x)) s++; return s / Math.max(1, u.size) }
 
 export interface Esito { prog: Programma; voto: number; misure: ReturnType<typeof misuraPixel> }
 /** l'evoluzione: prova i programmi su due battute a bassa risoluzione e tiene i migliori */
-export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { width: number; height: number })[]; seme: number; memoria?: Programma[]; da: number; generazioni?: number; popolazione?: number; log?: (m: string) => void }): Promise<Esito[]> {
+export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { width: number; height: number })[]; seme: number; memoria?: Programma[]; da: number; generazioni?: number; popolazione?: number; log?: (m: string) => void; testo?: HTMLCanvasElement }): Promise<Esito[]> {
   const r = rng(o.seme), w = 108, h = 192
   const M = new Motore(w, h)
   M.glifi = M.tex(atlante('mono'), false)
   const tav = o.tavole.map(t => M.tex(coperta(t, w, h)))
   const col = tavolozza(o.tavole[0])
+  // il testo di prova (impaginato dai suoi generatori) entra nell'immagine: il programma deve lasciarlo leggere
+  let maschera: Uint8Array | null = null
+  if (o.testo) {
+    const c = coperta(o.testo, w, h); M.aggiorna(M.testo, c)
+    const d = c.getContext('2d')!.getImageData(0, 0, w, h).data; maschera = new Uint8Array(w * h)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) maschera[(h - 1 - y) * w + x] = d[(y * w + x) * 4 + 3] > 128 ? 1 : 0
+  }
   const br = o.brano, nF = Math.round(br.beat * 12 * FPS)
   const env = (ts: number[], t: number, dec: number) => { let v = 0; for (const x of ts) { const d = t - x; if (d >= 0 && d < dec * 5) v = Math.max(v, Math.exp(-d / dec)) } return v }
   const lev: number[] = []
@@ -330,11 +347,24 @@ export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { w
     const fr: Uint8Array[] = []
     for (let f = 0; f < nF; f++) {
       const t = o.da + f / FPS
-      M.fotogramma(p, { tav: tav[0], tav2: tav[1 % tav.length], t, lev: { k: env(br.cassa, t, 0.08), s: env(br.rullante, t, 0.1), h: env(br.hat, t, 0.04), bar: ((t % (br.beat * 4)) / (br.beat * 4)), no: 0 }, col, barF: t / (br.beat * 4), testo: false })
+      M.fotogramma(p, { rivela: 1, verso: 0, sopra: 0, testo: false, tav: tav[0], tav2: tav[1 % tav.length], t, lev: { k: env(br.cassa, t, 0.08), s: env(br.rullante, t, 0.1), h: env(br.hat, t, 0.04), bar: ((t % (br.beat * 4)) / (br.beat * 4)), no: 0 }, col, barF: t / (br.beat * 4) })
       if (f % 2 === 0 || f > nF - 3) fr.push(M.leggi())
     }
     const lv = lev.filter((_, f) => f % 2 === 0 || f > nF - 3)
     const m = misuraPixel(fr, w, h, lv, sorg)
+    // leggibilità: quanto le lettere si staccano da quello che hanno intorno (separazione delle luminanze dentro/fuori)
+    let legg = 1.5
+    if (maschera) {
+      const d = fr[fr.length - 1], L = (i: number) => (d[i * 4] * 0.2126 + d[i * 4 + 1] * 0.7152 + d[i * 4 + 2] * 0.0722) / 255
+      let a = 0, a2 = 0, na = 0, b = 0, b2 = 0, nb = 0
+      for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+        const i = y * w + x
+        if (maschera[i]) { const l = L(i); a += l; a2 += l * l; na++ }
+        else if (maschera[i - 2] || maschera[i + 2] || maschera[i - 2 * w] || maschera[i + 2 * w]) { const l = L(i); b += l; b2 += l * l; nb++ }
+      }
+      if (na > 10 && nb > 10) { const ma = a / na, mb = b / nb, sa = Math.sqrt(Math.max(0, a2 / na - ma * ma)), sb = Math.sqrt(Math.max(0, b2 / nb - mb * mb)); legg = Math.abs(ma - mb) / (sa + sb + 0.02) }
+    }
+    ;(m as typeof m & { legg: number }).legg = legg
     let v = -Math.abs(m.ent - 0.55) * 4 // complessità in fascia
     v -= Math.max(0, 0.12 - m.std) * 10 // contrasto
     v -= Math.abs(Math.log((m.mov + 1e-3) / 0.035)) * 0.8 // movimento in fascia
@@ -344,6 +374,7 @@ export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { w
     v -= Math.max(0, 0.1 - m.trasf) * 20 // e deve essere davvero trasformata
     v += Math.min(4, new Set(p.map(x => x.p)).size) * 0.35 // un programma, non un filtro
     v -= m.estranei * 12 // i colori restano quelli della tavola
+    v += Math.min(1.5, (m as typeof m & { legg: number }).legg) * 3 // le parole, lavorate dal programma, si leggono ancora
     if (o.memoria?.length) v += Math.min(...o.memoria.slice(-12).map(x => distanza(p, x))) * 1.5 // novità
     return { prog: p, voto: v, misure: m }
   }
@@ -364,7 +395,7 @@ export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { w
 }
 
 /** gira il reel: riprese (tavola + programma + testo) sul beat */
-export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { width: number; height: number })[]; riprese: Riprese[]; nome: string; carattere?: string; tipo?: Tipografia }): Promise<Blob | null> {
+export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { width: number; height: number })[]; riprese: Riprese[]; nome: string; testi?: (tav: number, testo: string) => HTMLCanvasElement | null; leggibilita?: { A?: number; B?: number } }): Promise<Blob | null> {
   if (typeof VideoEncoder === 'undefined') return null
   const M = new Motore(W, H)
   M.glifi = M.tex(atlante('mono'), false)
@@ -376,72 +407,23 @@ export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { wid
   const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { errore = e } })
   ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: FPS })
   const env = (ts: number[], t: number, dec: number) => { let v = 0; for (const x of ts) { const d = t - x; if (d >= 0 && d < dec * 5) v = Math.max(v, Math.exp(-d / dec)) } return v }
-  // il testo: una tipografia sua per questo reel, disegnata su una tela trasparente e messa sopra
-  const tc = document.createElement('canvas'); tc.width = W; tc.height = H
-  const tg = tc.getContext('2d')!
-  const T = o.tipo ?? tipografiaACaso(rng(br.bpm * 7919), [o.carattere ?? 'Georgia'])
-  const scriviTesto = (s0: string, tl: number, col: number[][], centro: boolean) => {
-    tg.clearRect(0, 0, W, H)
-    const lum = (c: number[]) => { const f = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]) }
-    const contr = (a: number[], b: number[]) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
-    const hex = (c: number[]) => `rgb(${c.map(v => Math.round(v * 255)).join(',')})`
-    // inchiostro e fondo dalla tavolozza della tavola: la coppia con più contrasto; se non basta, bianco o nero
-    let best = [col[0], col[3]], bc = contr(col[0], col[3])
-    for (const a of col) for (const b of col) if (contr(a, b) > bc) { bc = contr(a, b); best = [a, b] }
-    let [ink, fondo] = T.inverti ? [best[1], best[0]] : best
-    if (bc < 4.5) { fondo = lum(fondo) > 0.4 ? [0.97, 0.96, 0.93] : [0.06, 0.06, 0.06]; ink = lum(fondo) > 0.4 ? [0.06, 0.06, 0.06] : [0.97, 0.96, 0.93] }
-    const gotico = /Unifraktur/i.test(T.famiglia)
-    const s = T.cassa === 'maiuscolo' && !gotico ? s0.toUpperCase() : T.cassa === 'minuscolo' ? s0.toLowerCase() : s0
-    const verticale = T.posto === 'verticale' && !centro && s.length < 40
-    const largo = (verticale ? H : W) - 2 * 60
-    let corpo = (s.length > 90 ? 40 : s.length > 50 ? 50 : s.length > 22 ? 64 : s.length > 10 ? 88 : 118) * T.corpo
-    corpo = Math.max(46, corpo) // mai troppo piccolo per un telefono
-    tg.save()
-    const font = () => `${T.peso} ${corpo}px '${T.famiglia}', Georgia, serif`
-    tg.font = font(); (tg as unknown as { letterSpacing: string }).letterSpacing = `${(T.spazio * corpo).toFixed(1)}px`
-    const righe = (): string[][] => { const R: string[][] = [[]]; for (const p of s.split(/\s+/).filter(Boolean)) { const pr = [...R[R.length - 1], p].join(' '); if (tg.measureText(pr).width > largo && R[R.length - 1].length) R.push([]); R[R.length - 1].push(p) } return R }
-    let R = righe()
-    while (R.length * corpo * T.interlinea > (verticale ? W : H) * 0.55 && corpo > 46) { corpo *= 0.9; tg.font = font(); R = righe() }
-    const hT = R.length * corpo * T.interlinea
-    if (verticale) { tg.translate(W - 60, 60); tg.rotate(Math.PI / 2) }
-    const Hh = verticale ? W : H, Ww = verticale ? H : W
-    const y0 = centro || T.posto === 'centro' ? (Hh - hT) / 2 + corpo : T.posto === 'alto' ? 200 + corpo : Hh - 230 - hT + corpo
-    // quanto è entrato: per parola, per lettera, per riga o tutto insieme, sui sedicesimi
-    const passo = br.beat / 4
-    const nP = s.split(/\s+/).length
-    const visibile = T.ingresso === 'tutto' ? 1e9 : T.ingresso === 'riga' ? Math.floor(tl / (passo * 4)) + 1 : T.ingresso === 'lettera' ? Math.floor(tl / (passo / 2)) + 1 : Math.floor(tl / passo) + 1
-    let kParola = 0, kLettera = 0
-    R.forEach((riga, ri) => {
-      const testo = riga.join(' '), w = tg.measureText(testo).width
-      const x0 = T.allinea === 'centro' ? (Ww - w) / 2 : T.allinea === 'destra' ? Ww - 60 - w : 60
-      const y = y0 + ri * corpo * T.interlinea
-      let mostra = testo
-      if (T.ingresso === 'parola') { const n = Math.max(0, Math.min(riga.length, visibile - kParola)); mostra = riga.slice(0, n).join(' '); kParola += riga.length }
-      else if (T.ingresso === 'lettera') { const n = Math.max(0, Math.min(testo.length, visibile - kLettera)); mostra = testo.slice(0, n); kLettera += testo.length }
-      else if (T.ingresso === 'riga') mostra = ri < visibile ? testo : ''
-      if (!mostra) return
-      const mw = tg.measureText(mostra).width, pad = corpo * 0.18
-      if (T.piastra === 'blocco') { tg.fillStyle = hex(fondo); tg.fillRect(x0 - pad, y - corpo * 0.9, mw + 2 * pad, corpo * (T.interlinea + 0.12)) }
-      if (T.piastra === 'fascia') { tg.fillStyle = hex(fondo); tg.fillRect(0, y - corpo * 0.9, Ww, corpo * (T.interlinea + 0.12)) }
-      if (T.piastra === 'contorno' || T.piastra === 'nessuna' || T.piastra === 'sottolinea') { tg.lineJoin = 'round'; tg.lineWidth = corpo * (T.piastra === 'contorno' ? 0.2 : 0.14); tg.strokeStyle = hex(fondo); tg.strokeText(mostra, x0, y) }
-      tg.fillStyle = hex(ink); tg.fillText(mostra, x0, y)
-      if (T.piastra === 'sottolinea') { tg.fillRect(x0, y + corpo * 0.12, mw, Math.max(3, corpo * 0.07)) }
-    })
-    void nP
-    tg.restore()
-    tg.font = "20px 'DejaVu Sans Mono', ui-monospace, monospace"; (tg as unknown as { letterSpacing: string }).letterSpacing = '0px'; tg.textBaseline = 'alphabetic'
-    tg.fillStyle = hex(fondo); tg.fillRect(40, 44, 300, 34); tg.fillStyle = hex(ink); tg.fillText(`${o.nome.toLowerCase()} · ${br.bpm} bpm`, 52, 68)
-    M.aggiorna(M.testo, tc)
-  }
+  // i testi: già impaginati dai suoi generatori tipografici (un canvas trasparente per ripresa); entrano nell'immagine
+  // e si rivelano a passi sui battiti; se il programma li rende poco leggibili, tornano anche sopra, quanto basta
+  const vuoto = document.createElement('canvas'); vuoto.width = W; vuoto.height = H
+  const legg = o.leggibilita ?? {}
   const nF = Math.round(br.durata * FPS)
   let ultimoTesto = ''
   for (let f = 0; f < nF; f++) {
     const t = f / FPS
     const s = o.riprese.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? o.riprese[o.riprese.length - 1]
     const tl = t - s.t0
-    const chiave = `${s.testo}|${s.tav}|${Math.min(200, Math.floor(tl / (br.beat / 8)))}`
-    if (chiave !== ultimoTesto) { scriviTesto(s.testo ?? '', tl, cols[s.tav], !!s.centro); ultimoTesto = chiave }
-    M.fotogramma(s.prog, { tav: tav[s.tav], tav2: tav[(s.tav + 1) % tav.length], t, lev: { k: env(br.cassa, t, 0.08), s: env(br.rullante, t, 0.1), h: env(br.hat, t, 0.04), bar: (t % (br.beat * 4)) / (br.beat * 4), no: 0 }, col: cols[s.tav], barF: t / (br.beat * 4), testo: true })
+    const chiave = `${s.testo}|${s.tav}`
+    if (chiave !== ultimoTesto) { const c = s.testo ? o.testi?.(s.tav, s.testo) : null; M.aggiorna(M.testo, c ? coperta(c, W, H) : vuoto); ultimoTesto = chiave }
+    // rivela: un passo per battito, finito in quattro battiti
+    const passi = Math.floor(tl / br.beat), fr0 = (tl - passi * br.beat) / br.beat
+    const rivela = s.testo ? Math.min(1, (passi + Math.min(1, fr0 / 0.35)) / 4) : 0
+    const lg = legg[s.prog === o.riprese[0].prog ? 'A' : 'B'] ?? 1
+    M.fotogramma(s.prog, { rivela, verso: (s.tav * 0.37) % 1, sopra: Math.max(0, Math.min(1, 1.3 - lg)), tav: tav[s.tav], tav2: tav[(s.tav + 1) % tav.length], t, lev: { k: env(br.cassa, t, 0.08), s: env(br.rullante, t, 0.1), h: env(br.hat, t, 0.04), bar: (t % (br.beat * 4)) / (br.beat * 4), no: 0 }, col: cols[s.tav], barF: t / (br.beat * 4), testo: true })
     const fr = new VideoFrame(M.cv as HTMLCanvasElement, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) })
     ve.encode(fr, { keyFrame: f % (FPS * 2) === 0 }); fr.close()
     if (ve.encodeQueueSize > 6) await new Promise(res => setTimeout(res, 5))
