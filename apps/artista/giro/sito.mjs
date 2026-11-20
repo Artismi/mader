@@ -43,8 +43,9 @@ table{border-collapse:collapse}td{padding:4px 14px 4px 0;vertical-align:top}foot
 <title>${esc(titolo)}</title><link rel="stylesheet" href="${sotto}stile.css"><link rel="alternate" type="application/rss+xml" href="${sotto}feed.xml" title="${esc(s.nome)}">${o.css ?? ''}</head><body>
 ${o.parete ? '' : `<a href="${sotto}index.html"><canvas id="campo" class="striscia"></canvas></a><script>window.PROGRAMMA=${mini}</script><script defer src="${sotto}parete.js"></script>`}
 <header${o.parete ? ' class="parete"' : ''}><a href="${sotto}index.html" style="text-decoration:none;color:inherit"><h1${o.parete ? ' class="nome"' : ''}>${esc(s.nome)}</h1></a>
-<nav><a href="${sotto}diario.html">diario di bordo</a><a href="${sotto}archivio.html">archivio</a><a href="${sotto}libro.html">il libro</a><a href="${sotto}appunti.html">appunti</a><a href="${sotto}letture.html">letture</a><a href="${sotto}come-parlo.html">come parlo</a>${ig ? `<a href="${esc(ig)}">instagram</a>` : ''}<a href="${sotto}feed.xml">rss</a></nav></header><main${o.parete ? ' class="pieno"' : ''}>`
-  const piede = `</main><footer>${esc(s.nome)} è un generatore procedurale: legge, ragiona con regole e disegna. Nessuna intelligenza artificiale. Questo sito lo scrive e lo impagina lui, a ogni giro. Giorno ${s.giorno}, aggiornato ${data(new Date().toISOString())}.</footer></body></html>`
+<nav><a href="${sotto}diario.html">pensieri</a><a href="${sotto}archivio.html">opere</a>${s.libro.length ? `<a href="${sotto}libro.html">libro</a>` : ''}${ig ? `<a href="${esc(ig)}">instagram</a>` : ''}</nav></header><main${o.parete ? ' class="pieno"' : ''}>`
+  const piedeDi = PIEDE => `</main><footer>${esc(s.nome)} è un generatore procedurale: legge, ragiona con regole e disegna. Nessuna intelligenza artificiale. Questo sito lo scrive e lo impagina lui.<br><a href="${PIEDE}come-parlo.html">come ragiona</a> · <a href="${PIEDE}letture.html">cosa ha letto</a></footer></body></html>`
+  const piede = piedeDi(''), piede2 = piedeDi('../')
   const prima = id => (img.has(id) ? `img/${id}.jpg` : null)
   const perGiorno = new Map()
   for (const w of s.archivio ?? []) { if (!perGiorno.has(w.giorno)) perGiorno.set(w.giorno, []); perGiorno.get(w.giorno).push(w) }
@@ -62,7 +63,7 @@ ${o.parete ? '' : `<a href="${sotto}index.html"><canvas id="campo" class="strisc
     ...s.diario.filter(x => x.tipo !== 'quaderno').slice(0, 30).map(x => ({ g: x.giorno, html: `<article class="voce nota"><div class="meta">giorno ${x.giorno} · ${x.tipo === 'retorica' ? 'nota sul mio modo di dire' : 'poetica'}</div><div class="breve">${para(x.testo)}</div></article>` })),
   ].sort((a, b) => b.g - a.g)
   const P = s.profilo
-  writeFileSync(join(MEM, 'diario.html'), testa(`Diario di bordo — ${s.nome}`) + `
+  writeFileSync(join(MEM, 'diario.html'), testa(`Pensieri — ${s.nome}`) + `
 ${P ? `<p class="bio">${esc(P.bio)}</p>${P.perche ? `<p class="meta">${esc(P.perche)}</p>` : ''}` : ''}
 ${ora ? `<div class="ora">${esc(ora)}</div>` : ''}
 ${s.visione ? `<div class="visione"><div class="meta">la mia visione, adesso</div><h3>${esc(s.visione.titolo)}</h3>${s.visione.domanda ? `<p>${esc(s.visione.domanda)}</p>` : ''}</div>` : ''}
@@ -85,7 +86,7 @@ ${e.conclusione ? `<div class="pensiero">${esc(e.conclusione)}</div>` : ''}
 ${e.domanda ? `<p><em>${esc(e.domanda)}</em></p>` : ''}
 ${e.letture.length ? `<h3>Ho letto</h3><ul>${e.letture.map(l => `<li><a href="${esc(l.url)}">${esc(l.titolo)}</a> <span class="meta">${esc(l.fonte)}</span></li>`).join('')}</ul>` : ''}
 ${e.instagram?.permalink ? `<p><a href="${esc(e.instagram.permalink)}">questa sequenza su Instagram</a></p>` : ''}
-<p class="meta">${prec ? `<a href="${prec.id}.html">← ${esc(corto(prec.titolo, 50))}</a>` : ''}${prec && succ ? ' · ' : ''}${succ ? `<a href="${succ.id}.html">${esc(corto(succ.titolo, 50))} →</a>` : ''}</p>` + piede)
+<p class="meta">${prec ? `<a href="${prec.id}.html">← ${esc(corto(prec.titolo, 50))}</a>` : ''}${prec && succ ? ' · ' : ''}${succ ? `<a href="${succ.id}.html">${esc(corto(succ.titolo, 50))} →</a>` : ''}</p>` + piede2)
   })
 
   // ── l'archivio: ogni giornata, ogni tavola, con il perché e la discussione con sé stesso ──
@@ -101,7 +102,7 @@ ${ws.map(w => `<section class="tavola${w.tenuta ? '' : ' scarto'}" id="${w.id}">
 <h3>${esc(w.titolo)}</h3>${w.perche ? `<p><em>${esc(w.perche)}</em></p>` : ''}<div class="testo">${para(w.testo)}</div>
 ${w.verbale.length ? `<details><summary class="meta">come ne ho discusso con me stesso${w.verdetto ? ` — ${w.verdetto === 'tiene' ? 'la tengo' : 'la butto'}` : ''}</summary><div class="verbale">${w.verbale.map(v => `<p>${esc(v)}</p>`).join('')}</div></details>` : ''}
 ${w.letture.length ? `<p class="meta">${w.letture.map(l => /^https?:/.test(l.url ?? '') ? `<a href="${esc(l.url)}">${esc(l.titolo)}</a>` : esc(l.titolo)).join(' · ')}</p>` : ''}</section>`).join('')}
-<p class="meta">${prec != null ? `<a href="${prec}.html">← giorno ${prec}</a>` : ''}${prec != null && succ != null ? ' · ' : ''}${succ != null ? `<a href="${succ}.html">giorno ${succ} →</a>` : ''}</p>` + piede)
+<p class="meta">${prec != null ? `<a href="${prec}.html">← giorno ${prec}</a>` : ''}${prec != null && succ != null ? ' · ' : ''}${succ != null ? `<a href="${succ}.html">giorno ${succ} →</a>` : ''}</p>` + piede2)
   })
   writeFileSync(join(MEM, 'archivio.html'), testa(`Archivio — ${s.nome}`) + `<h2>Archivio</h2><p class="meta">tutte le tavole, anche quelle che ho scartato, giorno per giorno</p>` +
     giorni.map(([g, ws]) => `<h3><a href="giorni/${g}.html" style="color:inherit">Giorno ${g}</a> <span class="meta">${ws.length} tavole</span></h3><div class="mini">${ws.filter(w => prima(w.id)).map(w => `<a href="giorni/${g}.html#${w.id}" title="${esc(w.titolo)}"><img loading="lazy" class="${w.tenuta ? '' : 'scarto'}" src="${prima(w.id)}" alt=""></a>`).join('')}</div>`).join('') + piede)
@@ -110,10 +111,6 @@ ${w.letture.length ? `<p class="meta">${w.letture.map(l => /^https?:/.test(l.url
   writeFileSync(join(MEM, 'libro.html'), testa(`Il libro — ${s.nome}`) + (s.libro.length ? s.libro.map(c => `
 <h2>${esc(c.titolo)}</h2><div class="meta">su «${esc(c.tema)}», cominciato il giorno ${c.nato}</div>
 ${c.capitoli.map(k => `<section class="capitolo"><h3>${esc(k.titolo)}</h3>${k.paragrafi.map(p => `<div class="tipo">${esc(p.tipo)}</div>${para(p.testo)}`).join('')}</section>`).join('')}`).join('') : '<p>Non ho ancora cominciato a scrivere un libro.</p>') + piede)
-
-  // ── gli appunti: il quaderno di ogni giornata ──
-  writeFileSync(join(MEM, 'appunti.html'), testa(`Appunti — ${s.nome}`) + `<h2>Appunti</h2><p class="meta">quello che annoto ogni giornata, anche quando non pubblico niente</p>` +
-    s.diario.slice(0, 120).map(x => `<p><span class="meta">giorno ${x.giorno}${x.quando ? ` · ${data(x.quando)}` : ''} · ${esc(x.tipo)}</span><br>${esc(corto(x.testo, 600))}</p>`).join('') + piede)
 
   // ── le letture ──
   writeFileSync(join(MEM, 'letture.html'), testa(`Letture — ${s.nome}`) + `<h2>Cosa ho letto</h2><ul>` +
@@ -130,7 +127,7 @@ ${c.capitoli.map(k => `<section class="capitolo"><h3>${esc(k.titolo)}</h3>${k.pa
 ${S.regole?.length ? `<h3>Le regole della mia firma</h3><ul>${S.regole.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}` + piede)
 
   // ── il feed ──
-  const base = process.env.SITO ?? 'https://artismi.github.io/artista-osservatore/'
+  const base = process.env.DOMINIO ? `https://${process.env.DOMINIO}/` : 'https://artismi.github.io/artista-osservatore/'
   writeFileSync(join(MEM, 'feed.xml'), `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>${esc(s.nome)}</title><link>${base}</link><description>${esc(s.profilo?.bio ?? '')}</description>` +
     s.sequenze.slice(0, 30).map(e => `<item><title>${esc(e.titolo)}</title><link>${base}p/${e.id}.html</link><guid>${base}p/${e.id}.html</guid>${e.quando ? `<pubDate>${new Date(e.quando).toUTCString()}</pubDate>` : ''}<description>${esc(corto(e.conclusione, 400))}</description></item>`).join('') + `</channel></rss>`)
 }
