@@ -2,7 +2,7 @@
 // Anche l'aspetto viene da lui: carattere dei titoli, colori e margini sono quelli della sua firma, e cambiano con lei.
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { programma, scriviParete } from './parete.mjs'
+import { decidi, scriviParete } from './parete.mjs'
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const para = t => esc(t).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
@@ -37,7 +37,7 @@ table{border-collapse:collapse}td{padding:4px 14px 4px 0;vertical-align:top}foot
 `
   writeFileSync(join(MEM, 'stile.css'), css)
   const ig = s.sequenze.find(x => x.instagram?.permalink)?.instagram.permalink?.replace(/\/p\/.*$/, '/') ?? null
-  const PR = programma({ ...s, MEM }, img)
+  const D = decidi(MEM, s, img), PR = D.P
   const mini = JSON.stringify({ ...PR, mini: true, ops: PR.ops.filter(o => o.op === 'fondo' || o.op === 'campo') }).replace(/</g, '\\u003c')
   const testa = (titolo, sotto = '', o = {}) => `<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(titolo)}</title><link rel="stylesheet" href="${sotto}stile.css"><link rel="alternate" type="application/rss+xml" href="${sotto}feed.xml" title="${esc(s.nome)}">${o.css ?? ''}</head><body>
@@ -68,7 +68,7 @@ ${ora ? `<div class="ora">${esc(ora)}</div>` : ''}
 ${s.visione ? `<div class="visione"><div class="meta">la mia visione, adesso</div><h3>${esc(s.visione.titolo)}</h3>${s.visione.domanda ? `<p>${esc(s.visione.domanda)}</p>` : ''}</div>` : ''}
 ${voci.map(v => v.html).join('') || '<p>Ancora niente.</p>'}` + piede)
 
-  scriviParete(MEM, s, img, testa, piede)
+  scriviParete(MEM, s, img, testa, piede, D)
 
   // ── una pagina per sequenza: le tavole con i loro testi, il brano, il reel, le fonti ──
   mkdirSync(join(MEM, 'p'), { recursive: true })

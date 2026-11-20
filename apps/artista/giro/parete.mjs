@@ -1,6 +1,6 @@
 // La sua parete: la prima pagina del sito. A ogni giro scrive un programma con quello che ha in testa
 // (umore, parole, colori, legami, tavole, il brano) e il sito lo esegue. Il programma resta in vista, in fondo.
-import { copyFileSync, existsSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,8 +20,8 @@ const CAMPI = {
 }
 const LENTEZZA = { calmo: 2.2, curioso: 1.2, inquieto: 0.8, giocoso: 1, cupo: 1.6, annoiato: 2.6 }
 
-export function programma(s, img) {
-  let z = hash(`${s.nome}:${s.giorno}:${s.giri}`)
+export function programma(s, img, sale = '') {
+  let z = hash(`${s.nome}:${s.giorno}:${s.giri}:${sale}`)
   const r = () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
   const scegli = (pesi) => { const e = Object.entries(pesi).filter(([, w]) => w > 0); let x = r() * e.reduce((a, [, w]) => a + w, 0); for (const [k, w] of e) if ((x -= w) <= 0) return k; return e[0][0] }
   const uno = a => a[Math.floor(r() * a.length)]
@@ -32,7 +32,12 @@ export function programma(s, img) {
   const tono = (s.toni?.length && r() < 0.35 + T * 0.3) ? uno(s.toni) : { bg: S.bg, ink: S.ink, acc: S.acc, scuro: false }
   const cupo = umore === 'cupo' && !tono.scuro && r() < 0.6
   const bg = cupo ? tono.ink : tono.bg, ink = cupo ? tono.bg : tono.ink, acc = tono.acc
-  const parola = String(s.archivio?.[0]?.parola || s.visione?.titolo?.split(/\s+/).pop() || s.nome)
+  // la parola: tra quelle su cui torna e che gli hanno dato di più, non per forza l'ultima
+  const peso = new Map()
+  ;(s.archivio ?? []).slice(0, 80).forEach((w, i) => { if (w.parola && w.parola.length > 3) peso.set(w.parola, (peso.get(w.parola) ?? 0) + (0.3 + (w.interesse ?? 0.5)) * (w.tenuta ? 1.5 : 0.6) * Math.exp(-i / 40)) })
+  for (const v of String(s.visione?.titolo ?? '').toLowerCase().split(/[^\p{L}]+/u)) if (peso.has(v)) peso.set(v, peso.get(v) * 2.5)
+  const scelte = Object.fromEntries([...peso].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, w]) => [k, Math.pow(w, 1.5 - T)]))
+  const parola = Object.keys(scelte).length ? scegli(scelte) : String(s.visione?.titolo?.split(/\s+/).pop() || s.nome)
   const LC = s.lessico?.colori ?? []
   const suoi = LC.find(c => c.concetto === parola)?.colori ?? (LC.length ? uno(LC).colori : [])
   const colori = [...new Set([acc, ink, ...suoi])].slice(0, 5)
@@ -88,7 +93,49 @@ export function programma(s, img) {
     } else { const l = uno(cita); ops.push({ op: 'cita', testo: l.titolo, fonte: l.fonte, href: l.url }); pesi.cita = 0 }
   }
   if (ultima && existsSync(join(s.MEM, 'audio', `${ultima.id}.mp3`))) ops.push({ op: 'ritmo', src: `audio/${ultima.id}.mp3`, titolo: ultima.musica ?? ultima.titolo })
-  return { seme: hash(`${s.giorno}:${s.giri}:${parola}`), carattere: S.titoli ?? 'Inter', ops }
+  return { seme: hash(`${s.giorno}:${s.giri}:${parola}:${sale}`), carattere: S.titoli ?? 'Inter', ops }
+}
+
+// Decide lui se e quanto cambiare la parete: la tiene finché ha senso, la ritocca quando cambia qualcosa,
+// la riscrive quando ha una cosa nuova da dire o se ne è stancato.
+export function decidi(MEM, s, img) {
+  const F = join(MEM, 'parete.json')
+  let A = null
+  try { A = JSON.parse(readFileSync(F, 'utf8')) } catch {}
+  const T = s.temperatura ?? 0.5, giri = s.giri ?? 0, ultima = s.sequenze?.[0]
+  let z = hash(`${s.giorno}:${giri}:decide`)
+  const r = () => { z = (Math.imul(z, 1664525) + 1013904223) >>> 0; return z / 4294967296 }
+  const nuovo = programma({ ...s, MEM }, img, String(A?.versioni?.length ?? 0))
+  let modo = 'tiene', perche = ''
+  if (!A?.P) { modo = 'riscrive'; perche = 'la prima parete' }
+  else {
+    const noia = (giri - (A.giri ?? 0)) / (5 + 12 * (1 - T)) // più è calmo, più a lungo la sopporta
+    if (ultima && ultima.id !== A.sequenza) { modo = r() < 0.7 ? 'riscrive' : 'ritocca'; perche = `è uscita una sequenza nuova, «${corto(ultima.titolo, 60)}»` }
+    else if (s.umore && s.umore !== A.umore && r() < 0.6) { modo = 'ritocca'; perche = `mi sento ${s.umore}, non più ${A.umore}` }
+    else if (s.visione?.titolo && s.visione.titolo !== A.visione && r() < 0.7) { modo = 'ritocca'; perche = `la mia visione è cambiata: ${s.visione.titolo}` }
+    else if (noia > 0.6 + r()) { modo = r() < 0.3 + T * 0.4 ? 'riscrive' : 'ritocca'; perche = `mi ero stancato di guardarla` }
+  }
+  let P = A?.P
+  let toccati = []
+  if (modo === 'riscrive') P = nuovo
+  else if (modo === 'ritocca') {
+    // cambia solo alcune parti: quelle che hanno a che fare con il motivo, più qualcuna a caso
+    const parti = ['fondo', 'campo', 'parola', 'tavole', 'frase']
+    toccati = perche.startsWith('mi sento') ? ['campo', 'fondo'] : perche.startsWith('la mia visione') ? ['parola', 'frase'] : []
+    while (toccati.length < 1 + Math.floor(r() * 2 + T)) { const k = parti[Math.floor(r() * parti.length)]; if (!toccati.includes(k)) toccati.push(k) }
+    if (toccati.includes('parola')) toccati.push('legame')
+    const ops = []
+    for (const o of P.ops) { if (toccati.includes(o.op)) { if (!ops.some(x => x.op === o.op)) ops.push(...nuovo.ops.filter(x => x.op === o.op)) } else ops.push(o) }
+    for (const o of nuovo.ops) if (toccati.includes(o.op) && !ops.some(x => x.op === o.op)) ops.splice(o.op === 'legame' ? ops.findIndex(x => x.op === 'parola') + 1 : ops.length, 0, o)
+    P = { ...P, seme: nuovo.seme, ops }
+  }
+  // il brano è sempre l'ultimo, e le tavole sparite dall'archivio si tolgono
+  P = { ...P, ops: P.ops.filter(o => o.op !== 'ritmo').map(o => o.op === 'tavole' ? { ...o, ids: o.ids.filter(id => img.has(id)) } : o).filter(o => o.op !== 'tavole' || o.ids.length >= 3).concat(nuovo.ops.filter(o => o.op === 'ritmo')) }
+  const versioni = A?.versioni ?? []
+  if (modo !== 'tiene') versioni.unshift({ giorno: s.giorno, quando: new Date().toISOString(), modo, perche, toccati: [...new Set(toccati)] })
+  const B = modo === 'tiene' ? { ...A, P } : { P, versioni: versioni.slice(0, 60), giri, umore: s.umore, sequenza: ultima?.id ?? null, visione: s.visione?.titolo ?? null }
+  writeFileSync(F, JSON.stringify(B))
+  return { P, versioni: B.versioni, modo }
 }
 
 // il programma come lo scriverebbe lui: leggibile, in fondo alla pagina
@@ -104,9 +151,9 @@ export function codice(P) {
   }).join('\n')
 }
 
-export function scriviParete(MEM, s, img, testa, piede) {
+export function scriviParete(MEM, s, img, testa, piede, D) {
   copyFileSync(join(QUI, 'parete.js'), join(MEM, 'parete.js'))
-  const P = programma({ ...s, MEM }, img)
+  const P = D.P
   const fondo = P.ops[0]
   const by = new Map((s.archivio ?? []).map(w => [w.id, w]))
   const link = id => { const w = by.get(id); return w ? `giorni/${w.giorno}.html#${id}` : 'archivio.html' }
@@ -156,11 +203,13 @@ body{background:${fondo.bg};color:${fondo.ink}}:root{--bg:${fondo.bg};--ink:${fo
 @keyframes gira{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.anello{animation:none}}
 .entra{opacity:0;transform:translateY(30px);transition:opacity 1.6s ease,transform 1.6s ease}.entra.visto{opacity:1;transform:none}
 .ritmo{position:fixed;right:16px;top:16px;z-index:5}.ritmo button{font:14px 'JetBrains Mono',monospace;background:${fondo.ink};color:${fondo.bg};border:0;padding:10px 14px;cursor:pointer;max-width:70vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.codice{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:40px max(16px,var(--m))}.codice pre{background:${fondo.bg};padding:18px;font:13px/1.6 'JetBrains Mono',monospace;white-space:pre-wrap;border-left:3px solid ${fondo.acc}}
+.codice{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:40px max(16px,var(--m))}.versioni{background:${fondo.bg};padding:4px 8px;display:inline-block;margin:8px 0 0}ul.versioni{list-style:none;padding:12px 18px;font-size:16px;line-height:1.7}.codice pre{background:${fondo.bg};padding:18px;font:13px/1.6 'JetBrains Mono',monospace;white-space:pre-wrap;border-left:3px solid ${fondo.acc}}
 .parete footer,.parete nav a,.parete .meta{background:${fondo.bg}}.parete nav{margin:0}.parete header{padding-top:18px}
 </style>`
   const html = testa(s.nome, '', { parete: true, css }) + `<canvas id="campo"></canvas><div class="parete">${corpo}</div>
-<section class="codice"><div class="meta">il codice di oggi — scritto da me, giorno ${s.giorno}</div><pre>${esc(codice(P))}</pre></section>
+<section class="codice"><div class="meta">il codice di oggi — scritto da me, giorno ${s.giorno}</div><pre>${esc(codice(P))}</pre>
+<div class="meta versioni">${D.versioni.length === 1 ? 'è la prima parete che scrivo' : `l'ho cambiata ${D.versioni.length} volte`}</div>
+<ul class="versioni">${D.versioni.slice(0, 10).map(v => `<li><span class="meta">giorno ${v.giorno} · ${new Date(v.quando).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })}</span> ${v.modo === 'riscrive' ? "l'ho riscritta" : `ho ritoccato ${v.toccati.filter(t => t !== 'legame').join(' e ')}`}: ${esc(v.perche)}</li>`).join('')}</ul></section>
 <script>window.PROGRAMMA=${JSON.stringify(P).replace(/</g, '\\u003c')}</script><script src="parete.js"></script>` + piede
   writeFileSync(join(MEM, 'index.html'), html)
   return P
