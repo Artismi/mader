@@ -16,14 +16,14 @@ type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; p
  * L'attesa: non pubblica a orario. Ogni giro legge e studia; quello che impara di nuovo (novità × interesse
  * delle giornate) si accumula. Quando ha accumulato abbastanza per dire qualcosa — la soglia cambia ogni volta,
  * a seconda del suo temperamento — prepara una sequenza. La sequenza pronta esce su Instagram appena possibile,
- * ma mai prima di 3 ore dal post precedente; nel frattempo continua a leggere.
+ * con un ritmo suo tra mezz'ora e 4 ore dal post precedente; nel frattempo continua a leggere.
  */
 interface Attesa { giri: number; accumulo: number; soglia: number; pronta?: string; tentativi?: number; ultimoPost?: string }
 type ConAttesa = AgentState & { attesa?: Attesa }
 const getAttesa = (st: AgentState): Attesa => ((st as ConAttesa).attesa ??= { giri: 0, accumulo: 0, soglia: 1.4 })
 const nuovaSoglia = (st: AgentState) => 0.9 + Math.random() * 1.2 + (st.temperature < 0.4 ? 0.4 : 0)
 
-export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; log: (m: string) => void; oreTraPost?: number }) {
+export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; log: (m: string) => void; oreTraPost?: number; oreMax?: number }) {
   let st: AgentState = await loadOrCreate()
   const fatte: string[] = []
   const una = async (seq: boolean) => {
@@ -44,8 +44,12 @@ export async function giro(o: { studi: number; sequenza?: boolean; epN: number; 
   const A = getAttesa(st)
   A.giri++
   let nuova: string | null = null
-  // ha abbastanza da dire? (o è passato troppo tempo: dopo 48 giri dice comunque quello che ha)
-  const pronto = o.sequenza ?? (!A.pronta && (A.accumulo >= A.soglia || A.giri >= 48))
+  // ha abbastanza da dire? Il ritmo è suo, ma dentro un intervallo: mai meno di mezz'ora tra un post e l'altro,
+  // mai più di 4 ore (se si avvicinano le 4 ore senza niente di pronto, dice quello che ha)
+  const daUltimo = A.ultimoPost ? (Date.now() - new Date(A.ultimoPost).getTime()) / 3600e3 : A.giri * 0.5
+  const scade = daUltimo >= (o.oreMax ?? 4) - 0.6
+  const pronto = o.sequenza ?? (!A.pronta && (A.accumulo >= A.soglia || scade))
+  if (scade && !A.pronta && A.accumulo < A.soglia) o.log('Sono quasi 4 ore che non dico niente: parlo con quello che ho.')
   if (pronto) {
     o.log(`Ho accumulato abbastanza per dire qualcosa (${A.accumulo.toFixed(2)} su ${A.soglia.toFixed(2)}, dopo ${A.giri} giri): preparo una sequenza.`)
     await una(true)
@@ -55,7 +59,7 @@ export async function giro(o: { studi: number; sequenza?: boolean; epN: number; 
   else o.log(`Non ho ancora abbastanza da dire (${A.accumulo.toFixed(2)} su ${A.soglia.toFixed(2)}): continuo a leggere e a pensare.`)
   await T.putState(st)
   const B = getAttesa(st)
-  const ore = o.oreTraPost ?? 3
+  const ore = o.oreTraPost ?? 0.5
   const puo = !!B.pronta && (!B.ultimoPost || Date.now() - new Date(B.ultimoPost).getTime() >= ore * 3600e3 - 60e3)
   return { giorno: st.day, nome: st.name, opere: fatte.length, episodio: nuova, pronta: B.pronta ?? null, puoPubblicare: puo }
 }

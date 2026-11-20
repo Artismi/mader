@@ -59,8 +59,8 @@ try {
   } else log('nessuna memoria: nasce adesso')
 
   // il lavoro
-  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, oreTraPost: Number(process.env.ORE_TRA_POST ?? 3), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
-  log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza nuova ${r.episodio}` : ''}${r.pronta ? `; sequenza pronta ${r.pronta}${r.puoPubblicare ? ', si pubblica' : ', aspetta (3 ore dal post prima)'}` : ''}`)
+  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, oreTraPost: Number(process.env.ORE_MIN ?? 0.5), oreMax: Number(process.env.ORE_MAX ?? 4), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
+  log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza nuova ${r.episodio}` : ''}${r.pronta ? `; sequenza pronta ${r.pronta}${r.puoPubblicare ? ', si pubblica' : ', aspetta (mezz’ora minima dal post prima)'}` : ''}`)
 
   // il post
   if (r.pronta && r.puoPubblicare && (ig.collegato || process.env.PROVA_VIDEO)) {
