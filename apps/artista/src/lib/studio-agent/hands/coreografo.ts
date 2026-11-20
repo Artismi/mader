@@ -68,6 +68,16 @@ function componenti(cv: HTMLCanvasElement, cella: number, max: number) {
   const g = t.getContext('2d')!; g.drawImage(cv, 0, 0, gw, gh)
   const d = g.getImageData(0, 0, gw, gh).data
   const pieno = new Uint8Array(gw * gh); for (let i = 0; i < gw * gh; i++) pieno[i] = d[i * 4 + 3] > 24 ? 1 : 0
+  // un livello pieno (quasi tutto opaco) non ha forme nella trasparenza: le cerca nel colore.
+  // Il colore più presente sui bordi è il suo fondo; il resto, per vicinanza di colore, sono le forme.
+  let fondo: number[] | null = null
+  const copertura = pieno.reduce((a, b) => a + b, 0) / (gw * gh)
+  if (copertura > 0.85) {
+    const conta = new Map<string, { n: number; c: number[] }>()
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) if (x === 0 || y === 0 || x === gw - 1 || y === gh - 1) { const i = (y * gw + x) * 4; const k = [d[i] >> 5, d[i + 1] >> 5, d[i + 2] >> 5].join(); const e = conta.get(k) ?? { n: 0, c: [d[i], d[i + 1], d[i + 2]] }; e.n++; conta.set(k, e) }
+    fondo = [...conta.values()].sort((a, b) => b.n - a.n)[0]?.c ?? null
+    if (fondo) for (let i = 0; i < gw * gh; i++) { const dd = Math.abs(d[i * 4] - fondo[0]) + Math.abs(d[i * 4 + 1] - fondo[1]) + Math.abs(d[i * 4 + 2] - fondo[2]); pieno[i] = pieno[i] && dd > 60 ? 1 : 0 }
+  }
   const lab = new Int32Array(gw * gh).fill(-1), out: { x0: number; y0: number; x1: number; y1: number; n: number; celle: number[] }[] = []
   for (let i = 0; i < gw * gh; i++) {
     if (!pieno[i] || lab[i] >= 0) continue
@@ -80,7 +90,7 @@ function componenti(cv: HTMLCanvasElement, cella: number, max: number) {
     out.push(c)
   }
   out.sort((a, b) => b.n - a.n)
-  return { comp: out.slice(0, max), resto: out.length > max, gw, gh, cella }
+  return { comp: out.slice(0, max), resto: out.length > max, gw, gh, cella, fondo }
 }
 
 /** smonta le tavole in una scena di oggetti */
@@ -101,11 +111,13 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
       const kc = pieno ? Math.max(W / l.canvas.width, H / l.canvas.height) : kk
       const intero = (): Nodo => ({ id: id++, ruolo, tav: ti, gruppo: (li % 2) as 0 | 1, sprite: l.canvas, x: pieno ? W / 2 : cx, y: pieno ? H / 2 : cy, w: l.canvas.width * kc, h: l.canvas.height * kc, rot: l.rot, alpha: l.alpha, blend: l.blend, padre: radice.id, indice: li, area: l.canvas.width * kk * l.canvas.height * kk })
       // i livelli di figura grandi si dividono negli oggetti che contengono
-      if (ruolo === 'figura' && !l.rot && !l.flipX && l.canvas.width * l.canvas.height > 160 * 160) {
-        const C = componenti(l.canvas, Math.max(4, Math.round(Math.max(l.canvas.width, l.canvas.height) / 160)), 36)
-        if (C.comp.length >= 2 && !C.resto) {
+      if ((ruolo === 'figura' || ruolo === 'trama') && !l.flipX && l.canvas.width * l.canvas.height > 160 * 160) {
+        const C = componenti(l.canvas, Math.max(3, Math.round(Math.max(l.canvas.width, l.canvas.height) / 220)), 40)
+        if (C.comp.length >= 1 && (C.fondo || C.comp.length >= 2) && !C.resto) {
           const gruppo: Nodo = { ...intero(), sprite: undefined }
           nodi.push(gruppo)
+          // il fondo del livello pieno: un piano di colore, sotto i suoi pezzi
+          if (C.fondo) { const pf = document.createElement('canvas'); pf.width = 4; pf.height = 4; const pg = pf.getContext('2d')!; pg.fillStyle = `rgb(${C.fondo.join(',')})`; pg.fillRect(0, 0, 4, 4); nodi.push({ ...intero(), ruolo: 'fondo', sprite: pf, padre: gruppo.id }) }
           C.comp.forEach((c, ci) => {
             const x0 = c.x0 * C.cella, y0 = c.y0 * C.cella, w = (c.x1 - c.x0 + 1) * C.cella, h = (c.y1 - c.y0 + 1) * C.cella
             if (w * h * kk * kk < 30) return
@@ -115,7 +127,7 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
             // solo la sua componente: maschera dalle celle
             const m = document.createElement('canvas'); m.width = sp.width; m.height = sp.height; const mg = m.getContext('2d')!; mg.fillStyle = '#000'
             for (const q of c.celle) { const qx = (q % C.gw) * C.cella - x0, qy = Math.floor(q / C.gw) * C.cella - y0; mg.fillRect(qx - 1, qy - 1, C.cella + 2, C.cella + 2) }
-            g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0)
+            g.globalCompositeOperation = 'destination-in'; g.filter = `blur(${Math.max(1, C.cella * 0.35)}px)`; g.drawImage(m, 0, 0); g.filter = 'none'
             const lx = (x0 + w / 2 - l.canvas.width / 2) * kk, ly = (y0 + h / 2 - l.canvas.height / 2) * kk
             nodi.push({ id: id++, ruolo: 'figura', tav: ti, gruppo: (ci % 2) as 0 | 1, sprite: sp, x: cx + lx, y: cy + ly, w: w * kk, h: h * kk, rot: 0, alpha: l.alpha, blend: l.blend, padre: gruppo.id, indice: ci, area: w * h * kk * kk })
           })
@@ -161,7 +173,8 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
 function lum(h: string) { const m = h.replace('#', ''); if (m.length < 6) return 0.5; const v = [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] }
 
 // ── il genoma della coreografia ──
-export interface Gesto { ingresso: Ingresso; vita: Vita; uscita: Uscita; segnale: Segnale; ampiezza: number; sfalsa: number; ordine: Ordine; lag: number }
+export type Direzione = 'lati' | 'alto' | 'basso' | 'asse' | 'centro'
+export interface Gesto { ingresso: Ingresso; vita: Vita; uscita: Uscita; segnale: Segnale; ampiezza: number; sfalsa: number; ordine: Ordine; lag: number; direzione: Direzione }
 export interface Coreografia {
   gesti: Record<Ruolo, Gesto>
   accoppia: Record<string, Accoppiamento> // per relazione
@@ -172,7 +185,7 @@ export interface Coreografia {
 function gestoACaso(r: () => number, ruolo: Ruolo): Gesto {
   const ingresso: Ingresso = ruolo === 'linea' ? 'traccia' : ruolo === 'testo' ? uno(r, ['scrivi', 'appari', 'cresci']) : ruolo === 'fondo' ? uno(r, ['appari', 'cresci']) : uno(r, INGR.filter(x => x !== 'traccia' && x !== 'scrivi'))
   const vita: Vita = ruolo === 'testo' ? uno(r, ['fermo', 'respira']) : uno(r, VITE)
-  return { ingresso, vita, uscita: uno(r, USC), segnale: uno(r, SEGN), ampiezza: 0.2 + r() * 0.8, sfalsa: r(), ordine: uno(r, ORD), lag: r() }
+  return { ingresso, vita, uscita: uno(r, USC), segnale: uno(r, SEGN), ampiezza: 0.2 + r() * 0.8, sfalsa: r(), ordine: uno(r, ORD), lag: r(), direzione: uno(r, ['lati', 'alto', 'basso', 'asse', 'centro'] as Direzione[]) }
 }
 export function coreografiaACaso(r: () => number, pesiRel?: Record<string, Partial<Record<Accoppiamento, number>>>): Coreografia {
   const accoppia: Record<string, Accoppiamento> = {}
@@ -188,7 +201,7 @@ function mutaC(c: Coreografia, r: () => number): Coreografia {
   const ru = uno(r, RUOLI), g = { ...x.gesti[ru] }
   const k = Math.floor(r() * 9)
   if (k === 0) g.ingresso = gestoACaso(r, ru).ingresso; else if (k === 1) g.vita = gestoACaso(r, ru).vita; else if (k === 2) g.uscita = uno(r, USC); else if (k === 3) g.segnale = uno(r, SEGN)
-  else if (k === 4) { g.ampiezza = clamp(g.ampiezza + (r() - 0.5) * 0.4); g.sfalsa = clamp(g.sfalsa + (r() - 0.5) * 0.4) } else if (k === 5) g.ordine = uno(r, ORD)
+  else if (k === 4) { g.ampiezza = clamp(g.ampiezza + (r() - 0.5) * 0.4); g.sfalsa = clamp(g.sfalsa + (r() - 0.5) * 0.4) } else if (k === 5) { g.ordine = uno(r, ORD); g.direzione = uno(r, ['lati', 'alto', 'basso', 'asse', 'centro'] as Direzione[]) }
   else if (k === 6) x.camera = uno(r, ['ferma', 'deriva', 'avvicina', 'segue']); else if (k === 7) { x.battutePerTavola = uno(r, [1, 2, 3]); x.quante = Math.max(2, Math.min(7, x.quante + (r() < 0.5 ? -1 : 1))) }
   else { const rel = uno(r, Object.keys(x.accoppia)); x.accoppia[rel] = uno(r, ACCOPPIAMENTI) }
   x.gesti[ru] = g
@@ -203,14 +216,22 @@ interface Stato { dx: number; dy: number; rot: number; sc: number; alpha: number
 
 /** la sceneggiatura: quali tavole, in che ordine, quando entrano ed escono */
 interface Ripresa { tav: number; t0: number; t1: number; rel?: string }
-function riprese(c: Coreografia, br: Brano, n: number, forte: number, rels: (string | undefined)[]): Ripresa[] {
+function riprese(c: Coreografia, br: Brano, n: number, forte: number, rels: (string | undefined)[], lettura: number[] = []): Ripresa[] {
   const bar = br.beat * 4, out: Ripresa[] = []
   const scelte = [forte, ...Array.from({ length: n }, (_, i) => i).filter(i => i !== forte)].slice(0, Math.min(n, c.quante))
-  const len = c.battutePerTavola * bar
   let t = 0, k = 0
-  while (t < br.durata - 1e-6) { const tv = scelte[k % scelte.length]; out.push({ tav: tv, t0: t, t1: Math.min(br.durata, t + len), rel: rels[tv] }); t += len; k++ }
-  // l'ultima ripresa torna sulla prima tavola: il video si richiude
-  out[out.length - 1].tav = scelte[0]
+  while (t < br.durata - 1e-6) {
+    const tv = scelte[k % scelte.length]
+    // ogni tavola resta almeno quanto serve a leggerla (in battute intere)
+    const len = Math.max(c.battutePerTavola, Math.ceil((lettura[tv] ?? 0) / bar)) * bar
+    out.push({ tav: tv, t0: t, t1: Math.min(br.durata, t + len), rel: rels[tv] }); t += len; k++
+  }
+  if (out.length > 1) {
+    // l'ultima ripresa torna sulla prima tavola (il video si richiude), e se è troppo corta per leggerla si unisce alla precedente
+    const u = out[out.length - 1]
+    if (u.t1 - u.t0 < Math.min(lettura[scelte[0]] ?? 0, 2 * bar)) { out.pop(); out[out.length - 1].t1 = br.durata }
+    else u.tav = scelte[0]
+  }
   return out
 }
 
@@ -219,7 +240,9 @@ function stato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano, rango
   const g = c.gesti[n.ruolo], beat = br.beat, bar = beat * 4
   const tl = t - rp.t0, dur = rp.t1 - rp.t0
   // sfalsamento: il rango nell'ordine scelto, distribuito nel primo battito o due
-  let ritardo = (rango / Math.max(1, quanti - 1)) * g.sfalsa * beat * 2
+  const principale = rango < 8 || n.ruolo === 'testo' || n.ruolo === 'linea'
+  if (n.ruolo === 'testo') { const sT = { dx: 0, dy: 0, rot: 0, sc: 1, alpha: n.alpha, traccia: 1, sfalda: 0, scrivi: 1 }; const pT = tl; if (g.ingresso === 'scrivi') sT.scrivi = clamp(pT / (beat * 1)); else if (g.ingresso === 'cresci') sT.sc = Math.max(0.001, molla(pT, 12, 0.6)); else sT.alpha *= clamp(pT / (beat * 0.25)); if (g.vita === 'respira') sT.sc *= 1 + 0.015 * inv(br.cassa, t, 0.1); return sT }
+  let ritardo = principale ? (Math.min(rango, 7) / Math.max(1, Math.min(quanti, 8) - 1)) * g.sfalsa * beat * 2 : beat * 2 * g.sfalsa
   // l'accoppiamento tra i due gruppi della tavola
   if (accoppia === 'causa' && n.gruppo === 1) ritardo += beat * 1.5
   if (accoppia === 'canone') ritardo += n.gruppo * beat
@@ -231,7 +254,17 @@ function stato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano, rango
   const e = molla(pi, 12, 0.42), lin = clamp(pi / (beat * 1.5))
   const amp = g.ampiezza
   switch (g.ingresso) {
-    case 'componi': { const a = (n.id * 2.399) % (Math.PI * 2), d = (300 + 400 * amp) * (1 - e); s.dx += Math.cos(a) * d; s.dy += Math.sin(a) * d; s.rot += (1 - e) * (n.id % 2 ? 1 : -1) * 0.8; s.alpha *= clamp(pi / (beat * 0.25)); break }
+    case 'componi': {
+      // arrivano tutti da una direzione sola per gruppo: i lati (il gruppo 0 da sinistra, l'1 da destra), l'alto, il basso,
+      // l'asse (ognuno lungo il suo asse più vicino al bordo), il centro (si aprono dal centro della tavola)
+      const d = (260 + 380 * amp) * (1 - e), sx = n.gruppo ? 1 : -1
+      if (g.direzione === 'lati') s.dx += sx * d
+      else if (g.direzione === 'alto') s.dy -= d
+      else if (g.direzione === 'basso') s.dy += d
+      else if (g.direzione === 'asse') { if (Math.abs(n.x - W / 2) / W > Math.abs(n.y - H / 2) / H) s.dx += Math.sign(n.x - W / 2 || 1) * d; else s.dy += Math.sign(n.y - H / 2 || 1) * d }
+      else { s.dx += (W / 2 - n.x) * (1 - e); s.dy += (H / 2 - n.y) * (1 - e) }
+      s.alpha *= clamp(pi / (beat * 0.25)); break
+    }
     case 'cresci': s.sc *= Math.max(0.001, e); break
     case 'cadi': s.dy -= (1 - e) * (H * 0.6); break
     case 'traccia': s.traccia = clamp(lin * 1.4); break
@@ -291,17 +324,18 @@ function misura(c: Coreografia, scena: Scena, br: Brano, rp: Ripresa[], memoria:
   const attMedia = attivi.reduce((a, b) => a + b, 0) / attivi.length
   const quiete = campioni.filter(x => x < ma * 0.3).length / campioni.length
   const gesti = new Set(RUOLI.flatMap(ru => [c.gesti[ru].ingresso, c.gesti[ru].vita, c.gesti[ru].uscita]))
-  let v = sync * 3 - Math.abs(attMedia - 3) * 0.6 - Math.abs(quiete - 0.3) * 3 + Math.min(10, gesti.size) * 0.15
+  const coerenza = (c.gesti.figura.direzione === c.gesti.trama.direzione ? 0.5 : 0) + (c.gesti.figura.ingresso === 'componi' || c.gesti.figura.ingresso === 'cresci' ? 0.3 : 0)
+  let v = coerenza + sync * 3 - Math.abs(attMedia - 3) * 0.6 - Math.abs(quiete - 0.3) * 3 + Math.min(10, gesti.size) * 0.15
   // una ripresa deve durare abbastanza per costruirsi e farsi vedere
   if (c.battutePerTavola * br.beat * 4 < 1.6) v -= 2
   if (memoria.length) { const dist = (a: Coreografia, b: Coreografia) => RUOLI.reduce((d, ru) => d + (['ingresso', 'vita', 'uscita', 'segnale'] as const).filter(k => a.gesti[ru][k] !== b.gesti[ru][k]).length, 0) / (RUOLI.length * 4); v += Math.min(...memoria.slice(-10).map(m => dist(c, m))) * 2 }
   return v
 }
 
-export function evolviCoreografia(scena: Scena, br: Brano, forte: number, rels: (string | undefined)[], seme: number, memoria: Coreografia[] = [], pesiRel?: Record<string, Partial<Record<Accoppiamento, number>>>) {
+export function evolviCoreografia(scena: Scena, br: Brano, forte: number, rels: (string | undefined)[], seme: number, memoria: Coreografia[] = [], pesiRel?: Record<string, Partial<Record<Accoppiamento, number>>>, lettura: number[] = []) {
   const r = rng(seme)
   let pop = Array.from({ length: 24 }, () => (memoria.length && r() < 0.3 ? mutaC(uno(r, memoria), r) : coreografiaACaso(r, pesiRel)))
-  const valuta = (c: Coreografia) => ({ c, f: misura(c, scena, br, riprese(c, br, scena.tavole, forte, rels), memoria) })
+  const valuta = (c: Coreografia) => ({ c, f: misura(c, scena, br, riprese(c, br, scena.tavole, forte, rels, lettura), memoria) })
   let es = pop.map(valuta)
   for (let g = 0; g < 12; g++) {
     es.sort((a, b) => b.f - a.f)
@@ -310,7 +344,7 @@ export function evolviCoreografia(scena: Scena, br: Brano, forte: number, rels: 
     es = [...es.slice(0, 6), ...pop.slice(6).map(valuta)]
   }
   es.sort((a, b) => b.f - a.f)
-  return { coreografia: es[0].c, voto: es[0].f, riprese: riprese(es[0].c, br, scena.tavole, forte, rels) }
+  return { coreografia: es[0].c, voto: es[0].f, riprese: riprese(es[0].c, br, scena.tavole, forte, rels, lettura) }
 }
 
 export function descriviCoreografia(c: Coreografia): string {
@@ -343,7 +377,10 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     // i ranghi per ruolo, secondo l'ordine scelto
     const rango = new Map<number, number>(), quanti = new Map<Ruolo, number>()
     for (const ru of RUOLI) { const xs = ordine(nodi.filter(n => n.ruolo === ru), c.gesti[ru].ordine); xs.forEach((n, i) => rango.set(n.id, i)); quanti.set(ru, xs.length) }
+    // se sopra c'è un testo del reel (domanda, conclusione), i testi della tavola tacciono: uno alla volta si legge
+    const testoReel = (o.testi ?? []).some(x => t >= x.t0 && t < x.t1)
     for (const n of nodi) {
+      if (testoReel && n.ruolo === 'testo') continue
       const s = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc)
       if (s.alpha <= 0.002 || s.sc <= 0.002) continue
       g.save()

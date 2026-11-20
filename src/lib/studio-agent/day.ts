@@ -647,18 +647,27 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
   const stile = scegliStile(gusto, r, st.day)
-  const { audio, brano } = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: 20, memoria: gusto.pattern })
+  // il tempo di lettura di ogni tavola (parole dei suoi testi), e del reel intero: la musica dura quanto serve
+  const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
+  const legge = (n: number) => (n ? 1.2 + n * 0.35 : 0)
+  const lettura = fogli.map(f => legge(parole(f)))
+  const forte0 = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
+  const servono = lettura.slice().sort((a, b) => b - a).slice(0, 4).reduce((a, b) => a + Math.max(b, 2.5), 0) + legge((t.domanda ?? '').split(/\s+/).length) + legge((t.conclusione ?? '').split(/\s+/).length)
+  const { audio, brano } = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(15, Math.min(40, servono)), memoria: gusto.pattern })
   gusto.pattern = [...gusto.pattern, brano.pattern].slice(-24)
   const scena = smonta(fogli, r)
-  const forte = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
-  const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel)
+  const forte = forte0
+  // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
+  const lett2 = lettura.slice(); lett2[forte] = Math.max(lett2[forte], legge((t.domanda ?? '').split(/\s+/).length))
+  const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2.map(x => Math.max(x, legge((t.conclusione ?? '').split(/\s+/).length) * 0)))
   // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni
   const testi: { t0: number; t1: number; cv: HTMLCanvasElement }[] = []
   const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }
   const bar = brano.beat * 4
   const conImg = async (tav: number, s: string, t0: number, t1: number) => { const f = flatten(fogli[tav], 0.5); const p = palette(fogli[tav]); const { cv } = await testoGrafico(f, s, { face: t.face, lettura: 'corsivo', colori: p.slice(0, 5), bg: fogli[tav].bg }, r, ['blocco', 'colonna', 'divaricato']); testi.push({ t0, t1, cv }) }
-  if (t.domanda) await conImg(ev.riprese[0].tav, t.domanda, 0, Math.min(ev.riprese[0].t1, 3 * bar))
-  if (t.conclusione) { const rp = ev.riprese[Math.max(0, ev.riprese.length - 2)]; await conImg(rp.tav, t.conclusione, rp.t0, rp.t1) }
+  if (t.domanda) await conImg(ev.riprese[0].tav, t.domanda, 0, ev.riprese[0].t1)
+  void bar
+  if (t.conclusione) { const need = legge(t.conclusione.split(/\s+/).length); const rp = [...ev.riprese].slice(1).reverse().find(x => x.t1 - x.t0 >= need) ?? ev.riprese[Math.max(0, ev.riprese.length - 2)]; await conImg(rp.tav, t.conclusione, rp.t0, rp.t1) }
   const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi })
   if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
   // memoria del movimento: la coreografia scelta, e gli accoppiamenti che hanno funzionato si rafforzano
