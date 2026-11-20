@@ -9,6 +9,9 @@ import { getEpisodi } from './mind/episodio'
 import { cura, getProfilo } from './mind/profilo'
 import { suona, wav } from './suono/musica'
 import type { AgentState, Work } from './core/types'
+import { coloreDi, descriviMossa, getRetorica } from './mind/retorica'
+import { TONES } from '@/components/studio/genera/recipes'
+import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 
 type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; permalink?: string; quando: string; errore?: string } }
 
@@ -99,12 +102,43 @@ export async function annotaPost(epId: string, r: { id?: string; permalink?: str
   await T.putState(st)
 }
 
-/** quello che serve al sito della memoria: profilo, visione, sequenze */
+/** quello che serve al suo blog: lo scrive lui, con i suoi materiali e il suo stile */
 export async function perIlSito() {
   const st = await loadOrCreate()
-  const eps = getEpisodi(st).slice(-40).reverse() as Ep[]
-  return { nome: st.name, giorno: st.day, profilo: getProfilo(st) ?? null, visione: (st as unknown as { visione?: unknown }).visione ?? null,
-    sequenze: eps.map(e => ({ id: e.id, titolo: e.titolo, giorno: e.day, schede: e.schede, didascalia: e.caption, instagram: e.instagram ?? null, musica: e.musica?.descr ?? null })) }
+  const works = await T.listWorks()
+  const byId = new Map(works.map(w => [w.id, w]))
+  const eps = getEpisodi(st).slice(-60).reverse() as Ep[]
+  const S = st as unknown as Record<string, unknown> & { scuola?: { firma?: { face: FaceId; tone: string; margine: number; griglia: number; regole?: string[] } }; cantieri?: { titolo: string; tema: string; nato: number; capitoli: { titolo: string; paragrafi: { tipo: string; testo: string }[] }[] }[]; visione?: { titolo: string; domanda?: string; tesi?: { testo: string; conf: number; da: number }[]; storia?: unknown[] }; notebook?: { day: number; date: string; intention: string }[]; poetics?: { day: number; date: string; text: string }[]; attesa?: { accumulo: number; soglia: number; pronta?: string; ultimoPost?: string } }
+  const F = S.scuola?.firma
+  const tono = TONES.find(t => t.id === F?.tone) ?? TONES[1]
+  const R = getRetorica(st)
+  const quando = (e: Ep) => e.instagram?.quando ?? byId.get(e.schede[0])?.createdAt ?? null
+  return {
+    nome: st.name, giorno: st.day, profilo: getProfilo(st) ?? null,
+    stile: { titoli: FACES[F?.face ?? 'grotesk']?.family ?? 'Inter', pesoTitoli: FACES[F?.face ?? 'grotesk']?.weight ?? 700, bg: tono.bg, ink: tono.ink, acc: tono.acc, scuro: tono.dark, margine: F?.margine ?? 0.06, regole: (F?.regole ?? []).slice(0, 6) },
+    visione: S.visione ? { titolo: S.visione.titolo, domanda: S.visione.domanda, tesi: (S.visione.tesi ?? []).slice(-8) } : null,
+    attesa: S.attesa ? { accumulo: S.attesa.accumulo, soglia: S.attesa.soglia, pronta: !!S.attesa.pronta, ultimoPost: S.attesa.ultimoPost ?? null } : null,
+    sequenze: eps.map(e => {
+      const ws = e.schede.map(id => byId.get(id)).filter((w): w is Work => !!w)
+      const letture = [...new Map(ws.flatMap(w => w.readings ?? []).filter(x => x.url && /^https?:/.test(x.url)).map(x => [x.url, { titolo: x.title, url: x.url, fonte: x.source }])).values()].slice(0, 8)
+      return { id: e.id, n: e.n, titolo: e.titolo, giorno: e.day, quando: quando(e), conclusione: e.conclusione, domanda: e.domanda, didascalia: e.caption, musica: e.musica?.descr ?? null, instagram: e.instagram ?? null, letture,
+        tavole: ws.map(w => ({ id: w.id, titolo: w.title, testo: w.text, ruolo: w.episodio?.ruolo ?? null })) }
+    }),
+    diario: [
+      ...(S.notebook ?? []).slice(-60).map(x => ({ giorno: x.day, quando: x.date, testo: x.intention, tipo: 'quaderno' })),
+      ...(S.poetics ?? []).slice(-12).map(x => ({ giorno: x.day, quando: x.date, testo: x.text, tipo: 'poetica' })),
+      ...R.diario.slice(-40).map(x => ({ giorno: x.day, quando: null, testo: x.nota, tipo: 'retorica' })),
+    ].sort((a, b) => b.giorno - a.giorno),
+    libro: (S.cantieri ?? []).map(c => ({ titolo: c.titolo, tema: c.tema, nato: c.nato, capitoli: c.capitoli.map(k => ({ titolo: k.titolo, paragrafi: k.paragrafi.map(p => ({ tipo: p.tipo, testo: p.testo })) })) })),
+    archivio: works.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 400).map(w => ({ id: w.id, giorno: w.day, quando: w.createdAt, titolo: w.title, testo: w.text, parola: w.intention?.word ?? '', perche: w.intention?.why ?? '', registro: w.intention?.register ?? '', umore: w.mood, verbale: w.debate?.verbale ?? [], verdetto: w.debate?.verdict ?? null, tenuta: w.kept, interesse: w.interest, sequenza: w.episodio ? { id: w.episodio.id, titolo: w.episodio.titolo, ruolo: w.episodio.ruolo } : null, letture: (w.readings ?? []).slice(0, 4).map(x => ({ titolo: x.title, url: x.url, fonte: x.source })) })),
+    letture: (st.readings ?? []).slice(-80).reverse().map(x => ({ titolo: x.title, url: x.url, fonte: x.source })),
+    lessico: {
+      connettivi: Object.entries(R.connettivi).filter(([, k]) => (k.doc?.length ?? 0) >= 2 && k.n >= 4).map(([f, k]) => ({ forma: f, n: k.n, rel: Object.entries(k.rel).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? '?' })).sort((a, b) => b.n - a.n).slice(0, 40),
+      mosse: R.mosse.slice().sort((a, b) => b.peso - a.peso).slice(0, 10).map(m => ({ descr: descriviMossa(m.ops), usi: m.usi, nata: m.nata })),
+      colori: Object.entries(R.immaginario).map(([c, im]) => ({ concetto: c, colori: Object.entries(im.colori).filter(([, n]) => n >= 2).map(([w]) => coloreDi(w)).filter(Boolean) })).filter(x => x.colori.length).slice(0, 40),
+      visive: Object.entries(R.visive).map(([rel, v]) => ({ rel, migliore: Object.entries(v).sort((a, b) => b[1].w - a[1].w)[0]?.[0] ?? null })),
+    },
+  }
 }
 
 export const memoria = { importa: T.importaMemoria, esporta: T.esportaMemoria }

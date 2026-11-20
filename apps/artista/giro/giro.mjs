@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { join } from 'node:path'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
+import { scriviBlog } from './sito.mjs'
 
 const MEM = process.env.MEMORIA ?? 'memoria'
 const PORT = Number(process.env.PORTA ?? 3123)
@@ -105,7 +106,7 @@ try {
   }
 
   // salva la memoria (immagini solo delle opere recenti, il resto vive su Instagram e nel sito)
-  const m = await pg.evaluate(() => window.__artista.memoria.esporta(160))
+  const m = await pg.evaluate(() => window.__artista.memoria.esporta(400))
   const tenere = new Set(Object.keys(m.images))
   for (const [id, url] of Object.entries(m.images)) writeFileSync(join(MEM, 'img', `${id}.jpg`), Buffer.from(url.split(',')[1], 'base64'))
   for (const f of readdirSync(join(MEM, 'img'))) if (!tenere.has(f.replace(/\.jpg$/, ''))) rmSync(join(MEM, 'img', f))
@@ -117,7 +118,7 @@ try {
   }
   // il sito
   const s = await pg.evaluate(() => window.__artista.perIlSito())
-  writeFileSync(join(MEM, 'index.html'), sito(s, tenere))
+  scriviBlog(MEM, s, tenere)
   writeFileSync(join(MEM, '.nojekyll'), '')
   // il token rinnovato, cifrato
   try {
@@ -131,29 +132,3 @@ try {
   await fine(1)
 }
 
-function esc(t) { return String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }
-function sito(s, img) {
-  const P = s.profilo, V = s.visione
-  const seq = s.sequenze.map(e => `
-  <section>
-    <h2>${esc(e.titolo)}</h2>
-    <p class="meta">giorno ${e.giorno}${e.musica ? ` · ${esc(e.musica)}` : ''}${e.instagram?.permalink ? ` · <a href="${esc(e.instagram.permalink)}">su Instagram</a>` : ''}</p>
-    ${existsSync(join(MEM, 'reel', `${e.id}.mp4`)) ? `<video controls playsinline preload="none" src="reel/${e.id}.mp4" class="reel"></video>` : ''}
-    ${existsSync(join(MEM, 'audio', `${e.id}.mp3`)) ? `<audio controls preload="none" src="audio/${e.id}.mp3"></audio>` : ''}
-    <div class="strip">${e.schede.filter(id => img.has(id)).map(id => `<img loading="lazy" src="img/${id}.jpg" alt="">`).join('')}</div>
-    <details><summary>didascalia</summary><pre>${esc(e.didascalia)}</pre></details>
-  </section>`).join('')
-  return `<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(s.nome)}</title>
-<style>body{margin:0;background:#0d0d0d;color:#eee;font:16px/1.5 system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:32px}
-h1{font-size:44px;margin:0}h2{font-size:22px;margin:28px 0 4px}.meta{color:#999;font-size:13px;margin:0 0 8px}a{color:#9fe}
-.strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.strip img{height:300px;aspect-ratio:4/5;object-fit:cover;border-radius:4px}
-video.reel{height:520px;aspect-ratio:9/16;background:#000;border-radius:6px;display:block;margin:6px 0}audio{width:100%;max-width:520px;margin:4px 0 8px}pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace;color:#bbb}.bio{color:#ccc;max-width:720px;white-space:pre-wrap}</style></head>
-<body><main>
-<h1>${esc(s.nome)}</h1>
-<p class="meta">giorno ${s.giorno} · aggiornato ${new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}</p>
-${P ? `<p class="bio">${esc(P.bio)}</p>${P.perche ? `<p class="bio"><i>${esc(P.perche)}</i></p>` : ''}<details><summary>chi sono</summary><p class="bio">${esc(P.presentazione)}</p></details>` : ''}
-${V ? `<h2>La mia visione: ${esc(V.titolo)}</h2>${V.domanda ? `<p class="bio">${esc(V.domanda)}</p>` : ''}` : ''}
-${seq || '<p>Ancora nessuna sequenza.</p>'}
-</main></body></html>`
-}
