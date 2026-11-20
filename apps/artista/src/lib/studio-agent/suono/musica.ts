@@ -18,24 +18,29 @@
  * risonante; accordi di seghe stonate; arpeggi e melodie; riverbero a convoluzione, eco,
  * saturazione, compressione e "pompaggio" sulla cassa.
  */
-export type Genere = 'lofi' | 'techno' | 'acid' | 'glitch' | 'downtempo' | 'minimalhouse' | 'synthwave' | 'breakbeat' | 'ambient' | 'pop'
-export interface Sezione { strumenti: string[]; motivo?: string; follia?: string; ultimo?: boolean }
+export type Genere = 'lofi' | 'techno' | 'acid' | 'glitch' | 'downtempo' | 'minimalhouse' | 'synthwave' | 'breakbeat' | 'ambient' | 'pop' | 'rock' | 'hiphop' | 'jazz' | 'funk' | 'hardtechno' | 'dnb'
+export interface Sezione { strumenti: string[]; motivo?: string; follia?: string; ultimo?: boolean; energia?: number }
 export interface Partitura {
   genere: Genere; bpm: number; swing: number; radice: number; scala: number[]; accordi: number[][]
   battute: number; sezioni: Sezione[]; motivi: Record<string, number[]>; risolve: boolean; seme: number
+  /** il groove che si è scritto: dove cade la cassa nei 16 passi (se manca, quello del genere) */
+  groove?: number[]; grooveCodice?: string
 }
 
 const SCALE: Record<string, number[]> = {
   minore: [0, 2, 3, 5, 7, 8, 10], dorico: [0, 2, 3, 5, 7, 9, 10], frigio: [0, 1, 3, 5, 7, 8, 10],
   maggiore: [0, 2, 4, 5, 7, 9, 11], lidio: [0, 2, 4, 6, 7, 9, 11], misolidio: [0, 2, 4, 5, 7, 9, 10],
 }
-const GENERE_LING: Record<string, Genere> = {
-  riso: 'lofi', costruttivista: 'techno', acido: 'acid', glitch: 'glitch', organico: 'downtempo', svizzero: 'minimalhouse',
-  datapoesia: 'synthwave', collage: 'breakbeat', minimo: 'ambient', concettuale: 'ambient', brutalista: 'techno',
+// per ogni linguaggio, i generi possibili dal più calmo al più duro: sceglie l'energia della sequenza
+const GENERI_LING: Record<string, Genere[]> = {
+  riso: ['lofi', 'jazz', 'hiphop'], costruttivista: ['techno', 'rock', 'hardtechno'], acido: ['acid', 'hardtechno'], glitch: ['glitch', 'dnb'],
+  organico: ['downtempo', 'jazz', 'funk'], svizzero: ['minimalhouse', 'funk'], datapoesia: ['synthwave', 'funk', 'techno'], collage: ['hiphop', 'breakbeat', 'funk'],
+  minimo: ['ambient', 'jazz'], concettuale: ['ambient', 'jazz', 'hiphop'], brutalista: ['rock', 'hardtechno'], ornamento: ['ambient', 'jazz', 'downtempo'],
 }
 const BPM: Record<Genere, [number, number]> = {
   lofi: [76, 90], techno: [128, 136], acid: [122, 128], glitch: [100, 140], downtempo: [88, 100], minimalhouse: [120, 124],
   synthwave: [96, 108], breakbeat: [168, 174], ambient: [70, 84], pop: [96, 112],
+  rock: [118, 150], hiphop: [84, 96], jazz: [118, 168], funk: [98, 112], hardtechno: [145, 156], dnb: [172, 176],
 }
 // gli strumenti che entrano, in ordine, per ogni genere
 const ORDINE: Record<Genere, string[]> = {
@@ -43,6 +48,46 @@ const ORDINE: Record<Genere, string[]> = {
   acid: ['cassa', 'hat', 'acid', 'clap', 'pad'], glitch: ['glitch', 'cassa', 'basso', 'melodia', 'hat'], downtempo: ['pad', 'arpeggio', 'cassa', 'basso', 'rullante', 'melodia'],
   minimalhouse: ['cassa', 'hat', 'basso', 'stab', 'clap', 'arpeggio'], synthwave: ['pad', 'arpeggio', 'cassa', 'rullante', 'basso', 'melodia'],
   breakbeat: ['break', 'basso', 'pad', 'melodia', 'hat'], ambient: ['pad', 'melodia', 'arpeggio', 'rumore'], pop: ['pad', 'cassa', 'clap', 'basso', 'hat', 'melodia', 'arpeggio'],
+  rock: ['chitarra', 'cassa', 'rullante', 'hat', 'basso', 'crash', 'melodia'],
+  hiphop: ['keys', 'cassa', 'rullante', 'hat', '808', 'vinile', 'melodia'],
+  jazz: ['ride', 'walking', 'piano', 'spazzole', 'melodia'],
+  funk: ['cassa', 'rullante', 'hat', 'slap', 'clav', 'fiati', 'ghost'],
+  hardtechno: ['cassa', 'rombo', 'hat', 'clap', 'acid', 'rumore'],
+  dnb: ['break', 'reese', 'hat', 'pad', 'melodia'],
+}
+const SWING: Partial<Record<Genere, number>> = { lofi: 0.18, downtempo: 0.1, hiphop: 0.22, jazz: 0.33, funk: 0.08 }
+const QUATTRO = new Set<Genere>(['techno', 'acid', 'minimalhouse', 'synthwave', 'pop', 'downtempo', 'hardtechno'])
+
+/**
+ * I colpi della batteria a ogni sedicesimo: un'unica fonte, usata dal brano (per suonare)
+ * e dal montaggio del reel (per tagliare e far pulsare a tempo). Solo parti fisse, niente caso.
+ */
+/** ritmo euclideo: k colpi distribuiti il più possibile uniformi su n passi, ruotati di rot (Toussaint) */
+export function euclide(k: number, n = 16, rot = 0): number[] {
+  const out: number[] = []
+  for (let i = 0; i < n; i++) if (Math.floor(((i + rot) * k) / n) !== Math.floor(((i + rot - 1) * k) / n)) out.push(i)
+  return out
+}
+export function colpi(p: Partitura, S: Sezione, st: number) {
+  const g = p.genere, s16 = st % 16, bar = Math.floor(st / 16)
+  const has = (x: string) => S.strumenti.includes(x)
+  const four = QUATTRO.has(g)
+  const c = { cassa: 0, rullante: 0, ghost: 0, hat: 0, aperto: false, crash: false, ride: 0 }
+  const kick: Partial<Record<Genere, number[]>> = { rock: [0, 8, 10], hiphop: [0, 7, 10], funk: [0, 3, 10, 14], lofi: [0, 7, 10], glitch: [0, 10], ambient: [0, 10], breakbeat: [0, 10], dnb: [0, 10] }
+  if (has('cassa')) { if (four ? s16 % 4 === 0 : (p.groove ?? kick[g] ?? [0, 10]).includes(s16)) c.cassa = 1 }
+  if (has('break') && (s16 === 0 || s16 === 10)) c.cassa = 0.9
+  if ((has('rullante') || has('clap') || has('break')) && (s16 === 4 || s16 === 12)) c.rullante = 1
+  if (has('spazzole') && (s16 === 4 || s16 === 12)) c.rullante = 0.35
+  if ((has('ghost') || (has('break') && g === 'dnb')) && (s16 === 7 || s16 === 9 || s16 === 15)) c.ghost = 0.25
+  if (has('hat')) {
+    if (four && s16 % 4 === 2) { c.hat = 1; c.aperto = true }
+    else if (g === 'funk' || g === 'hardtechno' || g === 'dnb') c.hat = s16 % 2 ? 0.6 : 1
+    else if (s16 % 2 === 0) c.hat = 1
+  }
+  if (has('break') && s16 % 2 === 0) c.hat = Math.max(c.hat, 0.8)
+  if (has('crash') && s16 === 0 && bar % 2 === 0) c.crash = true
+  if (has('ride') && [0, 4, 6, 8, 12, 14].includes(s16)) c.ride = s16 % 4 === 0 ? 1 : 0.6
+  return c
 }
 
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296) }
@@ -53,16 +98,19 @@ export interface SpecMusica { linguaggio: string; forma: string; scuro: boolean;
 /** compone il brano: tutto deciso da linguaggio, forma, tono, fiducia, concetti e follie */
 export function componi(s: SpecMusica): Partitura {
   const r = rng(s.seme)
-  const genere: Genere = GENERE_LING[s.linguaggio.split('×')[0]] ?? (s.linguaggio.includes('×') ? (['techno', 'lofi', 'synthwave', 'acid'] as Genere[])[Math.floor(r() * 4)] : 'pop')
+  // l'energia della sequenza: dall'umore, dalla forma e da quanto è sicuro di sé
+  const energia = Math.max(0, Math.min(1, 0.45 + ({ inquieto: 0.3, giocoso: 0.2, curioso: 0.1, annoiato: 0, calmo: -0.2, cupo: -0.1 }[s.mood] ?? 0) + (s.forma === 'manifesto' || s.forma === 'crescendo' ? 0.2 : s.forma === 'frammenti' ? 0.1 : 0) + (s.scuro ? 0.1 : 0) + (r() - 0.5) * 0.3))
+  const cand = [...new Set(s.linguaggio.split('×').flatMap(x => GENERI_LING[x] ?? []))]
+  const genere: Genere = cand.length ? cand[Math.min(cand.length - 1, Math.floor(energia * cand.length))] : 'pop'
   const [b0, b1] = BPM[genere]
   const bpm = Math.round(b0 + (b1 - b0) * (s.mood === 'inquieto' || s.mood === 'giocoso' ? 0.9 : s.mood === 'cupo' || s.mood === 'calmo' ? 0.15 : r()))
-  const modo = s.scuro ? (genere === 'techno' || genere === 'acid' ? 'frigio' : r() < 0.6 ? 'minore' : 'dorico') : (genere === 'synthwave' || genere === 'ambient' ? 'lidio' : r() < 0.7 ? 'maggiore' : 'misolidio')
+  const modo = genere === 'jazz' || genere === 'funk' ? 'dorico' : genere === 'rock' ? (s.scuro ? 'minore' : 'misolidio') : s.scuro ? (genere === 'techno' || genere === 'acid' || genere === 'hardtechno' ? 'frigio' : r() < 0.6 ? 'minore' : 'dorico') : (genere === 'synthwave' || genere === 'ambient' ? 'lidio' : r() < 0.7 ? 'maggiore' : 'misolidio')
   const radice = 36 + Math.floor(r() * 12) // nota MIDI del basso
   const scala = SCALE[modo]
   // progressioni (gradi della scala, 0-based)
   const PROG: number[][][] = s.scuro ? [[[0], [5], [2], [6]], [[0], [3], [4], [0]], [[0], [6], [5], [6]], [[0], [0], [5], [4]]] : [[[0], [4], [5], [3]], [[0], [5], [3], [4]], [[3], [4], [0], [0]], [[0], [3], [0], [4]]]
-  const prog = genere === 'techno' || genere === 'acid' || genere === 'ambient' ? [[0], [0], [0], [genere === 'ambient' ? 5 : 0]] : PROG[Math.floor(r() * PROG.length)]
-  const accordi = prog.map(([g]) => [g, g + 2, g + 4, ...(genere === 'lofi' || genere === 'downtempo' ? [g + 6] : [])])
+  const prog = genere === 'techno' || genere === 'acid' || genere === 'ambient' || genere === 'hardtechno' ? [[0], [0], [0], [genere === 'ambient' ? 5 : 0]] : PROG[Math.floor(r() * PROG.length)]
+  const accordi = prog.map(([g]) => [g, g + 2, g + 4, ...(genere === 'lofi' || genere === 'downtempo' || genere === 'jazz' || genere === 'hiphop' || genere === 'funk' ? [g + 6] : [])])
   // leitmotiv: quattro note e un ritmo per ogni concetto, sempre uguali per quella parola
   const motivi: Record<string, number[]> = {}
   for (const sc of s.schede) if (sc.concetto && !motivi[sc.concetto]) { const h = hash(sc.concetto); motivi[sc.concetto] = [0, 1, 2, 3].map(i => ((h >> (i * 4)) & 15) % 9) }
@@ -83,11 +131,20 @@ export function componi(s: SpecMusica): Partitura {
     const set = pieno(k)
     if (s.forma === 'dialogo') { if (i % 2) set.delete('melodia'); else set.add('melodia') }
     if (sc.concetto) set.add('motivo')
-    return { strumenti: [...set], motivo: sc.concetto, follia: sc.follia }
+    return { strumenti: [...set], motivo: sc.concetto, follia: sc.follia, energia: Math.min(1, (k / ord.length) * (0.6 + energia * 0.6)) }
   })
   if (s.forma === 'frammenti') sezioni = sezioni.map(x => ({ ...x, follia: x.follia ?? (r() < 0.35 ? 'ossessione' : undefined) }))
   if (sezioni.length) sezioni[sezioni.length - 1].ultimo = true
-  return { genere, bpm, swing: genere === 'lofi' ? 0.18 : genere === 'downtempo' ? 0.1 : 0, radice, scala, accordi, battute: 4, sezioni, motivi, risolve: s.conf >= 0.4, seme: s.seme }
+  // il groove: per i generi spezzati se lo scrive da sé, come un piccolo programma: euclide(k, 16, rotazione),
+  // con k e rotazione presi dalla parola della sequenza; tiene sempre il primo battere
+  let groove: number[] | undefined, grooveCodice: string | undefined
+  if (!QUATTRO.has(genere)) {
+    const w = s.schede.find(x => x.concetto)?.concetto ?? s.forma
+    const h = hash(w), k = 3 + (h % 3) + (energia > 0.6 ? 1 : 0), rot = (h >>> 4) % 16
+    groove = [...new Set([0, ...euclide(k, 16, rot)])].sort((a, b) => a - b).filter(x => x !== 4 && x !== 12)
+    grooveCodice = `euclide(${k}, 16, ${rot}) ∪ {0}`
+  }
+  return { groove, grooveCodice, genere, bpm, swing: SWING[genere] ?? 0, radice, scala, accordi, battute: 4, sezioni, motivi, risolve: s.conf >= 0.4, seme: s.seme }
 }
 
 /** quanto dura una sezione (una tavola) in secondi */
@@ -115,7 +172,7 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
   const steps = p.battute * 16
   // catena master: bus → saturazione → compressore → uscita; riverbero e eco in mandata
   const master = ctx.createGain(); master.gain.value = 0.8
-  const sat = ctx.createWaveShaper(); sat.curve = curvaSaturazione(p.genere === 'techno' ? 6 : 2)
+  const sat = ctx.createWaveShaper(); sat.curve = curvaSaturazione(p.genere === 'hardtechno' ? 14 : p.genere === 'techno' || p.genere === 'rock' ? 6 : p.genere === 'hiphop' ? 4 : 2)
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4
   master.connect(sat).connect(comp).connect(ctx.destination)
   const rev = ctx.createConvolver(); rev.buffer = impulso(ctx, p.genere === 'ambient' ? 5 : 2.4, 3)
@@ -129,15 +186,14 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
   const pompa = ctx.createGain(); pompa.connect(master); pompa.connect(rev)
   const NB = rumoreBuffer(ctx)
   const has = (x: string) => S.strumenti.includes(x)
-  const four = p.genere !== 'lofi' && p.genere !== 'breakbeat' && p.genere !== 'ambient' && p.genere !== 'glitch'
-
+  const four = QUATTRO.has(p.genere)
   const nota = (grado: number, ott = 0) => { const n = p.scala.length; const o = Math.floor(grado / n); return p.radice + 12 * (ott + o) + p.scala[((grado % n) + n) % n] }
   const accordo = (b: number) => p.accordi[b % p.accordi.length]
 
   const cassa = (t: number, vol = 1) => {
     const o = ctx.createOscillator(), g = ctx.createGain()
-    o.frequency.setValueAtTime(p.genere === 'techno' ? 180 : 150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12)
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + (p.genere === 'techno' ? 0.5 : 0.35))
+    o.frequency.setValueAtTime(p.genere === 'techno' || p.genere === 'hardtechno' ? 190 : p.genere === 'rock' ? 130 : 150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12)
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + (p.genere === 'techno' || p.genere === 'hardtechno' ? 0.5 : p.genere === 'rock' ? 0.22 : 0.35))
     o.connect(g).connect(master); o.start(t); o.stop(t + 0.6)
     pompa.gain.setValueAtTime(0.35, t); pompa.gain.linearRampToValueAtTime(1, t + beat * 0.6)
   }
@@ -149,7 +205,13 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
   }
   const rullante = (t: number, v = 0.5) => { rum(t, 0.18, 1800, v, true); rum(t, 0.25, 300, v * 0.6, true, rev); const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 190; g.gain.setValueAtTime(v * 0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.1); o.connect(g).connect(master); o.start(t); o.stop(t + 0.12) }
   const clap = (t: number) => { for (let k = 0; k < 3; k++) rum(t + k * 0.012, 0.12, 1200, 0.35, true); rum(t + 0.03, 0.3, 1500, 0.2, true, rev) }
-  const hat = (t: number, aperto = false) => rum(t, aperto ? 0.25 : 0.05, 8000, aperto ? 0.18 : 0.12)
+  const hat = (t: number, aperto = false, v = 1) => rum(t, aperto ? 0.25 : 0.05, 8000, (aperto ? 0.18 : 0.12) * v)
+  // chitarra distorta: quinta di potenza (fondamentale, quinta, ottava) dentro un distorsore
+  const dist = ctx.createWaveShaper(); dist.curve = curvaSaturazione(60); const cabina = ctx.createBiquadFilter(); cabina.type = 'lowpass'; cabina.frequency.value = 3200
+  const chitG = ctx.createGain(); chitG.gain.value = 0.55; dist.connect(cabina).connect(chitG).connect(pompa)
+  const chitarra = (t: number, dur: number, midi: number, vol: number) => { for (const [iv, d] of [[0, -7], [7, 6], [12, -3]] as const) { const o = ctx.createOscillator(), gg = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = f(midi + iv); o.detune.value = d; gg.gain.setValueAtTime(vol, t); gg.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05); o.connect(gg).connect(dist); o.start(t); o.stop(t + dur + 0.1) } }
+  // 808: sub sinusoidale con una piccola caduta di intonazione
+  const sub808 = (t: number, dur: number, midi: number) => { const o = ctx.createOscillator(), gg = ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f(midi) * 1.6, t); o.frequency.exponentialRampToValueAtTime(f(midi), t + 0.06); gg.gain.setValueAtTime(0.55, t); gg.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(gg).connect(master); o.start(t); o.stop(t + dur + 0.05) }
   const voce = (t: number, dur: number, midi: number, tipo: OscillatorType, vol: number, cutoff: number, dest: AudioNode, opts: { att?: number; detune?: number; res?: number; env?: number } = {}) => {
     const g = ctx.createGain(), fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = opts.res ?? 1
     fl.frequency.setValueAtTime(cutoff * (opts.env ? 1 + opts.env : 1), t); fl.frequency.exponentialRampToValueAtTime(Math.max(80, cutoff), t + Math.min(dur, 0.3))
@@ -161,12 +223,28 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
 
   for (let st = 0; st < steps; st++) {
     const t = T(st), bar = Math.floor(st / 16), s16 = st % 16
-    // batteria
-    if (has('cassa') && (four ? s16 % 4 === 0 : s16 === 0 || s16 === 10 || (p.genere === 'lofi' && s16 === 7))) cassa(t)
-    if (has('break')) { if (s16 === 0 || s16 === 10) cassa(t, 0.9); if (s16 === 4 || s16 === 12 || (s16 === 15 && r() < 0.5)) rullante(t, 0.55); if (s16 % 2 === 0) hat(t) }
-    if (has('rullante') && (s16 === 4 || s16 === 12)) rullante(t, p.genere === 'lofi' ? 0.35 : 0.5)
-    if (has('clap') && (s16 === 4 || s16 === 12)) clap(t)
-    if (has('hat')) { if (four && s16 % 4 === 2) hat(t, true); else if (s16 % 2 === 0 || (p.genere === 'techno' && r() < 0.6)) hat(t) }
+    // batteria: la stessa fonte dei colpi che usa il montaggio
+    const C = colpi(p, S, st)
+    if (C.cassa) cassa(t, C.cassa)
+    if (C.rullante) { if (has('clap') && !has('rullante')) clap(t); else rullante(t, p.genere === 'lofi' ? 0.35 : p.genere === 'rock' || p.genere === 'hiphop' ? 0.7 : C.rullante * 0.5) }
+    if (C.ghost) rullante(t, C.ghost * 0.4)
+    if (C.hat) hat(t, C.aperto, C.hat)
+    if (has('hat') && p.genere === 'techno' && !C.hat && r() < 0.6) hat(t)
+    if (has('break') && s16 === 15 && r() < 0.5) rullante(t, 0.45)
+    if (C.crash) rum(t, 1.2, 5000, 0.22, false, rev)
+    if (C.ride) { rum(t, 0.35, 6500, 0.09 * C.ride, true); rum(t, 0.6, 9000, 0.04 * C.ride) }
+    // generi nuovi: strumenti
+    const chN = accordo(bar)
+    if (has('chitarra')) { const pm = bar % 2 === 0; if (pm ? s16 % 2 === 0 : s16 === 0 || s16 === 6 || s16 === 10) chitarra(t, pm ? sedic * 1.6 : sedic * (s16 === 0 ? 6 : 4), nota(chN[0], 1), pm ? 0.13 : 0.16) }
+    if (has('808') && C.cassa) sub808(t, beat * 1.6, nota(chN[0], -1))
+    if (has('keys') && (s16 === 0 || s16 === 7 || s16 === 10)) for (const gg of chN) voce(t, sedic * (s16 === 0 ? 5 : 2.5), nota(gg, 2), 'triangle', 0.06, 1700, pompa, { att: 0.01, detune: 6 })
+    if (has('walking') && s16 % 4 === 0) { const q = s16 / 4, nx = accordo(bar + 1)[0]; const gr = q === 0 ? chN[0] : q === 1 ? chN[1] : q === 2 ? chN[2] : nx - 1; voce(t, beat * 0.9, nota(gr, 0), 'triangle', 0.34, 900, master, { env: 1 }) }
+    if (has('piano') && (s16 === 6 || s16 === 14 || (s16 === 3 && bar % 2))) for (const gg of chN) voce(t, sedic * 1.4, nota(gg, 2), 'sine', 0.07, 3000, rev, { att: 0.004 })
+    if (has('slap') && [0, 3, 6, 8, 10, 11, 14].includes(s16)) voce(t, sedic * 0.8, nota(chN[0], s16 === 6 || s16 === 14 ? 1 : 0), 'square', 0.28, 700, pompa, { res: 6, env: 5 })
+    if (has('clav') && [2, 5, 7, 10, 13, 15].includes(s16)) for (const gg of chN.slice(0, 3)) voce(t, sedic * 0.5, nota(gg, 2), 'square', 0.035, 2600, pompa, { res: 2, env: 2 })
+    if (has('fiati') && bar % 2 === 1 && (s16 === 4 || s16 === 10)) for (const gg of chN.slice(0, 3)) voce(t, sedic * 2.5, nota(gg, 2), 'sawtooth', 0.06, 1400, rev, { att: 0.02, detune: 10, env: 2 })
+    if (has('rombo') && C.cassa) { voce(t + sedic, sedic * 2.6, nota(chN[0], -1), 'sawtooth', 0.18, 160, rev, { res: 2 }) }
+    if (has('reese') && s16 === 0) voce(t, beat * 3.9, nota(chN[0], 0), 'sawtooth', 0.22, 380, pompa, { detune: 22, res: 3 })
     if (has('glitch') && r() < 0.35) rum(t, 0.03 + r() * 0.06, 2000 + r() * 8000, 0.25, true)
     // basso
     const ch = accordo(bar)
@@ -215,4 +293,29 @@ export function wav(b: AudioBuffer): Blob {
   return new Blob([out], { type: 'audio/wav' })
 }
 
-export const GENERE_NOME: Record<Genere, string> = { lofi: 'lo-fi', techno: 'techno industriale', acid: 'acid house', glitch: 'glitch', downtempo: 'downtempo', minimalhouse: 'minimal house', synthwave: 'synthwave', breakbeat: 'breakbeat', ambient: 'ambient', pop: 'base pop' }
+export const GENERE_NOME: Record<Genere, string> = { lofi: 'lo-fi', techno: 'techno industriale', acid: 'acid house', glitch: 'glitch', downtempo: 'downtempo', minimalhouse: 'minimal house', synthwave: 'synthwave', breakbeat: 'breakbeat', ambient: 'ambient', pop: 'base pop', rock: 'rock', hiphop: 'hip hop', jazz: 'jazz', funk: 'funk', hardtechno: 'hard techno', dnb: 'drum and bass' }
+
+/**
+ * I colpi di una sezione, in secondi dall'inizio della sezione: gli stessi che `suona` mette nel brano
+ * (solo le parti fisse, non quelle a caso), così l'animazione può cadere esattamente sul ritmo.
+ */
+export interface Eventi { beat: number; battute: number; cassa: number[]; rullante: number[]; basso: number[]; accordi: number[]; stab: number[]; durata: number; energia: number; crash: number[] }
+export function eventi(p: Partitura, i: number): Eventi {
+  const S = p.sezioni[i] ?? { strumenti: [] }
+  const beat = 60 / p.bpm, sedic = beat / 4
+  const T = (step: number) => step * sedic + (step % 2 ? p.swing * sedic : 0)
+  const has = (x: string) => S.strumenti.includes(x)
+  const e: Eventi = { beat, battute: p.battute, cassa: [], rullante: [], basso: [], accordi: [], stab: [], durata: durata(p) + (S.ultimo ? 1.5 : 0), energia: S.energia ?? 0.5, crash: [] }
+  for (let st = 0; st < p.battute * 16; st++) {
+    const t = T(st), s16 = st % 16, C = colpi(p, S, st)
+    if (C.cassa) e.cassa.push(t)
+    if (C.rullante) e.rullante.push(t)
+    if (C.crash) e.crash.push(t)
+    if ((has('basso') || has('slap') || has('walking') || has('808')) && (s16 % 4 === 0 || has('slap') && [3, 6, 10, 11, 14].includes(s16))) e.basso.push(t)
+    if (s16 === 0) e.accordi.push(t)
+    if ((has('stab') || has('clav') || has('fiati') || has('chitarra')) && (s16 === 3 || s16 === 10)) e.stab.push(t)
+  }
+  // senza batteria: i battiti diventano i quarti, così c'è sempre un ritmo a cui appoggiarsi
+  if (!e.cassa.length) for (let b = 0; b < p.battute * 4; b++) e.cassa.push(b * beat)
+  return e
+}

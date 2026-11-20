@@ -36,11 +36,12 @@ import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda } from './mind/episodio'
+import { nuovoReel } from './hands/anima'
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
 import { scegliLinguaggio, esitoLinguaggio } from './mind/linguaggi'
-import { componi, durata, GENERE_NOME } from './suono/musica'
+import { componi, durata, eventi, GENERE_NOME } from './suono/musica'
 import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
@@ -59,6 +60,8 @@ export interface DayHooks {
   shouldStop?: () => boolean
   /** modalità episodio: invece di 1–3 tavole, un episodio di N tavole che si leggono in sequenza */
   episodio?: number
+  /** montare anche il reel animato della sequenza */
+  reel?: boolean
 }
 
 const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
@@ -162,7 +165,11 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const openQ = st.questions.filter(q => !q.closed).sort((a, b) => a.visits - b.visits)
   const voids = Object.values(st.lexicon).filter(e => e.state === 'a_vuoto').map(e => e.word)
   const domEp = hooks.episodio ? (getVisione(st)?.domanda ?? '').toLowerCase().split(/[^a-zàèéìòù]+/).find(w => w.length > 3 && ensureAtlante(st).concetti[w]) : undefined
-  const thread = domEp ?? step?.word ?? openQ[0]?.word ?? (voids.length ? pick(r, voids) : null)
+  // la sequenza riparte da dove era finita la precedente: il punto d'arrivo dell'ultimo capitolo (più spesso) o la sua domanda
+  const precEp = hooks.episodio ? getEpisodi(st).slice(-1)[0] as (ReturnType<typeof getEpisodi>[number] & { coppia?: string }) | undefined : undefined
+  const daPrec = precEp?.coppia && r() < 0.65 ? precEp.coppia.split('|')[1] : undefined
+  if (daPrec) log(`Riparto da dove avevo finito: "${daPrec}".`)
+  const thread = daPrec ?? domEp ?? step?.word ?? openQ[0]?.word ?? (voids.length ? pick(r, voids) : null)
   if (thread) log(`Seguo un filo: "${thread}".`)
   const readings = await gather(st, r, thread, E0, log).catch(e => { log(`Non riesco a leggere (${e instanceof Error ? e.message : e}): lavoro con quello che ho.`); return [] as Reading[] })
   if (!readings.length) log('Non sono riuscito a leggere niente: lavoro con quello che ho.')
@@ -369,6 +376,11 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   }
   const works: Work[] = []
   const epId = uid()
+  // la musica si compone prima: così il reel può montare le tavole a tempo mentre le disegna
+  const partitura0 = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.map(x => ({ concetto: x.a, follia: x.follia })), seme: Math.floor(r() * 1e9) })
+  const riuscite: number[] = []
+  const reel = hooks.reel ? await nuovoReel({ linguaggio: L.id, nome: st.name, N: plan.schede.length, seme: Math.floor(r() * 1e9) }).catch(() => null) : null
+  if (hooks.reel && !reel) log('Il reel non si può fare in questo browser (manca la codifica video).')
   for (let i = 0; i < plan.schede.length; i++) {
     if (hooks.shouldStop?.()) break
     const sc = plan.schede[i]
@@ -391,19 +403,25 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     }
     st.recentVisual = [...st.recentVisual, { id, features: f, words: work.visual.words }].slice(-40)
     const saved = await T.saveWork(work, final.toDataURL('image/png'))
-    works.push(saved)
+    works.push(saved); riuscite.push(i)
+    if (reel) { try { await reel.tavola(sheet, eventi(partitura0, i)) } catch (e) { log(`Reel: ${e instanceof Error ? e.message : e}`) } }
     hooks.onWork?.(saved)
     hooks.preview?.(flatten(sheet, 0.5))
     log(`${i + 1}/${plan.schede.length} ${sc.ruolo}${sc.titolo ? `: ${sc.titolo}` : ''}`)
   }
   if (!works.length) return works
   // la musica: un brano composto per questa sequenza, un pezzo per tavola
-  const partitura = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.slice(0, works.length).map(x => ({ concetto: x.a, follia: x.follia })), seme: Math.floor(r() * 1e9) })
+  // le sezioni delle tavole saltate si tolgono; l'ultima rimasta chiude il brano
+  const partitura = { ...partitura0, sezioni: riuscite.map((i, k) => ({ ...partitura0.sezioni[i], ultimo: k === riuscite.length - 1 })) }
+  let video: Blob | null = null
+  if (reel) { try { video = await reel.fine(); if (video) log(`Reel montato: ${(video.size / 1e6).toFixed(1)} MB.`) } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) } }
   const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
-  log(`Musica: ${descrMusica}. Ogni tavola ha ${durata(partitura).toFixed(1)} secondi del brano.`)
-  const caption = didascaliaIT(st, { n: getEpisodi(st).length + 1, titolo: plan.titolo, schede: plan.schede.slice(0, works.length), d: plan.d, domanda: plan.domanda, lettura: plan.lettura, forma: plan.forma, L, partitura })
+  log(`Musica: ${descrMusica}. Ogni tavola ha ${durata(partitura).toFixed(1)} secondi del brano.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
+  const prec = getEpisodi(st).slice(-1)[0] as ({ conclusione?: string; domanda?: string } | undefined)
+  const caption = didascaliaIT(st, { prima: prec ? { conclusione: prec.conclusione, domanda: prec.domanda } : undefined, n: getEpisodi(st).length + 1, titolo: plan.titolo, schede: plan.schede.slice(0, works.length), d: plan.d, domanda: plan.domanda, lettura: plan.lettura, forma: plan.forma, L, partitura })
   esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
   const ep = chiudiEpisodio(st, r, { musica: { partitura, descr: descrMusica }, lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
+  if (video) await T.salvaReel(ep.id, video).catch(() => {})
   {
     const recenti = (await T.listWorks()).filter(w => w.day >= st.day - 20)
     const P = aggiornaProfilo(st, recenti)

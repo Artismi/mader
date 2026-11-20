@@ -12,12 +12,12 @@ import type { AgentState, Work } from './core/types'
 
 type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; permalink?: string; quando: string; errore?: string } }
 
-export async function giro(o: { studi: number; sequenza: boolean; epN: number; log: (m: string) => void }) {
+export async function giro(o: { studi: number; sequenza: boolean; epN: number; reel?: boolean; log: (m: string) => void }) {
   let st: AgentState = await loadOrCreate()
   const fatte: string[] = []
   const una = async (seq: boolean) => {
     try {
-      const r = await runDay(st, { fast: true, episodio: seq ? o.epN : undefined, log: o.log, preview: () => {}, onWork: (w: Work) => { fatte.push(w.id) }, shouldStop: () => false })
+      const r = await runDay(st, { fast: true, episodio: seq ? o.epN : undefined, reel: seq && !!o.reel, log: o.log, preview: () => {}, onWork: (w: Work) => { fatte.push(w.id) }, shouldStop: () => false })
       st = r.state
     } catch (e) {
       o.log(`Errore nella giornata ${st.day + 1}: ${e instanceof Error ? e.message : String(e)}. La salto.`)
@@ -83,5 +83,13 @@ export async function branoSequenza(epId: string) {
   let o = 0
   for (const p of parti) { for (let c = 0; c < ch; c++) tutto.getChannelData(c).set(p.getChannelData(Math.min(c, p.numberOfChannels - 1)), o); o += p.length }
   const r = await T.igMedia(`${ep.id}-brano.wav`, wav(tutto))
+  return r.nome ?? null
+}
+
+/** il reel di una sequenza (solo video), caricato sul server per il montaggio con il brano */
+export async function reelSequenza(epId: string) {
+  const v = await T.leggiReel(epId)
+  if (!v) return null
+  const r = await T.igMedia(`${epId}-reel.mp4`, v)
   return r.nome ?? null
 }

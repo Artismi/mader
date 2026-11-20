@@ -1,18 +1,21 @@
 name: giro
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '13,43 * * * *'
   workflow_dispatch: {}
 concurrency:
   group: giro
   cancel-in-progress: false
 permissions:
   contents: write
+  actions: write
 jobs:
   giro:
     runs-on: ubuntu-latest
-    timeout-minutes: 28
+    timeout-minutes: 45
     steps:
+      - name: inizio
+        run: echo "INIZIO=$(date +%s)" >> $GITHUB_ENV
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -41,3 +44,16 @@ jobs:
           git add -A
           git commit -q -m "giro $(date -u +%FT%TZ)" || exit 0
           git push -q -f origin HEAD:memoria
+      - name: prossimo giro
+        # GitHub non è puntuale con gli orari programmati: il giro aspetta fino alla mezz'ora e lancia il successivo da sé
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # aspetta fino alla mezz'ora; ma se nel frattempo qualcuno lancia un giro a mano, gli lascia il posto subito
+          while [ $(( $(date +%s) - INIZIO )) -lt 1800 ]; do
+            ALTRI=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow giro.yml --json status,databaseId --jq "[.[] | select((.status==\"pending\" or .status==\"queued\" or .status==\"waiting\") and .databaseId != $GITHUB_RUN_ID)] | length" 2>/dev/null || echo 0)
+            if [ "$ALTRI" -gt 0 ]; then echo "c'è già un giro in coda: gli lascio il posto"; exit 0; fi
+            sleep 30
+          done
+          gh workflow run giro.yml --ref main --repo "$GITHUB_REPOSITORY"

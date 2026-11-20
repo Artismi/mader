@@ -37,3 +37,6 @@ export const igToken = async (_t: string): Promise<IgStato> => ({ collegato: fal
 export const igTunnel = async (): Promise<{ tunnel?: string; error?: string }> => noIg
 export const igMedia = async (_n: string, _b: Blob): Promise<{ nome?: string; error?: string }> => noIg
 export const igPubblica = async (_f: string[], _d: string): Promise<{ id?: string; permalink?: string; error?: string }> => noIg
+const reels = new Map<string, Blob>()
+export const salvaReel = async (epId: string, v: Blob) => { reels.set(epId, v) }
+export const leggiReel = async (epId: string): Promise<Blob | null> => reels.get(epId) ?? null

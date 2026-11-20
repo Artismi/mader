@@ -194,7 +194,7 @@ const pulisci = (t: string) => t.replace(/\s+/g, ' ').replace(/[.:;,\s]+$/, '').
 const minuscola = (t: string) => (/^[A-ZÀ-Ý]{2,}/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1))
 const maiuscola = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
-export function didascaliaIT(st: AgentState, o: { n: number; titolo: string; schede: { titolo: string; corpo?: string; ruolo?: string; a?: string }[]; d: Deduzione | null; domanda: string; lettura?: string; forma: FormaSeq; L: Pick<Linguaggio, 'id' | 'nome'>; partitura: Partitura }): string {
+export function didascaliaIT(st: AgentState, o: { prima?: { conclusione?: string; domanda?: string }; n: number; titolo: string; schede: { titolo: string; corpo?: string; ruolo?: string; a?: string }[]; d: Deduzione | null; domanda: string; lettura?: string; forma: FormaSeq; L: Pick<Linguaggio, 'id' | 'nome'>; partitura: Partitura }): string {
   const dom = pulisci(o.domanda ?? '').replace(/\?+$/, '').toLowerCase()
   const versi = [...new Set(o.schede.map(s => pulisci(s.titolo).replace(/\?+$/, '')).filter(t => t && t.length < 90 && t.toLowerCase() !== o.titolo.toLowerCase() && t.toLowerCase() !== dom))]
   // il titolo di una lettura può essere un nome di file: lo rendo leggibile
@@ -210,6 +210,10 @@ export function didascaliaIT(st: AgentState, o: { n: number; titolo: string; sch
     a ? `Oggi ho girato intorno a ${a}.` : '',
     lettura ? `Da «${lettura}» mi è rimasta addosso una cosa sola.` : '',
   ].filter(Boolean)
+  // il filo con il capitolo prima: quello che aveva concluso diventa il punto da cui ripartire (o da mettere in dubbio)
+  const pc = o.prima?.conclusione ? minuscola(pulisci(o.prima.conclusione)) : ''
+  if (pc && pc.split(' ').length > 2 && Math.random() < 0.7) righe.push(scegli([`L'ultima volta avevo concluso che ${pc}. Riparto da lì.`, `Avevo scritto che ${pc}. Oggi non ne sono più così sicuro.`, `Dicevo: ${pc}. Vado avanti.`]))
+  else if (o.prima?.domanda && Math.random() < 0.4) righe.push(`Mi era rimasta una domanda: ${pulisci(o.prima.domanda).replace(/\?+$/, '')}?`)
   if (o.forma === 'a ritroso' && o.d) righe.push(`Comincio dalla fine: ${minuscola(pulisci(o.d.testo))}. Poi torno indietro.`)
   else if (o.forma !== 'frammenti' && aperture.length) righe.push(scegli(aperture))
   // le tavole come versi

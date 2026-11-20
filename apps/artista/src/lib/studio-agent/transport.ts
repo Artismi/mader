@@ -132,3 +132,7 @@ export async function esportaMemoria(maxImmagini = 160): Promise<Archivio> {
   }
   return { state: st, works: works.map(w => ({ ...w, image: '' })), images }
 }
+
+// ─── il reel di una sequenza (video senza audio; l'audio lo aggiunge chi monta) ───
+export async function salvaReel(epId: string, v: Blob) { await tx('images', 'readwrite', s => s.put(v, `reel:${epId}`)) }
+export async function leggiReel(epId: string): Promise<Blob | null> { return (await tx<Blob | undefined>('images', 'readonly', s => s.get(`reel:${epId}`))) ?? null }

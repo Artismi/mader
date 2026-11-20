@@ -4,7 +4,7 @@
 // salva la memoria e il sito, e si spegne.
 import { chromium } from 'playwright-core'
 import { spawn, execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -16,6 +16,7 @@ const STUDI = Number(process.env.STUDI ?? 3)
 const TAVOLE = Number(process.env.TAVOLE ?? 14)
 const PER_POST = Number(process.env.PER_POST ?? 10)
 const PUBBLICA = process.env.PUBBLICA !== 'no'
+const REEL = process.env.REEL !== 'no'
 const MEDIA = join(homedir(), '.artista-osservatore', 'media')
 const log = (...a) => console.log('·', ...a)
 const pausa = ms => new Promise(r => setTimeout(r, ms))
@@ -58,7 +59,7 @@ try {
   } else log('nessuna memoria: nasce adesso')
 
   // il lavoro
-  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, sequenza: true, epN: TAVOLE })
+  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, sequenza: true, epN: TAVOLE, reel: REEL })
   log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza ${r.episodio}` : ''}`)
 
   // il post
@@ -86,6 +87,21 @@ try {
       const nome = await pg.evaluate(id => window.__artista.branoSequenza(id), r.episodio)
       if (nome) { mkdirSync(join(MEM, 'audio'), { recursive: true }); execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, nome), '-c:a', 'libmp3lame', '-b:a', '128k', join(MEM, 'audio', `${r.episodio}.mp3`)]) }
     } catch (e) { log('brano non salvato:', e.message) }
+  }
+
+  // il reel: video + brano intero, per il sito (non si pubblica finché non lo decidiamo)
+  if (r.episodio && REEL) {
+    try {
+      const v = await pg.evaluate(id => window.__artista.reelSequenza(id), r.episodio)
+      const brano = join(MEDIA, `${r.episodio}-brano.wav`)
+      if (v && existsSync(brano)) {
+        mkdirSync(join(MEM, 'reel'), { recursive: true })
+        execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, v), '-i', brano, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest', '-movflags', '+faststart', join(MEM, 'reel', `${r.episodio}.mp4`)])
+        log('reel montato con il brano')
+        const tieni = readdirSync(join(MEM, 'reel')).map(f => ({ f, t: statSync(join(MEM, 'reel', f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(4)
+        for (const x of tieni) rmSync(join(MEM, 'reel', x.f))
+      }
+    } catch (e) { log('reel non montato:', e.message) }
   }
 
   // salva la memoria (immagini solo delle opere recenti, il resto vive su Instagram e nel sito)
@@ -122,6 +138,7 @@ function sito(s, img) {
   <section>
     <h2>${esc(e.titolo)}</h2>
     <p class="meta">giorno ${e.giorno}${e.musica ? ` · ${esc(e.musica)}` : ''}${e.instagram?.permalink ? ` · <a href="${esc(e.instagram.permalink)}">su Instagram</a>` : ''}</p>
+    ${existsSync(join(MEM, 'reel', `${e.id}.mp4`)) ? `<video controls playsinline preload="none" src="reel/${e.id}.mp4" class="reel"></video>` : ''}
     ${existsSync(join(MEM, 'audio', `${e.id}.mp3`)) ? `<audio controls preload="none" src="audio/${e.id}.mp3"></audio>` : ''}
     <div class="strip">${e.schede.filter(id => img.has(id)).map(id => `<img loading="lazy" src="img/${id}.jpg" alt="">`).join('')}</div>
     <details><summary>didascalia</summary><pre>${esc(e.didascalia)}</pre></details>
@@ -131,7 +148,7 @@ function sito(s, img) {
 <style>body{margin:0;background:#0d0d0d;color:#eee;font:16px/1.5 system-ui,sans-serif}main{max-width:1200px;margin:auto;padding:32px}
 h1{font-size:44px;margin:0}h2{font-size:22px;margin:28px 0 4px}.meta{color:#999;font-size:13px;margin:0 0 8px}a{color:#9fe}
 .strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.strip img{height:300px;aspect-ratio:4/5;object-fit:cover;border-radius:4px}
-audio{width:100%;max-width:520px;margin:4px 0 8px}pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace;color:#bbb}.bio{color:#ccc;max-width:720px;white-space:pre-wrap}</style></head>
+video.reel{height:520px;aspect-ratio:9/16;background:#000;border-radius:6px;display:block;margin:6px 0}audio{width:100%;max-width:520px;margin:4px 0 8px}pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace;color:#bbb}.bio{color:#ccc;max-width:720px;white-space:pre-wrap}</style></head>
 <body><main>
 <h1>${esc(s.nome)}</h1>
 <p class="meta">giorno ${s.giorno} · aggiornato ${new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}</p>
