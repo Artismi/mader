@@ -96,6 +96,15 @@ function componenti(cv: HTMLCanvasElement, cella: number, max: number) {
   return { comp: out.slice(0, max), resto: out.length > max, gw, gh, cella, fondo }
 }
 
+/** le righe di un testo: bande orizzontali di pixel pieni */
+function righeDi(src: HTMLCanvasElement): [number, number][] {
+  const d = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data, out: [number, number][] = []
+  let a = -1, vuote = 0; const gap = Math.max(3, Math.round(src.height / 60))
+  for (let y = 0; y < src.height; y++) { let pieno = false; for (let x = 0; x < src.width; x += 2) if (d[(y * src.width + x) * 4 + 3] > 30) { pieno = true; break } if (pieno) { if (a < 0) a = y; vuote = 0 } else if (a >= 0 && ++vuote > gap) { out.push([Math.max(0, a - 2), Math.min(src.height, y - vuote + 3)]); a = -1 } }
+  if (a >= 0) out.push([Math.max(0, a - 2), src.height])
+  return out.filter(([x, y]) => y - x > 4)
+}
+
 /** smonta le tavole in una scena di oggetti */
 export function smonta(fogli: Sheet[], r: () => number): Scena {
   const nodi: Nodo[] = []
@@ -120,7 +129,16 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
         const d = q.getImageData(0, 0, c.width, c.height), m = l.meta.color.replace('#', ''), R = parseInt(m.slice(0, 2), 16), G = parseInt(m.slice(2, 4), 16), B = parseInt(m.slice(4, 6), 16)
         for (let i = 0; i < d.data.length; i += 4) { const dd = Math.abs(d.data[i] - R) + Math.abs(d.data[i + 1] - G) + Math.abs(d.data[i + 2] - B); if (dd > 90) d.data[i + 3] = 0 }
         q.putImageData(d, 0, 0)
-        nodi.push({ ...intero(), sprite: c }); return
+        // ogni riga è un oggetto a sé (entra, si ferma, esce col suo tempo); la frase resta nel suo posto e nel suo carattere
+        const bande = righeDi(c)
+        if (bande.length <= 1) { nodi.push({ ...intero(), sprite: c }); return }
+        const base = intero()
+        for (const [a, b] of bande) {
+          const rc = document.createElement('canvas'); rc.width = c.width; rc.height = b - a; rc.getContext('2d')!.drawImage(c, 0, a, c.width, b - a, 0, 0, c.width, b - a)
+          const oy0 = ((a + b) / 2 - c.height / 2) * kk
+          nodi.push({ ...base, id: id++, sprite: rc, h: (b - a) * kk, x: cx - Math.sin(l.rot) * oy0, y: cy + Math.cos(l.rot) * oy0, area: c.width * kk * (b - a) * kk })
+        }
+        return
       }
       // i fondi e le trame che non coprono tutto: bordi sfumati, così non si vede il rettangolo
       if ((ruolo === 'fondo' || ruolo === 'trama') && !pieno && !(l.genera && ANIMABILI.has(l.genera.tool))) {
@@ -445,9 +463,7 @@ function misura(c: Coreografia, scena: Scena, br: Brano, rp: Ripresa[], memoria:
   // economia: pochi gesti con variazioni (non un campionario)
   const economia = -Math.max(0, gesti.size - 6) * 0.25
   // il ritmo degli stacchi: una media tra 0.7 e 1.8 secondi tiene l'occhio senza stancarlo
-  const iq = inquadrature(c, br, rp, scena), mediaIq = br.durata / Math.max(1, iq.length)
-  const ritmo = -Math.max(0, mediaIq - 1.8) * 1.5 - Math.max(0, 0.7 - mediaIq) * 3
-  let v = ritmo + coerenza + economia + sync * 1.5 + sulColpo * 3 - Math.abs(attMedia - 2) * 0.6 - Math.abs(quiete - 0.3) * 3
+  let v = coerenza + economia + sync * 1.5 + sulColpo * 3 - Math.abs(attMedia - 2) * 0.6 - Math.abs(quiete - 0.3) * 3
     - media(coperture) * 4 - media(equilibri) * 3 - Math.abs(media(pieni, 0.4) - 0.45) * 2
   // una ripresa deve durare abbastanza per costruirsi e farsi vedere
   if (c.battutePerTavola * br.beat * 4 < 1.6) v -= 2
@@ -546,7 +562,6 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   const scatole = new Map<HTMLCanvasElement, { x0: number; y0: number; x1: number; y1: number }>()
   const scatola = (cvT: HTMLCanvasElement) => { if (scatole.has(cvT)) return scatole.get(cvT)!; const q = cvT.getContext('2d')!; const d = q.getImageData(0, 0, cvT.width, cvT.height).data; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1; for (let y = 0; y < cvT.height; y += 4) for (let x = 0; x < cvT.width; x += 4) if (d[(y * cvT.width + x) * 4 + 3] > 40) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) } const k = W / cvT.width; const b = x1 < 0 ? { x0: 0, y0: 0, x1: 0, y1: 0 } : { x0: x0 * k, y0: y0 * k, x1: x1 * k, y1: y1 * k }; scatole.set(cvT, b); return b }
   const ordine = (nodi: Nodo[], o: Ordine) => nodi.slice().sort((a, b) => o === 'grandezza' ? b.area - a.area : o === 'sinistra' ? a.x - b.x : o === 'alto' ? a.y - b.y : o === 'centro' ? Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2) : ((a.id * 7919) % 97) - ((b.id * 7919) % 97))
-  const IQ = inquadrature(c, br, o.riprese, scena)
   // le righe di un testo (bande di pixel pieni), per farle entrare una alla volta a tempo
   const bande = new Map<HTMLCanvasElement, [number, number][]>()
   const righe = (src: HTMLCanvasElement) => {
@@ -582,16 +597,13 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     const tReale = f / FPS
     // balbetta: l'ultimo battito della frase ripete il suo primo sedicesimo (come un giradischi che salta)
     const tb = fineFrase(tReale)
-    const t = P.fineFrase === 'balbetta' && tb >= 0 ? tb + ((tReale - tb) % (beat / 4)) : tReale
+    const t = tReale, tBalbetta = P.fineFrase === 'balbetta' && tb >= 0 ? tb + ((tReale - tb) % (beat / 4)) : -1
     const vuoto = P.fineFrase === 'vuoto' && tb >= 0
     const rp = o.riprese.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? o.riprese[o.riprese.length - 1]
     const acc = c.accoppia[rp.rel ?? 'sequenza'] ?? 'libero'
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'
     g.fillStyle = scena.bg[rp.tav]; g.fillRect(0, 0, W, H)
     // la camera
-    const iq = IQ.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? IQ[IQ.length - 1]
-    const cam = camera(iq, t, br, c.regia ?? REGIA0)
-    g.translate(W / 2, H / 2); g.scale(cam.z, cam.z); g.translate(-cam.cx, -cam.cy)
     const nodi = scena.nodi.filter(n => n.tav === rp.tav && n.ruolo !== 'fondo' || (n.tav === rp.tav && n.sprite && n.ruolo === 'fondo'))
     // i ranghi per ruolo, secondo l'ordine scelto
     const rango = new Map<number, number>(), quanti = new Map<Ruolo, number>()
@@ -608,35 +620,46 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     const cp = P.rullante !== 'niente' ? colpo(t) : null
     const colpito = cp && bersagli.length ? bersagli[cp.i % bersagli.length].id : -1
     for (const n of nodi) {
-      if (n.ruolo === 'testo') { if (!testoReel) testi.push({ n, s: stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc) }); continue }
-      const s = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc)
+      if (n.ruolo === 'testo' && testoReel) continue
+      const s = stato(n, c, rp, tBalbetta >= 0 && bersagli[0]?.id === n.id ? tBalbetta : t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc)
       // la partitura sulle figure
-      if (vuoto && n.ruolo !== 'fondo') continue
+      if (vuoto && (n.ruolo === 'figura' || n.ruolo === 'linea') && bersagli[0]?.id !== n.id) continue
       if (n.id === colpito && cp) {
         const e = cp.e * P.forza, verso = cp.i % 2 ? 1 : -1
         if (P.rullante === 'pop') s.sc *= 1 + 0.22 * e
         else if (P.rullante === 'scatto') { s.rot += verso * 0.25 * e; s.dx += verso * 30 * e }
         else if (P.rullante === 'spinta') { s.dx += verso * 90 * e * (1 - e); s.dy -= 40 * e }
       }
-      if (P.cambio === 'esplodi' && t >= br.cambio && t < br.cambio + beat * 4 && n.ruolo !== 'fondo') { const ts = br.cambio + ((rango.get(n.id) ?? 0) % 8) * beat / 4; const m = t < ts ? 0 : molla(t - ts, 16, 0.32); s.sc *= m; s.rot += (1 - m) * 0.6 }
+      // il cambio: ogni oggetto (non le parole, non i fondi) si trasforma a suo tempo, uno dopo l'altro sui sedicesimi
+      let filtro = '', gira = 1
+      if (n.ruolo !== 'fondo' && n.ruolo !== 'testo' && t >= br.cambio && t < br.cambio + beat * 4) {
+        const ts = br.cambio + ((rango.get(n.id) ?? 0) % 8) * beat / 4, u = t - ts
+        if (P.cambio === 'esplodi') { const m = u < 0 ? 0 : molla(u, 16, 0.32); s.sc *= m; s.rot += (1 - m) * 0.6 }
+        else if (u >= 0 && u < beat * 2) {
+          const e = 1 - u / (beat * 2)
+          if (P.cambio === 'inverti' && u < beat) filtro = 'invert(1)'
+          else if (P.cambio === 'tinta') filtro = `hue-rotate(${Math.round(180 * e)}deg) saturate(${(1 + e).toFixed(2)})`
+          else if (P.cambio === 'specchia') gira = Math.cos(Math.PI * Math.min(1, u / (beat * 0.75)))
+        }
+      }
       if (s.alpha <= 0.002 || s.sc <= 0.002) continue
       // l'eco: la figura colpita lascia dietro di sé tre copie che svaniscono
       if (P.rullante === 'eco' && n.id === colpito && cp && n.sprite && cp.e > 0.05) {
         for (let k = 3; k >= 1; k--) { g.save(); g.globalAlpha = clamp(s.alpha) * 0.28 * cp.e / k * 2; g.globalCompositeOperation = n.blend; g.translate(n.x + s.dx - (cp.i % 2 ? 1 : -1) * k * 26 * P.forza * (1 - cp.e * 0.5), n.y + s.dy + k * 6); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); g.drawImage(n.sprite, -n.w / 2, -n.h / 2, n.w, n.h); g.restore() }
       }
       // indietro se passa sotto un testo
-      if (n.ruolo !== 'fondo' && sotto.length) { const x0 = n.x + s.dx - n.w * s.sc / 2, y0 = n.y + s.dy - n.h * s.sc / 2, x1 = x0 + n.w * s.sc, y1 = y0 + n.h * s.sc; const ov = sotto.reduce((a, b) => a + Math.max(0, Math.min(x1, b.x1) - Math.max(x0, b.x0)) * Math.max(0, Math.min(y1, b.y1) - Math.max(y0, b.y0)), 0) / Math.max(1, (x1 - x0) * (y1 - y0)); if (ov > 0.05) s.alpha *= 1 - 0.65 * Math.min(1, ov * 2) }
+      if (n.ruolo !== 'fondo' && n.ruolo !== 'testo' && sotto.length) { const x0 = n.x + s.dx - n.w * s.sc / 2, y0 = n.y + s.dy - n.h * s.sc / 2, x1 = x0 + n.w * s.sc, y1 = y0 + n.h * s.sc; const ov = sotto.reduce((a, b) => a + Math.max(0, Math.min(x1, b.x1) - Math.max(x0, b.x0)) * Math.max(0, Math.min(y1, b.y1) - Math.max(y0, b.y0)), 0) / Math.max(1, (x1 - x0) * (y1 - y0)); if (ov > 0.05) s.alpha *= 1 - 0.65 * Math.min(1, ov * 2) }
       g.save()
-      g.globalAlpha = clamp(s.alpha); g.globalCompositeOperation = n.blend
+      g.globalAlpha = clamp(s.alpha); g.globalCompositeOperation = n.blend; if (filtro) g.filter = filtro
       if (n.linea) {
         const P = n.linea.punti, m = Math.max(1, Math.floor((P.length - 1) * s.traccia))
         g.strokeStyle = n.linea.colore; g.lineWidth = n.linea.spess; g.lineCap = 'round'
         g.translate(s.dx, s.dy); g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 1; i <= m; i++) g.lineTo(P[i][0], P[i][1]); g.stroke()
       } else if (n.vivo) {
         const vc = await vivo(n, s.crescita ?? 1, s.fase ?? 0)
-        if (vc) { g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); g.drawImage(vc, -n.w / 2, -n.h / 2, n.w, n.h) }
+        if (vc) { g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc * gira, s.sc); g.drawImage(vc, -n.w / 2, -n.h / 2, n.w, n.h) }
       } else if (n.sprite) {
-        g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
+        g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc * gira, s.sc)
         if (s.sfalda > 0 && n.particelle?.length) {
           // si scioglie nelle sue particelle, che cadono e si spargono
           g.globalAlpha = clamp(s.alpha * (1 - s.sfalda * 0.2))
@@ -649,27 +672,7 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       }
       g.restore()
     }
-    // il cambio: la trasformazione grande (sul quadro intero, sotto ai testi)
     g.setTransform(1, 0, 0, 1, 0, 0)
-    if (t >= br.cambio && t < br.cambio + beat * 2) {
-      const u = (t - br.cambio) / (beat * 2)
-      if (P.cambio === 'inverti') { g.save(); g.globalCompositeOperation = 'difference'; g.globalAlpha = u < 0.5 ? 1 : clamp((1 - u) * 2); g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); g.restore() }
-      else if (P.cambio === 'specchia' && u < 0.5) { gtmp.clearRect(0, 0, W, H); gtmp.drawImage(cv, 0, 0); g.save(); g.setTransform(-1, 0, 0, 1, W, 0); g.drawImage(tmp, 0, 0); g.restore() }
-      else if (P.cambio === 'tinta') {
-        if (!tintaCambio) { gtmp.drawImage(cv, 0, 0, 16, 16); const d = gtmp.getImageData(0, 0, 16, 16).data; let best = -1; for (let i = 0; i < d.length; i += 4) { const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]), sat = mx ? (mx - mn) / mx : 0; if (sat * mx > best) { best = sat * mx; tintaCambio = `rgb(${d[i]},${d[i + 1]},${d[i + 2]})` } } }
-        g.save(); g.globalCompositeOperation = 'color'; g.globalAlpha = clamp(1 - u); g.fillStyle = tintaCambio; g.fillRect(0, 0, W, H); g.restore()
-      }
-    }
-    // i testi, sopra a tutto: un solo colore per testo, deciso su quello che c'è sotto quando entra (e tenuto fino al taglio)
-    g.setTransform(1, 0, 0, 1, 0, 0)
-    for (const { n, s } of testi) {
-      if (s.alpha <= 0.002 || !n.sprite) continue
-      const k = `${rp.t0}|${n.id}`
-      if (!inchiostri.has(k)) inchiostri.set(k, inchiostro({ x0: n.x + s.dx - n.w / 2, y0: n.y + s.dy - n.h / 2, x1: n.x + s.dx + n.w / 2, y1: n.y + s.dy + n.h / 2 }))
-      g.save(); g.globalAlpha = clamp(s.alpha); g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
-      aRighe(tinta(n.sprite, inchiostri.get(k)!), k, t, rp.t1 - rp.t0, -n.w / 2, -n.h / 2, n.w, n.h); g.restore()
-    }
-    if (testoReel) { const k = `r${testoReel.t0}`; if (!inchiostri.has(k)) inchiostri.set(k, inchiostro(scatola(testoReel.cv))); aRighe(tinta(testoReel.cv, inchiostri.get(k)!), k, t, testoReel.t1 - testoReel.t0, 0, 0, W, H) }
     // la copertina: il fotogramma più pieno e più vario (si controlla ogni mezzo secondo)
     if (f % 15 === 7) { const q = document.createElement('canvas'); q.width = 36; q.height = 64; const qg = q.getContext('2d')!; qg.drawImage(cv, 0, 0, 36, 64); const d = qg.getImageData(0, 0, 36, 64).data; let m = 0, m2 = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m += l; m2 += l * l } const n0 = d.length / 4, v = Math.sqrt(Math.max(0, m2 / n0 - (m / n0) ** 2)); if (v > copertina.v) copertina = { v, ms: Math.round(t * 1000) } }
     const out = o.finitura ? o.finitura(cv, t) ?? cv : cv

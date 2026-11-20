@@ -686,15 +686,8 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }
   const bar = brano.beat * 4
   const conImg = async (tav: number, s: string, t0: number, t1: number) => { const f = flatten(fogli[tav], 0.5); const p = palette(fogli[tav]); const { cv } = await testoGrafico(f, s, { face: t.face, lettura: 'corsivo', colori: p.slice(0, 5), bg: fogli[tav].bg }, r, ['blocco', 'colonna', 'divaricato', 'verticale']); testi.push({ t0, t1, cv }) }
-  if (t.domanda) { const need = legge(t.domanda.split(/\s+/).length) + 0.6; const fine = ev.riprese.find(x => x.t1 >= need)?.t1 ?? ev.riprese[ev.riprese.length - 1].t1; await conImg(ev.riprese[0].tav, t.domanda, 0, fine) }
-  void bar
-  if (t.conclusione) { const need = legge(t.conclusione.split(/\s+/).length); const rp = [...ev.riprese].slice(1).reverse().find(x => x.t1 - x.t0 >= need) ?? ev.riprese[Math.max(0, ev.riprese.length - 2)]; await conImg(rp.tav, t.conclusione, rp.t0, rp.t1) }
-  // i titoli delle tavole: nel reel si reimpaginano grandi, per il formato verticale (quelli del foglio quadrato sul telefono restano piccoli)
-  for (const rp of ev.riprese) {
-    if (testi.some(x => x.t0 < rp.t1 && x.t1 > rp.t0)) continue
-    const tit = fogli[rp.tav].layers.filter(l => l.meta?.text && l.meta.text.split(/\s+/).length <= 10 && !/^\s*fonte\s*:/i.test(l.meta.text)).sort((a, b) => b.meta!.size - a.meta!.size)[0]
-    if (tit) await conImg(rp.tav, tit.meta!.text, rp.t0, rp.t1)
-  }
+  // niente testi sovrapposti: le parole del reel sono quelle delle tavole, al loro posto, nel loro carattere (la domanda va nella didascalia)
+  void conImg
   let copertinaMs = 0
   const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, copertina: ms => { copertinaMs = ms } })
   if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
