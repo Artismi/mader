@@ -21,7 +21,7 @@ function copri(img: CanvasImageSource & { width: number; height: number }) {
 export async function testoGrafico(img: CanvasImageSource & { width: number; height: number }, testo: string, st: { face: FaceId; lettura: FaceId; colori: string[]; bg: string; maiuscolo?: boolean }, r: Rnd, vietate: Impagina[] = []): Promise<{ cv: HTMLCanvasElement; modo: Impagina }> {
   const base = copri(img)
   const sheet: Sheet = { W, H, bg: st.bg, layers: [{ id: 'tavola', kind: 'tavola', canvas: base, x: 0.5, y: 0.5, scale: H / W, rot: 0, alpha: 1, blend: 'source-over' }] }
-  const { sheet: s, modo } = await impaginaTesti(sheet, r, { titolo: testo }, { ...st, espressivo: true }, vietate)
+  const { sheet: s, modo } = await impaginaTesti(sheet, r, { titolo: testo }, { ...st, espressivo: true, nudo: true }, vietate)
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H
   const g = cv.getContext('2d')!
   const M = Math.min(W, H)

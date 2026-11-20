@@ -64,7 +64,9 @@ function righe(text: string, F: Face, sizePx: number, maxPx: number, color: stri
 }
 
 export interface Testi { titolo: string; corpo?: string; fonte?: string; numero?: string }
-export interface StileTipo { face: FaceId; lettura: FaceId; colori: string[]; bg: string; maiuscolo?: boolean; barra?: boolean; espressivo?: boolean; zona?: { x0: number; y0: number; x1: number } }
+export interface StileTipo { face: FaceId; lettura: FaceId; colori: string[]; bg: string; maiuscolo?: boolean; barra?: boolean; espressivo?: boolean; zona?: { x0: number; y0: number; x1: number }
+  /** solo le lettere, senza aloni, contorni né evidenziatori (chi lo usa decide il colore da sé) */
+  nudo?: boolean }
 
 /** impagina titolo, corpo e fonte con un'idea tipografica scelta; restituisce il foglio e l'impaginazione usata */
 export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, vietate: Impagina[] = []): Promise<{ sheet: Sheet; modo: Impagina }> {
@@ -100,6 +102,7 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
     const contr = ratio(col, sotto)
     const opposto = ratio('#111111', col) > ratio('#f4f2ec', col) ? '#111111' : '#f4f2ec'
     const soglia = grande ? 3 : 4.5
+    if (st.nudo) return { color: col }
     if (contr >= soglia && varianza < 45) return { color: col }
     // sotto c'è materia: alone (piccolo) o contorno/evidenziatore (grande)
     if (!grande) return { color: col, alone: opposto }

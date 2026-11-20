@@ -88,12 +88,14 @@ vec2 h22(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*vec3(.1031,.1030,.0973)); p3 += do
 float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h12(i),h12(i+vec2(1,0)),f.x),mix(h12(i+vec2(0,1)),h12(i+vec2(1,1)),f.x),f.y); }
 float fbm(vec2 p){ float s=0., a=.5; for(int i=0;i<5;i++){ s+=a*vn(p); p=p*2.03+17.1; a*=.5; } return s; }
 float K(){ return uQ*uLeva; }
+// il colore delle lettere, pixel per pixel: scuro dove sotto è chiaro, chiaro dove sotto è scuro (contrappunto, niente aloni)
+vec3 contrappunto(vec3 sotto){ float l = luma(sotto); vec3 ink = l > 0.45 ? uC0 : uC3; if (abs(luma(ink)-l) < 0.4) ink = l > 0.45 ? vec3(0.05) : vec3(0.97,0.96,0.93); return ink; }
 `
 const FS: Record<string, string> = {
   copia: HEAD + `void main(){ o = texture(uSrc, vUv); }`,
   // la tavola, con una deriva lenta
   sorgente: HEAD + `float riv(){ float a = uVerso < .25 ? vUv.x : uVerso < .5 ? 1.0-vUv.y : uVerso < .75 ? 1.0-vUv.x : vUv.y; float n = fbm(vUv*vec2(6.,10.))*0.25; return smoothstep(uRivela*1.3-0.15, uRivela*1.3-0.05, a + n); }
-    void main(){ vec2 uv = (vUv-.5)/(1.0+0.04*uT/8.0 + 0.03*K()) + .5; vec4 c = texture(uTav, uv); vec4 t = texture(uTesto, vUv); float m = t.a*(1.0-riv()); o = vec4(mix(c.rgb, t.rgb, m), 1.); }`,
+    void main(){ vec2 uv = (vUv-.5)/(1.0+0.04*uT/8.0 + 0.03*K()) + .5; vec4 c = texture(uTav, uv); vec4 t = texture(uTesto, vUv); float m = t.a*(1.0-riv()); o = vec4(mix(c.rgb, contrappunto(c.rgb), m), 1.); }`,
   feedback: HEAD + `void main(){
     vec2 c = vUv-.5; float z = 1.0 - (0.004 + 0.02*uA)*(1.0+2.0*K()); float an = (uB-.5)*0.03*(1.0+K());
     c = mat2(cos(an),-sin(an),sin(an),cos(an))*c*z; vec2 d = (vec2(fbm(vUv*3.+uT*.2), fbm(vUv*3.+5.+uT*.2))-.5)*0.006*uC;
@@ -153,7 +155,7 @@ const FS: Record<string, string> = {
   // il testo: piastra e lettere sopra, sempre leggibile
   testo: HEAD + `void main(){ vec4 s = texture(uSrc, vUv), t = texture(uTesto, vUv);
     float a = uVerso < .25 ? vUv.x : uVerso < .5 ? 1.0-vUv.y : uVerso < .75 ? 1.0-vUv.x : vUv.y; float vis = 1.0-smoothstep(uRivela*1.3-0.15, uRivela*1.3-0.05, a + fbm(vUv*vec2(6.,10.))*0.25);
-    o = vec4(mix(s.rgb, t.rgb, t.a*vis*uSopra), 1.); }`,
+    o = vec4(mix(s.rgb, contrappunto(s.rgb), t.a*vis*uSopra), 1.); }`,
 }
 
 interface T2 { t: WebGLTexture; f?: WebGLFramebuffer; w: number; h: number }
@@ -421,7 +423,7 @@ export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { wid
     if (chiave !== ultimoTesto) { const c = s.testo ? o.testi?.(s.tav, s.testo) : null; M.aggiorna(M.testo, c ? coperta(c, W, H) : vuoto); ultimoTesto = chiave }
     // rivela: un passo per battito, finito in quattro battiti
     const passi = Math.floor(tl / br.beat), fr0 = (tl - passi * br.beat) / br.beat
-    const rivela = s.testo ? Math.min(1, (passi + Math.min(1, fr0 / 0.35)) / 4) : 0
+    const rivela = s.testo ? 1 : 0; void passi; void fr0
     const lg = legg[s.prog === o.riprese[0].prog ? 'A' : 'B'] ?? 1
     M.fotogramma(s.prog, { rivela, verso: (s.tav * 0.37) % 1, sopra: Math.max(0, Math.min(1, 1.3 - lg)), tav: tav[s.tav], tav2: tav[(s.tav + 1) % tav.length], t, lev: { k: env(br.cassa, t, 0.08), s: env(br.rullante, t, 0.1), h: env(br.hat, t, 0.04), bar: (t % (br.beat * 4)) / (br.beat * 4), no: 0 }, col: cols[s.tav], barF: t / (br.beat * 4), testo: true })
     const fr = new VideoFrame(M.cv as HTMLCanvasElement, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) })
