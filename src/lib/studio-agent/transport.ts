@@ -40,3 +40,8 @@ export const igPubblica = async (_f: string[], _d: string): Promise<{ id?: strin
 const reels = new Map<string, Blob>()
 export const salvaReel = async (epId: string, v: Blob) => { reels.set(epId, v) }
 export const leggiReel = async (epId: string): Promise<Blob | null> => reels.get(epId) ?? null
+// il cassetto (in Creative OS solo in memoria, per ora)
+const cassetto = new Map<string, string>()
+export const riponiFoglio = async (id: string, json: string) => { cassetto.set(id, json) }
+export const prendiFoglio = async (id: string): Promise<string | null> => cassetto.get(id) ?? null
+export const nelCassetto = async (): Promise<string[]> => [...cassetto.keys()]

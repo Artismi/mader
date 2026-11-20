@@ -107,17 +107,18 @@ export const igMedia = (nome: string, b: Blob): Promise<{ nome?: string; error?:
 export const igPubblica = (file: string[], didascalia: string): Promise<{ id?: string; permalink?: string; error?: string }> => fetch('/api/studio-agent/ig-pubblica', { method: 'POST', body: JSON.stringify({ file, didascalia }) }).then(j)
 
 // ─── memoria portatile (per il giro senza schermo: la memoria vive in un file, non nel browser) ───
-type Archivio = { state: AgentState | null; works: Work[]; images: Record<string, string> }
+type Archivio = { state: AgentState | null; works: Work[]; images: Record<string, string>; fogli?: Record<string, string> }
 /** svuota l'archivio del browser e ci rimette dentro la memoria salvata */
 export async function importaMemoria(a: Archivio) {
   await tx('state', 'readwrite', s => s.clear()); await tx('works', 'readwrite', s => s.clear()); await tx('images', 'readwrite', s => s.clear())
   if (a.state) await putState(a.state)
   for (const w of a.works) await tx('works', 'readwrite', s => s.put({ ...w, image: '' }))
   for (const [id, url] of Object.entries(a.images)) { const b = await (await fetch(url)).blob(); await tx('images', 'readwrite', s => s.put(b, id)) }
+  for (const [id, json] of Object.entries(a.fogli ?? {})) await riponiFoglio(id, json)
   urls.clear()
 }
 /** la memoria da salvare: stato e tutte le opere, ma le immagini solo delle più recenti (in JPEG) */
-export async function esportaMemoria(maxImmagini = 160): Promise<Archivio> {
+export async function esportaMemoria(maxImmagini = 160, maxFogli = 40): Promise<Archivio> {
   const st = await getState()
   const works = await tx<Work[]>('works', 'readonly', s => s.getAll())
   works.sort((a, b) => b.day - a.day || b.createdAt.localeCompare(a.createdAt))
@@ -130,8 +131,17 @@ export async function esportaMemoria(maxImmagini = 160): Promise<Archivio> {
     const j = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.82 })
     images[w.id] = await new Promise<string>(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.readAsDataURL(j) })
   }
-  return { state: st, works: works.map(w => ({ ...w, image: '' })), images }
+  // il cassetto: i livelli delle tavole più recenti che ci sono finite
+  const fogli: Record<string, string> = {}
+  const nel = new Set(await nelCassetto())
+  for (const w of works.filter(x => nel.has(x.id)).slice(0, maxFogli)) { const j = await prendiFoglio(w.id); if (j) fogli[w.id] = j }
+  return { state: st, works: works.map(w => ({ ...w, image: '' })), images, fogli }
 }
+
+// ─── il cassetto: le tavole con i loro livelli, per i discorsi tra più giornate ───
+export async function riponiFoglio(id: string, json: string) { await tx('images', 'readwrite', s => s.put(new Blob([json], { type: 'application/json' }), `foglio:${id}`)) }
+export async function prendiFoglio(id: string): Promise<string | null> { const b = await tx<Blob | undefined>('images', 'readonly', s => s.get(`foglio:${id}`)); return b ? await b.text() : null }
+export async function nelCassetto(): Promise<string[]> { const ks = await tx<IDBValidKey[]>('images', 'readonly', s => s.getAllKeys()); return ks.map(String).filter(k => k.startsWith('foglio:')).map(k => k.slice(7)) }
 
 // ─── il reel di una sequenza (video senza audio; l'audio lo aggiunge chi monta) ───
 export async function salvaReel(epId: string, v: Blob) { await tx('images', 'readwrite', s => s.put(v, `reel:${epId}`)) }

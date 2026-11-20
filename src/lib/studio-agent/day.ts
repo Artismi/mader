@@ -13,6 +13,8 @@
 import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ricerca, Visit, Work } from './core/types'
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
+import { serializza, ricostruisci } from './hands/cassetto'
+import { cerca, merita, raccontato } from './mind/curatore'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, type Sheet } from './hands/sheet'
 import type { ToolCtx } from './hands/tools'
@@ -67,6 +69,8 @@ export interface DayHooks {
   episodio?: number
   /** montare anche il reel animato della sequenza */
   reel?: boolean
+  /** per le prove: il curatore racconta il discorso migliore che trova, anche se non è più forte del solito */
+  reelForza?: boolean
 }
 
 const toReading = (x: T.Raw): Reading => ({ ...x, id: uid(), fetchedAt: new Date().toISOString() })
@@ -409,6 +413,8 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     }
     st.recentVisual = [...st.recentVisual, { id, features: f, words: work.visual.words }].slice(-40)
     const saved = await T.saveWork(work, final.toDataURL('image/png'))
+    // nel cassetto, con i suoi livelli: potrà tornare in un discorso tra più giornate
+    try { await T.riponiFoglio(saved.id, JSON.stringify(serializza(sheet))) } catch (e) { log(`Cassetto: ${e instanceof Error ? e.message : e}`) }
     works.push(saved); riuscite.push(i)
     if (sc.b && ultimaImpaginazione()) esitoVisivo(st, sc.rel ?? 'accanto', ultimaImpaginazione()!, saved.interest)
     if (hooks.reel) { fogli.push(sheet); infoReel.push({ rel: sc.rel, interesse: saved.interest }) }
@@ -422,12 +428,25 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const partitura = { ...partitura0, sezioni: riuscite.map((i, k) => ({ ...partitura0.sezioni[i], ultimo: k === riuscite.length - 1 })) }
   let video: Blob | null = null
   let audioReel: Blob | null = null
-  if (hooks.reel && fogli.length >= 2) {
+  // il reel non nasce da ogni sequenza: lo decide il curatore, quando le tavole di più giornate si allineano in un discorso
+  if (hooks.reel) {
     try {
-      const rr = await faiReel(st, r, fogli, infoReel, { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log)
-      if (rr) { video = rr.video; audioReel = rr.audio }
+      const tutte = await T.listWorks()
+      const d = cerca(st, tutte, new Set(await T.nelCassetto()), works.map(w => w.id))
+      const m = merita(st, d)
+      log(`Curatore: ${m.perche}.`)
+      if (d && (m.si || hooks.reelForza)) {
+        const fogliD: Sheet[] = [], infoD: { rel?: string; interesse: number }[] = []
+        for (const id of d.ids) { const j = await T.prendiFoglio(id); if (!j) continue; fogliD.push(await ricostruisci(JSON.parse(j))); infoD.push({ interesse: tutte.find(x => x.id === id)?.interest ?? 0.5 }) }
+        if (fogliD.length >= 3) {
+          log(`Curatore: racconto «${d.tema}» con ${fogliD.length} tavole di ${d.giorni.length} giornate.`)
+          const rr = await faiReel(st, r, fogliD, infoD, { domanda: d.domanda, conclusione: d.conclusione, face: F.face as FaceId, parola: d.tema }, log)
+          if (rr) { video = rr.video; audioReel = rr.audio; raccontato(st, d) }
+        }
+      }
     } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
   }
+  void fogli; void infoReel
   const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
   log(`Musica: ${descrMusica}. Le tavole durano da ${Math.min(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} a ${Math.max(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} secondi, quanto serve per leggerle.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
   const prec = getEpisodi(st).slice(-1)[0] as ({ conclusione?: string; domanda?: string } | undefined)

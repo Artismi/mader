@@ -26,12 +26,12 @@ type ConAttesa = AgentState & { attesa?: Attesa }
 const getAttesa = (st: AgentState): Attesa => ((st as ConAttesa).attesa ??= { giri: 0, accumulo: 0, soglia: 1.4 })
 const nuovaSoglia = (st: AgentState) => 0.9 + Math.random() * 1.2 + (st.temperature < 0.4 ? 0.4 : 0)
 
-export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; log: (m: string) => void; oreTraPost?: number; oreMax?: number }) {
+export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; forza?: boolean; log: (m: string) => void; oreTraPost?: number; oreMax?: number }) {
   let st: AgentState = await loadOrCreate()
   const fatte: string[] = []
   const una = async (seq: boolean) => {
     try {
-      const r = await runDay(st, { fast: true, episodio: seq ? o.epN : undefined, reel: seq && !!o.reel, log: o.log, preview: () => {}, onWork: (w: Work) => { fatte.push(w.id) }, shouldStop: () => false })
+      const r = await runDay(st, { fast: true, episodio: seq ? o.epN : undefined, reel: seq && !!o.reel, reelForza: !!o.forza, log: o.log, preview: () => {}, onWork: (w: Work) => { fatte.push(w.id) }, shouldStop: () => false })
       st = r.state
     } catch (e) {
       o.log(`Errore nella giornata ${st.day + 1}: ${e instanceof Error ? e.message : String(e)}. La salto.`)

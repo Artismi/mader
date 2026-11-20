@@ -55,12 +55,15 @@ try {
     const a = JSON.parse(readFileSync(arch, 'utf8'))
     a.images = {}
     for (const f of readdirSync(join(MEM, 'img'))) if (f.endsWith('.jpg')) a.images[f.slice(0, -4)] = 'data:image/jpeg;base64,' + readFileSync(join(MEM, 'img', f)).toString('base64')
+    // il cassetto: le tavole con i loro livelli
+    a.fogli = {}
+    if (existsSync(join(MEM, 'cassetto'))) for (const f of readdirSync(join(MEM, 'cassetto'))) if (f.endsWith('.json')) a.fogli[f.slice(0, -5)] = readFileSync(join(MEM, 'cassetto', f), 'utf8')
     await pg.evaluate(a => window.__artista.memoria.importa(a), a)
     log(`memoria ripresa: giorno ${a.state?.day ?? 0}, ${a.works.length} opere, ${Object.keys(a.images).length} immagini`)
   } else log('nessuna memoria: nasce adesso')
 
   // il lavoro
-  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, oreTraPost: Number(process.env.ORE_MIN ?? 0.5), oreMax: Number(process.env.ORE_MAX ?? 4), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
+  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, forza: !!process.env.CURATORE_FORZA, oreTraPost: Number(process.env.ORE_MIN ?? 0.5), oreMax: Number(process.env.ORE_MAX ?? 4), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
   log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza nuova ${r.episodio}` : ''}${r.pronta ? `; sequenza pronta ${r.pronta}${r.puoPubblicare ? ', si pubblica' : ', aspetta (mezz’ora minima dal post prima)'}` : ''}`)
 
   // il post
@@ -111,6 +114,9 @@ try {
   const tenere = new Set(Object.keys(m.images))
   for (const [id, url] of Object.entries(m.images)) writeFileSync(join(MEM, 'img', `${id}.jpg`), Buffer.from(url.split(',')[1], 'base64'))
   for (const f of readdirSync(join(MEM, 'img'))) if (!tenere.has(f.replace(/\.jpg$/, ''))) rmSync(join(MEM, 'img', f))
+  mkdirSync(join(MEM, 'cassetto'), { recursive: true })
+  for (const [id, json] of Object.entries(m.fogli ?? {})) writeFileSync(join(MEM, 'cassetto', `${id}.json`), json)
+  for (const f of readdirSync(join(MEM, 'cassetto'))) if (!(m.fogli ?? {})[f.replace(/\.json$/, '')]) rmSync(join(MEM, 'cassetto', f))
   writeFileSync(arch, JSON.stringify({ state: m.state, works: m.works }))
   // i brani: solo delle ultime 12 sequenze
   if (existsSync(join(MEM, 'audio'))) {
