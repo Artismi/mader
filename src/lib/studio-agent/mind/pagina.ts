@@ -9,6 +9,7 @@ import type { Tone } from '@/components/studio/genera/recipes'
 import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 import { newCanvas, withLayer, fullLayer, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
+import { applica } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
 import { segnoDi } from './atlante'
 import type { Lavoro } from './cantiere'
@@ -43,7 +44,7 @@ export async function rendiPagina(st: AgentState, r: Rnd, l: Lavoro, s0: Sheet, 
     s = withLayer(s, { id: lid(), kind: 'motivo', canvas: cv, x, y, scale, rot: 0, alpha: 1, blend: 'source-over' })
   }
   // un po' di materia, ma la pagina resta leggibile
-  const usa = async (id: string, params: Record<string, unknown>) => { const tool = toolById(id); if (tool) s = await tool.apply(s, params, ctx) }
+  const usa = async (id: string, params: Record<string, unknown>) => { const tool = toolById(id); if (tool) s = await applica(tool, s, params, ctx) }
 
   if (formato === 'copertina') {
     if (ctx.shaders.some(x => x.code) && r() < 0.6) await usa('shader', { ...toolById('shader')!.propose(s, ctx), alpha: range(r, 0.5, 0.9) })

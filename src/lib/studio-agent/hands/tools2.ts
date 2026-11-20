@@ -12,6 +12,7 @@
  */
 import { pick, range, chance, type Rnd } from '../core/rng'
 import { FACES, loadLabFonts, perCarattere, type FaceId } from '@/components/studio/genera/fonts'
+import { tempoDi, finestra } from './tempo'
 import { fontCss, type Face } from '@/components/studio/genera/raster'
 import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, type Sheet, type Layer, type Blend } from './sheet'
 import type { Tool, ToolCtx } from './tools'
@@ -35,7 +36,8 @@ const retino: Tool = {
   id: 'retino', label: 'Retino', nature: 'materia', pushes: { punti: 0.4, contrasto: 0.2 },
   available: s => liberi(s).length > 0,
   propose: (_s, c) => ({ passo: Math.round(range(c.r, 6, 16)), angolo: pick(c.r, [0, 15, 45, 75]), colore: pick(c.r, colori(c)), sostituisci: chance(c.r, 0.5), alpha: range(c.r, 0.6, 1) }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const { img, resto } = piatto(s)
     const g0 = img.getContext('2d')!, d = g0.getImageData(0, 0, img.width, img.height).data
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
@@ -49,7 +51,8 @@ const retino: Tool = {
       if (fx < 0 || fy < 0 || fx >= s.W || fy >= s.H) continue
       const i = (Math.floor(fy) * img.width + Math.floor(fx)) * 4
       const lum = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255
-      const rad = (1 - lum) * st * 0.62
+      const f = finestra(T.crescita, Math.floor(fy / st), Math.ceil(s.H / st), 0.5)
+      const rad = (1 - lum) * st * 0.62 * f * (1 + 0.12 * T.a * Math.sin(T.fase * 6.283 + (fx + fy) * 0.01))
       if (rad > 0.4) { g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill() }
     }
     const lay = fullLayer(s, lid(), 'retino', cv, 'source-over', p.alpha as number)
@@ -79,9 +82,11 @@ const deforma: Tool = {
   id: 'deforma', label: 'Deformazione', nature: 'trasformazione', pushes: { diagonali: 0.1, complessita: 0.15 },
   available: s => liberi(s).length > 0,
   propose: (s, c) => ({ layer: pick(c.r, liberi(s)).id, modo: pick(c.r, ['onda', 'scorri', 'torci', 'scala']), forza: range(c.r, 0.02, 0.12), freq: range(c.r, 2, 12) }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const l = s.layers.find(x => x.id === p.layer)
     if (!l) return s
+    let nCella = 0
     const W = l.canvas.width, H = l.canvas.height, f = p.forza as number, fr = p.freq as number
     const cv = newCanvas(W, H), g = cv.getContext('2d')!
     if (p.modo === 'onda' || p.modo === 'scorri') {
@@ -107,12 +112,13 @@ const caleido: Tool = {
   id: 'caleido', label: 'Caleidoscopio', nature: 'ripetizione', pushes: { simmetria: 0.5, complessita: 0.2 },
   available: s => liberi(s).length > 0,
   propose: (_s, c) => ({ spicchi: pick(c.r, [4, 6, 8, 12]), cx: range(c.r, 0.35, 0.65), cy: range(c.r, 0.3, 0.6), sostituisci: chance(c.r, 0.4), alpha: range(c.r, 0.5, 1), blend: pick(c.r, ['source-over', 'screen', 'multiply', 'difference']) }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const { img, resto } = piatto(s)
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
     const n0 = p.spicchi as number, a = (Math.PI * 2) / n0, R = Math.hypot(s.W, s.H)
-    const cx = (p.cx as number) * s.W, cy = (p.cy as number) * s.H
-    for (let k = 0; k < n0; k++) {
+    const cx = ((p.cx as number) + Math.sin(T.fase * 6.283) * 0.04 * T.a) * s.W, cy = ((p.cy as number) + Math.cos(T.fase * 6.283) * 0.04 * T.a) * s.H
+    for (let k = 0; k < Math.ceil(n0 * T.crescita); k++) {
       g.save(); g.translate(s.W / 2, s.H / 2); g.rotate(k * a); if (k % 2) g.scale(1, -1)
       g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, R, 0, a + 0.01); g.closePath(); g.clip()
       g.drawImage(img, -cx, -cy); g.restore()
@@ -126,11 +132,13 @@ const flusso: Tool = {
   id: 'flusso', label: 'Campo di flusso', nature: 'segno', pushes: { linee: 0.4, complessita: 0.25 },
   available: () => true,
   propose: (_s, c) => ({ n: Math.round(range(c.r, 300, 1400)), passi: Math.round(range(c.r, 20, 80)), scala: range(c.r, 0.002, 0.012), giro: range(c.r, 1, 6), colori: colori(c).slice(0, 3), spessore: range(c.r, 0.6, 3), alpha: range(c.r, 0.25, 0.8), seme: c.r() * 1000 }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
-    const sc = p.scala as number, gi = p.giro as number, se = p.seme as number
+    // vita: il campo deriva lentamente (la fase sposta il seme); crescita: le linee si allungano tutte insieme lungo il campo
+    const sc = p.scala as number, gi = p.giro as number, se = (p.seme as number) + Math.sin(T.fase * 6.283) * 0.6
     const ang = (x: number, y: number) => (Math.sin(x * sc + se) + Math.cos(y * sc * 1.3 - se) + Math.sin((x + y) * sc * 0.7)) * gi
-    let a = Math.floor(se * 1e6) >>> 0
+    let a = Math.floor((p.seme as number) * 1e6) >>> 0
     const rnd = () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296)
     g.lineWidth = p.spessore as number; g.lineCap = 'round'; g.globalAlpha = p.alpha as number
     const cs = p.colori as string[]
@@ -138,7 +146,9 @@ const flusso: Tool = {
       let x = rnd() * s.W, y = rnd() * s.H
       g.strokeStyle = cs[i % cs.length]
       g.beginPath(); g.moveTo(x, y)
-      for (let k = 0; k < (p.passi as number); k++) { const t = ang(x, y); x += Math.cos(t) * 4; y += Math.sin(t) * 4; g.lineTo(x, y) }
+      const np = Math.round((p.passi as number) * finestra(T.crescita, i, p.n as number, 0.7))
+      if (np < 1) continue
+      for (let k = 0; k < np; k++) { const t = ang(x, y); x += Math.cos(t) * 4; y += Math.sin(t) * 4; g.lineTo(x, y) }
       g.stroke()
     }
     return withLayer(s, fullLayer(s, lid(), 'flusso', cv))
@@ -186,8 +196,9 @@ const grafico: Tool = {
       ds.forEach((d, i) => { const a = (i / ds.length) * Math.PI * 2, rr = (d.v / max) * R; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); g.stroke(); g.fillText(d.label.toUpperCase(), cx + Math.cos(a) * (R + 8), cy + Math.sin(a) * (R + 8)) })
     } else {
       const bw = W / ds.length
+      const T = tempoDi(c)
       ds.forEach((d, i) => {
-        const h = (d.v / max) * H
+        const h = (d.v / max) * H * finestra(T.crescita, i, ds.length, 0.5) * (1 + 0.04 * T.a * Math.sin(T.fase * 6.283 + i))
         if (p.tipo === 'barre') g.fillRect(x0 + i * bw + bw * 0.15, y0 + H - h, bw * 0.7, h)
         else { g.beginPath(); g.arc(x0 + i * bw + bw / 2, y0 + H - h, 5, 0, Math.PI * 2); g.fill() }
         g.save(); g.translate(x0 + i * bw + bw / 2, y0 + H + 6); g.rotate(Math.PI / 4); g.fillText(d.label.toUpperCase(), 0, 0); g.restore()
@@ -250,14 +261,20 @@ const ornato: Tool = {
     op: pick(c.r, ['nessuna', 'ribalta', 'gira']), passo: range(c.r, 0.12, 0.3), scala: range(c.r, 0.55, 0.95),
     traliccio: chance(c.r, 0.35), colore: pick(c.r, colori(c)), alpha: range(c.r, 0.6, 1), sostituisci: chance(c.r, 0.3),
   }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const l = s.layers.find(x => x.id === p.layer)
     if (!l) return s
+    let nCella = 0
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
     const P = (p.passo as number) * s.W, k = (p.scala as number) * P, sis = p.sistema as string, op = p.op as string
     const asp = l.canvas.height / l.canvas.width
+    const totCelle = (Math.ceil(s.W / ((p.passo as number) * s.W)) + 3) * (Math.ceil(s.H / ((p.passo as number) * s.W)) + 3)
     const cella = (x: number, y: number, i: number, j: number) => {
-      g.save(); g.translate(x, y)
+      // crescita: le celle compaiono una dopo l'altra, come si stampa un modulo; vita: ogni cella oscilla appena, sfasata
+      const f = finestra(T.crescita, nCella++, totCelle, 0.3)
+      if (f <= 0) return
+      g.save(); g.translate(x, y); g.rotate(Math.sin(T.fase * 6.283 + i * 0.7 + j * 1.1) * 0.06 * T.a); g.scale(f, f)
       if (op === 'ribalta' && (i + j) % 2) g.scale(-1, 1)
       if (op === 'gira') g.rotate(((i + j * 2) % 4) * Math.PI / 2)
       if (sis === 'diamante' || sis === 'ogiva') g.rotate(Math.PI / 4 * (sis === 'diamante' ? 0 : 0))

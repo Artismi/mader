@@ -29,6 +29,7 @@ import { anchorOf } from '../reader/lexicon'
 import { conceptsReady, relationsOf, REL_LABEL } from '../reader/concepts'
 import { newCanvas, withLayer, fullLayer, flatten, sfuma, type Layer, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
+import { applica } from '../hands/tools'
 import { runShader } from '../hands/shader'
 import { ratio } from '../eyes/judgement'
 import { isNome, realizza } from '../voice/lingua'
@@ -434,7 +435,7 @@ export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: 
   const usa = async (id: string, params: Record<string, unknown>) => {
     const tool = toolById(id)
     if (!tool) return
-    try { s = await tool.apply(s, params, ctx); passi.push({ tool: `scena:${id}`, params: { ...params, values: undefined, strokes: undefined }, kept: true, delta: 0 }) } catch { /* pazienza */ }
+    try { s = await applica(tool, s, params, ctx); passi.push({ tool: `scena:${id}`, params: { ...params, values: undefined, strokes: undefined }, kept: true, delta: 0 }) } catch { /* pazienza */ }
   }
   // 1. il campo: strati di materia, liberi (qui sperimenta)
   const nStrati = Math.floor(range(r, 1, 4))

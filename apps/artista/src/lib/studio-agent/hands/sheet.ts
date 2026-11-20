@@ -19,6 +19,8 @@ export interface Layer {
   flipX?: boolean
   /** per i testi: cosa c'è scritto, colore e corpo in px del foglio (serve a capire se si legge) */
   meta?: { text: string; color: string; size: number }
+  /** come è nato: lo strumento, i suoi parametri e (se ne aveva bisogno) l'immagine su cui ha lavorato. Serve per ridisegnarlo in un altro momento della sua vita (crescita, fase) */
+  genera?: { tool: string; p: Record<string, unknown>; fonte?: HTMLCanvasElement }
 }
 
 export interface Sheet {
@@ -38,7 +40,8 @@ export const emptySheet = (W: number, H: number, bg: string): Sheet => ({ W, H, 
 
 export function withLayer(s: Sheet, l: Layer): Sheet { return { ...s, layers: [...s.layers, l] } }
 export function replaceLayer(s: Sheet, id: string, patch: Partial<Layer>): Sheet {
-  return { ...s, layers: s.layers.map(l => (l.id === id ? { ...l, ...patch } : l)) }
+  // se cambia l'immagine, la ricetta non la descrive più
+  return { ...s, layers: s.layers.map(l => (l.id === id ? { ...l, ...patch, ...(patch.canvas ? { genera: undefined } : {}) } : l)) }
 }
 
 export function drawLayer(ctx: CanvasRenderingContext2D, s: Sheet, l: Layer) {

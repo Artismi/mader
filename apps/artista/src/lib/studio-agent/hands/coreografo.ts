@@ -21,6 +21,7 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import type { Layer, Sheet } from './sheet'
 import type { Brano } from '../suono/beat'
+import { toolById, ANIMABILI, type ToolCtx } from './tools'
 
 const W = 720, H = 1280, FPS = 30
 
@@ -50,6 +51,8 @@ interface Nodo {
   linea?: { punti: [number, number][]; spess: number; colore: string }
   padre: number | null; indice: number; area: number
   particelle?: { x: number; y: number; c: string }[]
+  /** un livello vivo: il suo generatore lo ridisegna a ogni momento (crescita, fase) */
+  vivo?: { tool: string; p: Record<string, unknown>; fonte?: HTMLCanvasElement; W: number; H: number; layer: Layer }
 }
 interface Scena { nodi: Nodo[]; bg: string[]; tavole: number }
 
@@ -110,6 +113,24 @@ export function smonta(fogli: Sheet[], r: () => number): Scena {
       const pieno = ruolo === 'fondo' && l.scale >= 0.99
       const kc = pieno ? Math.max(W / l.canvas.width, H / l.canvas.height) : kk
       const intero = (): Nodo => ({ id: id++, ruolo, tav: ti, gruppo: (li % 2) as 0 | 1, sprite: l.canvas, x: pieno ? W / 2 : cx, y: pieno ? H / 2 : cy, w: l.canvas.width * kc, h: l.canvas.height * kc, rot: l.rot, alpha: l.alpha, blend: l.blend, padre: radice.id, indice: li, area: l.canvas.width * kk * l.canvas.height * kk })
+      // le parole: solo le lettere (il colore del testo), senza aloni né piastre che la tavola aveva messo per leggerle
+      if (ruolo === 'testo' && l.meta?.color) {
+        const c = document.createElement('canvas'); c.width = l.canvas.width; c.height = l.canvas.height; const q = c.getContext('2d')!; q.drawImage(l.canvas, 0, 0)
+        const d = q.getImageData(0, 0, c.width, c.height), m = l.meta.color.replace('#', ''), R = parseInt(m.slice(0, 2), 16), G = parseInt(m.slice(2, 4), 16), B = parseInt(m.slice(4, 6), 16)
+        for (let i = 0; i < d.data.length; i += 4) { const dd = Math.abs(d.data[i] - R) + Math.abs(d.data[i + 1] - G) + Math.abs(d.data[i + 2] - B); if (dd > 90) d.data[i + 3] = 0 }
+        q.putImageData(d, 0, 0)
+        nodi.push({ ...intero(), sprite: c }); return
+      }
+      // i fondi e le trame che non coprono tutto: bordi sfumati, così non si vede il rettangolo
+      if ((ruolo === 'fondo' || ruolo === 'trama') && !pieno && !(l.genera && ANIMABILI.has(l.genera.tool))) {
+        const c = document.createElement('canvas'); c.width = l.canvas.width; c.height = l.canvas.height; const q = c.getContext('2d')!; q.drawImage(l.canvas, 0, 0)
+        q.globalCompositeOperation = 'destination-in'
+        const gx = q.createLinearGradient(0, 0, c.width, 0); gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(0.12, '#000'); gx.addColorStop(0.88, '#000'); gx.addColorStop(1, 'rgba(0,0,0,0)'); q.fillStyle = gx; q.fillRect(0, 0, c.width, c.height)
+        const gy = q.createLinearGradient(0, 0, 0, c.height); gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.12, '#000'); gy.addColorStop(0.88, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)'); q.fillStyle = gy; q.fillRect(0, 0, c.width, c.height)
+        nodi.push({ ...intero(), sprite: c }); return
+      }
+      // i livelli nati da un generatore animabile restano interi: cresceranno e vivranno col loro generatore
+      if (l.genera && ANIMABILI.has(l.genera.tool)) { nodi.push({ ...intero(), vivo: { ...l.genera, W: s.W, H: s.H, layer: l } }); return }
       // i livelli di figura grandi si dividono negli oggetti che contengono
       if ((ruolo === 'figura' || ruolo === 'trama') && !l.flipX && l.canvas.width * l.canvas.height > 160 * 160) {
         const C = componenti(l.canvas, Math.max(3, Math.round(Math.max(l.canvas.width, l.canvas.height) / 220)), 40)
@@ -212,7 +233,7 @@ function mutaC(c: Coreografia, r: () => number): Coreografia {
 /** risposta di una molla (oscillatore smorzato) a un gradino: 0 → 1 */
 const molla = (t: number, w = 14, z = 0.45) => { if (t <= 0) return 0; const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z / Math.sqrt(1 - z * z)) * Math.sin(wd * t)) }
 const inv = (ts: number[], t: number, dec: number) => { let v = 0; for (const x of ts) { const d = t - x; if (d >= 0 && d < dec * 5) v = Math.max(v, Math.exp(-d / dec)) } return v }
-interface Stato { dx: number; dy: number; rot: number; sc: number; alpha: number; traccia: number; sfalda: number; scrivi: number }
+interface Stato { dx: number; dy: number; rot: number; sc: number; alpha: number; traccia: number; sfalda: number; scrivi: number; crescita?: number; fase?: number }
 
 /** la sceneggiatura: quali tavole, in che ordine, quando entrano ed escono */
 interface Ripresa { tav: number; t0: number; t1: number; rel?: string }
@@ -253,6 +274,17 @@ function stato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano, rango
   if (pi < 0) { s.alpha = 0; s.traccia = 0; s.scrivi = 0; return s }
   const e = molla(pi, 12, 0.42), lin = clamp(pi / (beat * 1.5))
   const amp = g.ampiezza
+  if (n.vivo) {
+    // il generatore cresce a scatti sui sedicesimi (2–6 battiti), poi vive: la fase avanza col tempo e salta sui colpi
+    const durC = (2 + 4 * amp) * beat, passi = Math.floor(pi / (beat / 4)), fr = (pi - passi * beat / 4) / (beat / 4)
+    s.crescita = clamp(((passi + Math.min(1, fr / 0.4)) * beat / 4) / durC)
+    const tt0 = t - g.lag * beat * 0.5
+    const sig0 = g.segnale === 'k' ? inv(br.cassa, tt0, 0.1) : g.segnale === 's' ? inv(br.rullante, tt0, 0.12) : g.segnale === 'h' ? inv(br.hat, tt0, 0.05) : 0
+    s.fase = tt0 / (bar * 2) * (0.5 + amp) + sig0 * 0.08 * amp
+    const fine0 = dur - tl
+    if (fine0 < beat && rp.t1 < br.durata - 1e-6 && g.uscita !== 'resta') s.crescita = Math.min(s.crescita, clamp(fine0 / beat))
+    return s
+  }
   switch (g.ingresso) {
     case 'componi': {
       // arrivano tutti da una direzione sola per gruppo: i lati (il gruppo 0 da sinistra, l'1 da destra), l'alto, il basso,
@@ -362,6 +394,52 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 6_000_000, framerate: FPS })
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H
   const g = cv.getContext('2d')!
+  // il ridisegno dei livelli vivi: lo strumento rifà il livello al suo momento (con una piccola memoria dei momenti già fatti)
+  const cache = new Map<number, Map<string, HTMLCanvasElement>>()
+  let rr = 1
+  const ctxStub = (): ToolCtx => ({ r: () => ((rr = (rr * 1664525 + 1013904223) >>> 0) / 4294967296), tone: { id: 'x', label: '', bg: '#ffffff', ink: '#111111', acc: '#e3361b', dark: false } as unknown as ToolCtx['tone'], intention: {} as ToolCtx['intention'], mood: 'calmo', say: () => '', shaders: [], quality: 1 })
+  const vivo = async (n: Nodo, cr: number, fa: number): Promise<HTMLCanvasElement | null> => {
+    const v = n.vivo!; const tool = toolById(v.tool); if (!tool) return null
+    const k = `${Math.round(cr * 32)}|${Math.round(((fa % 1) + 1) % 1 * 24)}`
+    const m = cache.get(n.id) ?? new Map<string, HTMLCanvasElement>(); cache.set(n.id, m)
+    if (m.has(k)) return m.get(k)!
+    const base: Layer[] = []
+    if (v.tool === 'ornato' && v.fonte) base.push({ id: String(v.p.layer), kind: 'figura', canvas: v.fonte, x: 0.5, y: 0.5, scale: 0.3, rot: 0, alpha: 1, blend: 'source-over' })
+    if ((v.tool === 'retino' || v.tool === 'caleido') && v.fonte) base.push({ id: 'fonte', kind: 'fondo', canvas: v.fonte, x: 0.5, y: 0.5, scale: Math.max(v.W, v.H) / Math.min(v.W, v.H), rot: 0, alpha: 1, blend: 'source-over' })
+    const s0: Sheet = { W: v.W, H: v.H, bg: '#ffffff', layers: base }
+    const c = { ...ctxStub(), tempo: { crescita: cr, fase: fa } }
+    const out = await tool.apply(s0, { ...v.p, sostituisci: false }, c).catch(() => null)
+    const nuovo = out?.layers.find(l => !base.some(b => b.id === l.id))
+    if (!nuovo) return null
+    if (m.size > 48) m.delete(m.keys().next().value as string)
+    m.set(k, nuovo.canvas)
+    return nuovo.canvas
+  }
+  // le parole in contrappunto: scure dove sotto è chiaro, chiare dove sotto è scuro, pixel per pixel (niente aloni)
+  const tT = document.createElement('canvas'); tT.width = W; tT.height = H; const gT = tT.getContext('2d')!
+  const tL = document.createElement('canvas'); tL.width = W; tL.height = H; const gL = tL.getContext('2d')!
+  const tD = document.createElement('canvas'); tD.width = W; tD.height = H; const gD = tD.getContext('2d')!
+  const contrappunto = (disegna: (q: CanvasRenderingContext2D) => void) => {
+    gT.setTransform(1, 0, 0, 1, 0, 0); gT.clearRect(0, 0, W, H); disegna(gT)
+    gL.setTransform(1, 0, 0, 1, 0, 0); gL.filter = 'grayscale(1) contrast(1000%)'; gL.drawImage(cv, 0, 0); gL.filter = 'none'
+    const Lm = luce()
+    // scuro sul chiaro
+    gD.setTransform(1, 0, 0, 1, 0, 0); gD.clearRect(0, 0, W, H); gD.globalCompositeOperation = 'source-over'; gD.drawImage(tT, 0, 0)
+    gD.globalCompositeOperation = 'source-in'; gD.fillStyle = '#111111'; gD.fillRect(0, 0, W, H)
+    gD.globalCompositeOperation = 'destination-in'; gD.drawImage(Lm, 0, 0)
+    // chiaro sullo scuro
+    gT.globalCompositeOperation = 'source-in'; gT.fillStyle = '#f4f2ec'; gT.fillRect(0, 0, W, H)
+    gT.globalCompositeOperation = 'destination-out'; gT.drawImage(Lm, 0, 0); gT.globalCompositeOperation = 'source-over'
+    gD.globalCompositeOperation = 'source-over'
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(tD, 0, 0); g.drawImage(tT, 0, 0); g.restore()
+  }
+  // la maschera della luce: bianco opaco dove sotto è chiaro, trasparente dove è scuro
+  const tM = document.createElement('canvas'); tM.width = W; tM.height = H; const gM = tM.getContext('2d')!
+  const luce = () => {
+    const d = gL.getImageData(0, 0, W, H); const o = gM.createImageData(W, H)
+    for (let i = 0; i < d.data.length; i += 4) { o.data[i] = o.data[i + 1] = o.data[i + 2] = 255; o.data[i + 3] = d.data[i] > 127 ? 255 : 0 }
+    gM.putImageData(o, 0, 0); return tM
+  }
   const ordine = (nodi: Nodo[], o: Ordine) => nodi.slice().sort((a, b) => o === 'grandezza' ? b.area - a.area : o === 'sinistra' ? a.x - b.x : o === 'alto' ? a.y - b.y : o === 'centro' ? Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2) : ((a.id * 7919) % 97) - ((b.id * 7919) % 97))
   for (let f = 0; f < Math.round(br.durata * FPS); f++) {
     const t = f / FPS
@@ -389,6 +467,13 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
         const P = n.linea.punti, m = Math.max(1, Math.floor((P.length - 1) * s.traccia))
         g.strokeStyle = n.linea.colore; g.lineWidth = n.linea.spess; g.lineCap = 'round'
         g.translate(s.dx, s.dy); g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 1; i <= m; i++) g.lineTo(P[i][0], P[i][1]); g.stroke()
+      } else if (n.vivo) {
+        const vc = await vivo(n, s.crescita ?? 1, s.fase ?? 0)
+        if (vc) { g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); g.drawImage(vc, -n.w / 2, -n.h / 2, n.w, n.h) }
+      } else if (n.ruolo === 'testo' && n.sprite) {
+        const sp = n.sprite
+        g.restore(); g.save()
+        contrappunto(q => { q.globalAlpha = clamp(s.alpha); q.translate(n.x + s.dx, n.y + s.dy); q.rotate(n.rot + s.rot); q.scale(s.sc, s.sc); if (s.scrivi < 1) { q.beginPath(); q.rect(-n.w / 2, -n.h / 2, n.w * s.scrivi, n.h); q.clip() } q.drawImage(sp, -n.w / 2, -n.h / 2, n.w, n.h) })
       } else if (n.sprite) {
         g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
         if (s.sfalda > 0 && n.particelle?.length) {
@@ -405,7 +490,7 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     }
     // i testi del reel (domanda, conclusione), impaginati dai suoi generatori
     g.setTransform(1, 0, 0, 1, 0, 0)
-    for (const x of o.testi ?? []) if (t >= x.t0 && t < x.t1) g.drawImage(x.cv, 0, 0, W, H)
+    for (const x of o.testi ?? []) if (t >= x.t0 && t < x.t1) contrappunto(q => q.drawImage(x.cv, 0, 0, W, H))
     const out = o.finitura ? o.finitura(cv, t) ?? cv : cv
     const fr = new VideoFrame(out, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) })
     ve.encode(fr, { keyFrame: f % (FPS * 2) === 0 }); fr.close()

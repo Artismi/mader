@@ -18,6 +18,7 @@ import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 import type { Tone } from '@/components/studio/genera/recipes'
 import { newCanvas, withLayer, fullLayer, emptySheet, flatten, sfuma, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
+import { applica } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
 import { campoColore, ensureAtlante, maschera, pennella, segnoDi, type Rel } from './atlante'
 import { coerenza, deduci, diciDeduzione, fattiDi, fattiSu, scriviObiezione, scriviParagrafo, type Deduzione, type Fatto } from '../voice/scrittura'
@@ -271,7 +272,7 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   const tool = toolById(mat)
   if (tool && tool.available(s, ctx) && r() < 0.85) {
     const p = tool.propose(s, ctx)
-    s = await tool.apply(s, { ...p, piece: false, alpha: range(r, 0.25, 0.75), blend: pick(r, ['source-over', 'multiply', 'overlay', 'screen']) }, ctx)
+    s = await applica(tool, s, { ...p, piece: false, alpha: range(r, 0.25, 0.75), blend: pick(r, ['source-over', 'multiply', 'overlay', 'screen']) }, ctx)
   }
   const colori = opts.colori?.length ? opts.colori : [t.ink, t.acc]
   if (r() < 0.65) s = withLayer(s, campoColore(s, r, [...colori, t.bg]))
@@ -334,8 +335,8 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
     g.drawImage(flatten({ ...s, bg: 'rgba(0,0,0,0)', layers: s.layers.filter(l => l.kind === 'motivo') }), 0, 0)
     s = withLayer(s, fullLayer(s, lid2(), 'inverso', piena))
   }
-  if (sc.follia === 'caleido') { const tl = toolById('caleido'); if (tl) s = await tl.apply(s, { ...tl.propose(s, ctx), sostituisci: true, alpha: 1, blend: 'source-over' }, ctx) }
-  if (sc.follia === 'grafico' && ctx.dati?.length) { const tl = toolById('grafico'); if (tl) s = await tl.apply(s, { ...tl.propose(s, ctx), y: 0.12, h: 0.35 }, ctx) }
+  if (sc.follia === 'caleido') { const tl = toolById('caleido'); if (tl) s = await applica(tl, s, { ...tl.propose(s, ctx), sostituisci: true, alpha: 1, blend: 'source-over' }, ctx) }
+  if (sc.follia === 'grafico' && ctx.dati?.length) { const tl = toolById('grafico'); if (tl) s = await applica(tl, s, { ...tl.propose(s, ctx), y: 0.12, h: 0.35 }, ctx) }
   // lo studio: lavora la tavola come faceva prima (materia, luce, tagli, tracce), con l'occhio che giudica
   if (opts.studio) { try { s = await opts.studio(s) } catch { /* resta com'è */ } }
   if (sc.ruolo === 'parola') zona = { x0: 0.07, y0: pick(r, [0.5, 0.6]), x1: 0.93 }
@@ -385,7 +386,7 @@ async function catena(st: AgentState, r: Rnd, s0: Sheet, ws: string[], ctx: Tool
   let s = s0
   const t = ctx.tone
   const tool = toolById(pick(r, ['grana', 'pattern', 'shader']))
-  if (tool && tool.available(s, ctx)) s = await tool.apply(s, { ...tool.propose(s, ctx), alpha: range(r, 0.2, 0.5) }, ctx)
+  if (tool && tool.available(s, ctx)) s = await applica(tool, s, { ...tool.propose(s, ctx), alpha: range(r, 0.2, 0.5) }, ctx)
   const n = Math.min(6, ws.length)
   const pos = (k: number) => [0.14 + (0.72 * k) / Math.max(1, n - 1), 0.36 + (k % 2 ? -0.06 : 0.06) * (n > 3 ? 1 : 0)]
   const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!

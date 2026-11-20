@@ -120,7 +120,11 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
       let size = modo === 'gigante' ? range(r, 0.13, 0.19) : range(r, 0.08, 0.11)
       let p = prova(size, 0.9, { lead: 0.92, align: modo === 'centrato' ? 'center' : 'left' })
       while ((p.h / H > 0.55 || p.w / W > 0.95) && size > 0.05) { size *= 0.88; p = prova(size, 0.9, { lead: 0.92, align: modo === 'centrato' ? 'center' : 'left' }) }
-      const x0 = modo === 'centrato' ? (1 - p.w / W) / 2 : 0.04, y0 = modo === 'centrato' ? 0.5 - p.h / H / 2 - 0.06 : pick(r, [0.06, 0.5 - p.h / H / 2, 0.92 - p.h / H])
+      const x0 = modo === 'centrato' ? (1 - p.w / W) / 2 : 0.04
+      // il posto più calmo fra quelli possibili: il testo grande non va a sbattere sulle figure forti
+      const posti = modo === 'centrato' ? [0.5 - p.h / H / 2 - 0.06, 0.5 - p.h / H / 2 + 0.06] : [0.06, 0.5 - p.h / H / 2, 0.92 - p.h / H]
+      const quiete = posti.map(y => { mediaSotto(s, { x0, y0: y, x1: x0 + p.w / W, y1: y + p.h / H }); return ((mediaSotto as unknown as { varianza: number }).varianza ?? 0) + r() * 6 })
+      const y0 = posti[quiete.indexOf(Math.min(...quiete))]
       const rect = { x0, y0, x1: x0 + p.w / W, y1: y0 + p.h / H }
       const tr = leggibile(rect, true)
       const fin = righe(titolo, FT, size * M, 0.9 * W, tr.color, { lead: 0.92, align: modo === 'centrato' ? 'center' : 'left', stroke: tr.stroke, alone: tr.alone, evid: tr.evid })

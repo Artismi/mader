@@ -10,6 +10,7 @@ import type { AgentState, Features, Gesture, Intention, ToolSense } from '../cor
 import { weighted, type Rnd } from '../core/rng'
 import { flatten, type Sheet } from '../hands/sheet'
 import { TOOLS, type Tool, type ToolCtx } from '../hands/tools'
+import { applica } from '../hands/tools'
 import { measure, rasterize } from '../eyes/measure'
 import { patches } from '../eyes/visual-words'
 import { flaws as flawsOf, readability } from '../eyes/judgement'
@@ -105,7 +106,7 @@ export async function runStudio(
     const tool = weighted(r, avail, t => urgency(t, sheet, st, intention, sheet.layers.length ? cur.f : null, st.mood) * (ctx.noText && SPERIMENTA.has(t.id) ? 1.8 : 1) * (ctx.preferiti?.includes(t.id) ? 2.5 : 1), T)
     let next: Sheet
     const params = tool.propose(sheet, ctx)
-    try { next = await tool.apply(sheet, params, ctx) } catch (e) { console.warn('[studio-agent] gesto fallito', tool.id, e); continue }
+    try { next = await applica(tool, sheet, params, ctx) } catch (e) { console.warn('[studio-agent] gesto fallito', tool.id, e); continue }
     const nl = look(st, next, intention)
     const delta = nl.score - cur.score
     const keep = delta >= 0 || r() < Math.exp(delta / (0.04 * T))
@@ -196,7 +197,7 @@ export async function replay(
     const dec = decode(mutate(g.params, r, amount), sheet)
     if (!dec) continue
     try {
-      const next = await tool.apply(sheet, dec, ctx)
+      const next = await applica(tool, sheet, dec, ctx)
       genome.push({ tool: tool.id, params: encode(dec, sheet) })
       gestures.push({ tool: tool.id, params: summarize(dec), kept: true, delta: 0 })
       sheet = next

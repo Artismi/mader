@@ -24,6 +24,7 @@ import { anchorOf } from '../reader/lexicon'
 import { category, conceptsReady, field, relationsOf } from '../reader/concepts'
 import { newCanvas, withLayer, fullLayer, type Layer, type Sheet } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
+import { applica } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
 import { isNome, realizza } from '../voice/lingua'
 
@@ -145,7 +146,7 @@ export async function costruisci(st: AgentState, r: Rnd, sc: Scena, start: Sheet
   const usa = async (id: string, params: Record<string, unknown>) => {
     const tool = toolById(id)
     if (!tool) return
-    try { s = await tool.apply(s, params, ctx); passi.push({ tool: `scena:${id}`, params: compatti(params), kept: true, delta: 0 }) } catch { /* pazienza */ }
+    try { s = await applica(tool, s, params, ctx); passi.push({ tool: `scena:${id}`, params: compatti(params), kept: true, delta: 0 }) } catch { /* pazienza */ }
   }
   // 1. atmosfera: strati di materia (più strati nella sensazione, meno nell'icona)
   const strati = { sensazione: 4, ambiente: 3, racconto: 2, mappa: 2, icona: 2, manifesto: 2 }[sc.forma]

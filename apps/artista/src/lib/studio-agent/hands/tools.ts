@@ -11,6 +11,8 @@ import { FACES, loadLabFonts, perCarattere, type FaceId } from '@/components/stu
 import { fontCss, type Face } from '@/components/studio/genera/raster'
 import { pick, range, chance, type Rnd } from '../core/rng'
 import type { Intention, Mood, ShaderSource } from '../core/types'
+import { tempoDi, finestra } from './tempo'
+export { tempoDi, finestra }
 import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, sfuma, type Sheet, type Layer, type Blend } from './sheet'
 import { runShader } from './shader'
 import { NUOVI } from './tools2'
@@ -35,6 +37,8 @@ export interface ToolCtx {
   dati?: { label: string; v: number }[]
   /** strumenti preferiti dal linguaggio in uso */
   preferiti?: string[]
+  /** il tempo del generatore: crescita (0 = niente, 1 = finito) e fase (la sua vita, ciclica). Senza: finito e fermo */
+  tempo?: { crescita: number; fase: number }
 }
 
 export type Params = Record<string, unknown>
@@ -134,9 +138,13 @@ const geometria: Tool = {
     color: colorOf(c.tone, c.r), alpha: range(c.r, 0.6, 1),
     blend: chance(c.r, 0.2) ? 'difference' : 'source-over',
   }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const S = 1024, cv = newCanvas(S, S), g = cv.getContext('2d')!
     g.translate(S / 2, S / 2)
+    // vita: respira; crescita: il contorno si traccia, poi la forma si riempie
+    const resp = 1 + Math.sin(T.fase * 6.283) * 0.03; g.scale(resp, resp)
+    const traccia = Math.min(1, T.crescita / 0.7), riempi = Math.max(0, (T.crescita - 0.6) / 0.4)
     g.fillStyle = g.strokeStyle = p.color as string
     g.lineWidth = (p.stroke as number) * 3
     g.lineCap = 'butt'
@@ -150,7 +158,13 @@ const geometria: Tool = {
       case 'arco': g.arc(0, 0, R, Math.PI * 0.1, Math.PI * 1.2); break
       case 'croce': g.moveTo(-R, 0); g.lineTo(R, 0); g.moveTo(0, -R); g.lineTo(0, R); break
     }
-    if (p.fill && p.shape !== 'linea' && p.shape !== 'arco' && p.shape !== 'croce') g.fill(); else g.stroke()
+    const pieno = p.fill && p.shape !== 'linea' && p.shape !== 'arco' && p.shape !== 'croce'
+    if (traccia < 1 || (pieno && riempi < 1)) {
+      // il contorno tracciato in parte (tratteggio lungo quanto la crescita), il riempimento che sale di opacità
+      const L = R * 8
+      g.save(); g.setLineDash([L * traccia, L]); g.lineWidth = Math.max(4, (p.stroke as number) * 3); g.stroke(); g.restore()
+      if (pieno && riempi > 0) { g.globalAlpha = riempi; g.fill() }
+    } else if (pieno) g.fill(); else g.stroke()
     return withLayer(s, { id: lid(), kind: 'geometria', canvas: cv, x: p.x as number, y: p.y as number, scale: p.size as number, rot: p.rot as number, alpha: p.alpha as number, blend: p.blend as Blend })
   },
 }
@@ -167,7 +181,8 @@ const pattern: Tool = {
     region: chance(c.r, 0.5) ? 'tutto' : pick(c.r, ['sinistra', 'destra', 'alto', 'basso', 'centro']),
     blend: chance(c.r, 0.3) ? 'multiply' : 'source-over',
   }),
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
     g.save()
     const reg = p.region as string
@@ -178,13 +193,17 @@ const pattern: Tool = {
     g.fillStyle = g.strokeStyle = p.color as string
     g.lineWidth = p.weight as number
     const st = p.step as number, L = Math.max(s.W, s.H) * 2
+    // vita: il pattern scorre di un passo per ciclo di fase; crescita: le righe si tracciano una dopo l'altra, ognuna da sinistra
+    const off = (T.fase % 1) * st, nR = Math.ceil(L / st)
+    g.translate(0, off)
+    const riga = (k: number) => finestra(T.crescita, k, nR, 0.6)
     switch (p.kind) {
-      case 'righe': for (let y = 0; y < L; y += st) { g.beginPath(); g.moveTo(0, y); g.lineTo(L, y); g.stroke() } break
-      case 'punti': for (let y = 0; y < L; y += st) for (let x = 0; x < L; x += st) { g.beginPath(); g.arc(x + (y / st % 2) * st / 2, y, (p.weight as number) * 1.2, 0, Math.PI * 2); g.fill() } break
-      case 'griglia': for (let v = 0; v < L; v += st) { g.beginPath(); g.moveTo(0, v); g.lineTo(L, v); g.moveTo(v, 0); g.lineTo(v, L); g.stroke() } break
-      case 'onde': for (let y = 0; y < L; y += st) { g.beginPath(); for (let x = 0; x <= L; x += 8) g.lineTo(x, y + Math.sin(x / st) * st * 0.35); g.stroke() } break
-      case 'tratteggio': for (let v = -L; v < L; v += st) { g.beginPath(); g.moveTo(v, 0); g.lineTo(v + L, L); g.stroke(); g.beginPath(); g.moveTo(v + L, 0); g.lineTo(v, L); g.stroke() } break
-      case 'scacchi': for (let y = 0; y < L; y += st) for (let x = 0; x < L; x += st) if (((x + y) / st) % 2 === 0) g.fillRect(x, y, st, st); break
+      case 'righe': for (let y = 0, k = 0; y < L; y += st, k++) { const f = riga(k); if (f <= 0) continue; g.beginPath(); g.moveTo(0, y); g.lineTo(L * f, y); g.stroke() } break
+      case 'punti': for (let y = 0, k = 0; y < L; y += st, k++) { const f = riga(k); if (f <= 0) continue; for (let x = 0; x < L * f; x += st) { g.beginPath(); g.arc(x + (y / st % 2) * st / 2, y, (p.weight as number) * 1.2 * (1 + 0.15 * T.a * Math.sin(T.fase * 6.283 + x * 0.01)), 0, Math.PI * 2); g.fill() } } break
+      case 'griglia': for (let v = 0, k = 0; v < L; v += st, k++) { const f = riga(k); if (f <= 0) continue; g.beginPath(); g.moveTo(0, v); g.lineTo(L * f, v); g.moveTo(v, 0); g.lineTo(v, L * f); g.stroke() } break
+      case 'onde': for (let y = 0, k = 0; y < L; y += st, k++) { const f = riga(k); if (f <= 0) continue; g.beginPath(); for (let x = 0; x <= L * f; x += 8) g.lineTo(x, y + Math.sin(x / st + T.fase * 6.283) * st * 0.35); g.stroke() } break
+      case 'tratteggio': for (let v = -L, k = 0; v < L; v += st, k++) { const f = finestra(T.crescita, k, Math.ceil(2 * L / st), 0.6); if (f <= 0) continue; g.beginPath(); g.moveTo(v, 0); g.lineTo(v + L * f, L * f); g.stroke(); g.beginPath(); g.moveTo(v + L, 0); g.lineTo(v + L - L * f, L * f); g.stroke() } break
+      case 'scacchi': for (let y = 0, k = 0; y < L; y += st, k++) { const f = riga(k); if (f <= 0) continue; for (let x = 0; x < L * f; x += st) if (((x + y) / st) % 2 === 0) g.fillRect(x, y, st, st) } break
     }
     g.restore()
     // la regione sfuma invece di finire con un taglio netto
@@ -215,10 +234,18 @@ const traccia: Tool = {
     })
     return { strokes, width: range(c.r, 2, 40), taper: chance(c.r, 0.7), color: colorOf(c.tone, c.r), alpha: range(c.r, 0.6, 1), dry: chance(c.r, 0.35) }
   },
-  apply: async (s, p) => {
+  apply: async (s, p, c) => {
+    const T = tempoDi(c)
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
     g.fillStyle = p.color as string
-    for (const pts of p.strokes as [number, number][][]) {
+    let seme = 9
+    const rnd = () => ((seme = (seme * 1664525 + 1013904223) >>> 0) / 4294967296) // stesso "secco" a ogni ridisegno
+    const tratti = p.strokes as [number, number][][]
+    for (const [si, pts0] of tratti.entries()) {
+      // crescita: ogni pennellata avanza lungo il suo percorso, una dopo l'altra; vita: il segno trema appena
+      const f = finestra(T.crescita, si, tratti.length, 0.5)
+      if (f <= 0) continue
+      const pts = pts0.slice(0, Math.max(2, Math.ceil(pts0.length * f))).map(([x, y], k) => [x + Math.sin(T.fase * 6.283 + k * 0.9 + si) * 0.002 * T.a, y + Math.cos(T.fase * 6.283 + k * 1.3 + si) * 0.002 * T.a] as [number, number])
       for (let i = 0; i < pts.length; i++) {
         const t = i / Math.max(1, pts.length - 1)
         const w = (p.width as number) * (p.taper ? Math.sin(Math.PI * t) * 0.9 + 0.1 : 1)
@@ -227,7 +254,7 @@ const traccia: Tool = {
         const [nx, ny] = pts[Math.min(pts.length - 1, i + 1)]
         for (let k = 0; k < steps; k++) {
           const px = (x + (nx - x) * k / steps) * s.W, py = (y + (ny - y) * k / steps) * s.H
-          if (p.dry && Math.random() < 0.3) continue
+          if (p.dry && rnd() < 0.3) continue
           g.beginPath(); g.arc(px, py, Math.max(0.5, w / 2), 0, Math.PI * 2); g.fill()
         }
       }
@@ -461,6 +488,18 @@ const schiaccia: Tool = {
     return { ...s, layers: [fullLayer(s, lid(), 'unito', flat)] }
   },
 }
+
+/** applica uno strumento e marca i livelli nuovi con la loro ricetta (strumento, parametri, immagine di partenza se serve) */
+export async function applica(tool: Tool, s: Sheet, p: Params, c: ToolCtx): Promise<Sheet> {
+  const prima = new Set(s.layers.map(l => l.id))
+  const out = await tool.apply(s, p, c)
+  if (!ANIMABILI.has(tool.id)) return out
+  const fonte = tool.id === 'retino' || tool.id === 'caleido' ? flatten({ ...s, layers: s.layers.filter(l => !LOCKED.has(l.kind)) }, 0.5)
+    : tool.id === 'ornato' ? s.layers.find(l => l.id === p.layer)?.canvas : undefined
+  return { ...out, layers: out.layers.map(l => (prima.has(l.id) ? l : { ...l, genera: { tool: tool.id, p, fonte } })) }
+}
+/** gli strumenti che sanno crescere e vivere */
+export const ANIMABILI = new Set(['pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico'])
 
 export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI]
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)
