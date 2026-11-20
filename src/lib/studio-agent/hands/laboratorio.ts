@@ -340,7 +340,7 @@ export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { w
     v -= Math.abs(Math.log((m.mov + 1e-3) / 0.035)) * 0.8 // movimento in fascia
     v -= Math.max(0, m.lampo - 0.12) * 30 // niente lampi
     v += m.sync * 2.5 // si muove col beat
-    v -= Math.max(0, 0.3 - m.ponte) * 6 + Math.max(0, m.ponte - 0.85) * 6 // la tavola si riconosce ancora, ma non è la stessa
+    v -= Math.max(0, 0.45 - m.ponte) * 8 + Math.max(0, m.ponte - 0.85) * 6 // la tavola si riconosce ancora, ma non è la stessa
     v -= Math.max(0, 0.1 - m.trasf) * 20 // e deve essere davvero trasformata
     v += Math.min(4, new Set(p.map(x => x.p)).size) * 0.35 // un programma, non un filtro
     v -= m.estranei * 12 // i colori restano quelli della tavola
@@ -364,7 +364,7 @@ export async function evolvi(o: { brano: Brano; tavole: (CanvasImageSource & { w
 }
 
 /** gira il reel: riprese (tavola + programma + testo) sul beat */
-export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { width: number; height: number })[]; riprese: Riprese[]; nome: string; carattere?: string }): Promise<Blob | null> {
+export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { width: number; height: number })[]; riprese: Riprese[]; nome: string; carattere?: string; tipo?: Tipografia }): Promise<Blob | null> {
   if (typeof VideoEncoder === 'undefined') return null
   const M = new Motore(W, H)
   M.glifi = M.tex(atlante('mono'), false)
@@ -376,28 +376,61 @@ export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { wid
   const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { errore = e } })
   ve.configure({ codec: 'avc1.640028', width: W, height: H, bitrate: 8_000_000, framerate: FPS })
   const env = (ts: number[], t: number, dec: number) => { let v = 0; for (const x of ts) { const d = t - x; if (d >= 0 && d < dec * 5) v = Math.max(v, Math.exp(-d / dec)) } return v }
-  // il testo: disegnato su una tela trasparente, una piastra sotto ogni riga; parole che entrano sui sedicesimi e poi stanno
+  // il testo: una tipografia sua per questo reel, disegnata su una tela trasparente e messa sopra
   const tc = document.createElement('canvas'); tc.width = W; tc.height = H
   const tg = tc.getContext('2d')!
-  const car = o.carattere ?? 'Georgia'
-  const scriviTesto = (s: string, tl: number, col: number[][], centro: boolean) => {
+  const T = o.tipo ?? tipografiaACaso(rng(br.bpm * 7919), [o.carattere ?? 'Georgia'])
+  const scriviTesto = (s0: string, tl: number, col: number[][], centro: boolean) => {
     tg.clearRect(0, 0, W, H)
+    const lum = (c: number[]) => { const f = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]) }
+    const contr = (a: number[], b: number[]) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
     const hex = (c: number[]) => `rgb(${c.map(v => Math.round(v * 255)).join(',')})`
-    const L = (c: number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-    const fondo = L(col[3]) > 0.6 ? col[3] : [0.96, 0.95, 0.92], ink = L(fondo) > 0.5 ? [0.07, 0.07, 0.07] : [0.96, 0.95, 0.92]
-    const corpo = s.length > 90 ? 62 : s.length > 50 ? 76 : s.length > 22 ? 96 : s.length > 10 ? 132 : 176
-    tg.font = `700 ${corpo}px '${car}', Georgia, serif`; tg.textBaseline = 'alphabetic'
-    const righe: string[][] = [[]]
-    for (const p of s.split(/\s+/).filter(Boolean)) { const prova = [...righe[righe.length - 1], p].join(' '); if (tg.measureText(prova).width > W - 170 && righe[righe.length - 1].length) righe.push([]); righe[righe.length - 1].push(p) }
-    const hT = righe.length * corpo * 1.1, y0 = centro ? (H - hT) / 2 + corpo : H - 330 - hT + corpo
-    let k = 0
-    righe.forEach((riga, ri) => {
-      let x = 85; const y = y0 + ri * corpo * 1.1
-      const vis = riga.filter((_, wi) => tl >= (k + wi) * br.beat / 4)
-      if (vis.length) { tg.fillStyle = hex(fondo); tg.fillRect(68, y - corpo * 0.92, tg.measureText(vis.join(' ')).width + 34, corpo * 1.18) }
-      for (const p of riga) { const t0 = (k++) * br.beat / 4; if (tl < t0) break; tg.fillStyle = hex(ink); tg.fillText(p, x, y); x += tg.measureText(p + ' ').width }
+    // inchiostro e fondo dalla tavolozza della tavola: la coppia con più contrasto; se non basta, bianco o nero
+    let best = [col[0], col[3]], bc = contr(col[0], col[3])
+    for (const a of col) for (const b of col) if (contr(a, b) > bc) { bc = contr(a, b); best = [a, b] }
+    let [ink, fondo] = T.inverti ? [best[1], best[0]] : best
+    if (bc < 4.5) { fondo = lum(fondo) > 0.4 ? [0.97, 0.96, 0.93] : [0.06, 0.06, 0.06]; ink = lum(fondo) > 0.4 ? [0.06, 0.06, 0.06] : [0.97, 0.96, 0.93] }
+    const gotico = /Unifraktur/i.test(T.famiglia)
+    const s = T.cassa === 'maiuscolo' && !gotico ? s0.toUpperCase() : T.cassa === 'minuscolo' ? s0.toLowerCase() : s0
+    const verticale = T.posto === 'verticale' && !centro && s.length < 40
+    const largo = (verticale ? H : W) - 2 * 60
+    let corpo = (s.length > 90 ? 40 : s.length > 50 ? 50 : s.length > 22 ? 64 : s.length > 10 ? 88 : 118) * T.corpo
+    corpo = Math.max(46, corpo) // mai troppo piccolo per un telefono
+    tg.save()
+    const font = () => `${T.peso} ${corpo}px '${T.famiglia}', Georgia, serif`
+    tg.font = font(); (tg as unknown as { letterSpacing: string }).letterSpacing = `${(T.spazio * corpo).toFixed(1)}px`
+    const righe = (): string[][] => { const R: string[][] = [[]]; for (const p of s.split(/\s+/).filter(Boolean)) { const pr = [...R[R.length - 1], p].join(' '); if (tg.measureText(pr).width > largo && R[R.length - 1].length) R.push([]); R[R.length - 1].push(p) } return R }
+    let R = righe()
+    while (R.length * corpo * T.interlinea > (verticale ? W : H) * 0.55 && corpo > 46) { corpo *= 0.9; tg.font = font(); R = righe() }
+    const hT = R.length * corpo * T.interlinea
+    if (verticale) { tg.translate(W - 60, 60); tg.rotate(Math.PI / 2) }
+    const Hh = verticale ? W : H, Ww = verticale ? H : W
+    const y0 = centro || T.posto === 'centro' ? (Hh - hT) / 2 + corpo : T.posto === 'alto' ? 200 + corpo : Hh - 230 - hT + corpo
+    // quanto è entrato: per parola, per lettera, per riga o tutto insieme, sui sedicesimi
+    const passo = br.beat / 4
+    const nP = s.split(/\s+/).length
+    const visibile = T.ingresso === 'tutto' ? 1e9 : T.ingresso === 'riga' ? Math.floor(tl / (passo * 4)) + 1 : T.ingresso === 'lettera' ? Math.floor(tl / (passo / 2)) + 1 : Math.floor(tl / passo) + 1
+    let kParola = 0, kLettera = 0
+    R.forEach((riga, ri) => {
+      const testo = riga.join(' '), w = tg.measureText(testo).width
+      const x0 = T.allinea === 'centro' ? (Ww - w) / 2 : T.allinea === 'destra' ? Ww - 60 - w : 60
+      const y = y0 + ri * corpo * T.interlinea
+      let mostra = testo
+      if (T.ingresso === 'parola') { const n = Math.max(0, Math.min(riga.length, visibile - kParola)); mostra = riga.slice(0, n).join(' '); kParola += riga.length }
+      else if (T.ingresso === 'lettera') { const n = Math.max(0, Math.min(testo.length, visibile - kLettera)); mostra = testo.slice(0, n); kLettera += testo.length }
+      else if (T.ingresso === 'riga') mostra = ri < visibile ? testo : ''
+      if (!mostra) return
+      const mw = tg.measureText(mostra).width, pad = corpo * 0.18
+      if (T.piastra === 'blocco') { tg.fillStyle = hex(fondo); tg.fillRect(x0 - pad, y - corpo * 0.9, mw + 2 * pad, corpo * (T.interlinea + 0.12)) }
+      if (T.piastra === 'fascia') { tg.fillStyle = hex(fondo); tg.fillRect(0, y - corpo * 0.9, Ww, corpo * (T.interlinea + 0.12)) }
+      if (T.piastra === 'contorno' || T.piastra === 'nessuna' || T.piastra === 'sottolinea') { tg.lineJoin = 'round'; tg.lineWidth = corpo * (T.piastra === 'contorno' ? 0.2 : 0.14); tg.strokeStyle = hex(fondo); tg.strokeText(mostra, x0, y) }
+      tg.fillStyle = hex(ink); tg.fillText(mostra, x0, y)
+      if (T.piastra === 'sottolinea') { tg.fillRect(x0, y + corpo * 0.12, mw, Math.max(3, corpo * 0.07)) }
     })
-    tg.font = "26px ui-monospace, Menlo, monospace"; tg.fillStyle = hex(fondo); tg.fillRect(70, 88, 420, 44); tg.fillStyle = hex(ink); tg.textBaseline = 'middle'; tg.fillText(`${o.nome.toLowerCase()} · ${br.bpm} bpm`, 84, 111)
+    void nP
+    tg.restore()
+    tg.font = "20px 'DejaVu Sans Mono', ui-monospace, monospace"; (tg as unknown as { letterSpacing: string }).letterSpacing = '0px'; tg.textBaseline = 'alphabetic'
+    tg.fillStyle = hex(fondo); tg.fillRect(40, 44, 300, 34); tg.fillStyle = hex(ink); tg.fillText(`${o.nome.toLowerCase()} · ${br.bpm} bpm`, 52, 68)
     M.aggiorna(M.testo, tc)
   }
   const nF = Math.round(br.durata * FPS)
@@ -406,7 +439,7 @@ export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { wid
     const t = f / FPS
     const s = o.riprese.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? o.riprese[o.riprese.length - 1]
     const tl = t - s.t0
-    const chiave = `${s.testo}|${Math.min(64, Math.floor(tl / (br.beat / 4)))}`
+    const chiave = `${s.testo}|${s.tav}|${Math.min(200, Math.floor(tl / (br.beat / 8)))}`
     if (chiave !== ultimoTesto) { scriviTesto(s.testo ?? '', tl, cols[s.tav], !!s.centro); ultimoTesto = chiave }
     M.fotogramma(s.prog, { tav: tav[s.tav], tav2: tav[(s.tav + 1) % tav.length], t, lev: { k: env(br.cassa, t, 0.08), s: env(br.rullante, t, 0.1), h: env(br.hat, t, 0.04), bar: (t % (br.beat * 4)) / (br.beat * 4), no: 0 }, col: cols[s.tav], barF: t / (br.beat * 4), testo: true })
     const fr = new VideoFrame(M.cv as HTMLCanvasElement, { timestamp: Math.round((f * 1e6) / FPS), duration: Math.round(1e6 / FPS) })
@@ -418,6 +451,19 @@ export async function gira(o: { brano: Brano; tavole: (CanvasImageSource & { wid
   if (errore) return null
   muxer.finalize()
   return new Blob([muxer.target.buffer], { type: 'video/mp4' })
+}
+
+/** la tipografia del reel: niente di fisso, un genoma; si allontana da quelle già usate */
+export interface Tipografia { famiglia: string; peso: number; cassa: 'normale' | 'maiuscolo' | 'minuscolo'; corpo: number; spazio: number; interlinea: number; allinea: 'sinistra' | 'centro' | 'destra'; posto: 'alto' | 'centro' | 'basso' | 'verticale'; piastra: 'blocco' | 'fascia' | 'contorno' | 'sottolinea' | 'nessuna'; ingresso: 'parola' | 'lettera' | 'riga' | 'tutto'; inverti: boolean }
+export function tipografiaACaso(r: () => number, caratteri: string[], memoria: Tipografia[] = []): Tipografia {
+  const una = (): Tipografia => {
+    const cassa = uno(r, ['normale', 'normale', 'maiuscolo', 'minuscolo'] as const)
+    return { famiglia: uno(r, caratteri), peso: uno(r, [300, 400, 600, 800, 900]), cassa, corpo: 0.9 + r() * 0.7, spazio: cassa === 'maiuscolo' ? r() * 0.15 : (r() - 0.6) * 0.06, interlinea: 0.88 + r() * 0.35, allinea: uno(r, ['sinistra', 'centro', 'destra'] as const), posto: uno(r, ['alto', 'centro', 'basso', 'verticale'] as const), piastra: uno(r, ['blocco', 'fascia', 'contorno', 'sottolinea', 'nessuna'] as const), ingresso: uno(r, ['parola', 'lettera', 'riga', 'tutto'] as const), inverti: r() < 0.5 }
+  }
+  const d = (a: Tipografia, b: Tipografia) => (['famiglia', 'cassa', 'allinea', 'posto', 'piastra', 'ingresso'] as const).filter(k => a[k] !== b[k]).length + Math.abs(a.peso - b.peso) / 300
+  let best = una(), bv = -1
+  for (let i = 0; i < 12; i++) { const c = una(); const v = memoria.length ? Math.min(...memoria.slice(-8).map(m => d(c, m))) : r(); if (v > bv) { bv = v; best = c } }
+  return best
 }
 
 /** la sceneggiatura: aggancio con la domanda, riprese a battute, cambio di programma a metà, conclusione, ritorno all'inizio */
