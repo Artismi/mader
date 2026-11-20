@@ -50,14 +50,14 @@ export function stileACaso(r: () => number, giorno = 0): Stile {
   return {
     id: Math.floor(r() * 1e9).toString(36), meta,
     bpm: Math.round(meta ? 130 + r() * 30 : 82 + r() * 26),
-    swing: r() * 0.22, ritardoRullante: r() * 0.014, anticipoHat: -r() * 0.004,
+    swing: r() * 0.14, ritardoRullante: 0, anticipoHat: 0,
     densita: 0.1 + r() * 0.4, sincope: 0.2 + r() * 0.45, rulli: r() * 0.4,
     glide: meta ? 0.3 + r() * 0.6 : r() * 0.3, sub: meta ? 0.6 + r() * 0.4 : r(), taglio: r(), polvere: r(), colore: r(), scuro: r(),
     durezza: r(), campanaccio: r() < 0.2 ? 0.6 + r() * 0.4 : r() * 0.2, voci: r() * 0.7, sottrai: r(), punteggio: 0, usi: 0, nato: giorno,
   }
 }
 const CHIAVI = ['swing', 'ritardoRullante', 'anticipoHat', 'densita', 'sincope', 'rulli', 'glide', 'sub', 'taglio', 'polvere', 'colore', 'scuro', 'durezza', 'campanaccio', 'voci', 'sottrai'] as const
-const SCALA: Record<string, [number, number]> = { swing: [0, 0.25], ritardoRullante: [0, 0.015], anticipoHat: [-0.005, 0] }
+const SCALA: Record<string, [number, number]> = { swing: [0, 0.15], ritardoRullante: [0, 0], anticipoHat: [0, 0] }
 /** figlio di due stili: incrocio dei parametri e una mutazione gaussiana */
 export function figlio(a: Stile, b: Stile, r: () => number, giorno = 0): Stile {
   const c: Stile = { ...a, id: Math.floor(r() * 1e9).toString(36), punteggio: 0, usi: 0, nato: giorno }
@@ -103,23 +103,23 @@ export interface Pattern { cassa: number[]; rullante: number[]; hat: number[]; p
 export function evolviPattern(st: Stile, r: () => number, memoria: Pattern[] = []): Pattern {
   const anc = st.meta ? [8] : [4, 12]
   const nuovo = (): Pattern => ({
-    cassa: Array.from({ length: 16 }, (_, i) => (i === 0 || r() < st.densita * 0.35) && !anc.includes(i) ? 1 : 0),
-    rullante: Array.from({ length: 16 }, (_, i) => anc.includes(i) ? 1 : r() < 0.06 ? 0.4 : 0),
+    cassa: Array.from({ length: 16 }, (_, i) => (i === 0 || (i % 2 === 0 && r() < st.densita * 0.5)) && !anc.includes(i) ? 1 : 0),
+    rullante: Array.from({ length: 16 }, (_, i) => anc.includes(i) ? 1 : 0),
     hat: Array.from({ length: 16 }, (_, i) => r() < st.densita * 0.6 || (i % 4 === 0 && r() < 0.5) ? (i % 2 ? 0.55 : 0.9) : 0),
-    perc: Array.from({ length: 16 }, () => r() < 0.05 * st.densita ? 0.6 : 0),
+    perc: Array.from({ length: 16 }, (_, i) => i % 2 === 0 && r() < 0.05 * st.densita ? 0.6 : 0),
   })
   const muta = (p: Pattern): Pattern => {
     const q = { cassa: [...p.cassa], rullante: [...p.rullante], hat: [...p.hat], perc: [...p.perc] }
-    const linea = (['cassa', 'cassa', 'hat', 'perc', 'rullante'] as const)[Math.floor(r() * 5)]
-    const i = Math.floor(r() * 16)
-    if (linea === 'rullante' && anc.includes(i)) return q
-    q[linea][i] = q[linea][i] ? 0 : linea === 'rullante' ? 0.4 : linea === 'hat' ? (i % 2 ? 0.55 : 0.9) : 1
+    const linea = (['cassa', 'cassa', 'hat', 'perc'] as const)[Math.floor(r() * 4)]
+    let i = Math.floor(r() * 16)
+    if (linea !== 'hat') i -= i % 2 // gli ottavi soltanto
+    q[linea][i] = q[linea][i] ? 0 : linea === 'hat' ? (i % 2 ? 0.55 : 0.9) : 1
     q.cassa[0] = 1
     return q
   }
   const sincMax = 22
   const fit = (p: Pattern) => {
-    const sc = sincopeDi(p.cassa) / sincMax, sh = sincopeDi(p.hat.map(x => x ? 1 : 0)) / sincMax
+    const sc = sincopeDi(p.cassa) / (sincMax * 0.6), sh = sincopeDi(p.hat.map(x => x ? 1 : 0)) / sincMax
     const dens = (p.cassa.filter(Boolean).length / 16 + p.hat.filter(Boolean).length / 16) / 2
     let f = -Math.abs(sc - st.sincope) * 2 - Math.abs(sh - st.sincope * 0.6) - Math.abs(dens - (0.12 + st.densita * 0.35)) * 2
     f -= Math.max(0, p.cassa.filter(Boolean).length - 5) * 0.4 // pulito: pochi colpi, ognuno pesa
@@ -197,7 +197,7 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
 
   const cassaT: number[] = [], rullT: number[] = [], hatT: number[] = [], battT: number[] = []
   const tempo = (b: number, i: number, quale: 'c' | 'r' | 'h' | 'x') => {
-    let t = b * bar + i * s16 + (i % 2 ? st.swing * s16 : 0)
+    let t = b * bar + i * s16 + (quale === 'h' && i % 2 ? st.swing * s16 : 0)
     if (quale === 'r') t += st.ritardoRullante
     if (quale === 'h') t += st.anticipoHat
     return Math.max(0, t)
@@ -325,7 +325,6 @@ export async function suonaBeat(st: Stile, o: { seme: number; parola: string; se
       }
       if (P.perc[i] && V.has('perc')) perc(tempo(b, i, 'x'), P.perc[i])
     }
-    if (fill && !st.meta && r() < st.rulli) { const t = tempo(b, 15, 'r'); snare(t, 0.3) }
     // basso sui colpi di cassa, sul grado dell'accordo
     const g = prog[b % 4]
     const colpiC = P.cassa.map((x, i) => x ? i : -1).filter(i => i >= 0)
