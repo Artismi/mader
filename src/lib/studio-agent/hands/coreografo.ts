@@ -220,7 +220,12 @@ export interface Coreografia {
   camera: 'ferma' | 'deriva' | 'avvicina' | 'segue'
   battutePerTavola: number
   quante: number // quante tavole nel reel
+  /** la regia: ogni quanti battiti stacca (base), quanta voglia di dettagli, quanta spinta sui colpi */
+  regia?: Regia
 }
+export interface Regia { taglio: 1 | 2 | 4; dettaglio: number; impulso: number }
+const regiaACaso = (r: () => number): Regia => ({ taglio: uno(r, [1, 2, 2, 4] as (1 | 2 | 4)[]), dettaglio: 0.3 + r() * 0.6, impulso: 0.3 + r() * 0.7 })
+const REGIA0: Regia = { taglio: 2, dettaglio: 0.55, impulso: 0.6 }
 function gestoACaso(r: () => number, ruolo: Ruolo): Gesto {
   const ingresso: Ingresso = ruolo === 'linea' ? 'traccia' : ruolo === 'testo' ? uno(r, ['scrivi', 'appari', 'cresci']) : ruolo === 'fondo' ? uno(r, ['appari', 'cresci']) : uno(r, INGR.filter(x => x !== 'traccia' && x !== 'scrivi'))
   const vita: Vita = ruolo === 'testo' ? uno(r, ['fermo', 'respira']) : uno(r, VITE)
@@ -233,7 +238,7 @@ export function coreografiaACaso(r: () => number, pesiRel?: Record<string, Parti
     let x = r() * Object.values(p).reduce((a, b) => a + b, 0); accoppia[rel] = 'libero'
     for (const [k, w] of Object.entries(p) as [Accoppiamento, number][]) if ((x -= w) <= 0) { accoppia[rel] = k; break }
   }
-  return { gesti: Object.fromEntries(RUOLI.map(ru => [ru, gestoACaso(r, ru)])) as Record<Ruolo, Gesto>, accoppia, camera: uno(r, ['ferma', 'deriva', 'avvicina', 'segue']), battutePerTavola: uno(r, [1, 2, 2, 3]), quante: 3 + Math.floor(r() * 4) }
+  return { gesti: Object.fromEntries(RUOLI.map(ru => [ru, gestoACaso(r, ru)])) as Record<Ruolo, Gesto>, accoppia, camera: uno(r, ['ferma', 'deriva', 'avvicina', 'segue']), battutePerTavola: uno(r, [1, 2, 2, 3]), quante: 3 + Math.floor(r() * 4), regia: regiaACaso(r) }
 }
 function mutaC(c: Coreografia, r: () => number): Coreografia {
   const x: Coreografia = { ...c, gesti: { ...c.gesti }, accoppia: { ...c.accoppia } }
@@ -243,6 +248,7 @@ function mutaC(c: Coreografia, r: () => number): Coreografia {
   else if (k === 4) { g.ampiezza = clamp(g.ampiezza + (r() - 0.5) * 0.4); g.sfalsa = clamp(g.sfalsa + (r() - 0.5) * 0.4) } else if (k === 5) { g.ordine = uno(r, ORD); g.direzione = uno(r, ['lati', 'alto', 'basso', 'asse', 'centro'] as Direzione[]) }
   else if (k === 6) x.camera = uno(r, ['ferma', 'deriva', 'avvicina', 'segue']); else if (k === 7) { x.battutePerTavola = uno(r, [1, 2, 3]); x.quante = Math.max(2, Math.min(7, x.quante + (r() < 0.5 ? -1 : 1))) }
   else { const rel = uno(r, Object.keys(x.accoppia)); x.accoppia[rel] = uno(r, ACCOPPIAMENTI) }
+  if (r() < 0.35) { const q = { ...(x.regia ?? REGIA0) }; const j = Math.floor(r() * 3); if (j === 0) q.taglio = uno(r, [1, 2, 4] as (1 | 2 | 4)[]); else if (j === 1) q.dettaglio = clamp(q.dettaglio + (r() - 0.5) * 0.4); else q.impulso = clamp(q.impulso + (r() - 0.5) * 0.4); x.regia = q }
   x.gesti[ru] = g
   return x
 }
@@ -252,6 +258,48 @@ function mutaC(c: Coreografia, r: () => number): Coreografia {
 const molla = (t: number, w = 14, z = 0.45) => { if (t <= 0) return 0; const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z / Math.sqrt(1 - z * z)) * Math.sin(wd * t)) }
 const inv = (ts: number[], t: number, dec: number) => { let v = 0; for (const x of ts) { const d = t - x; if (d >= 0 && d < dec * 5) v = Math.max(v, Math.exp(-d / dec)) } return v }
 interface Stato { dx: number; dy: number; rot: number; sc: number; alpha: number; traccia: number; sfalda: number; scrivi: number; crescita?: number; fase?: number }
+
+// ── la regia: dentro ogni ripresa, inquadrature che staccano sul colpo ──
+export interface Inquadratura { t0: number; t1: number; tav: number; tipo: 'tutto' | 'dettaglio' | 'carrello'; z: number; cx: number; cy: number; vx: number }
+/** Le inquadrature nascono dalla musica (dove cade il colpo, quanta energia c'è, dove sta il cambio) e dalla tavola (le figure vere su cui stringere).
+ *  Ogni ripresa apre larga; poi stringe sui dettagli o scivola; mai due uguali di fila. */
+export function inquadrature(c: Coreografia, br: Brano, rp: Ripresa[], scena: Scena): Inquadratura[] {
+  const R = c.regia ?? REGIA0, beat = br.beat, bar = beat * 4, out: Inquadratura[] = []
+  let h = 7
+  const r = () => ((h = (h * 1103515245 + 12345) >>> 0) / 4294967296)
+  for (const p of rp) {
+    const figure = scena.nodi.filter(n => n.tav === p.tav && (n.ruolo === 'figura' || n.ruolo === 'trama') && (n.sprite || n.vivo) && n.area > 3000 && n.area < W * H * 0.5).sort((a, b) => b.area - a.area).slice(0, 6)
+    let t = p.t0, prima = true, ultimo = '', iFig = 0
+    while (t < p.t1 - 1e-6) {
+      // lunghezza: la base del genoma, dimezzata con l'energia e nella prima battuta (l'aggancio), raddoppiata nella battuta che prepara il cambio
+      let n: number = R.taglio
+      if (br.energia(t) > 0.8) n = Math.max(1, n / 2)
+      if (t < bar) n = 1
+      if (t >= br.cambio - bar && t < br.cambio) n = 4
+      if (prima) n = Math.max(n, 2)
+      const t1 = Math.min(p.t1, t + n * beat)
+      let tipo: Inquadratura['tipo'] = 'tutto'
+      if (!prima && figure.length) { const x = r(); tipo = x < R.dettaglio ? 'dettaglio' : x < R.dettaglio + (1 - R.dettaglio) * 0.5 ? 'carrello' : 'tutto'; if (tipo === ultimo) tipo = tipo === 'tutto' ? 'dettaglio' : 'tutto' }
+      if (t >= br.cambio - bar && t < br.cambio) tipo = 'tutto' // prima del cambio si respira
+      let z = 1, cx = W / 2, cy = H / 2, vx = 0
+      if (tipo === 'dettaglio') { const f = figure[iFig++ % figure.length]; z = Math.max(1.7, Math.min(3, Math.min(W / (f.w * 1.2), H / (f.h * 1.2)))); cx = f.x; cy = f.y }
+      if (tipo === 'carrello') { const f = figure[Math.floor(r() * figure.length)]; z = 1.4 + r() * 0.35; cx = f.x; cy = f.y; vx = (r() < 0.5 ? -1 : 1) * W * 0.12 }
+      out.push({ t0: t, t1, tav: p.tav, tipo, z, cx, cy, vx })
+      ultimo = tipo; prima = false; t = t1
+    }
+  }
+  return out
+}
+/** la trasformazione della camera in un istante: niente bordi vuoti, spinta sul taglio e sulla cassa */
+function camera(q: Inquadratura, t: number, br: Brano, R: Regia) {
+  const u = (t - q.t0) / Math.max(1e-3, q.t1 - q.t0)
+  let z = q.z * (1 + 0.035 * u) // dentro l'inquadratura si stringe appena: è viva
+  z *= 1 + 0.06 * R.impulso * Math.exp(-(t - q.t0) / 0.09) + 0.014 * R.impulso * inv(br.cassa, t, 0.1)
+  let cx = q.cx + q.vx * (u - 0.5), cy = q.cy
+  const mx = W / (2 * z), my = H / (2 * z)
+  cx = Math.max(mx, Math.min(W - mx, cx)); cy = Math.max(my, Math.min(H - my, cy))
+  return { z, cx, cy }
+}
 
 /** la sceneggiatura: quali tavole, in che ordine, quando entrano ed escono */
 interface Ripresa { tav: number; t0: number; t1: number; rel?: string; anello?: boolean }
@@ -389,7 +437,10 @@ function misura(c: Coreografia, scena: Scena, br: Brano, rp: Ripresa[], memoria:
   const media = (xs: number[], d = 0) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : d)
   // economia: pochi gesti con variazioni (non un campionario)
   const economia = -Math.max(0, gesti.size - 6) * 0.25
-  let v = coerenza + economia + sync * 1.5 + sulColpo * 3 - Math.abs(attMedia - 2) * 0.6 - Math.abs(quiete - 0.3) * 3
+  // il ritmo degli stacchi: una media tra 0.7 e 1.8 secondi tiene l'occhio senza stancarlo
+  const iq = inquadrature(c, br, rp, scena), mediaIq = br.durata / Math.max(1, iq.length)
+  const ritmo = -Math.max(0, mediaIq - 1.8) * 1.5 - Math.max(0, 0.7 - mediaIq) * 3
+  let v = ritmo + coerenza + economia + sync * 1.5 + sulColpo * 3 - Math.abs(attMedia - 2) * 0.6 - Math.abs(quiete - 0.3) * 3
     - media(coperture) * 4 - media(equilibri) * 3 - Math.abs(media(pieni, 0.4) - 0.45) * 2
   // una ripresa deve durare abbastanza per costruirsi e farsi vedere
   if (c.battutePerTavola * br.beat * 4 < 1.6) v -= 2
@@ -486,6 +537,31 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   const scatole = new Map<HTMLCanvasElement, { x0: number; y0: number; x1: number; y1: number }>()
   const scatola = (cvT: HTMLCanvasElement) => { if (scatole.has(cvT)) return scatole.get(cvT)!; const q = cvT.getContext('2d')!; const d = q.getImageData(0, 0, cvT.width, cvT.height).data; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1; for (let y = 0; y < cvT.height; y += 4) for (let x = 0; x < cvT.width; x += 4) if (d[(y * cvT.width + x) * 4 + 3] > 40) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) } const k = W / cvT.width; const b = x1 < 0 ? { x0: 0, y0: 0, x1: 0, y1: 0 } : { x0: x0 * k, y0: y0 * k, x1: x1 * k, y1: y1 * k }; scatole.set(cvT, b); return b }
   const ordine = (nodi: Nodo[], o: Ordine) => nodi.slice().sort((a, b) => o === 'grandezza' ? b.area - a.area : o === 'sinistra' ? a.x - b.x : o === 'alto' ? a.y - b.y : o === 'centro' ? Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2) : ((a.id * 7919) % 97) - ((b.id * 7919) % 97))
+  const IQ = inquadrature(c, br, o.riprese, scena)
+  // le righe di un testo (bande di pixel pieni), per farle entrare una alla volta a tempo
+  const bande = new Map<HTMLCanvasElement, [number, number][]>()
+  const righe = (src: HTMLCanvasElement) => {
+    if (bande.has(src)) return bande.get(src)!
+    const d = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data, out: [number, number][] = []
+    let a = -1, vuote = 0; const gap = Math.max(3, Math.round(src.height / 120))
+    for (let y = 0; y < src.height; y++) { let pieno = false; for (let x = 0; x < src.width; x += 3) if (d[(y * src.width + x) * 4 + 3] > 30) { pieno = true; break } if (pieno) { if (a < 0) a = y; vuote = 0 } else if (a >= 0 && ++vuote > gap) { out.push([a, y - vuote + 1]); a = -1 } }
+    if (a >= 0) out.push([a, src.height])
+    bande.set(src, out); return out
+  }
+  const entrate = new Map<string, number>()
+  /** disegna un testo riga per riga: ogni riga entra su un mezzo battito, sale di poco e resta */
+  const aRighe = (src: HTMLCanvasElement, chiave: string, t: number, dur: number, x0: number, y0: number, w: number, h: number) => {
+    if (!entrate.has(chiave)) entrate.set(chiave, t)
+    const tA = entrate.get(chiave)!, rr = righe(src), mezzo = br.beat / 2
+    const passo = Math.max(mezzo, Math.min(br.beat, Math.floor((dur * 0.4) / Math.max(1, rr.length) / mezzo) * mezzo))
+    const ky = h / src.height
+    rr.forEach(([a, b], i) => {
+      const ta = Math.ceil((tA + i * passo) / mezzo - 1e-6) * mezzo, e = clamp((t - ta) / 0.12)
+      if (e <= 0) return
+      const sale = (1 - e) * (1 - e) * 16
+      g.save(); g.globalAlpha *= e; g.drawImage(src, 0, a, src.width, b - a, x0, y0 + a * ky + sale, w, (b - a) * ky); g.restore()
+    })
+  }
   for (let f = 0; f < Math.round(br.durata * FPS); f++) {
     const t = f / FPS
     const rp = o.riprese.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? o.riprese[o.riprese.length - 1]
@@ -493,9 +569,9 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'
     g.fillStyle = scena.bg[rp.tav]; g.fillRect(0, 0, W, H)
     // la camera
-    const tl = t - rp.t0, dur = rp.t1 - rp.t0
-    const zc = c.camera === 'avvicina' ? 1 + 0.08 * (tl / dur) : 1, dc = c.camera === 'deriva' ? (tl / dur - 0.5) * 40 : 0
-    g.translate(W / 2 + dc, H / 2); g.scale(zc, zc); g.translate(-W / 2, -H / 2)
+    const iq = IQ.find(x => t >= x.t0 - 1e-6 && t < x.t1) ?? IQ[IQ.length - 1]
+    const cam = camera(iq, t, br, c.regia ?? REGIA0)
+    g.translate(W / 2, H / 2); g.scale(cam.z, cam.z); g.translate(-cam.cx, -cam.cy)
     const nodi = scena.nodi.filter(n => n.tav === rp.tav && n.ruolo !== 'fondo' || (n.tav === rp.tav && n.sprite && n.ruolo === 'fondo'))
     // i ranghi per ruolo, secondo l'ordine scelto
     const rango = new Map<number, number>(), quanti = new Map<Ruolo, number>()
@@ -543,10 +619,9 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       const k = `${rp.t0}|${n.id}`
       if (!inchiostri.has(k)) inchiostri.set(k, inchiostro({ x0: n.x + s.dx - n.w / 2, y0: n.y + s.dy - n.h / 2, x1: n.x + s.dx + n.w / 2, y1: n.y + s.dy + n.h / 2 }))
       g.save(); g.globalAlpha = clamp(s.alpha); g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
-      if (s.scrivi < 1) { g.beginPath(); g.rect(-n.w / 2, -n.h / 2, n.w * s.scrivi, n.h); g.clip() }
-      g.drawImage(tinta(n.sprite, inchiostri.get(k)!), -n.w / 2, -n.h / 2, n.w, n.h); g.restore()
+      aRighe(tinta(n.sprite, inchiostri.get(k)!), k, t, rp.t1 - rp.t0, -n.w / 2, -n.h / 2, n.w, n.h); g.restore()
     }
-    if (testoReel) { const k = `r${testoReel.t0}`; if (!inchiostri.has(k)) inchiostri.set(k, inchiostro(scatola(testoReel.cv))); g.drawImage(tinta(testoReel.cv, inchiostri.get(k)!), 0, 0, W, H) }
+    if (testoReel) { const k = `r${testoReel.t0}`; if (!inchiostri.has(k)) inchiostri.set(k, inchiostro(scatola(testoReel.cv))); aRighe(tinta(testoReel.cv, inchiostri.get(k)!), k, t, testoReel.t1 - testoReel.t0, 0, 0, W, H) }
     // la copertina: il fotogramma più pieno e più vario (si controlla ogni mezzo secondo)
     if (f % 15 === 7) { const q = document.createElement('canvas'); q.width = 36; q.height = 64; const qg = q.getContext('2d')!; qg.drawImage(cv, 0, 0, 36, 64); const d = qg.getImageData(0, 0, 36, 64).data; let m = 0, m2 = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m += l; m2 += l * l } const n0 = d.length / 4, v = Math.sqrt(Math.max(0, m2 / n0 - (m / n0) ** 2)); if (v > copertina.v) copertina = { v, ms: Math.round(t * 1000) } }
     const out = o.finitura ? o.finitura(cv, t) ?? cv : cv
