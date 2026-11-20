@@ -35,7 +35,7 @@ import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } 
 import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
-import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda } from './mind/episodio'
+import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione } from './mind/episodio'
 import { nuovoReel } from './hands/anima'
 import { fraseDi } from './voice/scrittura'
 import { lavora, type Lavoro } from './mind/cantiere'
@@ -47,6 +47,7 @@ import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } fr
 import { flaws, readability } from './eyes/judgement'
 import { conceptsReady, describe, loadConcepts, loadInglese } from './reader/concepts'
 import { aggiornaProfilo, battezza, didascaliaIT } from './mind/profilo'
+import { esitoVisivo, osservaRetorica, ricorda } from './mind/retorica'
 
 
 export interface DayHooks {
@@ -173,7 +174,8 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (thread) log(`Seguo un filo: "${thread}".`)
   const readings = await gather(st, r, thread, E0, log).catch(e => { log(`Non riesco a leggere (${e instanceof Error ? e.message : e}): lavoro con quello che ho.`); return [] as Reading[] })
   if (!readings.length) log('Non sono riuscito a leggere niente: lavoro con quello che ho.')
-  for (const rd of readings) registraStudio(st, rd.title, rd.text)
+  const concettiNoti = Object.keys(ensureAtlante(st).concetti).slice(-400)
+  for (const rd of readings) { registraStudio(st, rd.title, rd.text); try { osservaRetorica(st, rd.text, thread ? [thread, ...concettiNoti] : concettiNoti, rd.title) } catch { /* niente */ } }
   sc.studiare = []
   for (const rd of readings) if (rd.kind !== 'rilettura') addText(st.words, rd.text)
   const nFrasi = ensureAtlante(st).frasi.length
@@ -377,7 +379,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const works: Work[] = []
   const epId = uid()
   // la musica si compone prima: così il reel può montare le tavole a tempo mentre le disegna
-  const partitura0 = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.map(x => ({ concetto: x.a, follia: x.follia, parole: `${x.titolo} ${x.corpo ?? ''}`.split(/\s+/).filter(Boolean).length })), seme: Math.floor(r() * 1e9) })
+  const partitura0 = componi({ linguaggio: L.id, forma: plan.forma, scuro: tone.dark, conf: plan.d?.conf ?? 0.3, mood: st.mood, schede: plan.schede.map(x => ({ rel: x.rel, concetto: x.a, follia: x.follia, parole: `${x.titolo} ${x.corpo ?? ''}`.split(/\s+/).filter(Boolean).length })), seme: Math.floor(r() * 1e9) })
   const riuscite: number[] = []
   const reel = hooks.reel ? await nuovoReel({ linguaggio: L.id, nome: st.name, N: plan.schede.length, seme: Math.floor(r() * 1e9) }).catch(() => null) : null
   if (hooks.reel && !reel) log('Il reel non si può fare in questo browser (manca la codifica video).')
@@ -404,6 +406,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     st.recentVisual = [...st.recentVisual, { id, features: f, words: work.visual.words }].slice(-40)
     const saved = await T.saveWork(work, final.toDataURL('image/png'))
     works.push(saved); riuscite.push(i)
+    if (sc.b && ultimaImpaginazione()) esitoVisivo(st, sc.rel ?? 'accanto', ultimaImpaginazione()!, saved.interest)
     if (reel) { try { await reel.tavola(sheet, eventi(partitura0, i)) } catch (e) { log(`Reel: ${e instanceof Error ? e.message : e}`) } }
     hooks.onWork?.(saved)
     hooks.preview?.(flatten(sheet, 0.5))
@@ -422,6 +425,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   esitoLinguaggio(st, L.id, works.reduce((a, w) => a + w.interest, 0) / Math.max(1, works.length))
   const ep = chiudiEpisodio(st, r, { musica: { partitura, descr: descrMusica }, lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
   if (video) await T.salvaReel(ep.id, video).catch(() => {})
+  ricorda(st, caption)
   {
     const recenti = (await T.listWorks()).filter(w => w.day >= st.day - 20)
     const P = aggiornaProfilo(st, recenti)

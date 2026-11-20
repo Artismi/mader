@@ -17,6 +17,7 @@ import type { AgentState } from '../core/types'
 import { pick, type Rnd } from '../core/rng'
 import { sentences } from '../reader/tokenize'
 import { describe, iperonimo, sinonimi, verbi, conceptsReady, type Verbo } from '../reader/concepts'
+import { dici, trovaEsempio } from '../mind/retorica'
 import { concludi, type TipoD } from './conclusioni'
 import { singolare } from './lingua'
 import { accorda, art, concorda, genere, isNome, isNomeQ, osservaGenere, realizza } from './lingua'
@@ -313,9 +314,16 @@ export function deduci(st: AgentState, r: Rnd, concetti: string[]): Deduzione[] 
   const archi = grafo(st, fs)
   const out: Deduzione[] = []
   const frase = (f: Fatto) => riscrivi(r, f, new Set(), 'attiva')
+  const fonti = [...new Set(fs.map(f => f.fonte))]
   const metti = (tipo: TipoD, a: string, b: string, v: Record<string, string>, premesse: string[], segno: 1 | -1, conf: number, passi: number) => {
     const t2: TipoD = segno < 0 && (tipo === 'catena' || tipo === 'lunga' || tipo === 'dipendenza') ? 'interrotta' : tipo
-    const c = concludi(st, r, t2, v)
+    let c = concludi(st, r, t2, v)
+    // la retorica sua: se ha imparato abbastanza modi di legare, dice la conclusione con una mossa propria
+    const ex = trovaEsempio(st, fonti, a, b)
+    // la conclusione "nuda": solo il legame tra i due capi, detto con il verbo più semplice
+    const nuda = realizza(segno > 0 ? (passi > 2 ? '{det:a}, alla lontana, porta {a:b}' : '{det:a} porta {a:b}') : '{det:a} non porta {a:b}', { a, b })
+    const mia = dici(st, r, { a, b, premesse, conclusione: c.testo, nuda, conf, segno, tipo: t2, ...ex })
+    if (mia) c = { testo: mia.testo, modello: `mossa:${mia.mossa}` }
     out.push({ tipo: t2, a, b, premesse, testo: c.testo, segno, conf, passi, modello: c.modello })
   }
   // catene: cammini nel grafo, da 2 a 4 archi, senza tornare indietro

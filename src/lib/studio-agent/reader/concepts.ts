@@ -286,3 +286,10 @@ export function iperonimo(w: string, ctx?: Set<string>): string | null {
   const h = rels(s, 'h')[0]
   return h === undefined ? null : lemma(h)
 }
+
+/** le categorie grammaticali che il dizionario conosce per una parola (n, v, a, r = avverbio); vuoto se non la conosce */
+export function categorie(word: string): string[] {
+  if (!data) return []
+  const ids = data.lex[word.toLowerCase()] ?? []
+  return [...new Set(ids.map(i => data!.syn[i][2] as string))]
+}

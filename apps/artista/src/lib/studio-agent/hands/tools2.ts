@@ -11,7 +11,7 @@
  *  sfasa      — fuori registro: canali di colore spostati, come una stampa sbagliata
  */
 import { pick, range, chance, type Rnd } from '../core/rng'
-import { FACES, loadLabFonts, type FaceId } from '@/components/studio/genera/fonts'
+import { FACES, loadLabFonts, perCarattere, type FaceId } from '@/components/studio/genera/fonts'
 import { fontCss, type Face } from '@/components/studio/genera/raster'
 import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, type Sheet, type Layer, type Blend } from './sheet'
 import type { Tool, ToolCtx } from './tools'
@@ -156,7 +156,7 @@ const tipografia: Tool = {
     const testo = String(p.testo || '').trim()
     if (!testo) return s
     const parola = testo.split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? testo
-    const T = (x: string) => (F.upper ? x.toUpperCase() : x)
+    const T = (x: string) => perCarattere(F.upper ? x.toUpperCase() : x, F.family)
     g.fillStyle = p.colore as string; g.textBaseline = 'middle'
     switch (p.modo) {
       case 'gigante': { const size = s.H * 0.42; g.font = fontCss(F, size); g.save(); g.translate(s.W * 0.5, (p.y as number) * s.H); g.rotate(-Math.PI / 2 * (Math.random() < 0.3 ? 1 : 0)); g.textAlign = 'center'; g.fillText(T(parola), 0, 0); g.restore(); break }

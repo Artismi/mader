@@ -12,7 +12,18 @@ import type { AgentState, Work } from './core/types'
 
 type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; permalink?: string; quando: string; errore?: string } }
 
-export async function giro(o: { studi: number; sequenza: boolean; epN: number; reel?: boolean; log: (m: string) => void }) {
+/**
+ * L'attesa: non pubblica a orario. Ogni giro legge e studia; quello che impara di nuovo (novità × interesse
+ * delle giornate) si accumula. Quando ha accumulato abbastanza per dire qualcosa — la soglia cambia ogni volta,
+ * a seconda del suo temperamento — prepara una sequenza. La sequenza pronta esce su Instagram appena possibile,
+ * ma mai prima di 3 ore dal post precedente; nel frattempo continua a leggere.
+ */
+interface Attesa { giri: number; accumulo: number; soglia: number; pronta?: string; tentativi?: number; ultimoPost?: string }
+type ConAttesa = AgentState & { attesa?: Attesa }
+const getAttesa = (st: AgentState): Attesa => ((st as ConAttesa).attesa ??= { giri: 0, accumulo: 0, soglia: 1.4 })
+const nuovaSoglia = (st: AgentState) => 0.9 + Math.random() * 1.2 + (st.temperature < 0.4 ? 0.4 : 0)
+
+export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; log: (m: string) => void; oreTraPost?: number }) {
   let st: AgentState = await loadOrCreate()
   const fatte: string[] = []
   const una = async (seq: boolean) => {
@@ -24,10 +35,29 @@ export async function giro(o: { studi: number; sequenza: boolean; epN: number; r
       st = { ...st, day: st.day + 1 }; await T.putState(st).catch(() => {})
     }
   }
-  for (let i = 0; i < o.studi; i++) await una(false)
-  if (o.sequenza) await una(true)
-  const ep = o.sequenza ? (getEpisodi(st).slice(-1)[0] as Ep | undefined) : undefined
-  return { giorno: st.day, nome: st.name, opere: fatte.length, episodio: ep && ep.day === st.day ? ep.id : null }
+  for (let i = 0; i < o.studi; i++) {
+    await una(false)
+    const h = st.history[st.history.length - 1]
+    const A = getAttesa(st)
+    if (h && h.day === st.day) A.accumulo += Math.max(0, h.novelty) * Math.max(0.2, h.interest) + (h.kept ? 0.05 : 0)
+  }
+  const A = getAttesa(st)
+  A.giri++
+  let nuova: string | null = null
+  // ha abbastanza da dire? (o è passato troppo tempo: dopo 48 giri dice comunque quello che ha)
+  const pronto = o.sequenza ?? (!A.pronta && (A.accumulo >= A.soglia || A.giri >= 48))
+  if (pronto) {
+    o.log(`Ho accumulato abbastanza per dire qualcosa (${A.accumulo.toFixed(2)} su ${A.soglia.toFixed(2)}, dopo ${A.giri} giri): preparo una sequenza.`)
+    await una(true)
+    const ep = getEpisodi(st).slice(-1)[0] as Ep | undefined
+    if (ep && ep.day === st.day) { nuova = ep.id; const B = getAttesa(st); B.pronta = ep.id; B.tentativi = 0; B.accumulo = 0; B.giri = 0; B.soglia = nuovaSoglia(st) }
+  } else if (A.pronta) o.log('Ho una sequenza pronta: aspetto il momento di pubblicarla e intanto continuo a leggere.')
+  else o.log(`Non ho ancora abbastanza da dire (${A.accumulo.toFixed(2)} su ${A.soglia.toFixed(2)}): continuo a leggere e a pensare.`)
+  await T.putState(st)
+  const B = getAttesa(st)
+  const ore = o.oreTraPost ?? 3
+  const puo = !!B.pronta && (!B.ultimoPost || Date.now() - new Date(B.ultimoPost).getTime() >= ore * 3600e3 - 60e3)
+  return { giorno: st.day, nome: st.name, opere: fatte.length, episodio: nuova, pronta: B.pronta ?? null, puoPubblicare: puo }
 }
 
 /** prepara il post di una sequenza: per ogni tavola scelta carica sul server l'immagine e il suo pezzo di musica */
@@ -58,7 +88,11 @@ export async function preparaPost(epId: string, n: number) {
 export async function annotaPost(epId: string, r: { id?: string; permalink?: string; error?: string }) {
   const st = await loadOrCreate()
   const ep = getEpisodi(st).find(e => e.id === epId) as Ep | undefined
-  if (ep) { ep.instagram = { id: r.id, permalink: r.permalink, quando: new Date().toISOString(), errore: r.error }; await T.putState(st) }
+  if (ep) ep.instagram = { id: r.id, permalink: r.permalink, quando: new Date().toISOString(), errore: r.error }
+  const A = getAttesa(st)
+  if (!r.error) { A.ultimoPost = new Date().toISOString(); if (A.pronta === epId) A.pronta = undefined }
+  else if (A.pronta === epId && (A.tentativi = (A.tentativi ?? 0) + 1) >= 3) A.pronta = undefined // dopo tre tentativi falliti la lascia nel sito
+  await T.putState(st)
 }
 
 /** quello che serve al sito della memoria: profilo, visione, sequenze */

@@ -7,7 +7,7 @@
 import { RECIPES, TONES, runRecipe, shuffle as shuffleParams, defaults, type Tone } from '@/components/studio/genera/recipes'
 import { renderFx } from '@/components/studio/fx/render'
 import { FX_DEFS, LOOKS, newFx, type FxId } from '@/components/studio/fx/catalog'
-import { FACES, loadLabFonts, type FaceId } from '@/components/studio/genera/fonts'
+import { FACES, loadLabFonts, perCarattere, type FaceId } from '@/components/studio/genera/fonts'
 import { fontCss, type Face } from '@/components/studio/genera/raster'
 import { pick, range, chance, type Rnd } from '../core/rng'
 import type { Intention, Mood, ShaderSource } from '../core/types'
@@ -259,7 +259,7 @@ export async function textLayer(s: Sheet, o: { text: string; face: FaceId; sizeP
   await loadLabFonts()
   const face: Face = FACES[o.face] ?? FACES.grotesk
   const size = Math.max(8, Math.round(o.sizePx))
-  const txt = face.upper ? o.text.toUpperCase() : o.text
+  const txt = perCarattere(face.upper ? o.text.toUpperCase() : o.text, face.family)
   const probe = newCanvas(4, 4).getContext('2d')!
   probe.font = fontCss(face, size)
   const lines = wrap(probe, txt, s.W * (o.maxW ?? 0.8))

@@ -47,3 +47,11 @@ export function loadLabFonts(): Promise<void> {
   })()
   return ready
 }
+
+/** il fraktur (UnifrakturMaguntia) in tutto maiuscolo non si legge: con quel carattere il testo va in minuscolo, con l'iniziale maiuscola */
+export function perCarattere(text: string, family: string): string {
+  if (!/Unifraktur/i.test(family)) return text
+  if (text !== text.toUpperCase()) return text
+  const l = text.toLowerCase()
+  return l.replace(/(^|[.!?]\s+)(\p{L})/gu, (_m, a, c) => a + c.toUpperCase())
+}

@@ -11,7 +11,7 @@ import {
 import { SILHOUETTES, band, growth, inkPlume, lozenge, mirrored, needle, sigil, spindle, swash, taper, thornRing, walk, type Pt } from './strokes'
 import { shade, type Material } from './material'
 import { coffeeRings, crescent, membrane, neuralNet } from './organic'
-import { DISPLAY_FACES, FACES, type FaceId } from './fonts'
+import { DISPLAY_FACES, FACES, perCarattere, type FaceId } from './fonts'
 
 // ─── tipi ────────────────────────────────────────────────────────────────────
 
@@ -142,7 +142,7 @@ function finish(c: HTMLCanvasElement, o: Job, t: Tone, id: string, caps: [string
 /** altezza utile di una parola già adattata (per impaginare sopra/sotto) */
 function wordSize(s: string, f: typeof FACES[FaceId], width: number) {
   const { ctx } = makeCanvas(4, 4)
-  const str2 = 'upper' in f && f.upper ? s.toUpperCase() : s
+  const str2 = perCarattere('upper' in f && f.upper ? s.toUpperCase() : s, 'family' in f ? String(f.family) : '')
   return fitSize(ctx, str2, f, width)
 }
 
@@ -320,7 +320,7 @@ const ghirigoro: Recipe = {
     })
     const { c, ctx } = stage(o, t)
     paint(ctx, m, o, t, num(o, 'mat'), on(o, 'glow'), 0.006)
-    return finish(c, o, t, 'gotico', ['LITTERA GOTHICA', code(o, 'goth'), ROMAN_YEAR, word.toUpperCase()])
+    return finish(c, o, t, 'gotico', ['Littera gothica', code(o, 'goth'), ROMAN_YEAR, word])
   },
 }
 
@@ -562,7 +562,7 @@ const vortice: Recipe = {
       for (let i = 0; i < rows; i++) {
         const h = (SH / rows) * (0.6 + 0.8 * ((i + 1) / rows)) / 1.1
         const f = on(o, 'mix') ? faces[i % faces.length] : faces[0]
-        const unit = ('upper' in f && f.upper ? word.toUpperCase() : word)
+        const unit = perCarattere('upper' in f && f.upper ? word.toUpperCase() : word, 'family' in f ? String(f.family) : '')
         let s = unit
         ctx.font = `${'italic' in f && f.italic ? 'italic ' : ''}${f.weight} ${h}px "${f.family}"`
         while (ctx.measureText(s).width < SW * 1.05) s += unit

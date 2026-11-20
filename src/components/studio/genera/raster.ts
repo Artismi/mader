@@ -1,3 +1,4 @@
+import { perCarattere } from './fonts'
 /**
  * Primitive raster del laboratorio grafico: maschere (canale alfa), distorsioni
  * e trattamenti di stampa. Tutto lavora su pixel veri, ad alta risoluzione, e
@@ -119,7 +120,7 @@ function setTrack(ctx: Ctx, f: Face, size: number) {
 
 /** testo con il suo corpo, tracking e allineamento; restituisce le metriche reali */
 export function text(ctx: Ctx, s: string, x: number, y: number, f: Face, size: number, align: CanvasTextAlign = 'left', mode: 'fill' | 'stroke' = 'fill') {
-  const str = f.upper ? s.toUpperCase() : s
+  const str = perCarattere(f.upper ? s.toUpperCase() : s, f.family)
   ctx.font = fontCss(f, size)
   setTrack(ctx, f, size)
   ctx.textAlign = align

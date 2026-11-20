@@ -59,13 +59,13 @@ try {
   } else log('nessuna memoria: nasce adesso')
 
   // il lavoro
-  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, sequenza: true, epN: TAVOLE, reel: REEL })
-  log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza ${r.episodio}` : ''}`)
+  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, oreTraPost: Number(process.env.ORE_TRA_POST ?? 3), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
+  log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza nuova ${r.episodio}` : ''}${r.pronta ? `; sequenza pronta ${r.pronta}${r.puoPubblicare ? ', si pubblica' : ', aspetta (3 ore dal post prima)'}` : ''}`)
 
   // il post
-  if (r.episodio && (ig.collegato || process.env.PROVA_VIDEO)) {
+  if (r.pronta && r.puoPubblicare && (ig.collegato || process.env.PROVA_VIDEO)) {
     try {
-      const p = await pg.evaluate(([id, n]) => window.__artista.preparaPost(id, n), [r.episodio, PER_POST])
+      const p = await pg.evaluate(([id, n]) => window.__artista.preparaPost(id, n), [r.pronta, PER_POST])
       const file = []
       for (const x of p.pezzi) {
         if (!x.wav) { file.push(x.jpg); continue }
@@ -77,9 +77,9 @@ try {
       log(`pubblico ${file.length} slide…`)
       const esito = await api('ig-pubblica', { file, didascalia: p.didascalia }).catch(e => ({ error: String(e) }))
       log(esito.error ? `Instagram: errore — ${esito.error}` : `Instagram: pubblicato ${esito.permalink ?? esito.id}`)
-      await pg.evaluate(([id, e]) => window.__artista.annotaPost(id, e), [r.episodio, esito])
+      await pg.evaluate(([id, e]) => window.__artista.annotaPost(id, e), [r.pronta, esito])
     } catch (e) { log('Instagram: errore —', e.message) }
-  } else if (r.episodio) log('Instagram non collegato: la sequenza resta nel sito')
+  } else if (r.pronta && !ig.collegato) log('Instagram non collegato: la sequenza resta nel sito')
 
   // il brano della sequenza, per il sito (mp3)
   if (r.episodio) {

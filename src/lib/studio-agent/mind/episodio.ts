@@ -26,6 +26,7 @@ import { getCantieri } from './cantiere'
 import { APERTURE } from '../voice/conclusioni'
 import type { Follia, Linguaggio } from './linguaggi'
 import { impaginaTesti, type Impagina } from '../hands/tipo'
+import { coloriDi, scegliVisiva } from './retorica'
 
 // ─── la visione ─────────────────────────────────────────────────────────────
 export interface Tesi { testo: string; conf: number; da: number; a: string; b: string; ritirata?: boolean }
@@ -240,6 +241,7 @@ const LAY_REL: Record<Rel, Lay[]> = {
   identita: ['sovrapposti', 'griglia', 'zoom'], diventa: ['coppia', 'griglia', 'vuoto'], accanto: ['coppia', 'vuoto', 'griglia', 'diviso'],
 }
 let ultimoLay: Lay | null = null
+export const ultimaImpaginazione = () => ultimoLay
 let ultimoTipo: Impagina | null = null
 const hx = (a: number, b: number, c: number) => '#' + [a, b, c].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
 function mediaSotto(s: Sheet, x0: number, y0: number, x1: number, y1: number): string {
@@ -296,15 +298,19 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   } else if (sc.a) {
     const modi = L && r() < 0.6 ? (L.modi as Modo[]) : MODI_RUOLO[sc.ruolo]
     const ma = pick(r, modi), mb = pick(r, modi)
-    let opts = sc.b && sc.a !== sc.b ? LAY_REL[sc.rel ?? 'accanto'].filter(l => l !== ultimoLay) : (['zoom', 'vuoto', 'griglia', 'solo'] as Lay[]).filter(l => l !== ultimoLay)
-    if (L && r() < 0.6) { const pref = (L.lay as Lay[]).filter(l => l !== ultimoLay); if (pref.length) opts = pref }
-    let lay = pick(r, opts.length ? opts : ['solo']) as Lay
+    // l'impaginazione dice la relazione: quale la dica meglio lo impara dal giudizio del suo occhio (con esplorazione)
+    const TUTTE: Lay[] = ['coppia', 'zoom', 'vuoto', 'orbita', 'diviso', 'sovrapposti', 'griglia']
+    let lay: Lay
+    if (sc.b && sc.a !== sc.b) lay = scegliVisiva(st, r, sc.rel ?? 'accanto', TUTTE, [...LAY_REL[sc.rel ?? 'accanto'], ...((L?.lay ?? []) as Lay[])], ultimoLay)
+    else lay = pick(r, (['zoom', 'vuoto', 'griglia', 'solo'] as Lay[]).filter(l => l !== ultimoLay))
     // le follie: i salti
     if (sc.follia === 'scala') lay = 'zoom'
     if (sc.follia === 'ossessione') lay = 'griglia'
     ultimoLay = lay
-    let A = await segno(sc.follia === 'scambio' && sc.b ? sc.b : sc.a, ma, sc.b)
-    let B = sc.b && sc.b !== sc.a ? await segno(sc.follia === 'scambio' ? sc.a : sc.b, mb, sc.a) : null
+    const tinta = (cv: HTMLCanvasElement, w: string) => { const c = coloriDi(st, w)[0]; if (!c) return cv; const out = newCanvas(cv.width, cv.height), g = out.getContext('2d')!; g.drawImage(cv, 0, 0); g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.8; g.fillStyle = c; g.fillRect(0, 0, out.width, out.height); return out }
+    const wa = sc.follia === 'scambio' && sc.b ? sc.b : sc.a, wb = sc.follia === 'scambio' ? sc.a : sc.b
+    let A = tinta(await segno(wa, ma, sc.b), wa)
+    let B = sc.b && sc.b !== sc.a ? tinta(await segno(wb!, mb, sc.a), wb!) : null
     if (sc.follia === 'assenza') { A = newCanvas(4, 4); B = null; lay = 'vuoto' }
     const alto = r() < 0.5
     switch (lay) {

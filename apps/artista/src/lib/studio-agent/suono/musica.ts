@@ -19,7 +19,7 @@
  * saturazione, compressione e "pompaggio" sulla cassa.
  */
 export type Genere = 'lofi' | 'techno' | 'acid' | 'glitch' | 'downtempo' | 'minimalhouse' | 'synthwave' | 'breakbeat' | 'ambient' | 'pop' | 'rock' | 'hiphop' | 'jazz' | 'funk' | 'hardtechno' | 'dnb'
-export interface Sezione { strumenti: string[]; motivo?: string; follia?: string; ultimo?: boolean; energia?: number; battute?: number }
+export interface Sezione { rel?: string; strumenti: string[]; motivo?: string; follia?: string; ultimo?: boolean; energia?: number; battute?: number }
 export interface Partitura {
   genere: Genere; bpm: number; swing: number; radice: number; scala: number[]; accordi: number[][]
   battute: number; sezioni: Sezione[]; motivi: Record<string, number[]>; risolve: boolean; seme: number
@@ -93,7 +93,7 @@ export function colpi(p: Partitura, S: Sezione, st: number) {
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296) }
 const hash = (w: string) => [...w].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 17)
 
-export interface SpecMusica { linguaggio: string; forma: string; scuro: boolean; conf: number; mood: string; schede: { concetto?: string; follia?: string; parole?: number }[]; seme: number }
+export interface SpecMusica { linguaggio: string; forma: string; scuro: boolean; conf: number; mood: string; schede: { concetto?: string; follia?: string; parole?: number; rel?: string }[]; seme: number }
 
 /** compone il brano: tutto deciso da linguaggio, forma, tono, fiducia, concetti e follie */
 export function componi(s: SpecMusica): Partitura {
@@ -133,8 +133,11 @@ export function componi(s: SpecMusica): Partitura {
     if (sc.concetto) set.add('motivo')
     const secBattuta = (4 * 60) / bpm, serve = 2.5 + (sc.parole ?? 0) / 2.6
     const bt = Math.min(12, Math.max(4, Math.ceil(serve / secBattuta / 2) * 2))
-    return { battute: bt, strumenti: [...set], motivo: sc.concetto, follia: sc.follia, energia: Math.min(1, (k / ord.length) * (0.6 + energia * 0.6)) }
+    return { rel: sc.rel, battute: bt, strumenti: [...set], motivo: sc.concetto, follia: sc.follia, energia: Math.min(1, (k / ord.length) * (0.6 + energia * 0.6)) }
   })
+  // la stessa relazione che la tavola dice con le parole e con l'impaginazione, la musica la dice così:
+  // contrasto → si toglie la batteria per una battuta e l'armonia scarta; identità/dentro → riprende gli strumenti della sezione prima
+  sezioni = sezioni.map((x, i) => x.rel === 'identita' || x.rel === 'dentro' ? { ...x, strumenti: [...new Set([...(sezioni[i - 1]?.strumenti ?? x.strumenti), 'motivo'])] } : x)
   if (s.forma === 'frammenti') sezioni = sezioni.map(x => ({ ...x, follia: x.follia ?? (r() < 0.35 ? 'ossessione' : undefined) }))
   if (sezioni.length) sezioni[sezioni.length - 1].ultimo = true
   // il groove: per i generi spezzati se lo scrive da sé, come un piccolo programma: euclide(k, 16, rotazione),
@@ -191,7 +194,8 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
   const has = (x: string) => S.strumenti.includes(x)
   const four = QUATTRO.has(p.genere)
   const nota = (grado: number, ott = 0) => { const n = p.scala.length; const o = Math.floor(grado / n); return p.radice + 12 * (ott + o) + p.scala[((grado % n) + n) % n] }
-  const accordo = (b: number) => p.accordi[b % p.accordi.length]
+  const scarto = S?.rel === 'contro' ? 2 : S?.rel === 'diventa' ? 1 : 0
+  const accordo = (b: number) => p.accordi[b % p.accordi.length].map(g => g + (b % 2 ? scarto : 0))
 
   const cassa = (t: number, vol = 1) => {
     const o = ctx.createOscillator(), g = ctx.createGain()
@@ -228,6 +232,7 @@ export async function suona(p: Partitura, i: number, sampleRate = 48000): Promis
     const t = T(st), bar = Math.floor(st / 16), s16 = st % 16
     // batteria: la stessa fonte dei colpi che usa il montaggio
     const C = colpi(p, S, st)
+    if (S.rel === 'contro' && bar === 0) { C.cassa = 0; C.rullante = 0; C.hat = 0 } // il contrasto comincia con un vuoto
     if (C.cassa) cassa(t, C.cassa)
     if (C.rullante) { if (has('clap') && !has('rullante')) clap(t); else rullante(t, p.genere === 'lofi' ? 0.35 : p.genere === 'rock' || p.genere === 'hiphop' ? 0.7 : C.rullante * 0.5) }
     if (C.ghost) rullante(t, C.ghost * 0.4)
@@ -311,6 +316,7 @@ export function eventi(p: Partitura, i: number): Eventi {
   const e: Eventi = { beat, battute: p.battute, cassa: [], rullante: [], basso: [], accordi: [], stab: [], durata: durata(p, i) + (S.ultimo ? 1.5 : 0), energia: S.energia ?? 0.5, crash: [] }
   for (let st = 0; st < (S.battute ?? p.battute) * 16; st++) {
     const t = T(st), s16 = st % 16, C = colpi(p, S, st)
+    if (S.rel === 'contro' && st < 16) { C.cassa = 0; C.rullante = 0 }
     if (C.cassa) e.cassa.push(t)
     if (C.rullante) e.rullante.push(t)
     if (C.crash) e.crash.push(t)

@@ -13,6 +13,7 @@ import { inglese } from '../reader/concepts'
 import type { Linguaggio } from './linguaggi'
 import { GENERE_NOME, type Partitura } from '../suono/musica'
 import { concorda } from '../voice/lingua'
+import { connettivo } from './retorica'
 
 export interface Profilo { perche?: string; why?: string; nome: string; username: string; bio: string; presentazione: string; temi: string[]; day: number; foto?: string; storia: { day: number; cosa: string }[] }
 type WithP = AgentState & { profilo?: Profilo }
@@ -230,10 +231,10 @@ export function didascaliaIT(st: AgentState, o: { prima?: { conclusione?: string
   if (o.d) {
     righe.push('')
     const t = minuscola(pulisci(o.d.testo)), p = o.d.conf
-    righe.push(o.d.ritirata ? `A metà mi sono contraddetto, e ho lasciato la contraddizione dov'era.`
-      : p >= 0.7 ? scegli([`Ne sono quasi sicuro: ${t}.`, `Lo dico piano, ma lo dico: ${t}.`])
-      : p >= 0.4 ? scegli([`Forse ${t}.`, `Può darsi che ${t}. Non lo so ancora.`])
-      : scegli([`Non ci credo, ma lo scrivo lo stesso: ${t}.`, `È solo un'ipotesi: ${t}.`]))
+    // quanto ci crede, detto con i segnali di incertezza che ha imparato leggendo (non con frasi nostre)
+    const dub = p < 0.5 ? connettivo(st, Math.random, 'dubbio') : null
+    const contro = o.d.ritirata ? connettivo(st, Math.random, 'contrasto') : null
+    righe.push(dub ? `${maiuscola(dub)}, ${t}.` : contro ? `${maiuscola(contro)}, ${t}.` : `${maiuscola(t)}.`)
   }
   // come l'ha fatto: immagini e suono, in poche parole
   const gesti = o.L.id.split('×').map(x => GESTO[x]).filter(Boolean).map(g => scegli(g!))

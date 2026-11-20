@@ -17,7 +17,7 @@
 import type { AgentState, Features, Intention } from '../core/types'
 import { pick, range, weighted, type Rnd } from '../core/rng'
 import { RECIPES, defaults, shuffle as shuffleParams, type Tone } from '@/components/studio/genera/recipes'
-import { FACES, loadLabFonts, type FaceId } from '@/components/studio/genera/fonts'
+import { FACES, loadLabFonts, perCarattere, type FaceId } from '@/components/studio/genera/fonts'
 import { fontCss, type Face } from '@/components/studio/genera/raster'
 import { LOOKS } from '@/components/studio/fx/catalog'
 import { anchorOf } from '../reader/lexicon'
@@ -314,7 +314,7 @@ async function etichette(s: Sheet, items: { text: string; x: number; y: number }
   const F: Face = FACES[face] ?? FACES.grotesk
   const size = Math.round(Math.min(s.W, s.H) * 0.022)
   g.font = fontCss(F, size); g.fillStyle = [t.ink, t.acc].sort((a, b) => ratio(b, t.bg) - ratio(a, t.bg))[0]; g.textAlign = 'center'; g.textBaseline = 'top'
-  for (const it of items) g.fillText(F.upper ? it.text.toUpperCase() : it.text, it.x * s.W, it.y * s.H)
+  for (const it of items) g.fillText(perCarattere(F.upper ? it.text.toUpperCase() : it.text, F.family), it.x * s.W, it.y * s.H)
   return withLayer(s, fullLayer(s, lid(), 'etichette', cv))
 }
 
@@ -347,7 +347,7 @@ async function mappaLayer(s: Sheet, r: Rnd, sc: Scena, face: FaceId, t: Tone): P
     g.beginPath(); g.arc(x * s.W, y * s.H, R * (s.W / 800), 0, Math.PI * 2); g.fill()
     g.font = fontCss(F, i ? size : Math.round(size * 1.5))
     g.textAlign = x > 0.6 ? 'right' : 'left'
-    g.fillText(F.upper ? w.toUpperCase() : w, x * s.W + (x > 0.6 ? -14 : 14), y * s.H)
+    g.fillText(perCarattere(F.upper ? w.toUpperCase() : w, F.family), x * s.W + (x > 0.6 ? -14 : 14), y * s.H)
   })
   return withLayer(s, fullLayer(s, lid(), 'mappa', cv))
 }
