@@ -14,9 +14,11 @@ import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ri
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { serializza, ricostruisci } from './hands/cassetto'
+import { gusto as gustoVisivo } from './eyes/gusto'
 import { GENERICI } from './mind/pensiero'
 import { posDi } from './reader/concepts'
 import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
+import { buone, tavoleAdHoc } from './mind/adhoc'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, type Sheet } from './hands/sheet'
 import type { ToolCtx } from './hands/tools'
@@ -446,6 +448,13 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
       if (d && (m.si || hooks.reelForza)) {
         const fogliD: Sheet[] = [], infoD: { rel?: string; interesse: number }[] = []
         for (const id of d.ids) { const j = await T.prendiFoglio(id); if (!j) continue; fogliD.push(await ricostruisci(JSON.parse(j))); infoD.push({ interesse: tutte.find(x => x.id === id)?.interest ?? 0.5 }) }
+        // se tra le tavole del discorso le buone sono meno di quattro, ne fa di nuove apposta (sul tema del discorso)
+        const nbD = buone(st, fogliD, intention).length
+        if (nbD < 4) {
+          const ah = await tavoleAdHoc(st, r, { log, intention, readings, quante: 4 - nbD + 1, fast: hooks.fast, suggerito: d.tema, perche: `il discorso su «${d.tema}» ha solo ${nbD} tavole buone` })
+          for (const w of ah.works) hooks.onWork?.(w)
+          fogliD.push(...ah.fogli); infoD.push(...ah.info)
+        }
         if (fogliD.length >= 3) {
           log(`Curatore: racconto «${d.tema}» con ${fogliD.length} tavole di ${d.giorni.length} giornate.`)
           const rr = await faiReel(st, r, fogliD, infoD, { domanda: d.domanda, conclusione: d.conclusione, face: F.face as FaceId, parola: d.tema }, log)
@@ -455,8 +464,20 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
   }
   // l'agenda vuole un reel e nessun discorso tra più giornate è pronto: racconta la sequenza di oggi
-  if (hooks.reel && hooks.reelForza && !video && fogli.length >= 2) {
-    try { log('Reel: nessun discorso tra più giornate, racconto la sequenza di oggi.'); const rr = await faiReel(st, r, fogli, infoReel, { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log); if (rr) { video = rr.video; audioReel = rr.audio } } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
+  if (hooks.reel && hooks.reelForza && !video && fogli.length >= 1) {
+    try {
+      log('Reel: nessun discorso tra più giornate, racconto la sequenza di oggi.')
+      // le tavole buone di oggi sono poche? ne fa di nuove apposta, ragionando sulle ultime giornate, e le mette insieme alle buone
+      let fogliR = fogli, infoR = infoReel, esclusiAH: string[] = []
+      const bo = buone(st, fogli, intention)
+      if (bo.length < 4) {
+        const ah = await tavoleAdHoc(st, r, { log, intention, readings, quante: 4 - bo.length + 1, fast: hooks.fast, suggerito: plan.d?.a ?? intention.word, perche: `delle tavole di oggi solo ${bo.length} reggono un reel` })
+        for (const w of ah.works) hooks.onWork?.(w)
+        esclusiAH = ah.works.map(w => w.id)
+        const tieni = bo.length >= 1 ? bo.map(x => x.i) : fogli.map((_, i) => i).slice(0, 1)
+        fogliR = [...tieni.map(i => fogli[i]), ...ah.fogli]; infoR = [...tieni.map(i => infoReel[i]), ...ah.info]
+      }
+      const rr = await faiReel(st, r, fogliR, infoR, { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word, esclusi: [...works.map(w => w.id), ...esclusiAH] }, log); if (rr) { video = rr.video; audioReel = rr.audio } } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
   }
   const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
   log(`Musica: ${descrMusica}. Le tavole durano da ${Math.min(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} a ${Math.max(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} secondi, quanto serve per leggerle.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
@@ -675,7 +696,7 @@ export async function loadOrCreate(): Promise<AgentState> {
 
 // ── il reel: un beat suo, la scena smontata, una coreografia che si evolve ──
 type ConMovimento = AgentState & { beat?: Gusto; movimento?: { memoria: Coreografia[]; rel: Record<string, Partial<Record<Accoppiamento, number>>>; diario: string[] } }
-async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: { rel?: string; interesse: number }[], t: { domanda?: string; conclusione?: string; face: FaceId; parola: string }, log: (m: string) => void): Promise<{ video: Blob; audio: Blob } | null> {
+async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: { rel?: string; interesse: number }[], t: { domanda?: string; conclusione?: string; face: FaceId; parola: string; esclusi?: string[] }, log: (m: string) => void): Promise<{ video: Blob; audio: Blob } | null> {
   const st = st0 as ConMovimento
   // le tavole che hanno poco da far vedere (solo testo su un fondo) restano fuori dal reel, se ne restano almeno due
   {
@@ -689,6 +710,17 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     if (ricche.length >= 3) tieni.splice(0, tieni.length, ...ricche)
     if (tieni.length >= 2 && tieni.length < fogli.length) { log(`Reel: lascio fuori ${fogli.length - tieni.length} tavole che sono solo parole.`); fogli = tieni.map(i => fogli[i]); info = tieni.map(i => info[i]) }
   }
+  // poche tavole fanno un reel che gira a vuoto: ne riprende dal cassetto, di altri giorni, quelle che hanno a che fare con la parola e più materia
+  if (fogli.length < 4) {
+    try {
+      const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set(t.esclusi ?? [])
+      const radice = t.parola.toLowerCase().slice(0, 5)
+      const cand = tutte.filter(w => nel.has(w.id) && !via.has(w.id)).map(w => ({ w, v: 0.6 * w.interest + 0.4 * (w.visual?.features ? gustoVisivo(st0, w.visual.features) : 0.5) + (radice && `${w.title ?? ''} ${w.intention?.word ?? ''}`.toLowerCase().includes(radice) ? 0.5 : 0) })).sort((a, b) => b.v - a.v)
+      let presi = 0
+      for (const { w } of cand) { if (fogli.length >= 4) break; const j = await T.prendiFoglio(w.id); if (!j) continue; fogli = [...fogli, await ricostruisci(JSON.parse(j))]; info = [...info, { interesse: w.interest }]; presi++ }
+      if (presi) log(`Reel: le tavole di oggi sono poche, ne riprendo ${presi} dal cassetto.`)
+    } catch (e) { log(`Cassetto: ${e instanceof Error ? e.message : e}`) }
+  }
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
   // l'orecchio sceglie: tre beat candidati (stili diversi), vince quello che suona meglio; tutti gli stili prendono il loro voto
@@ -698,15 +730,16 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   // la partitura parte dall'ultima che ha funzionato (a volte da capo): la costruzione a strati si evolve con lui
   const ultimaP = M.memoria.length && r() < 0.6 ? M.memoria[M.memoria.length - 1].partitura : undefined
   await loadLabFonts() // i caratteri delle tavole (fraktur, mono…) devono esserci prima di scrivere
-  const scena = smonta(fogli, r, ultimaP)
+  let scena = smonta(fogli, r, ultimaP)
   void parole
   const lettura = scena.parole.map(legge)
   const forte0 = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
-  const servono = lettura.slice().sort((a, b) => b - a).slice(0, 4).reduce((a, b) => a + Math.max(b, 2.5), 0) + legge((t.domanda ?? '').split(/\s+/).length) + legge((t.conclusione ?? '').split(/\s+/).length)
+  // il brano dura quanto le tavole: ognuna si costruisce e si legge una volta, e torna al massimo una volta, più breve
+  const servono = lettura.slice(0, 6).reduce((a, b) => a + Math.max(b + 1.2, 3.2) * 1.45, 0)
   let migliore: { audio: AudioBuffer; brano: Awaited<ReturnType<typeof suonaBeat>>['brano']; voto: number; stile: ReturnType<typeof scegliStile>; orecchio: ReturnType<typeof ascoltaBeat> } | null = null
   for (let k = 0; k < 3; k++) {
     const stile = scegliStile(gusto, r, st.day)
-    const b = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(10, Math.min(40, servono)), memoria: gusto.pattern })
+    const b = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(8, Math.min(40, servono)), memoria: gusto.pattern })
     const o = ascoltaBeat(b.audio, b.brano.cassa, b.brano.rullante)
     premiaStile(gusto, stile.id, Math.max(0, Math.min(1, (o.voto + 1) / 3)))
     if (!migliore || o.voto > migliore.voto) migliore = { ...b, voto: o.voto, stile, orecchio: o }
@@ -717,7 +750,34 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const forte = forte0
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
   const lett2 = lettura.slice()
-  const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2)
+  let ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2)
+  // più tentativi: altre due versioni (altra partitura, altra costruzione); di ognuna dieci provini, giudicati dal suo occhio:
+  // la materia di ogni fotogramma, quanto cambia da un momento all'altro, quante volte torna la stessa tavola. Si gira la migliore.
+  {
+    const tempi = Array.from({ length: 10 }, (_, i) => (i + 0.5) * brano.durata / 10)
+    const giudica = async (sc: typeof scena, e: typeof ev) => {
+      let pv: HTMLCanvasElement[] = []
+      await giraCoreografia({ scena: sc, brano, coreografia: e.coreografia, riprese: e.riprese, provini: tempi, suiProvini: x => { pv = x } })
+      if (!pv.length) return { v: -9, materia: 0, varia: 0 }
+      const fs = pv.map(c => measure(rasterize(c, 64)))
+      const materia = fs.reduce((a, f) => a + gustoVisivo(st0, f), 0) / fs.length
+      const dati = pv.map(c => { const q = document.createElement('canvas'); q.width = 18; q.height = 32; const g0 = q.getContext('2d')!; g0.drawImage(c, 0, 0, 18, 32); return g0.getImageData(0, 0, 18, 32).data })
+      let varia = 0; for (let i = 1; i < dati.length; i++) { let d = 0; for (let j = 0; j < dati[i].length; j += 4) d += Math.abs(dati[i][j] - dati[i - 1][j]) + Math.abs(dati[i][j + 1] - dati[i - 1][j + 1]) + Math.abs(dati[i][j + 2] - dati[i - 1][j + 2]); varia += Math.min(1, d / (18 * 32 * 3 * 60)) }
+      varia /= dati.length - 1
+      const volte = new Map<number, number>(); for (const p of e.riprese) volte.set(p.tav, (volte.get(p.tav) ?? 0) + 1)
+      const ripete = [...volte.values()].reduce((a, n) => a + Math.max(0, n - 1), 0) / Math.max(1, e.riprese.length)
+      return { v: materia + 0.6 * varia - 0.5 * ripete + 0.08 * volte.size, materia, varia }
+    }
+    let meglio = { scena, ev, ...(await giudica(scena, ev)) }
+    for (let k = 1; k < 3; k++) {
+      const sc = smonta(fogli, r)
+      const e = evolviCoreografia(sc, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, sc.parole.map(legge))
+      const g0 = await giudica(sc, e)
+      if (g0.v > meglio.v) meglio = { scena: sc, ev: e, ...g0 }
+    }
+    scena = meglio.scena; ev = meglio.ev
+    log(`Reel: tre versioni provate, giro quella con più materia e movimento (materia ${meglio.materia.toFixed(2)}, cambiamento ${meglio.varia.toFixed(2)}).`)
+  }
   // le lettere-forma sono già state disposte smontando le tavole: la partitura le registra com'erano
   ev.coreografia.partitura = { ...partitura(ev.coreografia.partitura), ...(scena.strati ?? {}), rullante: partitura(ev.coreografia.partitura).rullante, fineFrase: partitura(ev.coreografia.partitura).fineFrase, cambio: partitura(ev.coreografia.partitura).cambio }
   // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni

@@ -10,7 +10,8 @@ import { propostaDi, type Forma } from './mind/curatore'
 import { rng } from './core/rng'
 import { esito, type TipoD } from './voice/conclusioni'
 import { premiaStile, type Gusto } from './suono/beat'
-import { impara } from './eyes/gusto'
+import { impara, gusto } from './eyes/gusto'
+import { tavoleAdHoc } from './mind/adhoc'
 import { posDi } from './reader/concepts'
 import { GENERICI } from './mind/pensiero'
 import { cura, getProfilo } from './mind/profilo'
@@ -72,6 +73,20 @@ export async function giro(o: { studi: number; sequenza?: boolean; epN: number; 
       // l'agenda: se tocca a un carosello, la sequenza esce come carosello anche se lui la terrebbe nel sito
       if (o.deve?.includes('carosello') && (P.forma === 'niente' || P.forma === 'storia')) P = { ...P, forma: 'carosello', ids: ep.schede, perche: 'tocca a un carosello' }
       if (P.forma === 'niente' && scade) { const best = (await T.listWorks()).filter(w => ep.schede.includes(w.id)).sort((a, b) => b.interest - a.interest)[0]; if (best) P = { ...P, forma: 'storia', ids: [best.id], perche: 'quasi 4 ore di silenzio: lascio almeno un frammento' } }
+      // il carosello ha bisogno di almeno quattro tavole buone: se la sequenza ne ha meno, ne fa di nuove apposta
+      // (ragionando sulle ultime giornate e letture, più varianti per ognuna) e le aggiunge in coda alla sequenza
+      if (P.forma === 'carosello') {
+        try {
+          const ws = (await T.listWorks()).filter(w => ep.schede.includes(w.id))
+          const nb = ws.filter(w => w.visual?.features && gusto(st, w.visual.features) >= 0.42).length
+          if (nb < 4 && ws.length) {
+            const it = ws[ws.length - 1].intention
+            const ah = await tavoleAdHoc(st, rng(st.day * 31 + ws.length), { log: o.log, intention: it, readings: st.readings.slice(-40), quante: 4 - nb + 1, fast: true, suggerito: ((ep as Ep & { coppia?: string }).coppia ?? '').split('|')[0] || it.word, perche: `il carosello ha solo ${nb} tavole buone` })
+            for (const w of ah.works) fatte.push(w.id)
+            if (ah.works.length) { ep.schede = [...ep.schede, ...ah.works.map(w => w.id)]; P = { ...P, ids: ep.schede } }
+          }
+        } catch (e) { o.log(`Tavole per il post non riuscite: ${e instanceof Error ? e.message : e}`) }
+      }
       if (P.forma === 'niente') o.log('Questa sequenza resta nel sito: non la pubblico.')
       else { B.pronta = ep.id; B.tentativi = 0; B.forma = P.forma; B.storia = P.ids[0] }
     }
