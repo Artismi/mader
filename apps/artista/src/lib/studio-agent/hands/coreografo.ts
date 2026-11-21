@@ -19,9 +19,9 @@
  *    dei gesti, novità rispetto a quelle già fatte. Vince la migliore; i suoi gesti si rafforzano nella memoria.
  */
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
-import { rettangoloVuoto, flatten, type Layer, type Sheet } from './sheet'
+import { rettangoloVuoto, flatten, sfuma, type Layer, type Sheet } from './sheet'
 import type { Brano } from '../suono/beat'
-import { toolById, type ToolCtx } from './tools'
+import { toolById, ANIMABILI, type ToolCtx } from './tools'
 import { fontCss } from '@/components/studio/genera/raster'
 import { perCarattere } from '@/components/studio/genera/fonts'
 
@@ -56,11 +56,14 @@ interface Nodo {
   lettera?: boolean
   particelle?: { x: number; y: number; c: string }[]
   /** un livello vivo: il suo generatore lo ridisegna a ogni momento (crescita, fase) */
-  vivo?: { tool: string; p: Record<string, unknown>; fonte?: HTMLCanvasElement; W: number; H: number; layer: Layer }
+  vivo?: { tool: string; p: Record<string, unknown>; fonte?: HTMLCanvasElement; W: number; H: number; layer: Layer; vero?: boolean; tono?: { bg: string; ink: string; acc: string } }
   /** lo strato della tavola (l'ordine in cui è stata fatta) e il modo in cui si rivela */
   strato?: number; rivela?: Rivela
 }
-export type Rivela = 'retino' | 'tendina' | 'strappo' | 'alba' | 'posa' | 'crescita' | 'righe'
+export type Rivela = 'retino' | 'tendina' | 'strappo' | 'alba' | 'posa' | 'crescita' | 'righe' | 'cresce'
+const MASCHERE = new Set<Rivela>(['retino', 'tendina', 'strappo', 'cresce'])
+/** i generatori che possono fare da protagonisti (crescono e reggono lo schermo) */
+const FORTI = new Set(['muffa', 'flusso', 'caleido', 'traccia', 'ornato', 'geometria', 'pattern'])
 const MATERIA = new Set(['retino', 'punti', 'grana', 'duotono', 'sfasa', 'materia', 'caleido', 'pattern', 'onde', 'ornato'])
 /** come si rivela uno strato: dalla sua natura (il retino a punti che crescono, il campo a tendina, la carta a strappo) */
 function rivelaDi(l: Layer, n: Nodo, P: Partitura): Rivela {
@@ -69,11 +72,13 @@ function rivelaDi(l: Layer, n: Nodo, P: Partitura): Rivela {
   if (n.ruolo === 'linea') return 'tendina'
   if (/retino|punti|grana|pattern|ornato|caleido/.test(l.kind)) return 'retino'
   if (/luce|ombra|shader/.test(l.kind)) return 'alba'
-  if (n.ruolo === 'fondo') return n.w >= W * 0.98 && n.h >= H * 0.98 && n.indice === 0 ? 'alba' : 'tendina'
-  if (n.ruolo === 'trama') return l.blend !== 'source-over' ? 'retino' : 'tendina'
-  return P.figure ?? 'strappo'
+  if (n.ruolo === 'fondo') return n.w >= W * 0.98 && n.h >= H * 0.98 && n.indice === 0 ? 'alba' : 'cresce'
+  if (n.ruolo === 'trama') return l.blend !== 'source-over' ? 'retino' : 'cresce'
+  // la figura si forma dalla sua materia: cresce dal suo centro di massa seguendo la forma (o si posa); mai una lama dritta
+  void P
+  return P.figure === 'posa' ? 'posa' : 'cresce'
 }
-interface Scena { nodi: Nodo[]; bg: string[]; tavole: number; parole: number[]; lettere?: Partitura['lettere']; tratto?: Partitura['tratto']; strati?: Partitura; rango?: Map<number, { k: number; n: number }> }
+interface Scena { nodi: Nodo[]; bg: string[]; tavole: number; parole: number[]; lettere?: Partitura['lettere']; tratto?: Partitura['tratto']; strati?: Partitura; rango?: Map<number, { k: number; n: number }>; protagonista?: Map<number, number> }
 
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296) }
 const uno = <T,>(r: () => number, a: T[]) => a[Math.floor(r() * a.length)]
@@ -145,6 +150,9 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
     return '#' + [R / n, G / n, B / n].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
   }
   const parole: number[] = []
+  // le lettere-forma: al massimo in una tavola del reel, quella con meno materia (dove serve una forma in più)
+  const materiaDi = (s: Sheet) => s.layers.filter(l => l.genera || MATERIA.has(l.kind) || (l.blend !== 'source-over' && !TESTO.has(l.kind))).length
+  const tavolaLettere = fogli.length ? fogli.map((s, i) => ({ i, m: materiaDi(s) })).sort((a, b) => a.m - b.m)[0].i : -1
   for (const [ti, s] of fogli.entries()) {
     const k = W / s.W // la tavola occupa la larghezza del video, centrata in altezza
     const oy = (H - s.H * k) / 2
@@ -215,7 +223,7 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
         dopo.push({ id: id++, strato: 1000 + i, rivela: 'righe', ruolo: 'testo', tav: ti, gruppo: 0, sprite: c, x: m + c.width / 2, y: y + c.height / 2, w: c.width, h: c.height, rot: 0, alpha: 1, blend: 'source-over', padre: radice.id, indice: 1000 + i, area: c.width * c.height })
         y += x.px * 1.1 + x.dopo
       })
-      parole[ti] = tit.meta!.text.split(/\s+/).length + (blocchi[1]?.testo.split(/\s+/).length ?? 0)
+      parole[ti] = blocchi[0].testo.split(/\s+/).length + (blocchi[1]?.testo.split(/\s+/).length ?? 0) // le parole che si leggono davvero (il titolo accorciato)
     }
     // la redazione degli strati: fuori quelli generici (i blocchi di colore a caso, i grafici senza dati che parlano),
     // e la pila di un'ombra (tante copie spostate) diventa uno strato solo
@@ -277,8 +285,9 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
         const gy = q.createLinearGradient(0, 0, 0, c.height); gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.12, '#000'); gy.addColorStop(0.88, '#000'); gy.addColorStop(1, 'rgba(0,0,0,0)'); q.fillStyle = gy; q.fillRect(0, 0, c.width, c.height)
         nodi.push({ ...intero(), sprite: c }); return
       }
-      // i livelli nati da un generatore animabile restano interi: cresceranno e vivranno col loro generatore
-      // i livelli nati da un generatore restano quelli veri (rigenerarli cambia colori e grana): si rivelano, non si rifanno
+      // i livelli nati da un generatore crescono con il loro generatore (la fedeltà al livello vero si verifica prima di girare;
+      // se il generatore non lo rifà uguale, il livello si forma dalla sua materia)
+      if (l.genera && (ANIMABILI.has(l.genera.tool) || l.genera.tool === 'muffa')) { nodi.push({ ...intero(), vivo: { ...l.genera, W: s.W, H: s.H, layer: l, vero: true } }); return }
       if (copre) { nodi.push(intero()); return }
       // i livelli di figura grandi si dividono negli oggetti che contengono
       if (P0.scomponi && (ruolo === 'figura' || ruolo === 'trama') && !l.flipX && l.canvas.width * l.canvas.height > 160 * 160) {
@@ -338,7 +347,7 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       }
       // le lettere-forma: la parola chiave della tavola, nel suo carattere, usata come materia (enorme, tagliata dal bordo, sparsa…)
       const parolaChiave = (tit?.meta?.text ?? '').split(/[^\p{L}]+/u).filter(w => w.length >= 4 && !/^(della|delle|dello|nella|sulla|come|sono|essere|anche|quando|perché|questo|questa|quello|quella|tutto|ogni)$/i.test(w)).sort((a2, b2) => b2.length - a2.length)[0]
-      if (parolaChiave && tit?.meta && P0.lettere !== 'niente') {
+      if (parolaChiave && tit?.meta && P0.lettere !== 'niente' && ti === tavolaLettere) {
         const font = tit.meta.font ?? { family: 'serif', weight: 700 }
         const lettere = [...(font.upper ? parolaChiave.toUpperCase() : parolaChiave)]
         const n = lettere.length, mis = document.createElement('canvas').getContext('2d')!
@@ -433,7 +442,10 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
     const tutti = [...ord, ...testo]
     for (const n of xs) rango.set(n.id, { k: tutti.indexOf(n.strato!), n: tutti.length })
   }
-  return { nodi, bg: fogli.map(bordo), tavole: fogli.length, parole, lettere: P0.lettere, tratto: P0.tratto, strati: P0, rango }
+  // il protagonista di ogni tavola: lo strato generato più forte (muffa, flusso, caleido…), il più grande
+  const protagonista = new Map<number, number>()
+  for (let ti = 0; ti < fogli.length; ti++) { const c0 = nodi.filter(n => n.tav === ti && n.vivo?.vero && FORTI.has(n.vivo.tool)).sort((a, b) => (b.vivo!.tool === 'muffa' ? 2 : 1) * b.area - (a.vivo!.tool === 'muffa' ? 2 : 1) * a.area)[0]; if (c0) protagonista.set(ti, c0.id) }
+  return { nodi, bg: fogli.map(bordo), tavole: fogli.length, parole, lettere: P0.lettere, tratto: P0.tratto, strati: P0, rango, protagonista }
 }
 function drawL(q: CanvasRenderingContext2D, s: Sheet, l: Layer) {
   const k = (Math.min(s.W, s.H) * l.scale) / Math.max(l.canvas.width, l.canvas.height)
@@ -669,7 +681,7 @@ function statoStrato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano,
   const tipo = n.rivela ?? 'alba'
   const durR = tipo === 'retino' ? beat * 1.5 : tipo === 'alba' ? beat * 2 : tipo === 'strappo' ? beat * 0.75 : beat
   const u = clamp(pi / durR)
-  if (tipo === 'retino' || tipo === 'tendina' || tipo === 'strappo') { s.rivela = u * u * (3 - 2 * u); s.traccia = s.rivela }
+  if (MASCHERE.has(tipo)) { const uu = tipo === 'cresce' ? clamp(pi / (beat * 1.6)) : u; s.rivela = uu * uu * (3 - 2 * uu); s.traccia = s.rivela }
   else if (tipo === 'alba') s.alpha *= u
   else if (tipo === 'posa') { const m = molla(pi, 11, 0.5); s.dy -= (1 - m) * 46; s.sc *= 0.94 + 0.06 * m; s.alpha *= clamp(pi / (beat * 0.2)) }
   else if (tipo === 'righe') { const e = clamp(pi / 0.14); s.alpha *= e; s.dy += (1 - e) * (1 - e) * 16 }
@@ -687,7 +699,9 @@ function statoStrato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano,
   }
   // i generatori crescono a scatti sui sedicesimi, poi vivono: la fase avanza e salta sui colpi
   if (n.vivo) {
-    const g = c.gesti.trama, amp = g.ampiezza, durC = (2 + 3 * amp) * beat, passi = Math.floor(pi / (beat / 4)), fr = (pi - passi * beat / 4) / (beat / 4)
+    const prot = scena.protagonista?.get(rp.tav) === n.id
+    // il protagonista cresce più lento (è l'evento della tavola); al ritorno ricresce da capo, da vicino, per quasi tutta la ripresa
+    const g = c.gesti.trama, amp = g.ampiezza, durC = (prot ? (rp.anello ? Math.max(beat * 4, (rp.t1 - rp.t0) * 0.75) : (4 + 4 * amp) * beat) : (2 + 3 * amp) * beat), passi = Math.floor(pi / (beat / 4)), fr = (pi - passi * beat / 4) / (beat / 4)
     s.crescita = clamp(((passi + Math.min(1, fr / 0.4)) * beat / 4) / durC)
     const tt0 = t - g.lag * beat * 0.5
     const sig0 = g.segnale === 'k' ? inv(br.cassa, tt0, 0.1) : g.segnale === 's' ? inv(br.rullante, tt0, 0.12) : g.segnale === 'h' ? inv(br.hat, tt0, 0.05) : 0
@@ -710,7 +724,7 @@ function statoStrato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano,
   const fine = (rp.t1 - t)
   if (fine < beat && rp.t1 < br.durata - 1e-6 && !(R0.k === 0)) {
     const da = ((R0.n - 1 - R0.k) / Math.max(1, R0.n - 1)) * beat * 0.6, v = clamp(((beat - fine) - da) / (beat * 0.3))
-    if (tipo === 'retino' || tipo === 'tendina' || tipo === 'strappo') s.rivela = Math.min(s.rivela ?? 1, 1 - v)
+    if (MASCHERE.has(tipo)) s.rivela = Math.min(s.rivela ?? 1, 1 - v)
     else s.alpha *= 1 - v
     if (n.vivo) s.crescita = Math.min(s.crescita ?? 1, 1 - v)
   }
@@ -806,22 +820,76 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   const cache = new Map<number, Map<string, HTMLCanvasElement>>()
   let rr = 1
   const ctxStub = (): ToolCtx => ({ r: () => ((rr = (rr * 1664525 + 1013904223) >>> 0) / 4294967296), tone: { id: 'x', label: '', bg: '#ffffff', ink: '#111111', acc: '#e3361b', dark: false } as unknown as ToolCtx['tone'], intention: {} as ToolCtx['intention'], mood: 'calmo', say: () => '', shaders: [], quality: 1 })
+  // la muffa: il suo generatore (con la crescita, se c'è); si carica una volta
+  let muffaMod: Record<string, unknown> | null = null
+  const crescite = new Map<number, (f: number) => HTMLCanvasElement>()
+  const statoMuffa = async (n: Nodo, f: number): Promise<HTMLCanvasElement | null> => {
+    const v = n.vivo!, seme = Number(v.p.seme), colore = String(v.p.colore ?? '#111111'), S = Number(v.p.S) || Math.max(v.layer.canvas.width, v.layer.canvas.height) || 560
+    if (!Number.isFinite(seme)) return null
+    muffaMod ??= (await import('./muffa').catch(() => ({}))) as Record<string, unknown>
+    let fn = crescite.get(n.id)
+    if (!fn) {
+      const cm = muffaMod.crescitaMuffa as ((a: number, b: string, c: number) => (f: number) => HTMLCanvasElement) | undefined
+      const dm = muffaMod.disegnaMuffa as ((a: number, b: string, c: number, f?: number) => HTMLCanvasElement) | undefined
+      if (cm) fn = cm(seme, colore, S); else if (dm) fn = (x: number) => dm(seme, colore, S, x); else return null
+      crescite.set(n.id, fn)
+    }
+    // in tavola il segno passa da sfuma (bordi morbidi): lo stesso qui, così a crescita finita è identico
+    return v.p.__nudo ? fn(f) : sfuma(fn(f), 0.08)
+  }
   const vivo = async (n: Nodo, cr: number, fa: number): Promise<HTMLCanvasElement | null> => {
-    const v = n.vivo!; const tool = toolById(v.tool); if (!tool) return null
-    const k = `${Math.round(cr * 32)}|${Math.round(((fa % 1) + 1) % 1 * 24)}`
+    const v = n.vivo!
+    // a crescita finita, il livello vero (nessun salto tra l'ultimo stato ricostruito e la tavola)
+    if (v.vero && cr >= 0.999) return v.layer.canvas
+    const k = v.vero ? `${Math.round(cr * 24)}` : `${Math.round(cr * 32)}|${Math.round(((fa % 1) + 1) % 1 * 24)}`
     const m = cache.get(n.id) ?? new Map<string, HTMLCanvasElement>(); cache.set(n.id, m)
     if (m.has(k)) return m.get(k)!
-    const base: Layer[] = []
-    if (v.tool === 'ornato' && v.fonte) base.push({ id: String(v.p.layer), kind: 'figura', canvas: v.fonte, x: 0.5, y: 0.5, scale: 0.3, rot: 0, alpha: 1, blend: 'source-over' })
-    if ((v.tool === 'retino' || v.tool === 'caleido') && v.fonte) base.push({ id: 'fonte', kind: 'fondo', canvas: v.fonte, x: 0.5, y: 0.5, scale: Math.max(v.W, v.H) / Math.min(v.W, v.H), rot: 0, alpha: 1, blend: 'source-over' })
-    const s0: Sheet = { W: v.W, H: v.H, bg: '#ffffff', layers: base }
-    const c = { ...ctxStub(), tempo: { crescita: cr, fase: fa } }
-    const out = await tool.apply(s0, { ...v.p, sostituisci: false }, c).catch(() => null)
-    const nuovo = out?.layers.find(l => !base.some(b => b.id === l.id))
-    if (!nuovo) return null
+    let out: HTMLCanvasElement | null = null
+    if (v.tool === 'muffa') out = await statoMuffa(n, v.vero ? Math.round(cr * 24) / 24 : cr)
+    else {
+      const tool = toolById(v.tool); if (!tool) return null
+      const base: Layer[] = []
+      if (v.tool === 'ornato' && v.fonte) base.push({ id: String(v.p.layer), kind: 'figura', canvas: v.fonte, x: 0.5, y: 0.5, scale: 0.3, rot: 0, alpha: 1, blend: 'source-over' })
+      if ((v.tool === 'retino' || v.tool === 'caleido') && v.fonte) base.push({ id: 'fonte', kind: 'fondo', canvas: v.fonte, x: 0.5, y: 0.5, scale: Math.max(v.W, v.H) / Math.min(v.W, v.H), rot: 0, alpha: 1, blend: 'source-over' })
+      const s0: Sheet = { W: v.W, H: v.H, bg: '#ffffff', layers: base }
+      const st0 = ctxStub()
+      const c = { ...st0, ...(v.tono ? { tone: { ...st0.tone, ...v.tono } } : {}), tempo: { crescita: v.vero ? Math.round(cr * 24) / 24 : cr, fase: v.vero ? 0 : fa } }
+      const res = await tool.apply(s0, { ...v.p, sostituisci: false }, c).catch(() => null)
+      out = res?.layers.find(l => !base.some(b => b.id === l.id))?.canvas ?? null
+    }
+    if (!out) return null
     if (m.size > 48) m.delete(m.keys().next().value as string)
-    m.set(k, nuovo.canvas)
-    return nuovo.canvas
+    m.set(k, out)
+    return out
+  }
+  // la fedeltà: prima di girare, ogni livello generato si rifà a crescita finita e si confronta con quello vero;
+  // se non combacia si riprova con i colori veri del livello; se ancora no, il livello si forma dalla sua materia.
+  // Si controlla anche che cresca davvero (a un quarto è diverso da finito), se no non ha senso farlo crescere.
+  const mini = (cv: HTMLCanvasElement) => { const q = document.createElement('canvas'); q.width = 24; q.height = 24; const g0 = q.getContext('2d', { willReadFrequently: true })!; g0.drawImage(cv, 0, 0, 24, 24); return g0.getImageData(0, 0, 24, 24).data }
+  const diff = (a: Uint8ClampedArray, b: Uint8ClampedArray) => { let d = 0, n0 = 0; for (let i = 0; i < a.length; i += 4) { const al = a[i + 3] / 255, bl = b[i + 3] / 255; if (al < 0.05 && bl < 0.05) continue; d += (Math.abs(a[i] * al - b[i] * bl) + Math.abs(a[i + 1] * al - b[i + 1] * bl) + Math.abs(a[i + 2] * al - b[i + 2] * bl)) / 765 + Math.abs(al - bl); n0++ } return n0 ? d / n0 : 0 }
+  const tonoDi = (cv: HTMLCanvasElement) => { const d = mini(cv), cs: number[][] = []; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 120) cs.push([d[i], d[i + 1], d[i + 2]]); if (!cs.length) return undefined; const hex = (c: number[]) => '#' + c.map(x => Math.round(x).toString(16).padStart(2, '0')).join(''); const sat = (c: number[]) => Math.max(...c) - Math.min(...c); const scuro = cs.reduce((m, c) => (c[0] + c[1] + c[2] < m[0] + m[1] + m[2] ? c : m)), acceso = cs.reduce((m, c) => (sat(c) > sat(m) ? c : m)); return { bg: '#ffffff', ink: hex(scuro), acc: hex(acceso) } }
+  for (const n of scena.nodi.filter(x => x.vivo?.vero)) {
+    try {
+      const v = n.vivo!, vero = mini(v.layer.canvas)
+      cache.delete(n.id); crescite.delete(n.id)
+      const fine = async () => { const m0 = new Map<string, HTMLCanvasElement>(); cache.set(n.id, m0); const out = await vivo({ ...n, vivo: { ...v, vero: false } }, 1, 0); cache.delete(n.id); return out }
+      let a1 = await fine(), d1 = a1 ? diff(mini(a1), vero) : 9
+      if (d1 > 0.1 && v.tool !== 'muffa') { v.tono = tonoDi(v.layer.canvas); a1 = await fine(); d1 = a1 ? diff(mini(a1), vero) : 9 }
+      // la muffa in tavola è a volte sfumata ai bordi, a volte no: si prova anche senza
+      if (v.tool === 'muffa' && d1 > 0.04) { v.p = { ...v.p, __nudo: true }; const a2 = await fine(), d2 = a2 ? diff(mini(a2), vero) : 9; if (d2 < d1) { a1 = a2; d1 = d2 } else v.p = { ...v.p, __nudo: false } }
+      const q = a1 ? await (async () => { cache.set(n.id, new Map()); const o2 = await vivo({ ...n, vivo: { ...v, vero: false } }, 0.25, 0); cache.delete(n.id); return o2 })() : null
+      const cresce = q && a1 ? diff(mini(q), mini(a1)) > 0.03 : false
+      if (d1 > 0.1 || !cresce) { n.vivo = undefined; n.sprite = v.layer.canvas; n.rivela = 'cresce'; if (scena.protagonista?.get(n.tav) === n.id) scena.protagonista.delete(n.tav) }
+    } catch { const v = n.vivo!; n.vivo = undefined; n.sprite = v.layer.canvas; n.rivela = 'cresce' }
+  }
+  // il centro di massa di un nodo (dove la camera guarda il protagonista)
+  const centri = new Map<number, [number, number]>()
+  const centroDi = (n: Nodo): [number, number] => {
+    if (centri.has(n.id)) return centri.get(n.id)!
+    const src = n.vivo?.layer.canvas ?? n.sprite
+    let c0: [number, number] = [n.x, n.y]
+    if (src) { const d = mini(src); let x = 0, y = 0, a = 0; for (let i = 0; i < d.length; i += 4) { const w0 = d[i + 3]; x += ((i / 4) % 24 + 0.5) * w0; y += (Math.floor(i / 96) + 0.5) * w0; a += w0 } if (a) c0 = [n.x - n.w / 2 + (x / a / 24) * n.w, n.y - n.h / 2 + (y / a / 24) * n.h] }
+    centri.set(n.id, c0); return c0
   }
   // le parole in contrappunto: scure dove sotto è chiaro, chiare dove sotto è scuro, pixel per pixel (niente aloni)
   const tT = document.createElement('canvas'); tT.width = W; tT.height = H; const gT = tT.getContext('2d')!
@@ -899,6 +967,7 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   // le maschere con cui uno strato si rivela: punti che crescono (il retino), una tendina, uno strappo di carta
   const mTmp = new Map<number, HTMLCanvasElement>()
   const dirDi = (n: Nodo) => { const d = ['alto', 'sinistra', 'basso', 'destra'], k = (d.indexOf(scena.strati?.dir ?? 'basso') + (scena.rango?.get(n.id)?.k ?? 0)) % 4; return d[k] }
+  const arrivi = new Map<number, { D: Float32Array; mx: number; G: number; cv: HTMLCanvasElement }>()
   const mascherato = (n: Nodo, u: number) => {
     const src = n.sprite!, sw = Math.max(1, Math.min(src.width, 720)), sh = Math.max(1, Math.round(src.height * sw / src.width))
     let c = mTmp.get(n.id); if (!c) { c = document.createElement('canvas'); c.width = sw; c.height = sh; mTmp.set(n.id, c) }
@@ -906,7 +975,36 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     q.globalCompositeOperation = 'destination-in'; q.fillStyle = '#000'
     const d = dirDi(n), lungo = d === 'alto' || d === 'basso' ? sh : sw
     const pos = (x: number, y: number) => (d === 'alto' ? y / sh : d === 'basso' ? 1 - y / sh : d === 'sinistra' ? x / sw : 1 - x / sw)
-    if (n.rivela === 'retino') {
+    if (n.rivela === 'cresce') {
+      // la forma cresce da dentro: dai suoi punti più pieni, lungo la sua materia (distanza che passa per i pixel opachi,
+      // lenta nel vuoto, con un po' di irregolarità), come una macchia che si allarga seguendo la carta
+      let A = arrivi.get(n.id)
+      if (!A) {
+        const G = 64, t0 = document.createElement('canvas'); t0.width = G; t0.height = G; const g0 = t0.getContext('2d', { willReadFrequently: true })!; g0.drawImage(src, 0, 0, G, G)
+        const d0 = g0.getImageData(0, 0, G, G).data, costo = new Float32Array(G * G), D = new Float32Array(G * G).fill(1e9)
+        let h0 = n.id * 2654435761 >>> 0; const rr = () => ((h0 = (h0 * 1664525 + 1013904223) >>> 0) / 4294967296)
+        for (let i = 0; i < G * G; i++) costo[i] = d0[i * 4 + 3] > 40 ? 0.8 + 0.5 * rr() : 3.5
+        // i semi: i pixel più pieni (due o tre, lontani tra loro)
+        const pieni = [...Array(G * G).keys()].filter(i => d0[i * 4 + 3] > 200)
+        const semi: number[] = []
+        for (let k = 0; k < 3 && pieni.length; k++) { const c0 = pieni[Math.floor(rr() * pieni.length)]; if (semi.every(s0 => Math.hypot((s0 % G) - (c0 % G), Math.floor(s0 / G) - Math.floor(c0 / G)) > G * 0.25)) semi.push(c0) }
+        if (!semi.length) semi.push((G >> 1) * G + (G >> 1))
+        for (const s0 of semi) D[s0] = 0
+        const vic = [[-1, 0, 1], [1, 0, 1], [0, -1, 1], [0, 1, 1], [-1, -1, 1.414], [1, 1, 1.414], [-1, 1, 1.414], [1, -1, 1.414]]
+        for (let pass = 0; pass < 6; pass++) {
+          const avanti = pass % 2 === 0
+          for (let j = 0; j < G * G; j++) { const i = avanti ? j : G * G - 1 - j, x = i % G, y = (i / G) | 0; for (const [dx, dy, w] of vic) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= G || yy >= G) continue; const v = D[yy * G + xx] + w * costo[i]; if (v < D[i]) D[i] = v } }
+        }
+        let mx = 0; for (let i = 0; i < G * G; i++) if (d0[i * 4 + 3] > 40) mx = Math.max(mx, D[i])
+        const cvA = document.createElement('canvas'); cvA.width = G; cvA.height = G
+        A = { D, mx: mx || 1, G, cv: cvA }; arrivi.set(n.id, A)
+      }
+      const { D, mx, G } = A, gA = A.cv.getContext('2d')!, im = gA.createImageData(G, G)
+      const fronte = u * 1.12 * mx
+      for (let i = 0; i < G * G; i++) { const v = clamp((fronte - D[i]) / (mx * 0.08)); im.data[i * 4 + 3] = Math.round(v * v * (3 - 2 * v) * 255) }
+      gA.putImageData(im, 0, 0)
+      q.imageSmoothingEnabled = true; q.imageSmoothingQuality = 'high'; q.drawImage(A.cv, 0, 0, sw, sh)
+    } else if (n.rivela === 'retino') {
       const sp = Math.max(6, Math.max(sw, sh) / 36); q.beginPath()
       for (let y = 0, row = 0; y < sh + sp; y += sp * 0.866, row++) for (let x = (row % 2) * sp / 2; x < sw + sp; x += sp) { const r0 = clamp(u * 1.6 - pos(x, y) * 0.6) * sp * 0.78; if (r0 > 0.3) { q.moveTo(x + r0, y); q.arc(x, y, r0, 0, 6.2832) } }
       q.fill()
@@ -939,7 +1037,16 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     g.fillStyle = scena.bg[rp.tav]; g.fillRect(0, 0, W, H)
     // al ritorno la camera va vicino: su uno strato della tavola (la figura più grande), e stringe piano; le parole restano dove si leggono
     let cam: [number, number, number, number, number, number] | null = null
-    if (rp.anello) {
+    const protN = scena.protagonista?.has(rp.tav) ? scena.nodi[scena.protagonista.get(rp.tav)!] : null
+    if (protN && protN.vivo) {
+      // il protagonista: al ritorno la camera gli va addosso e lo tiene a schermo quasi intero mentre ricresce;
+      // al primo passaggio, se è piccolo, la camera gli si avvicina piano mentre cresce
+      const u = clamp((t - rp.t0) / Math.max(1e-3, rp.t1 - rp.t0)), e = u * u * (3 - 2 * u)
+      const [mx, my] = centroDi(protN)
+      const zPieno = protN.area > W * H * 0.6 ? 1.3 : Math.max(1.15, Math.min(2.8, Math.min(W / (protN.w * 1.05), H / (protN.h * 1.05))))
+      const z = rp.anello ? zPieno * (1 + 0.06 * u) : protN.area < W * H * 0.35 ? 1 + (Math.min(1.4, zPieno) - 1) * e : 1
+      if (z > 1.001) { const cx0 = rp.anello ? mx : W / 2 + (mx - W / 2) * e, cy0 = rp.anello ? my : H / 2 + (my - H / 2) * e, fx = Math.max(W / (2 * z), Math.min(W - W / (2 * z), cx0)), fy = Math.max(H / (2 * z), Math.min(H - H / (2 * z), cy0)); cam = [z, 0, 0, z, W / 2 - fx * z, H / 2 - fy * z] }
+    } else if (rp.anello) {
       const f0 = scena.nodi.filter(n => n.tav === rp.tav && n.ruolo !== 'testo' && n.ruolo !== 'fondo' && (n.sprite || n.vivo) && n.area < W * H * 0.5).sort((a, b) => b.area - a.area)[(rp.tav + Math.round(rp.t0)) % 2] ?? null
       if (f0) { const u = (t - rp.t0) / Math.max(1e-3, rp.t1 - rp.t0), z = 1.55 + 0.18 * u, fx = Math.max(W / (2 * z), Math.min(W - W / (2 * z), f0.x)), fy = Math.max(H / (2 * z), Math.min(H - H / (2 * z), f0.y)); cam = [z, 0, 0, z, W / 2 - fx * z, H / 2 - fy * z] }
     }
@@ -980,7 +1087,7 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       if (n.ruolo !== 'fondo' && n.ruolo !== 'testo' && t >= br.cambio && t < br.cambio + beat * 4) {
         const ts = br.cambio + ((rango.get(n.id) ?? 0) % 8) * beat / 4, u = t - ts
         // a strati: sul cambio la tavola si rifà, strato per strato, sui sedicesimi
-        if (scena.strati && !n.vivo && s.rivela !== undefined && n.rivela && ['retino', 'tendina', 'strappo'].includes(n.rivela)) { if ((scena.rango?.get(n.id)?.k ?? 0) % 2 === 1) s.rivela = Math.min(s.rivela, 0.2 + 0.8 * (u < 0 ? 0 : clamp(u / beat))) } // si rifà metà della tavola, a strati alterni: mai il vuoto
+        if (scena.strati && !n.vivo && s.rivela !== undefined && n.rivela && MASCHERE.has(n.rivela)) { if ((scena.rango?.get(n.id)?.k ?? 0) % 2 === 1) s.rivela = Math.min(s.rivela, 0.2 + 0.8 * (u < 0 ? 0 : clamp(u / beat))) } // si rifà metà della tavola, a strati alterni: mai il vuoto
         else if (P.cambio === 'sboccia' && !n.vivo) { const m = u < 0 ? 0 : molla(u, 16, 0.32); s.sc *= m; s.rot += (1 - m) * 0.4 }
         if (P.cambio === 'ricresce' && n.vivo) s.crescita = Math.min(s.crescita ?? 1, clamp(u / (beat * 2)))
         if (P.cambio === 'muta' && n.vivo) s.fase = (s.fase ?? 0) + 0.5 * clamp(u / beat)
@@ -1000,8 +1107,10 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
           const soglia = h >= 50 ? 3 : 4.5
           for (let i = 0; i < d.length; i += 4 * 5) { const lb = lumLin(d[i], d[i + 1], d[i + 2]); const cr = (Math.max(lt, lb) + 0.05) / (Math.min(lt, lb) + 0.05); tot++; if (cr < soglia) cattivi++ }
           const frac = cattivi / Math.max(1, tot)
-          if (s.alpha > 0.5) { leggi.campioni++; leggi.somma += frac; leggi.peggiore = Math.max(leggi.peggiore, frac) }
-          if (frac > 0.16 && s.alpha > 0.3) {
+          const salva = frac > 0.06 && s.alpha > 0.3
+          // si conta quello che si vede: una riga scritta in contrappunto ha contrasto ovunque
+          if (s.alpha > 0.5) { const fv = salva ? 0 : frac; leggi.campioni++; leggi.somma += fv; leggi.peggiore = Math.max(leggi.peggiore, fv) }
+          if (salva) {
             leggi.salvati++
             const sp = n.sprite
             contrappunto(q => { q.globalAlpha = clamp(s.alpha); q.drawImage(sp, x0, y0, w, h) })

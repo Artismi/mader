@@ -16,7 +16,7 @@ import { sentences } from '../reader/tokenize'
 import { pick, range, uid, weighted, type Rnd } from '../core/rng'
 import { FACES, type FaceId } from '@/components/studio/genera/fonts'
 import type { Tone } from '@/components/studio/genera/recipes'
-import { newCanvas, withLayer, fullLayer, emptySheet, flatten, sfuma, type Sheet } from '../hands/sheet'
+import { newCanvas, withLayer, fullLayer, emptySheet, flatten, sfuma, type Sheet, generaDi } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { applica } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
@@ -244,7 +244,13 @@ function variante(src: HTMLCanvasElement, modo: Modo, r: Rnd, colore: string, al
   const { c, g } = cv0(W, H)
   switch (modo) {
     case 'frammento': { const k = range(r, 0.35, 0.6); const x = r() * W * (1 - k), y = r() * H * (1 - k); g.drawImage(src, x, y, W * k, H * k, 0, 0, W, H); break }
-    case 'ripetuto': { const n = 2 + Math.floor(r() * 3); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { g.globalAlpha = 0.35 + 0.65 * ((i + j) % 2); g.drawImage(src, (i * W) / n, (j * H) / n, W / n, H / n) } break }
+    case 'ripetuto': {
+      // non una griglia: una colonia. Copie di misure diverse che crescono una addosso all'altra e si fondono, dal centro verso fuori
+      const n = 5 + Math.floor(r() * 8), pos: { x: number; y: number; k: number }[] = [{ x: W / 2, y: H / 2, k: range(r, 0.45, 0.65) }]
+      for (let i = 1; i < n; i++) { const p = pos[Math.floor(r() * pos.length)], a = r() * 6.283, k = p.k * range(r, 0.5, 0.95), d = (p.k + k) * W * 0.28; pos.push({ x: Math.max(W * k / 2, Math.min(W - W * k / 2, p.x + Math.cos(a) * d)), y: Math.max(H * k / 2, Math.min(H - H * k / 2, p.y + Math.sin(a) * d)), k }) }
+      for (const p of pos.sort((a, b) => a.k - b.k)) { g.save(); g.globalAlpha = range(r, 0.6, 1); g.translate(p.x, p.y); g.rotate((r() - 0.5) * 1.4); g.drawImage(src, -W * p.k / 2, -H * p.k / 2, W * p.k, H * p.k); g.restore() }
+      break
+    }
     case 'specchio': g.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H); g.save(); g.translate(W, 0); g.scale(-1, 1); g.drawImage(src, 0, 0, W / 2, H, 0, 0, W / 2, H); g.restore(); break
     case 'spezzato': { const n = 5 + Math.floor(r() * 6); for (let i = 0; i < n; i++) { const y0 = (i * H) / n, dx = (r() - 0.5) * W * 0.25; g.drawImage(src, 0, y0, W, H / n, dx, y0, W, H / n) } break }
     case 'sbiadito': g.globalAlpha = 0.28; g.drawImage(src, 0, 0); g.globalAlpha = 1; for (let i = 0; i < 400; i++) { g.clearRect(r() * W, r() * H, 3 + r() * 9, 3 + r() * 9) } break
@@ -321,7 +327,10 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
     return variante(base, modo, r, col(w), b2)
   }
   const metti = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
-    s = withLayer(s, { id: lid2(), kind: 'motivo', canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
+    // la muffa a volte è la protagonista: grande, quasi a tutta tavola (il reel la farà crescere)
+    const gen = generaDi(cv)
+    if (gen && Math.random() < 0.3) { scale = Math.min(1.15, Math.max(scale, 0.75 + Math.random() * 0.35)); x = 0.5 + (x - 0.5) * 0.3; y = 0.42 + (y - 0.5) * 0.3 }
+    s = withLayer(s, { id: lid2(), kind: 'motivo', genera: gen, canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
   }
   // 2. i segni, in una composizione scelta dalla relazione (e diversa dalla tavola prima)
   if (sc.catena?.length && sc.catena.length > 1 && (sc.ruolo === 'passaggio' || sc.ruolo === 'conclusione' || sc.ruolo === 'fiducia' || sc.ruolo === 'visione' || (sc.ruolo === 'premessa' && r() < 0.5))) {
@@ -437,7 +446,7 @@ async function catena(st: AgentState, r: Rnd, s0: Sheet, ws: string[], ctx: Tool
     const [x, y] = pos(k)
     const c = await segnoDi(st, r, ws[k], t, ctx)
     const scale = n <= 2 ? 0.34 : n <= 4 ? 0.2 : 0.15
-    s = withLayer(s, { id: lid(), kind: 'motivo', canvas: c, x, y, scale: enfasi && (k === 0 || k === n - 1) ? scale * 1.3 : scale, rot: 0, alpha: 1, blend: 'source-over' })
+    s = withLayer(s, { id: lid(), kind: 'motivo', genera: generaDi(c), canvas: c, x, y, scale: enfasi && (k === 0 || k === n - 1) ? scale * 1.3 : scale, rot: 0, alpha: 1, blend: 'source-over' })
   }
   // le parole sotto ai segni
   const cvT = newCanvas(s.W, s.H), gt = cvT.getContext('2d')!

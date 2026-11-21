@@ -28,7 +28,7 @@ import { LOOKS } from '@/components/studio/fx/catalog'
 import { sentences, words, looksItalian } from '../reader/tokenize'
 import { anchorOf } from '../reader/lexicon'
 import { conceptsReady, relationsOf, REL_LABEL } from '../reader/concepts'
-import { newCanvas, withLayer, fullLayer, flatten, sfuma, type Layer, type Sheet } from '../hands/sheet'
+import { newCanvas, withLayer, fullLayer, flatten, sfuma, type Layer, type Sheet, generaDi } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { applica } from '../hands/tools'
 import { runShader } from '../hands/shader'
@@ -495,7 +495,7 @@ export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: 
   const cA = rendi(bA, colA), cB = stile === 'maschera' && r() < 0.5 ? bB : rendi(bB, colB)
   passi.push({ tool: 'scena:stile', params: { stile, armonia }, kept: true, delta: 0 })
   const lay = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
-    s = withLayer(s, { id: lid(), kind: 'motivo', canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
+    s = withLayer(s, { id: lid(), kind: 'motivo', genera: generaDi(cv), canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
   }
   let posA: [number, number] = [0.33, 0.45], posB: [number, number] = [0.66, 0.45]
   let libere: Messa['libere'] = []

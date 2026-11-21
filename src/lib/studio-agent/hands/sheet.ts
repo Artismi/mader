@@ -109,3 +109,9 @@ export function rettangoloVuoto(cv: HTMLCanvasElement): boolean {
   }
   vuoti.set(cv, r); return r
 }
+
+/** la ricetta di un segno di muffa (se il canvas ne è uno), da portare nel livello: il reel lo farà ricrescere */
+export function generaDi(cv: HTMLCanvasElement): Layer['genera'] | undefined {
+  const m = (cv as HTMLCanvasElement & { __muffa?: { seme: number; colore: string; S: number } }).__muffa
+  return m ? { tool: 'muffa', p: { seme: m.seme, colore: m.colore, S: m.S } } : undefined
+}

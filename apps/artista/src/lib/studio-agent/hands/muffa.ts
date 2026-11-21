@@ -11,6 +11,90 @@
  */
 import { newCanvas } from './sheet'
 
+/*
+ * LA CRESCITA. La simulazione si calcola una volta; ogni gesto (un tratto, un grumo, un'ifa) viene registrato con il
+ * suo tempo (0..1) invece di essere disegnato. Uno stato a "fino" ridisegna i gesti nati fino a quel momento: gli
+ * stati sono uno il prefisso dell'altro, e a fino = 1 si ripercorrono tutti nell'ordine originale (identico a prima).
+ * I tubi e i corpi della rete si ingrossano mentre crescono; le ife si allungano passo per passo.
+ */
+type Cmd = number[] // [0,x,y,t] moveTo · [1,x,y,t] lineTo · [2,cx,cy,x,y,t] quad · [3,x,y,r,a0,a1,t] arc · [4,t] close
+interface Stile { a: number; lw: number; ss: string; fs: string; cap: CanvasLineCap; join: CanvasLineJoin; comp: GlobalCompositeOperation }
+type Prim = { k: 's' | 'f'; st: Stile; p: Cmd[]; t: number; L: 'A' | 'B' | 'C' } | { k: 'spec'; t: number; L: 'S1' | 'S2' | 'S3'; draw: (g: CanvasRenderingContext2D, fino: number, esatto: boolean) => void }
+const tOf = (c: Cmd) => c[c.length - 1]
+class Registro {
+  t = 0; L: 'A' | 'B' | 'C' = 'A'
+  globalAlpha = 1; lineWidth = 1; strokeStyle = '#000'; fillStyle = '#000'; lineCap: CanvasLineCap = 'butt'; lineJoin: CanvasLineJoin = 'miter'; globalCompositeOperation: GlobalCompositeOperation = 'source-over'
+  prims: Prim[] = []; private path: Cmd[] = []; private pila: Stile[] = []
+  private stile(): Stile { return { a: this.globalAlpha, lw: this.lineWidth, ss: this.strokeStyle, fs: this.fillStyle, cap: this.lineCap, join: this.lineJoin, comp: this.globalCompositeOperation } }
+  beginPath() { this.path = [] }
+  moveTo(x: number, y: number) { this.path.push([0, x, y, this.t]) }
+  lineTo(x: number, y: number) { this.path.push([1, x, y, this.t]) }
+  quadraticCurveTo(cx: number, cy: number, x: number, y: number) { this.path.push([2, cx, cy, x, y, this.t]) }
+  arc(x: number, y: number, r: number, a0: number, a1: number) { this.path.push([3, x, y, r, a0, a1, this.t]) }
+  closePath() { this.path.push([4, this.t]) }
+  stroke() { if (this.path.length) this.prims.push({ k: 's', st: this.stile(), p: this.path.slice(), t: tOf(this.path[0]), L: this.L }) }
+  fill() { if (this.path.length) this.prims.push({ k: 'f', st: this.stile(), p: this.path.slice(), t: tOf(this.path[0]), L: this.L }) }
+  save() { this.pila.push(this.stile()) }
+  restore() { const s = this.pila.pop(); if (s) { this.globalAlpha = s.a; this.lineWidth = s.lw; this.strokeStyle = s.ss; this.fillStyle = s.fs; this.lineCap = s.cap; this.lineJoin = s.join; this.globalCompositeOperation = s.comp } }
+  spec(L: 'S1' | 'S2' | 'S3', t: number, draw: (g: CanvasRenderingContext2D, fino: number, esatto: boolean) => void) { this.prims.push({ k: 'spec', t, L, draw }) }
+}
+/** quanto un tubo o un corpo è cresciuto: nasce sottile e si ingrossa */
+const ingrossa = (fino: number, t: number) => (fino >= 1 ? 1 : Math.max(0.3, Math.min(1, 0.3 + 0.7 * (fino - t) / 0.15)))
+function traccia(g: CanvasRenderingContext2D, pr: Extract<Prim, { k: 's' | 'f' }>, fino: number) {
+  const gf = pr.L === 'B' ? ingrossa(fino, pr.t) : 1
+  g.globalAlpha = pr.st.a; g.globalCompositeOperation = pr.st.comp; g.lineCap = pr.st.cap; g.lineJoin = pr.st.join
+  g.beginPath()
+  for (const c of pr.p) {
+    if (tOf(c) > fino) break
+    if (c[0] === 0) g.moveTo(c[1], c[2]); else if (c[0] === 1) g.lineTo(c[1], c[2]); else if (c[0] === 2) g.quadraticCurveTo(c[1], c[2], c[3], c[4])
+    else if (c[0] === 3) g.arc(c[1], c[2], c[3] * (pr.k === 'f' ? gf : 1), c[4], c[5]); else g.closePath()
+  }
+  if (pr.k === 's') { g.strokeStyle = pr.st.ss; g.lineWidth = pr.st.lw * gf; g.stroke() } else { g.fillStyle = pr.st.fs; g.fill() }
+}
+
+/** la crescita di un segno di muffa: si calcola una volta, poi ogni stato (0..1) si disegna in poco tempo */
+export function crescitaMuffa(seme: number, colore: string, S = 560): (fino: number) => HTMLCanvasElement {
+  const { prims } = simula(seme, colore, S)
+  const ricetta = { seme, colore, S }
+  const A = prims.filter(p => p.k !== 'spec' && p.L === 'A').sort((a, b) => a.t - b.t) as Extract<Prim, { k: 's' | 'f' }>[]
+  const C = prims.filter(p => p.k !== 'spec' && p.L === 'C').sort((a, b) => a.t - b.t) as Extract<Prim, { k: 's' | 'f' }>[]
+  const B = prims.filter(p => p.k !== 'spec' && p.L === 'B') as Extract<Prim, { k: 's' | 'f' }>[]
+  const spec = (L: string) => prims.filter(p => p.k === 'spec' && p.L === L) as Extract<Prim, { k: 'spec' }>[]
+  const S1 = spec('S1'), S2 = spec('S2'), S3 = spec('S3')
+  // le ife e il merletto (A) e le spore (C) si accumulano: ogni stato aggiunge solo quello che è nato dall'ultimo
+  const cvA = newCanvas(S, S), gA = cvA.getContext('2d')!, cvC = newCanvas(S, S), gC = cvC.getContext('2d')!
+  let iA = 0, iC = 0, ultimo = -1
+  let finale: HTMLCanvasElement | null = null
+  return (fino0: number) => {
+    const fino = Math.max(0, Math.min(1, fino0))
+    const out = newCanvas(S, S), g = out.getContext('2d')!
+    if (fino >= 1) {
+      // l'ultimo stato: tutti i gesti nell'ordine in cui sono nati (è il segno di prima, identico)
+      if (!finale) { finale = newCanvas(S, S); const q = finale.getContext('2d')!; for (const p of prims) { if (p.k === 'spec') { if (p.L !== 'S3') p.draw(q, 1, true) } else traccia(q, p, 1) } for (const p of S3) p.draw(q, 1, true) }
+      g.drawImage(finale, 0, 0)
+    } else {
+      if (fino < ultimo) { gA.clearRect(0, 0, S, S); gC.clearRect(0, 0, S, S); iA = 0; iC = 0 }
+      ultimo = fino
+      while (iA < A.length && A[iA].t <= fino) traccia(gA, A[iA++], fino)
+      while (iC < C.length && C[iC].t <= fino) traccia(gC, C[iC++], fino)
+      for (const p of S1) p.draw(g, fino, false)
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.drawImage(cvA, 0, 0)
+      for (const p of S2) p.draw(g, fino, false)
+      for (const p of B) if (p.t <= fino) traccia(g, p, fino)
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.drawImage(cvC, 0, 0)
+      for (const p of S3) p.draw(g, fino, false)
+    }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'
+    ;(out as HTMLCanvasElement & { __muffa?: typeof ricetta }).__muffa = ricetta
+    return out
+  }
+}
+
+/** la ricetta di un segno di muffa (se il canvas lo è): serve per farlo ricrescere altrove (nel reel) */
+export function ricettaMuffa(cv: HTMLCanvasElement): { seme: number; colore: string; S: number } | undefined {
+  return (cv as HTMLCanvasElement & { __muffa?: { seme: number; colore: string; S: number } }).__muffa
+}
+
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296) }
 /** rumore liscio periodico sull'angolo: quanto cresce la colonia in ogni direzione (le colonie vere non sono dischi) */
 function lobi(r: () => number, n = 5) { const ph = Array.from({ length: n }, () => r() * 6.283), am = Array.from({ length: n }, (_, i) => (r() * 0.6) / (i + 1)); return (a: number) => 1 + am.reduce((s, x, i) => s + x * Math.sin((i + 1) * a + ph[i]), 0) }
@@ -18,13 +102,35 @@ function lobi(r: () => number, n = 5) { const ph = Array.from({ length: n }, () 
 export type Specie = 'micelio' | 'batterio'
 export interface Colonia { x: number; y: number; specie: Specie; vigore: number }
 
-export function disegnaMuffa(seme: number, colore: string, S = 560): HTMLCanvasElement {
+/** il segno di muffa a uno stato della sua crescita (fino = 1: la colonia intera) */
+const cacheCrescite = new Map<string, (fino: number) => HTMLCanvasElement>()
+export function disegnaMuffa(seme: number, colore: string, S = 560, fino = 1): HTMLCanvasElement {
+  const k = `${seme}|${colore}|${S}`
+  let c = cacheCrescite.get(k)
+  if (!c) { c = crescitaMuffa(seme, colore, S); cacheCrescite.set(k, c); if (cacheCrescite.size > 12) cacheCrescite.delete(cacheCrescite.keys().next().value as string) }
+  return c(fino)
+}
+
+/** l'alone si calcola sul segno finito (ne segue la sagoma); nella crescita si allarga e si fa avanti piano */
+function conAlone(reg: Registro, S: number, colore: string, r: () => number) {
+  const cv = newCanvas(S, S), q = cv.getContext('2d')!
+  for (const p of reg.prims) { if (p.k === 'spec') p.draw(q, 1, true); else traccia(q, p, 1) }
+  const t = alone(cv, S, colore, r)
+  if (!t) return
+  reg.spec('S3', 0, (g, fino, esatto) => {
+    const a = esatto ? 1 : Math.max(0, Math.min(1, (fino - 0.12) / 0.7)); if (a <= 0) return
+    const k = esatto ? 1 : 0.6 + 0.4 * Math.min(1, fino / 0.85)
+    g.save(); g.globalCompositeOperation = 'destination-over'; g.globalAlpha = a; g.imageSmoothingQuality = 'high'; g.translate(S / 2, S / 2); g.scale(k, k); g.drawImage(t, -S / 2, -S / 2, S, S); g.restore()
+  })
+}
+
+function simula(seme: number, colore: string, S: number): Registro {
   // il seme si mescola prima (semi vicini darebbero colonie simili)
   let h0 = (seme ^ 0x9e3779b9) >>> 0; h0 = Math.imul(h0 ^ (h0 >>> 16), 0x85ebca6b) >>> 0; h0 = Math.imul(h0 ^ (h0 >>> 13), 0xc2b2ae35) >>> 0; h0 = (h0 ^ (h0 >>> 16)) >>> 0
   const r = rng(h0)
-  const cv = newCanvas(S, S), g = cv.getContext('2d')!
+  const reg = new Registro(), g = reg as unknown as CanvasRenderingContext2D
   // la forma principale: la rete tra più fulcri (Physarum); a volte le colonie di prima
-  if (r() < 0.6) { rete(g, S, colore, r); alone(cv, S, colore, r); return cv }
+  if (r() < 0.6) { rete(reg, S, colore, r); conAlone(reg, S, colore, r); return reg }
   // le colonie: una o più, di specie diverse, seminate vicine così si incontrano
   const n = 1 + Math.floor(r() * r() * 4)
   const col: Colonia[] = []
@@ -32,10 +138,11 @@ export function disegnaMuffa(seme: number, colore: string, S = 560): HTMLCanvasE
   // chi occupa cosa (per l'incontro): una griglia grossa con il numero della colonia
   const Q = 4, GW = Math.ceil(S / Q), chi = new Int16Array(GW * GW).fill(-1), densita = new Float32Array(GW * GW)
   // i batteri si disegnano prima (stanno sotto, piatti sull'agar), il micelio sopra (è un feltro che si alza)
-  for (const [k, c] of col.entries()) if (c.specie === 'batterio') batteri(g, S, c, k, colore, r, chi, GW, Q)
-  micelio(g, S, col, colore, r, chi, densita, GW, Q)
-  alone(cv, S, colore, r)
-  return cv
+  for (const [k, c] of col.entries()) if (c.specie === 'batterio') batteri(reg, S, c, k, colore, r, chi, GW, Q)
+  micelio(reg, S, col, colore, r, chi, densita, GW, Q)
+  void g
+  conAlone(reg, S, colore, r)
+  return reg
 }
 
 /**
@@ -43,7 +150,7 @@ export function disegnaMuffa(seme: number, colore: string, S = 560): HTMLCanvasE
  * Particelle di nutrimento vagano a caso e, quando toccano la colonia abbastanza volte, ci si attaccano: le punte, più esposte,
  * crescono più in fretta e si dividono; nascono dita ramificate. Più colpi servono, più le dita sono grasse e lisce.
  */
-function batteri(g: CanvasRenderingContext2D, S: number, c: Colonia, k: number, colore: string, r: () => number, chi: Int16Array, GW: number, Q: number) {
+function batteri(reg: Registro, S: number, c: Colonia, k: number, colore: string, r: () => number, chi: Int16Array, GW: number, Q: number) {
   const N = 300, sc = S / N, occ = new Uint8Array(N * N), colpi = new Uint8Array(N * N), eta = new Uint16Array(N * N), px = new Float32Array(N * N), py = new Float32Array(N * N)
   const cx = Math.round(c.x / sc), cy = Math.round(c.y / sc)
   const Rm = Math.min(N * (0.17 + 0.15 * c.vigore), N * 0.44 - Math.hypot(c.x / sc - N / 2, c.y / sc - N / 2)), m = 1 + Math.floor(r() * 2), deriva = 0.02 + r() * 0.06
@@ -70,26 +177,46 @@ function batteri(g: CanvasRenderingContext2D, S: number, c: Colonia, k: number, 
     }
   }
   // il disegno: ogni cellula è un punto; le vecchie (al centro) più dense; un alone di velo attorno alle dita (l'agar bagnato)
-  const tmp = newCanvas(S, S), q = tmp.getContext('2d')!, anelli = 2 + Math.floor(r() * 4)
-  q.fillStyle = colore
-  for (let i = 0; i < N * N; i++) if (occ[i]) { const x = (px[i] || i % N) * sc, y = (py[i] || (i / N) | 0) * sc, vec = 1 - eta[i] / n, anello = 0.78 + 0.22 * Math.sin((eta[i] / n) * 6.283 * anelli); q.globalAlpha = (0.5 + 0.5 * vec) * anello; q.beginPath(); q.arc(x, y, sc * (1.1 + 0.9 * vec), 0, 6.283); q.fill() }
-  g.save(); g.globalAlpha = 0.22; g.filter = `blur(${Math.round(S * 0.012)}px)`; g.drawImage(tmp, 0, 0); g.filter = 'none'; g.globalAlpha = 1; g.drawImage(tmp, 0, 0); g.restore()
+  const anelli = 2 + Math.floor(r() * 4)
+  const cel: { x: number; y: number; r: number; a: number; t: number }[] = []
+  for (let i = 0; i < N * N; i++) if (occ[i]) { const x = (px[i] || i % N) * sc, y = (py[i] || (i / N) | 0) * sc, vec = 1 - eta[i] / n, anello = 0.78 + 0.22 * Math.sin((eta[i] / n) * 6.283 * anelli); cel.push({ x, y, r: sc * (1.1 + 0.9 * vec), a: (0.5 + 0.5 * vec) * anello, t: 0.02 + 0.93 * eta[i] / n }) }
+  // crescita: le cellule si attaccano nell'ordine in cui sono arrivate; la tela si accumula, il velo si rifà
+  const perTempo = cel.slice().sort((a, b) => a.t - b.t)
+  const tmp = newCanvas(S, S), q = tmp.getContext('2d')!; let iT = 0, ult = -1
+  const HS = Math.round(S / 2), halo = newCanvas(HS, HS), hq = halo.getContext('2d')!
+  reg.spec('S1', 0, (g, fino, esatto) => {
+    if (esatto) {
+      const f = newCanvas(S, S), fq = f.getContext('2d')!; fq.fillStyle = colore
+      for (const c0 of cel) { fq.globalAlpha = c0.a; fq.beginPath(); fq.arc(c0.x, c0.y, c0.r, 0, 6.283); fq.fill() }
+      g.save(); g.globalAlpha = 0.22; g.filter = `blur(${Math.round(S * 0.012)}px)`; g.drawImage(f, 0, 0); g.filter = 'none'; g.globalAlpha = 1; g.drawImage(f, 0, 0); g.restore(); return
+    }
+    if (fino < ult) { q.clearRect(0, 0, S, S); iT = 0 }
+    ult = fino; q.fillStyle = colore
+    while (iT < perTempo.length && perTempo[iT].t <= fino) { const c0 = perTempo[iT++]; q.globalAlpha = c0.a; q.beginPath(); q.arc(c0.x, c0.y, c0.r, 0, 6.283); q.fill() }
+    // il velo sfocato si fa su una tela piccola (negli stati intermedi): costa un quarto
+    hq.clearRect(0, 0, HS, HS); hq.filter = `blur(${Math.max(1, Math.round(S * 0.012 * HS / S))}px)`; hq.drawImage(tmp, 0, 0, HS, HS); hq.filter = 'none'
+    g.save(); g.globalAlpha = 0.22; g.imageSmoothingQuality = 'high'; g.drawImage(halo, 0, 0, S, S); g.globalAlpha = 1; g.drawImage(tmp, 0, 0); g.restore()
+  })
 }
 
 /** il micelio: punte che crescono sentendo i vicini, si ramificano, si fermano dove c'è un'altra colonia */
-function micelio(g: CanvasRenderingContext2D, S: number, col: Colonia[], colore: string, r: () => number, chi: Int16Array, densita: Float32Array, GW: number, Q: number) {
+function micelio(reg: Registro, S: number, col: Colonia[], colore: string, r: () => number, chi: Int16Array, densita: Float32Array, GW: number, Q: number) {
   interface Punta { x: number; y: number; a: number; c: number; w: number; eta: number; vive: boolean }
   const punte: Punta[] = []
   col.forEach((c, k) => { if (c.specie !== 'micelio') return; const n0 = 20 + Math.floor(r() * 16); const ino = S * (0.02 + 0.03 * r()); for (let i = 0; i < n0; i++) { const a0 = r() * 6.283, d0 = Math.sqrt(r()) * ino; punte.push({ x: c.x + Math.cos(a0) * d0, y: c.y + Math.sin(a0) * d0, a: a0 + (r() - 0.5) * 1.2, c: k, w: 1, eta: 0, vive: true }) } })
   if (!punte.length) return
+  const g = reg as unknown as CanvasRenderingContext2D, k0 = reg.prims.length
+  const incrCella: number[] = [], incrT: number[] = [] // la storia del feltro: quando ogni cella si è addensata
   g.strokeStyle = colore; g.fillStyle = colore; g.lineCap = 'round'
   const fronte: { t: number; d: number[] }[] = []
   const notte = 60 + Math.floor(r() * 40) // ogni quanti passi il fronte si ferma (una "giornata")
   const passi = 340, MAXP = 1700
   const forma = col.map(() => lobi(r, 5)), Rmax = col.map(c => S * (0.2 + 0.18 * c.vigore))
   const dens = (x: number, y: number) => { const gx = (x / Q) | 0, gy = (y / Q) | 0; return gx < 0 || gy < 0 || gx >= GW || gy >= GW ? 99 : densita[gy * GW + gx] }
-  const spore: { x: number; y: number; c: number; giorno: number }[] = []
+  const spore: { x: number; y: number; c: number; giorno: number; t?: number }[] = []
+  let ultimoPasso = 1
   for (let t = 0; t < passi; t++) {
+    reg.t = t; ultimoPasso = t
     const giorno = Math.floor(t / notte), sera = t % notte > notte * 0.8 // a sera rallenta e sporula
     const vivi = punte.filter(p => p.vive)
     if (!vivi.length) break
@@ -113,7 +240,7 @@ function micelio(g: CanvasRenderingContext2D, S: number, col: Colonia[], colore:
       if (occ >= 0 && occ !== p.c) { p.vive = false; continue }
       chi[gy * GW + gx] = p.c
       if (densita[gy * GW + gx] > 7) { p.vive = false; continue }
-      densita[gy * GW + gx] += 0.35
+      densita[gy * GW + gx] += 0.35; incrCella.push(gy * GW + gx); incrT.push(t)
       // il tratto: sottile e trasparente, si somma in feltro
       g.globalAlpha = 0.22 + 0.25 * p.w; g.lineWidth = 0.5 + 0.9 * p.w
       g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(nx, ny); g.stroke()
@@ -121,20 +248,36 @@ function micelio(g: CanvasRenderingContext2D, S: number, col: Colonia[], colore:
       // ramificazione laterale, più frequente nelle ife giovani; le ramificazioni sono più sottili
       if (punte.length < MAXP && r() < 0.045 * (1 - p.eta / 600)) punte.push({ x: p.x, y: p.y, a: p.a + (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.5), c: p.c, w: p.w * 0.8, eta: 0, vive: true })
       // a sera sporula: teste di spore sulle ife (più dense negli anelli)
-      if (sera && r() < 0.08) spore.push({ x: p.x, y: p.y, c: p.c, giorno })
+      if (sera && r() < 0.08) spore.push({ x: p.x, y: p.y, c: p.c, giorno, t } as typeof spore[0])
     }
     if (t % notte === 0) fronte.push({ t, d: [] })
   }
-  // il feltro: dove le ife sono tante si fa una massa opaca, morbida (la densità, sfocata)
+  // il tempo: i passi diventano 0..1 (la colonia cresce per tutta la durata, anche se si ferma prima del limite)
+  const tempo = (passo: number) => 0.04 + 0.94 * passo / Math.max(1, ultimoPasso)
+  for (let i = k0; i < reg.prims.length; i++) { const p = reg.prims[i]; if (p.k !== 'spec') { for (const c of p.p) c[c.length - 1] = tempo(c[c.length - 1]); p.t = tempo(p.t) } }
+  // il feltro: dove le ife sono tante si fa una massa opaca, morbida (la densità, sfocata). Cresce con la sua storia
   {
-    const f = newCanvas(GW, GW), fq = f.getContext('2d')!, im = fq.createImageData(GW, GW)
     const h = colore.replace('#', ''), R0 = parseInt(h.slice(0, 2), 16), G0 = parseInt(h.slice(2, 4), 16), B0 = parseInt(h.slice(4, 6), 16)
-    for (let i = 0; i < GW * GW; i++) { const v = Math.min(1, Math.max(0, densita[i] - 1.2) / 5); im.data[i * 4] = R0; im.data[i * 4 + 1] = G0; im.data[i * 4 + 2] = B0; im.data[i * 4 + 3] = Math.round(v * v * 200) }
-    fq.putImageData(im, 0, 0)
-    g.save(); g.globalAlpha = 1; g.filter = `blur(${Math.round(S * 0.01)}px)`; g.imageSmoothingQuality = 'high'; g.drawImage(f, 0, 0, S, S); g.filter = 'none'; g.restore()
+    const f = newCanvas(GW, GW), fq = f.getContext('2d')!, im = fq.createImageData(GW, GW), dn = new Float32Array(GW * GW)
+    const tI = incrT.map(tempo); let iI = 0, ult = -1
+    const PS = Math.round(S / 2), piccola = newCanvas(PS, PS), pq = piccola.getContext('2d')!
+    const finale = densita.slice()
+    reg.spec('S2', 0, (g2, fino, esatto) => {
+      if (esatto) dn.set(finale)
+      else { if (fino < ult) { dn.fill(0); iI = 0 } ult = fino; while (iI < tI.length && tI[iI] <= fino) { dn[incrCella[iI]] += 0.35; iI++ } }
+      for (let i = 0; i < GW * GW; i++) { const v = Math.min(1, Math.max(0, dn[i] - 1.2) / 5); im.data[i * 4] = R0; im.data[i * 4 + 1] = G0; im.data[i * 4 + 2] = B0; im.data[i * 4 + 3] = Math.round(v * v * 200) }
+      fq.putImageData(im, 0, 0)
+      g2.save(); g2.globalAlpha = 1; g2.imageSmoothingQuality = 'high'
+      if (esatto) { g2.filter = `blur(${Math.round(S * 0.01)}px)`; g2.drawImage(f, 0, 0, S, S); g2.filter = 'none' }
+      else { pq.clearRect(0, 0, PS, PS); pq.filter = `blur(${Math.max(1, Math.round(S * 0.01 * PS / S))}px)`; pq.drawImage(f, 0, 0, PS, PS); pq.filter = 'none'; g2.drawImage(piccola, 0, 0, S, S) }
+      g2.restore()
+      if (esatto) { iI = tI.length; ult = 1 }
+    })
   }
+  reg.L = 'C'
   // le spore: piccole teste (un punto con una corona), fitte negli anelli della zonazione
   for (const s of spore) {
+    reg.t = tempo(s.t ?? 0) + 0.01
     const rr = 0.8 + r() * 2.2
     g.globalAlpha = 0.55; g.beginPath(); g.arc(s.x, s.y, rr, 0, 6.283); g.fill()
     g.globalAlpha = 0.25; g.lineWidth = 0.5
@@ -145,15 +288,16 @@ function micelio(g: CanvasRenderingContext2D, S: number, col: Colonia[], colore:
     // il tassello d'innesto: un groviglio fitto di ife corte e arricciate
     const R1 = S * (0.025 + 0.025 * c.vigore)
     g.lineWidth = 0.7
-    for (let i = 0; i < 260; i++) { const a0 = r() * 6.283, d0 = Math.sqrt(r()) * R1; let x = c.x + Math.cos(a0) * d0, y = c.y + Math.sin(a0) * d0, an = r() * 6.283; g.globalAlpha = 0.25; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 8; k++) { an += (r() - 0.5) * 1.4; x += Math.cos(an) * 2; y += Math.sin(an) * 2; g.lineTo(x, y) } g.stroke() }
+    for (let i = 0; i < 260; i++) { reg.t = 0.005 + 0.05 * i / 260; const a0 = r() * 6.283, d0 = Math.sqrt(r()) * R1; let x = c.x + Math.cos(a0) * d0, y = c.y + Math.sin(a0) * d0, an = r() * 6.283; g.globalAlpha = 0.25; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 8; k++) { an += (r() - 0.5) * 1.4; x += Math.cos(an) * 2; y += Math.sin(an) * 2; g.lineTo(x, y) } g.stroke() }
   }
   g.globalAlpha = 1
+  reg.L = 'A'
 }
 
 /** l'alone: sotto la colonia il terreno si è bagnato e asciugato come una macchia di caffè. Non un contorno pulito:
  *  la macchia è spostata dove il liquido è colato, il bordo è irregolare e a tratti si interrompe; a volte non c'è. */
-function alone(cv: HTMLCanvasElement, S: number, colore: string, r: () => number) {
-  if (r() < 0.3) return
+function alone(cv: HTMLCanvasElement, S: number, colore: string, r: () => number): HTMLCanvasElement | null {
+  if (r() < 0.3) return null
   const M = 140, t = newCanvas(M, M), q = t.getContext('2d', { willReadFrequently: true })!
   const sx = (r() - 0.5) * 10, sy = (r() - 0.5) * 10, k = 1.02 + r() * 0.12
   q.filter = `blur(${3 + Math.floor(r() * 3)}px)`; q.translate(M / 2 + sx, M / 2 + sy); q.scale(k, k); q.drawImage(cv, -M / 2, -M / 2, M, M); q.setTransform(1, 0, 0, 1, 0, 0); q.filter = 'none'
@@ -171,8 +315,7 @@ function alone(cv: HTMLCanvasElement, S: number, colore: string, r: () => number
     o.data[i * 4] = R0; o.data[i * 4 + 1] = G0; o.data[i * 4 + 2] = B0; o.data[i * 4 + 3] = Math.round(Math.min(1, velo + bordo) * Math.min(1, sb) * 255)
   }
   q.putImageData(o, 0, 0)
-  const g = cv.getContext('2d')!
-  g.save(); g.globalCompositeOperation = 'destination-over'; g.imageSmoothingQuality = 'high'; g.drawImage(t, 0, 0, S, S); g.restore()
+  return t
 }
 
 /**
@@ -182,7 +325,8 @@ function alone(cv: HTMLCanvasElement, S: number, colore: string, r: () => number
  * si consuma dove no: dD/dt = f(|Q|) − D, con f sigmoide (gerarchia). Restano vene spesse sulle strade di priorità,
  * capillari sottili, lacune vuote; al fronte esterno il merletto.
  */
-function rete(g: CanvasRenderingContext2D, S: number, colore: string, r: () => number) {
+function rete(reg: Registro, S: number, colore: string, r: () => number) {
+  const g = reg as unknown as CanvasRenderingContext2D
   const t0 = performance.now()
   // i fulcri: 3–9, irregolari, non troppo vicini; il primo è il corpo principale
   const nF = 3 + Math.floor(r() * 7), F: { x: number; y: number; m: number }[] = []
@@ -232,6 +376,25 @@ function rete(g: CanvasRenderingContext2D, S: number, colore: string, r: () => n
     // i tubi si adattano al flusso
     for (let e = 0; e < m; e++) { const q = Math.abs(D[e] / eL[e] * (p[ea[e]] - p[eb[e]])) / I0, fq = q ** mu / (0.03 ** mu + q ** mu); Q[e] = Q[e] * 0.7 + q * 0.3; D[e] += 0.45 * (fq - D[e]) }
   }
+  // il tempo della crescita: la distanza lungo il grafo dal fulcro più vicino (seguendo di preferenza le vene: più conducono, più corta la strada)
+  const Dm0 = Math.max(...D), dist = new Float64Array(n).fill(1e9), fatto = new Uint8Array(n)
+  for (const v of NF) dist[v] = 0
+  for (let it = 0; it < n; it++) {
+    let u = -1, du = 1e9; for (let i = 0; i < n; i++) if (!fatto[i] && dist[i] < du) { du = dist[i]; u = i }
+    if (u < 0) break; fatto[u] = 1
+    for (const e of adj[u]) { const v = ea[e] === u ? eb[e] : ea[e], w = eL[e] / Math.sqrt(D[e] / Dm0 + 0.05); if (du + w < dist[v]) dist[v] = du + w }
+  }
+  let maxD = 1; for (let i = 0; i < n; i++) if (dist[i] < 1e8) maxD = Math.max(maxD, dist[i])
+  // il tempo è il rango della distanza (non la distanza): le vene si allungano a passo costante, non tutte all'inizio
+  const ordine = Array.from({ length: n }, (_, i) => i).sort((a, b) => (dist[a] < 1e8 ? dist[a] : maxD) - (dist[b] < 1e8 ? dist[b] : maxD)), rango = new Float64Array(n)
+  ordine.forEach((v, k) => { rango[v] = k / Math.max(1, n - 1) })
+  // le vene si allungano per conto loro: il loro tempo è il rango tra i nodi che stanno su una vena
+  const Dm1 = Math.max(...D), Qm1 = Math.max(...Q), suVena = new Uint8Array(n)
+  for (let e = 0; e < m; e++) if (D[e] / Dm1 > 0.12 && Q[e] / Qm1 > 0.035) { suVena[ea[e]] = 1; suVena[eb[e]] = 1 }
+  const ordV = ordine.filter(i => suVena[i]), rangoV = new Float64Array(n).fill(-1)
+  ordV.forEach((v, k) => { rangoV[v] = k / Math.max(1, ordV.length - 1) })
+  const tN = (i: number) => (rangoV[i] >= 0 ? 0.12 + 0.55 * rangoV[i] : 0.13 + 0.5 * rango[i])
+  const tE = (e: number) => Math.min(tN(ea[e]), tN(eb[e]))
   // il disegno
   const Dmax = Math.max(...D), W = S * 0.022
   g.strokeStyle = g.fillStyle = colore; g.lineCap = 'round'; g.lineJoin = 'round'
@@ -239,13 +402,14 @@ function rete(g: CanvasRenderingContext2D, S: number, colore: string, r: () => n
   const tubo = (e: number, w: number) => { const A = P[ea[e]], B = P[eb[e]], mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2, nx = -(B.y - A.y), ny = B.x - A.x, k = ((e * 2654435761) % 1000) / 1000 - 0.5; g.lineWidth = w; g.beginPath(); g.moveTo(A.x, A.y); g.quadraticCurveTo(mx + nx * k * 0.35, my + ny * k * 0.35, B.x, B.y); g.stroke() }
   // il merletto: al fronte esterno ventagli di filamenti finissimi che si ramificano verso fuori (dove la rete non serve muore)
   const vicino = (x: number, y: number) => F.reduce((m0, f) => (Math.hypot(f.x - x, f.y - y) < Math.hypot(m0.x - x, m0.y - y) ? f : m0), F[0])
-  const ramo = (x: number, y: number, an: number, w: number, passi: number, prof: number) => {
-    g.lineWidth = w; g.beginPath(); g.moveTo(x, y)
+  const ramo = (x: number, y: number, an: number, w: number, passi: number, prof: number, tl: number) => {
+    reg.t = tl; g.lineWidth = w; g.beginPath(); g.moveTo(x, y)
     for (let k = 0; k < passi; k++) {
+      tl = Math.min(0.99, tl + 0.006); reg.t = tl
       an += (r() - 0.5) * 0.6; const nx = x + Math.cos(an) * 2.4, ny = y + Math.sin(an) * 2.4
       if (dentro(nx, ny) <= 0 || nx < 3 || ny < 3 || nx > S - 3 || ny > S - 3) break
       g.lineTo(nx, ny); x = nx; y = ny
-      if (prof < 6 && r() < 0.2) { g.stroke(); ramo(x, y, an + (r() < 0.5 ? -1 : 1) * (0.35 + r() * 0.4), w * 0.8, passi - k, prof + 1); g.lineWidth = w; g.beginPath(); g.moveTo(x, y) }
+      if (prof < 6 && r() < 0.2) { g.stroke(); ramo(x, y, an + (r() < 0.5 ? -1 : 1) * (0.35 + r() * 0.4), w * 0.8, passi - k, prof + 1, tl); reg.t = tl; g.lineWidth = w; g.beginPath(); g.moveTo(x, y) }
     }
     g.stroke()
   }
@@ -254,10 +418,11 @@ function rete(g: CanvasRenderingContext2D, S: number, colore: string, r: () => n
     const q0 = P[i]
     if (q0.m > 0.6 || r() > 0.3 || performance.now() - t0 > 800) continue
     const f = vicino(q0.x, q0.y), an = Math.atan2(q0.y - f.y, q0.x - f.x) + (r() - 0.5) * 0.6
-    ramo(q0.x, q0.y, an, 0.5, 18 + Math.floor(r() * 22), 0)
+    ramo(q0.x, q0.y, an, 0.5, 18 + Math.floor(r() * 22), 0, 0.5 + 0.25 * rango[i])
   }
   // i capillari: i tubi sottili che restano vivi, senza alone
-  for (let e = 0; e < m; e++) { const rel = D[e] / Dmax; if (rel > 0.02 && rel <= 0.12) { g.globalAlpha = 0.25 + 2 * rel; tubo(e, 0.6 + 6 * rel) } }
+  reg.L = 'B'
+  for (let e = 0; e < m; e++) { const rel = D[e] / Dmax; if (rel > 0.02 && rel <= 0.12) { reg.t = tE(e) + 0.04; g.globalAlpha = 0.25 + 2 * rel; tubo(e, 0.6 + 6 * rel) } }
   // le vene: lo spessore viene dal flusso che portano (il tronco tra due corpi è più grosso dei rami); il tubo passa
   // morbido attraverso i nodi: da metà di un tubo a metà dell'altro, curvando sul nodo (niente spigoli, niente segmenti)
   const Qmax = Math.max(...Q)
@@ -270,6 +435,7 @@ function rete(g: CanvasRenderingContext2D, S: number, colore: string, r: () => n
     for (let i = 0; i < n; i++) {
       const es = perNodo[i]; if (!es.length) continue
       const N0 = P[i]
+      reg.t = tN(i)
       if (es.length === 1) { const M = mezzo(es[0]), w = larg(es[0]) * k; g.globalAlpha = alpha(w); g.lineWidth = w; g.beginPath(); g.moveTo(N0.x, N0.y); g.lineTo(M.x, M.y); g.stroke(); continue }
       for (let a2 = 0; a2 < es.length; a2++) for (let b2 = a2 + 1; b2 < es.length; b2++) {
         const A = mezzo(es[a2]), B = mezzo(es[b2]), w = Math.min(larg(es[a2]), larg(es[b2])) * k
@@ -282,13 +448,17 @@ function rete(g: CanvasRenderingContext2D, S: number, colore: string, r: () => n
   g.strokeStyle = g.fillStyle = colore
   disegnaVene(1, w => Math.min(1, 0.45 + w / W * 0.5))
   // ife che escono dalle vene grosse, corte e arricciate
-  for (const e of vene.slice().sort((x, y) => Q[x] - Q[y]).slice(-60)) if (r() < 0.5) { const A = P[ea[e]]; let x = A.x, y = A.y, an = r() * 6.283; g.globalAlpha = 0.35; g.lineWidth = 0.6; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 6 + r() * 10; k++) { an += (r() - 0.5) * 0.9; x += Math.cos(an) * 2.5; y += Math.sin(an) * 2.5; g.lineTo(x, y) } g.stroke() }
+  reg.L = 'A'
+  for (const e of vene.slice().sort((x, y) => Q[x] - Q[y]).slice(-60)) if (r() < 0.5) { reg.t = tE(e) + 0.06; const A = P[ea[e]]; let x = A.x, y = A.y, an = r() * 6.283; g.globalAlpha = 0.35; g.lineWidth = 0.6; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 6 + r() * 10; k++) { an += (r() - 0.5) * 0.9; x += Math.cos(an) * 2.5; y += Math.sin(an) * 2.5; g.lineTo(x, y) } g.stroke() }
   // i corpi sui fulcri: masse rugose di grumi (il plasmodio che mangia), il principale più grande
-  for (const f of F) {
-    const R1 = S * (0.02 + 0.05 * f.m)
-    for (let i = 0; i < 90 + 200 * f.m; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.08 + r() * 0.22); g.globalAlpha = 0.25 + r() * 0.35; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
+  reg.L = 'B'
+  for (const [iF, f] of F.entries()) {
+    const R1 = S * (0.02 + 0.05 * f.m), base = 0.12 * iF / Math.max(1, F.length)
+    for (let i = 0; i < 90 + 200 * f.m; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.08 + r() * 0.22); reg.t = base + 0.1 * d / R1; g.globalAlpha = 0.25 + r() * 0.35; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
     // le pieghe: piccoli vuoti dentro il corpo
+    reg.t = base + 0.11
     g.save(); g.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 12 * f.m + 3; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * R1 * 0.85; g.globalAlpha = 0.3; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, R1 * (0.02 + r() * 0.05), 0, 6.283); g.fill() } g.restore()
   }
   g.globalAlpha = 1
+  reg.L = 'A'
 }

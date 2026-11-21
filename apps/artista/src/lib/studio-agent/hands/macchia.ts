@@ -7,6 +7,7 @@
  */
 import { newCanvas } from './sheet'
 import { disegnaMuffa } from './muffa'
+export { crescitaMuffa, ricettaMuffa } from './muffa'
 
 export interface Macchia { seme: number; muffa: number; anello: number; satelliti: number; lobi: number; espansione: number; rete?: number }
 
@@ -18,8 +19,8 @@ export const macchiaDa = (seme: number): Macchia => {
 }
 
 /** disegna la macchia: è muffa vera (micelio, batteri, zonazione, incontri, l'alone del caffè) — vedi muffa.ts */
-export function disegnaMacchia(m: Macchia, colore: string, S = 560): HTMLCanvasElement {
-  return disegnaMuffa(m.seme, colore, S)
+export function disegnaMacchia(m: Macchia, colore: string, S = 560, fino = 1): HTMLCanvasElement {
+  return disegnaMuffa(m.seme, colore, S, fino)
 }
 
 /** l'occhio sui segni: boccia la ripetizione (tassellature), il radiale vuoto (un anello sottile e niente dentro), il segno senza massa */

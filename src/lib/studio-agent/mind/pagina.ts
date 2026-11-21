@@ -7,7 +7,7 @@ import type { AgentState } from '../core/types'
 import { pick, range, type Rnd } from '../core/rng'
 import type { Tone } from '@/components/studio/genera/recipes'
 import { FACES, type FaceId } from '@/components/studio/genera/fonts'
-import { newCanvas, withLayer, fullLayer, type Sheet } from '../hands/sheet'
+import { newCanvas, withLayer, fullLayer, type Sheet, generaDi } from '../hands/sheet'
 import { textLayer, toolById, type ToolCtx } from '../hands/tools'
 import { applica } from '../hands/tools'
 import { ratio } from '../eyes/judgement'
@@ -41,7 +41,7 @@ export async function rendiPagina(st: AgentState, r: Rnd, l: Lavoro, s0: Sheet, 
   const formato = formatoDi(l)
   const segno = async (w: string, x: number, y: number, scale: number) => {
     const cv = await segnoDi(st, r, w, t, ctx)
-    s = withLayer(s, { id: lid(), kind: 'motivo', canvas: cv, x, y, scale, rot: 0, alpha: 1, blend: 'source-over' })
+    s = withLayer(s, { id: lid(), kind: 'motivo', genera: generaDi(cv), canvas: cv, x, y, scale, rot: 0, alpha: 1, blend: 'source-over' })
   }
   // un po' di materia, ma la pagina resta leggibile
   const usa = async (id: string, params: Record<string, unknown>) => { const tool = toolById(id); if (tool) s = await applica(tool, s, params, ctx) }
