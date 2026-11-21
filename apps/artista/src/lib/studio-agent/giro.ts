@@ -6,6 +6,7 @@
 import * as T from './transport'
 import { loadOrCreate, runDay } from './day'
 import { getEpisodi } from './mind/episodio'
+import { propostaDi, type Forma } from './mind/curatore'
 import { cura, getProfilo } from './mind/profilo'
 import { suona, wav } from './suono/musica'
 import type { AgentState, Work } from './core/types'
@@ -21,7 +22,7 @@ type Ep = ReturnType<typeof getEpisodi>[number] & { instagram?: { id?: string; p
  * a seconda del suo temperamento — prepara una sequenza. La sequenza pronta esce su Instagram appena possibile,
  * con un ritmo suo tra mezz'ora e 4 ore dal post precedente; nel frattempo continua a leggere.
  */
-interface Attesa { giri: number; accumulo: number; soglia: number; pronta?: string; tentativi?: number; ultimoPost?: string }
+interface Attesa { giri: number; accumulo: number; soglia: number; pronta?: string; tentativi?: number; ultimoPost?: string; forma?: Forma; storia?: string }
 type ConAttesa = AgentState & { attesa?: Attesa }
 const getAttesa = (st: AgentState): Attesa => ((st as ConAttesa).attesa ??= { giri: 0, accumulo: 0, soglia: 1.4 })
 const nuovaSoglia = (st: AgentState) => 0.9 + Math.random() * 1.2 + (st.temperature < 0.4 ? 0.4 : 0)
@@ -57,14 +58,22 @@ export async function giro(o: { studi: number; sequenza?: boolean; epN: number; 
     o.log(`Ho accumulato abbastanza per dire qualcosa (${A.accumulo.toFixed(2)} su ${A.soglia.toFixed(2)}, dopo ${A.giri} giri): preparo una sequenza.`)
     await una(true)
     const ep = getEpisodi(st).slice(-1)[0] as Ep | undefined
-    if (ep && ep.day === st.day) { nuova = ep.id; const B = getAttesa(st); B.pronta = ep.id; B.tentativi = 0; B.accumulo = 0; B.giri = 0; B.soglia = nuovaSoglia(st) }
+    if (ep && ep.day === st.day) {
+      nuova = ep.id; const B = getAttesa(st); B.accumulo = 0; B.giri = 0; B.soglia = nuovaSoglia(st)
+      // la forma la sceglie lui (il curatore); se sono quasi 4 ore di silenzio, almeno una storia
+      let P = propostaDi(st)
+      if (P?.epId !== ep.id) P = { forma: 'carosello', epId: ep.id, ids: ep.schede, perche: '', day: st.day }
+      if (P.forma === 'niente' && scade) { const best = (await T.listWorks()).filter(w => ep.schede.includes(w.id)).sort((a, b) => b.interest - a.interest)[0]; if (best) P = { ...P, forma: 'storia', ids: [best.id], perche: 'quasi 4 ore di silenzio: lascio almeno un frammento' } }
+      if (P.forma === 'niente') o.log('Questa sequenza resta nel sito: non la pubblico.')
+      else { B.pronta = ep.id; B.tentativi = 0; B.forma = P.forma; B.storia = P.ids[0] }
+    }
   } else if (A.pronta) o.log('Ho una sequenza pronta: aspetto il momento di pubblicarla e intanto continuo a leggere.')
   else o.log(`Non ho ancora abbastanza da dire (${A.accumulo.toFixed(2)} su ${A.soglia.toFixed(2)}): continuo a leggere e a pensare.`)
   await T.putState(st)
   const B = getAttesa(st)
   const ore = o.oreTraPost ?? 0.5
   const puo = !!B.pronta && (!B.ultimoPost || Date.now() - new Date(B.ultimoPost).getTime() >= ore * 3600e3 - 60e3)
-  return { giorno: st.day, nome: st.name, opere: fatte.length, episodio: nuova, pronta: B.pronta ?? null, puoPubblicare: puo }
+  return { giorno: st.day, nome: st.name, opere: fatte.length, episodio: nuova, pronta: B.pronta ?? null, puoPubblicare: puo, forma: B.forma ?? 'carosello', storia: B.storia ?? null }
 }
 
 /** prepara il post di una sequenza: per ogni tavola scelta carica sul server l'immagine e il suo pezzo di musica */
@@ -91,13 +100,36 @@ export async function preparaPost(epId: string, n: number) {
   return { pezzi, didascalia: ep.caption as string }
 }
 
+/** la storia: una tavola sola, in verticale, sul colore del suo bordo */
+export async function preparaStoria(workId: string, epId: string) {
+  const w = (await T.listWorks()).find(x => x.id === workId)
+  if (!w) throw new Error('tavola della storia non trovata')
+  const bmp = await createImageBitmap(await fetch(w.image).then(r => r.blob()))
+  const cv = new OffscreenCanvas(1080, 1920), g = cv.getContext('2d')!
+  // il colore del bordo della tavola fa da fondo
+  const p = new OffscreenCanvas(8, 8), pg = p.getContext('2d')!; pg.drawImage(bmp, 0, 0, 8, 8); const d = pg.getImageData(0, 0, 8, 8).data
+  let R = 0, G = 0, B = 0, n = 0; for (let i = 0; i < 64; i++) { const x = i % 8, y = Math.floor(i / 8); if (x && y && x < 7 && y < 7) continue; R += d[i * 4]; G += d[i * 4 + 1]; B += d[i * 4 + 2]; n++ }
+  g.fillStyle = `rgb(${R / n | 0},${G / n | 0},${B / n | 0})`; g.fillRect(0, 0, 1080, 1920)
+  const h = 1080 * bmp.height / bmp.width; g.drawImage(bmp, 0, (1920 - h) / 2, 1080, h)
+  const j = await T.igMedia(`${epId}-storia.jpg`, await cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 }))
+  if (!j.nome) throw new Error(j.error ?? 'caricamento storia fallito')
+  return j.nome as string
+}
+
+/** la sequenza pronta non si pubblica (la forma scelta non è ancora approvata): resta nel sito, senza contare come post */
+export async function lasciaNelSito(epId: string) {
+  const st = await loadOrCreate(); const A = getAttesa(st)
+  if (A.pronta === epId) { A.pronta = undefined; A.forma = undefined; A.storia = undefined }
+  await T.putState(st)
+}
+
 /** annota nella memoria com'è andata la pubblicazione */
 export async function annotaPost(epId: string, r: { id?: string; permalink?: string; error?: string }) {
   const st = await loadOrCreate()
   const ep = getEpisodi(st).find(e => e.id === epId) as Ep | undefined
   if (ep) ep.instagram = { id: r.id, permalink: r.permalink, quando: new Date().toISOString(), errore: r.error }
   const A = getAttesa(st)
-  if (!r.error) { A.ultimoPost = new Date().toISOString(); if (A.pronta === epId) A.pronta = undefined }
+  if (!r.error) { A.ultimoPost = new Date().toISOString(); if (A.pronta === epId) { A.pronta = undefined; A.forma = undefined; A.storia = undefined } }
   else if (A.pronta === epId && (A.tentativi = (A.tentativi ?? 0) + 1) >= 3) A.pronta = undefined // dopo tre tentativi falliti la lascia nel sito
   await T.putState(st)
 }

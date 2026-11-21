@@ -56,7 +56,15 @@ export function cerca(st: AgentState, tutte: Work[], nelCassetto: Set<string>, o
     const coerenza = n ? sim / n : 0
     const interesse = G.reduce((a, w) => a + w.interest, 0) / G.length
     const giaDetto = C.raccontati.some(x => radice(x.tema) === tema0 && x.day > st.day - 10) ? 1.2 : 0
-    const voto = Math.min(G.length, 7) / 7 + 0.25 * Math.min(ponti, 4) + 0.35 * Math.min(giorni.length, 4) + 0.3 * catena + 0.9 * coerenza + interesse - giaDetto
+    // e già raccontato anche se cambia la parola: quanta parte di queste tavole era già in un reel recente
+    const giaVisti = new Set(C.raccontati.filter(x => x.day > st.day - 14).flatMap(x => x.ids))
+    const ripete = G.filter(w => giaVisti.has(w.id)).length / G.length
+    // e una giornata che rifà le stesse parole di un'altra non è un discorso che matura: è un ritornello
+    const perGiorno = new Map<number, Set<string>>(); for (const w of G) { const m = perGiorno.get(w.day) ?? new Set(); for (const k of concetti.get(w.id) ?? []) m.add(k); perGiorno.set(w.day, m) }
+    const gs = [...perGiorno.values()]; let uguali = 0, cp = 0
+    for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) { const inter = [...gs[i]].filter(k => gs[j].has(k)).length; uguali += inter / Math.max(1, Math.min(gs[i].size, gs[j].size)); cp++ }
+    const ritornello = cp ? uguali / cp : 0
+    const voto = Math.min(G.length, 7) / 7 + 0.25 * Math.min(ponti, 4) + 0.35 * Math.min(giorni.length, 4) + 0.3 * catena + 0.9 * coerenza + interesse - giaDetto - ripete * 1.5 - Math.max(0, ritornello - 0.5) * 3
     if (meglio && voto <= meglio.voto) continue
     // la scelta delle tavole: almeno una per giornata, poi le più interessanti; quelle di oggi ci sono; massimo sei
     const scelte: Work[] = []
@@ -92,3 +100,31 @@ export function raccontato(st: AgentState, d: Discorso) {
   C.raccontati = [...C.raccontati, { tema: d.tema, ids: d.ids, day: st.day }].slice(-60)
   C.ultimoReel = st.day
 }
+
+// ── la forma: reel, carosello, storia o niente ──
+export type Forma = 'reel' | 'carosello' | 'storia' | 'niente'
+export interface Proposta { forma: Forma; epId: string; ids: string[]; perche: string; day: number }
+type ConP = AgentState & { curatore?: MemoriaCuratore & { proposta?: Proposta; medieEp?: number[]; interessi?: number[] } }
+const quantile = (xs: number[], q: number, d: number) => (xs.length >= 5 ? xs.slice().sort((a, b) => a - b)[Math.floor(xs.length * q)] : d)
+
+/** decide che forma dare a quello che è nato oggi: il reel se ha raccontato un discorso tra più giornate;
+ *  il carosello se la sequenza è un ragionamento che regge (più interessante del suo solito, con una conclusione);
+ *  la storia se della sequenza resta solo un frammento forte; niente se non c'è niente da dire */
+export function decidiForma(st: AgentState, ep: { id: string; schede: string[]; conclusione?: string; coppia?: string }, opere: Work[], reel: boolean): Proposta {
+  const C = memoriaCuratore(st) as NonNullable<ConP['curatore']>
+  const ws = opere.filter(w => ep.schede.includes(w.id))
+  const media = ws.length ? ws.reduce((a, w) => a + w.interest, 0) / ws.length : 0
+  const soglia = quantile(C.medieEp ?? [], 0.4, 0)
+  const forte = quantile(C.interessi ?? [], 0.7, 0)
+  C.medieEp = [...(C.medieEp ?? []), media].slice(-30)
+  C.interessi = [...(C.interessi ?? []), ...ws.map(w => w.interest)].slice(-200)
+  const migliore = ws.slice().sort((a, b) => b.interest - a.interest)[0]
+  let p: Proposta
+  if (reel) p = { forma: 'reel', epId: ep.id, ids: [], perche: 'oggi un discorso attraversa più giornate: lo racconto in movimento', day: st.day }
+  else if (ws.length >= 3 && (media >= soglia || (!!ep.coppia && media >= soglia * 0.85))) p = { forma: 'carosello', epId: ep.id, ids: ep.schede, perche: `la sequenza regge da sola${ep.coppia ? ' e arriva a una conclusione' : ''} (interesse ${media.toFixed(2)}, il mio solito ${soglia.toFixed(2)})`, day: st.day }
+  else if (migliore && migliore.interest >= forte) p = { forma: 'storia', epId: ep.id, ids: [migliore.id], perche: `della sequenza resta un frammento: «${(migliore.title ?? '').replace(/^\d+\/\d+\s*·\s*/, '')}»`, day: st.day }
+  else p = { forma: 'niente', epId: ep.id, ids: [], perche: `la sequenza è più debole del mio solito (${media.toFixed(2)} contro ${soglia.toFixed(2)}): resta nel sito`, day: st.day }
+  C.proposta = p
+  return p
+}
+export const propostaDi = (st: AgentState): Proposta | undefined => (st as ConP).curatore?.proposta

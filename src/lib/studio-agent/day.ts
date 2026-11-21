@@ -14,7 +14,7 @@ import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ri
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { serializza, ricostruisci } from './hands/cassetto'
-import { cerca, merita, raccontato } from './mind/curatore'
+import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, type Sheet } from './hands/sheet'
 import type { ToolCtx } from './hands/tools'
@@ -455,6 +455,8 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const ep = chiudiEpisodio(st, r, { musica: { partitura, descr: descrMusica }, lettura: plan.lettura, coppia: plan.d ? `${plan.d.a}|${plan.d.b}` : undefined, titolo: plan.titolo, day: st.day, schede: works.map(w => w.id), conclusione: plan.d?.testo ?? plan.titolo, domanda: plan.domanda, caption }, plan.d)
   if (video) await T.salvaReel(ep.id, video).catch(() => {})
   if (audioReel) await T.salvaReel(`${ep.id}:audio`, audioReel).catch(() => {})
+  // che forma dare a quello che è nato: la sceglie lui
+  { const fp = decidiForma(st, ep, works, !!video); log(`Forma: ${({ reel: 'un reel', carosello: 'un carosello', storia: 'una storia', niente: 'niente' })[fp.forma]} — ${fp.perche}.`) }
   ricorda(st, caption)
   {
     const recenti = (await T.listWorks()).filter(w => w.day >= st.day - 20)

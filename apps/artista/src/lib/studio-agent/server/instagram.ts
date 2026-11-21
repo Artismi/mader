@@ -197,6 +197,18 @@ async function pubblicaCon(base: string, file: string[], didascalia: string): Pr
   return { id: pub.id, permalink: info.permalink }
 }
 
+/** una storia: un'immagine o un video, senza didascalia (le storie si possono pubblicare solo con un account professionale) */
+export async function pubblicaStoria(f: string): Promise<{ id: string; permalink?: string }> {
+  const c = leggiConf()
+  if (!c.token || !c.userId) throw new Error('Instagram non è collegato')
+  const base = await apriTunnel()
+  const url = `${base}/api/studio-agent/media/${encodeURIComponent(f)}`
+  const j = await ig(`${c.userId}/media`, f.endsWith('.mp4') ? { media_type: 'STORIES', video_url: url } : { media_type: 'STORIES', image_url: url }, 'POST') as { id: string }
+  await aspettaPronto(j.id)
+  const pub = await ig(`${c.userId}/media_publish`, { creation_id: j.id }, 'POST') as { id: string }
+  return { id: pub.id }
+}
+
 // ─── modo semplice: Upload-Post (upload-post.com) ───────────────────────────
 // Upload-Post ha già la sua app Meta approvata: colleghi Instagram con un clic sul loro sito,
 // copi la chiave API, e da qui gli mandiamo direttamente i file. Niente token Meta, niente tunnel.
