@@ -21,6 +21,8 @@ import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
 import { buone, tavoleAdHoc } from './mind/adhoc'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, type Sheet } from './hands/sheet'
+import { disegnaMuffa } from './hands/muffa'
+const lum0 = (h: string) => { const m = h.replace('#', ''); if (m.length < 6) return 0.5; return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * parseInt(m.slice(i, i + 2), 16) / 255, 0) }
 import type { ToolCtx } from './hands/tools'
 import { measure, rasterize, palette } from './eyes/measure'
 import { histogram, learn, patches, seedCodebook } from './eyes/visual-words'
@@ -722,6 +724,45 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       for (const { w } of cand) { if (fogli.length >= 4) break; const j = await T.prendiFoglio(w.id); if (!j) continue; fogli = [...fogli, await ricostruisci(JSON.parse(j))]; info = [...info, { interesse: w.interest }]; presi++ }
       if (presi) log(`Reel: le tavole di oggi sono poche, ne riprendo ${presi} dal cassetto.`)
     } catch (e) { log(`Cassetto: ${e instanceof Error ? e.message : e}`) }
+  }
+  // una tavola astratta in mezzo, spesso (quanto spesso è un suo tratto, che si evolve): una pausa senza parole.
+  // O una tavola di un altro giorno, dal cassetto, senza le sue parole (la più ricca di materia); o la muffa protagonista che cresce da sola
+  {
+    const MM = (st0 as ConMovimento).movimento
+    const SP = st0 as AgentState & { astratta?: { p: number } }
+    const pA = (SP.astratta ??= { p: 0.65 }).p
+    ;(st0 as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta = false
+    if (fogli.length >= 2 && r() < pA) {
+      const TXT = /testo|tipografia|etichette|firma|piastra/
+      const mezzo = Math.floor(fogli.length / 2), vicina = fogli[mezzo - 1] ?? fogli[0]
+      let astratta: Sheet | null = null, come = ''
+      if (r() < 0.5) {
+        try {
+          const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set(t.esclusi ?? [])
+          const c = tutte.filter(w => nel.has(w.id) && !via.has(w.id)).map(w => ({ w, v: w.visual?.features ? gustoVisivo(st0, w.visual.features) : 0 })).sort((a, b) => b.v - a.v).slice(0, 6)
+          const sc = c[Math.floor(r() * c.length)]
+          const j = sc ? await T.prendiFoglio(sc.w.id) : null
+          if (j) { const f = await ricostruisci(JSON.parse(j)); const ls = f.layers.filter(l => !TXT.test(l.kind)); if (ls.length >= 2) { astratta = { ...f, layers: ls }; come = 'una tavola di un altro giorno, senza parole' } }
+        } catch { /* niente */ }
+      }
+      if (!astratta) {
+        // la muffa protagonista: grande, sul fondo della tavola vicina, con la sua materia sotto
+        const bg = vicina.bg, lb = (() => { const m = bg.replace('#', ''); if (m.length < 6) return 0.5; return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * parseInt(m.slice(i, i + 2), 16) / 255, 0) })()
+        const tit = vicina.layers.find(l => l.meta?.ruolo === 'titolo')
+        const colore = tit?.meta?.color && Math.abs(lum0(tit.meta.color) - lb) > 0.35 ? tit.meta.color : lb > 0.5 ? '#1c1a17' : '#efe9dc'
+        const seme = Math.floor(r() * 1e9), cv = disegnaMuffa(seme, colore, 900)
+        const G = (st0 as AgentState & { scalaMuffa?: { m: number } }).scalaMuffa
+        const scala = Math.max(1.0, Math.min(1.45, (G?.m ?? 0.45) * 2.4 + (r() - 0.5) * 0.3))
+        let f = emptySheet(vicina.W, vicina.H, bg)
+        const materia = vicina.layers.find(l => /retino|pattern|grana|punti|sfasa/.test(l.kind) && l.scale >= 0.99)
+        if (materia) f = { ...f, layers: [materia] }
+        f = { ...f, layers: [...f.layers, { id: 'astratta', kind: 'motivo', canvas: cv, x: 0.5 + (r() - 0.5) * 0.1, y: 0.47 + (r() - 0.5) * 0.1, scale: scala, rot: r() * 6.283, alpha: 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900, scala } } }] }
+        astratta = f; come = 'la muffa da sola'
+      }
+      ;(st0 as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta = !!astratta
+      if (astratta) { fogli = [...fogli.slice(0, mezzo), astratta, ...fogli.slice(mezzo)]; info = [...info.slice(0, mezzo), { interesse: 0.5 }, ...info.slice(mezzo)]; log(`Reel: in mezzo una tavola astratta (${come}).`) }
+      void MM
+    }
   }
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })

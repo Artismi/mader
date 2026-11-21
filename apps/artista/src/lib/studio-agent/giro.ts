@@ -271,7 +271,7 @@ export async function annotaPubblicazione(forma: Forma3, epId: string | null, wo
   const works = (await T.listWorks()).filter(w => ids.includes(w.id))
   const ora = new Date().toISOString()
   A.ultimo[forma] = ora; A.qualsiasi = ora
-  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
+  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, astratta: forma === 'reel' ? (st as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
   await T.putState(st)
 }
 
@@ -314,6 +314,8 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
     A.pesiForma = { ...(A.pesiForma ?? {}), [p.forma]: Math.max(0.5, Math.min(2, ((A.pesiForma ?? {})[p.forma] ?? 1) * Math.exp(0.1 * z))) }
     // il gusto visivo impara da come sono arrivate le tavole pubblicate (le misure di ognuna, con il loro esito)
     if (p.works?.length) { opere ??= await T.listWorks(); for (const id of p.works) { const w = opere.find(x => x.id === id); if (w?.visual?.features) impara(st, w.visual.features, (z + 2.5) / 5) } }
+    // la voglia di una tavola astratta in mezzo si sposta con come è arrivato il reel che l'aveva (o non l'aveva)
+    if (p.forma === 'reel' && typeof (p as { astratta?: boolean }).astratta === 'boolean') { const SA = ((st as AgentState & { astratta?: { p: number } }).astratta ??= { p: 0.65 }); SA.p = Math.max(0.25, Math.min(0.9, SA.p + 0.04 * z * ((p as { astratta?: boolean }).astratta ? 1 : -1))) }
     p.premiato = true
     if (Math.abs(z) > 1) note.push(`${p.forma === 'reel' ? 'il reel' : p.forma === 'storia' ? 'la storia' : 'il carosello'} del ${new Date(p.quando).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} ${z > 0 ? 'è arrivato più del solito' : 'è passato quasi inosservato'}`)
   }
