@@ -147,12 +147,16 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
     const perche = centro && centro !== f.s && centro !== o && r() < 0.5 ? realizza(pick(r, [' E mi serve per capire {det:c}.', ' Lo tengo perché parlo {di:c}.', ' Questo sposta qualcosa {in:c}.']), v) : ''
     return concorda(cap(g) + '.' + perche + ` (${f.fonte})`)
   }
+  let lunghi = 0
   /** due frasi sue su una parola: quello che sa di lei, riscritto */
   const riassunto = (w: string) => {
     const p = scriviParagrafo(st, r, w, { altri: nodi.filter(x => x !== w).slice(0, 3) })
     // di solito due frasi; ogni tanto il paragrafo intero (fino a sei), quando ha abbastanza da dire
     const fr = p.testo.replace(/\s*\(Letto in:.*$/, '').split(/(?<=[.?!])\s+/)
-    return fr.slice(0, fr.length >= 4 && r() < 0.35 ? 6 : 2).join(' ')
+    // un paragrafo lungo ogni tanto, e al massimo uno per sequenza
+    const lungo = !lunghi && fr.length >= 4 && r() < 0.12
+    if (lungo) lunghi++
+    return fr.slice(0, lungo ? 6 : 2).join(' ')
   }
   /** il ragionamento disteso: quello che ha capito delle due cose, il confronto, la conclusione, una domanda. Tutto suo */
   const disteso = (dd: Deduzione): string => {
@@ -168,7 +172,8 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   let mute = 0
   const S: Scheda[] = []
   const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: glossa(x.f), a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
-  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: r() < 0.6 ? disteso(d) : concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`), catena: [d.a, d.b], a: d.a, b: d.b } : null)
+  let corpoConc: string | undefined
+  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: corpoConc ??= (!lunghi && r() < 0.22 ? (lunghi++, disteso(d)) : concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`)), catena: [d.a, d.b], a: d.a, b: d.b } : null)
   const muta = (a?: string, b?: string): Scheda | null => (mute++ >= 1 ? null : { ruolo: 'silenzio', titolo: d ? cap(senzaAttacco(d.testo).split(/[,:;]/)[0]) : tesi.length ? cap(senzaAttacco(pick(r, tesi).testo).split(/[,:;]/)[0]) : cap(V.titolo), corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
   const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: riassunto(w), a: w })
   const ritorno = (): Scheda | null => (prev && r() < 0.35 ? { ruolo: 'prima', titolo: pick(r, ['Torno su una cosa', 'Me lo ero già chiesto', 'Ancora']), corpo: `${cap(prev.conclusione)}.`, a: d?.a } : null)
