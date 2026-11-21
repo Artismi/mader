@@ -766,7 +766,9 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       varia /= dati.length - 1
       const volte = new Map<number, number>(); for (const p of e.riprese) volte.set(p.tav, (volte.get(p.tav) ?? 0) + 1)
       const ripete = [...volte.values()].reduce((a, n) => a + Math.max(0, n - 1), 0) / Math.max(1, e.riprese.length)
-      return { v: materia + 0.6 * varia - 0.5 * ripete + 0.08 * volte.size, materia, varia }
+      // piena ma leggera: il troppo fitto (complessità alta, niente vuoto) pesa quanto il vuoto
+      const fitto = fs.reduce((a, f) => a + Math.max(0, (f.complessita ?? 0) - 0.5) * 2 + Math.max(0, 0.08 - (f.vuoto ?? 0)) * 4, 0) / fs.length
+      return { v: materia + 0.6 * varia - 0.5 * ripete + 0.08 * volte.size - fitto, materia, varia }
     }
     let meglio = { scena, ev, ...(await giudica(scena, ev)) }
     for (let k = 1; k < 3; k++) {

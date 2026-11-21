@@ -24,6 +24,7 @@ import type { Brano } from '../suono/beat'
 import { toolById, ANIMABILI, type ToolCtx } from './tools'
 import { fontCss } from '@/components/studio/genera/raster'
 import { perCarattere } from '@/components/studio/genera/fonts'
+import { measure, rasterize } from '../eyes/measure'
 
 const W = 720, H = 1280, FPS = 30
 
@@ -140,6 +141,7 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
   let id = 0
   // la griglia delle parole, una per tutto il reel: nella fascia libera sopra o sotto la tavola, stessi margini, allineate a sinistra
   const fascia: 'alto' | 'basso' = r() < 0.5 ? 'alto' : 'basso'
+  let ultimoPosto = '' // il posto delle parole cambia da una tavola all'altra
   const bordo = (s: Sheet) => {
     const c = document.createElement('canvas'); c.width = 24; c.height = Math.max(2, Math.round(24 * s.H / s.W)); const g = c.getContext('2d')!
     g.fillStyle = s.bg; g.fillRect(0, 0, c.width, c.height)
@@ -180,9 +182,16 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       // la tavola senza le sue parole (nel reel non ci sono)
       const piatta = flatten({ ...s, layers: s.layers.filter(l => !TESTO.has(l.kind)) }, 0.25), pq = piatta.getContext('2d', { willReadFrequently: true })!
       const kV = W / s.W, oyV = (H - s.H * kV) / 2
-      const sottoTesto = (y0: number, y1: number) => {
+      // dove ci sono figure (non i fondi, non le materie a tutta pagina): lì le parole non vanno
+      const fig = flatten({ ...s, bg: 'rgba(0,0,0,0)', layers: s.layers.filter(l => !TESTO.has(l.kind) && !ATMO.has(l.kind) && l.scale < 1.15) }, 0.25), fq = fig.getContext('2d', { willReadFrequently: true })!
+      const occupato = (y0: number, y1: number, x0: number, x1: number) => {
+        let a = 0, n = 0
+        for (let y = y0; y < y1; y += 8) for (let x = x0; x < x1; x += 8) { const sy = (y - oyV) / kV, sx = x / kV; if (sy >= 0 && sy < s.H) a += fq.getImageData(Math.floor(sx * 0.25), Math.floor(sy * 0.25), 1, 1).data[3] / 255; n++ }
+        return a / Math.max(1, n)
+      }
+      const sottoTesto = (y0: number, y1: number, x0 = 48, x1 = W - 150) => {
         let m = 0, m2 = 0, n = 0
-        for (let y = y0; y < y1; y += 8) for (let x = 48; x < W - 150; x += 8) {
+        for (let y = y0; y < y1; y += 8) for (let x = x0; x < x1; x += 8) {
           const sy = (y - oyV) / kV, sx = x / kV
           let l = lb
           if (sy >= 0 && sy < s.H) { const d = pq.getImageData(Math.floor(sx * 0.25), Math.floor(sy * 0.25), 1, 1).data; l = (0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]) / 255 }
@@ -202,11 +211,16 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       const tutte: { t: string; f: typeof blocchi[0]['font']; px: number; col: string; dopo: number }[] = righeT.map((t, i) => ({ t, f: blocchi[0].font, px, col: blocchi[0].colore, dopo: i === righeT.length - 1 ? px * 0.45 : px * 0.08 }))
       if (blocchi[1]) for (const t of a_capo(blocchi[1].testo, blocchi[1].font, blocchi[1].px, larg * 0.92)) tutte.push({ t, f: blocchi[1].font, px: blocchi[1].px, col: blocchi[1].colore, dopo: blocchi[1].px * 0.28 })
       const alto = tutte.reduce((a, x) => a + x.px * 1.1 + x.dopo, 0)
-      const fA = sottoTesto(200, 200 + alto), fB = sottoTesto(H - 330 - alto, H - 330)
-      // la fascia scelta per il reel, se sotto è calma; altrimenti l'altra, se è più calma
-      const qui = fascia === 'alto' ? fA : fB, la = fascia === 'alto' ? fB : fA
-      const dove = qui.sd <= 0.12 || qui.sd <= la.sd ? fascia : fascia === 'alto' ? 'basso' : 'alto'
-      const f0 = dove === fascia ? qui : la
+      // i posti possibili (tutti dentro le zone sicure): in alto, in basso, a metà a sinistra, in alto centrato.
+      // Vince il più calmo sotto, ma non lo stesso della tavola prima (le parole non stanno sempre nell'angolo)
+      const larghezza = Math.max(...tutte.map(x => { mis.font = fontCss(x.f as never, x.px); return mis.measureText(x.t).width + 8 }))
+      const posti = [
+        { id: 'alto', y: 200, cx: false }, { id: 'basso', y: H - 330 - alto, cx: false },
+        { id: 'meta', y: Math.round(H * 0.47 - alto / 2), cx: false }, { id: 'centro', y: 200, cx: true },
+      ].map(p => { const x0 = p.cx ? Math.round((48 + W - 150) / 2 - larghezza / 2) : 48, x1 = Math.min(W - 150, x0 + larghezza); return { ...p, x0, f: sottoTesto(p.y, p.y + alto, x0, x1), occ: occupato(p.y, p.y + alto, x0, x1) } })
+      const scelto = posti.map(p => ({ p, v: p.f.sd + 1.5 * p.occ + (p.id === ultimoPosto ? 0.1 : 0) + (p.id === fascia ? -0.02 : 0) + r() * 0.03 })).sort((a, b) => a.v - b.v)[0].p
+      ultimoPosto = scelto.id
+      const f0 = scelto.f
       // il colore: quello della tavola se si stacca da quello che c'è sotto, se no il più lontano tra scuro e chiaro
       // il contrasto vero (WCAG, sulla luce lineare): almeno 4.5:1 per le righe piccole, 3.5:1 per il titolo grande
       const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
@@ -215,12 +229,12 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       // se sotto è agitato, la soglia sale (il fondo prende in prestito un po' del contrasto)
       const agitato = 1 + f0.sd * 2
       for (const x of tutte) if (cr(x.col) < (x.px >= 48 ? 3.5 : 4.5) * agitato) x.col = cr('#111111') > cr('#f4f2ec') ? '#111111' : '#f4f2ec'
-      let y = dove === 'alto' ? 200 : H - 330 - alto
+      let y = scelto.y
       tutte.forEach((x, i) => {
         const c = document.createElement('canvas'), q0 = c.getContext('2d')!; q0.font = fontCss(x.f as never, x.px)
         c.width = Math.ceil(q0.measureText(x.t).width + 8); c.height = Math.ceil(x.px * 1.3)
         const q = c.getContext('2d')!; q.font = fontCss(x.f as never, x.px); q.fillStyle = x.col; q.textBaseline = 'top'; q.fillText(x.t, 4, x.px * 0.1)
-        dopo.push({ id: id++, strato: 1000 + i, rivela: 'righe', ruolo: 'testo', tav: ti, gruppo: 0, sprite: c, x: m + c.width / 2, y: y + c.height / 2, w: c.width, h: c.height, rot: 0, alpha: 1, blend: 'source-over', padre: radice.id, indice: 1000 + i, area: c.width * c.height })
+        dopo.push({ id: id++, strato: 1000 + i, rivela: 'righe', ruolo: 'testo', tav: ti, gruppo: 0, sprite: c, x: scelto.cx ? (48 + W - 150) / 2 : m + c.width / 2, y: y + c.height / 2, w: c.width, h: c.height, rot: 0, alpha: 1, blend: 'source-over', padre: radice.id, indice: 1000 + i, area: c.width * c.height })
         y += x.px * 1.1 + x.dopo
       })
       parole[ti] = blocchi[0].testo.split(/\s+/).length + (blocchi[1]?.testo.split(/\s+/).length ?? 0) // le parole che si leggono davvero (il titolo accorciato)
@@ -248,6 +262,30 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
         continue
       }
       strati.push(l)
+    }
+    // la densità: piena ma leggera. Se la tavola è troppo fitta per un telefono, restano il fondo, il protagonista e gli strati più forti
+    {
+      const fNon = strati.filter(l => !TESTO.has(l.kind))
+      const f = measure(rasterize(flatten({ ...s, layers: fNon }, 0.25), 64))
+      const troppo = (f.complessita ?? 0) > 0.55 || (f.vuoto ?? 1) < 0.07 || fNon.length > 6
+      if (troppo && fNon.length > 4) {
+        const prot = fNon.filter(l => l.genera).sort((a, b) => b.scale - a.scale)[0]
+        const forza = (l: Layer) => (l === prot ? 99 : 0) + (l === fNon[0] ? 50 : 0) + l.scale * l.alpha * (l.genera ? 1.5 : 1) * (MATERIA.has(l.kind) ? 0.7 : 1)
+        const tieni = new Set(fNon.slice().sort((a, b) => forza(b) - forza(a)).slice(0, (f.complessita ?? 0) > 0.65 ? 3 : 4))
+        for (let i = strati.length - 1; i >= 0; i--) if (!TESTO.has(strati[i].kind) && !tieni.has(strati[i])) strati.splice(i, 1)
+      }
+    }
+    // niente accavallamenti: uno strato di figura che copre per più di metà uno più forte (prima di tutti il protagonista) lascia il posto
+    {
+      const box = (l: Layer) => { const sd = Math.min(s.W, s.H) * l.scale, w = sd * l.canvas.width / Math.max(l.canvas.width, l.canvas.height), h = sd * l.canvas.height / Math.max(l.canvas.width, l.canvas.height); return { x0: l.x * s.W - w / 2, y0: l.y * s.H - h / 2, x1: l.x * s.W + w / 2, y1: l.y * s.H + h / 2, a: w * h } }
+      const figura = (l: Layer) => !TESTO.has(l.kind) && !ATMO.has(l.kind) && l.scale < 0.99
+      const pesoL = (l: Layer) => (l.genera ? 2 : 1) * l.scale * l.alpha
+      const ordinati = strati.filter(figura).sort((a, b) => pesoL(b) - pesoL(a)), restano: Layer[] = []
+      for (const l of ordinati) {
+        const b = box(l)
+        const sopra = restano.some(o => { const c = box(o), ix = Math.max(0, Math.min(b.x1, c.x1) - Math.max(b.x0, c.x0)), iy = Math.max(0, Math.min(b.y1, c.y1) - Math.max(b.y0, c.y0)); return (ix * iy) / Math.min(b.a, c.a) > 0.5 })
+        if (sopra && restano.length >= 1) { strati.splice(strati.indexOf(l), 1) } else restano.push(l)
+      }
     }
     const metti = (l: Layer, li: number) => {
       if (tit && TESTO.has(l.kind)) return // le parole di questa tavola le ha già messe la griglia
@@ -351,14 +389,15 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
         const font = tit.meta.font ?? { family: 'serif', weight: 700 }
         const lettere = [...(font.upper ? parolaChiave.toUpperCase() : parolaChiave)]
         const n = lettere.length, mis = document.createElement('canvas').getContext('2d')!
-        const colore = Math.abs(lum(acc) - lb) > 0.25 ? acc : ink
+        const colore = P0.lettere === 'colonna' ? (Math.abs(lum(ink) - lb) > 0.45 ? ink : lb > 0.5 ? '#111111' : '#f4f2ec') : Math.abs(lum(acc) - lb) > 0.25 ? acc : ink
         const disegna = (ch: string, px: number) => {
           mis.font = fontCss(font as never, px); const w0 = Math.max(px * 0.3, mis.measureText(ch).width)
           const c = document.createElement('canvas'); c.width = Math.ceil(w0 + px * 0.2); c.height = Math.ceil(px * 1.25)
           const q = c.getContext('2d')!; q.font = fontCss(font as never, px); q.textBaseline = 'alphabetic'
           const bx = px * 0.1, by = px * 0.95
-          if (P0.tratto !== 'contorno') { q.fillStyle = colore; q.fillText(ch, bx, by) }
-          if (P0.tratto !== 'pieno') { q.lineWidth = Math.max(2, px / 70); q.strokeStyle = P0.tratto === 'doppio' ? ink : colore; q.strokeText(ch, bx + (P0.tratto === 'doppio' ? px * 0.04 : 0), by + (P0.tratto === 'doppio' ? px * 0.04 : 0)) }
+          const TR = P0.lettere === 'colonna' ? 'pieno' : P0.tratto
+          if (TR !== 'contorno') { q.fillStyle = colore; q.fillText(ch, bx, by) }
+          if (TR !== 'pieno') { q.lineWidth = Math.max(2, px / 70); q.strokeStyle = TR === 'doppio' ? ink : colore; q.strokeText(ch, bx + (TR === 'doppio' ? px * 0.04 : 0), by + (TR === 'doppio' ? px * 0.04 : 0)) }
           return { c, w0 }
         }
         const pos: { x: number; y: number; px: number; rot: number }[] = []
@@ -368,7 +407,11 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
           let x = -W * 0.25 + r() * W * 0.1; const y = H * (0.3 + r() * 0.4)
           for (const ch of lettere) { mis.font = fontCss(font as never, px); const w0 = mis.measureText(ch).width; pos.push({ x: x + w0 / 2, y, px, rot: 0 }); x += w0 }
         } else if (P0.lettere === 'colonna') {
-          const px = Math.min(320, (H * 0.85) / n), x = r() < 0.5 ? 40 + px * 0.4 : W - 40 - px * 0.4
+          // la colonna sul lato più calmo della tavola (le lettere si devono leggere)
+          const px = Math.min(260, (H * 0.8) / n), xs = [40 + px * 0.4, W - 40 - px * 0.4]
+          const piatta2 = flatten({ ...s, layers: s.layers.filter(l => !TESTO.has(l.kind)) }, 0.1), p2 = piatta2.getContext('2d', { willReadFrequently: true })!
+          const agit = (x: number) => { const d = p2.getImageData(Math.max(0, Math.floor((x - px / 2) / W * piatta2.width)), 0, Math.max(1, Math.floor(px / W * piatta2.width)), piatta2.height).data; let m0 = 0, m2 = 0, n0 = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m0 += l; m2 += l * l; n0++ } const mu = m0 / n0; return Math.sqrt(Math.max(0, m2 / n0 - mu * mu)) }
+          const x = agit(xs[0]) <= agit(xs[1]) ? xs[0] : xs[1]
           lettere.forEach((_, k) => pos.push({ x, y: H * 0.08 + (k + 0.5) * (H * 0.84) / n, px, rot: 0 }))
         } else if (P0.lettere === 'diagonale') {
           const px = Math.min(300, Math.hypot(W, H) * 0.9 / n * 1.1)
@@ -379,7 +422,8 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
           const { c } = disegna(ch, pos[k].px)
           const nodo: Nodo = { id: id++, ruolo: 'figura', tav: ti, gruppo: (k % 2) as 0 | 1, sprite: c, x: pos[k].x, y: pos[k].y - pos[k].px * 0.35, w: c.width, h: c.height, rot: pos[k].rot, alpha: P0.tratto === 'contorno' ? 1 : 0.92, blend: 'source-over', padre: radice.id, indice: 0.6 + k * 0.01, area: c.width * c.height, lettera: true }
           // la parola è uno strato tra gli altri: quasi sempre sotto la materia (il retino, la grana le passano sopra)
-          const sotto = r() < 0.85; nodo.strato = sotto ? 0.7 : 900; nodo.rivela = 'tendina'
+          // in colonna la parola si deve leggere: sopra, piena, opaca; le altre disposizioni sono materia, sotto
+          const sotto = P0.lettere !== 'colonna' && r() < 0.85; nodo.strato = sotto ? 0.7 : 900; nodo.rivela = 'tendina'
           // sotto la materia la parola è uno strato tra gli altri, non la protagonista
           if (sotto) { nodo.alpha = 0.55; nodo.blend = lb > 0.5 ? 'multiply' : 'screen' }
           ;(sotto ? dietro : davanti).push(nodo)
@@ -1044,8 +1088,10 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       const u = clamp((t - rp.t0) / Math.max(1e-3, rp.t1 - rp.t0)), e = u * u * (3 - 2 * u)
       const [mx, my] = centroDi(protN)
       const zPieno = protN.area > W * H * 0.6 ? 1.3 : Math.max(1.15, Math.min(2.8, Math.min(W / (protN.w * 1.05), H / (protN.h * 1.05))))
-      const z = rp.anello ? zPieno * (1 + 0.06 * u) : protN.area < W * H * 0.35 ? 1 + (Math.min(1.4, zPieno) - 1) * e : 1
-      if (z > 1.001) { const cx0 = rp.anello ? mx : W / 2 + (mx - W / 2) * e, cy0 = rp.anello ? my : H / 2 + (my - H / 2) * e, fx = Math.max(W / (2 * z), Math.min(W - W / (2 * z), cx0)), fy = Math.max(H / (2 * z), Math.min(H - H / (2 * z), cy0)); cam = [z, 0, 0, z, W / 2 - fx * z, H / 2 - fy * z] }
+      // al primo passaggio la camera va e torna mentre il protagonista cresce, prima che entrino le parole (nel primo 40% della ripresa)
+      const giro0 = u < 0.4 ? Math.sin(Math.PI * u / 0.4) : 0
+      const z = rp.anello ? zPieno * (1 + 0.06 * u) : protN.area < W * H * 0.35 ? 1 + (Math.min(1.4, zPieno) - 1) * giro0 : 1
+      if (z > 1.001) { const cx0 = rp.anello ? mx : W / 2 + (mx - W / 2) * giro0, cy0 = rp.anello ? my : H / 2 + (my - H / 2) * giro0, fx = Math.max(W / (2 * z), Math.min(W - W / (2 * z), cx0)), fy = Math.max(H / (2 * z), Math.min(H - H / (2 * z), cy0)); cam = [z, 0, 0, z, W / 2 - fx * z, H / 2 - fy * z] }
     } else if (rp.anello) {
       const f0 = scena.nodi.filter(n => n.tav === rp.tav && n.ruolo !== 'testo' && n.ruolo !== 'fondo' && (n.sprite || n.vivo) && n.area < W * H * 0.5).sort((a, b) => b.area - a.area)[(rp.tav + Math.round(rp.t0)) % 2] ?? null
       if (f0) { const u = (t - rp.t0) / Math.max(1e-3, rp.t1 - rp.t0), z = 1.55 + 0.18 * u, fx = Math.max(W / (2 * z), Math.min(W - W / (2 * z), f0.x)), fy = Math.max(H / (2 * z), Math.min(H - H / (2 * z), f0.y)); cam = [z, 0, 0, z, W / 2 - fx * z, H / 2 - fy * z] }
@@ -1069,6 +1115,8 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     const colpito = cp && bersagli.length ? bersagli[cp.i % bersagli.length].id : -1
     for (const n of nodi) {
       if (n.ruolo === 'testo' && testoReel) continue
+      // con la camera vicina le parole tacciono: al ritorno la tavola è già stata letta, e lo zoom porterebbe le figure sotto le parole
+      if (n.ruolo === 'testo' && (cam || rp.anello)) continue
       const s = stato(n, c, rp, t, br, rango.get(n.id) ?? 0, quanti.get(n.ruolo) ?? 1, scena, acc)
       // la partitura sulle figure
       if (vuoto && (n.ruolo === 'figura' || n.ruolo === 'linea') && bersagli[0]?.id !== n.id) continue
