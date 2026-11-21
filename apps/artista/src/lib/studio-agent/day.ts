@@ -41,7 +41,7 @@ import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } 
 import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
-import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione } from './mind/episodio'
+import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione, imparaScalaMuffa } from './mind/episodio'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -425,6 +425,8 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     const saved = await T.saveWork(work, final.toDataURL('image/png'))
     // nel cassetto, con i suoi livelli: potrà tornare in un discorso tra più giornate
     try { await T.riponiFoglio(saved.id, JSON.stringify(serializza(sheet))) } catch (e) { log(`Cassetto: ${e instanceof Error ? e.message : e}`) }
+    // la misura delle muffe impara da come è venuta la tavola (interesse e gusto per la materia insieme)
+    imparaScalaMuffa(st, sheet, 0.5 * saved.interest + 0.5 * gustoVisivo(st, f))
     works.push(saved); riuscite.push(i)
     if (sc.b && ultimaImpaginazione()) esitoVisivo(st, sc.rel ?? 'accanto', ultimaImpaginazione()!, saved.interest)
     if (hooks.reel) { fogli.push(sheet); infoReel.push({ rel: sc.rel, interesse: saved.interest }) }

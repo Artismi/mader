@@ -205,8 +205,12 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       // le zone di Instagram: in alto nome e audio, in basso didascalia e mi piace, a destra i pulsanti. Il testo da leggere sta fuori
       const m = 48, larg = W - m - 150
       // il titolo: il più grande che sta in tre righe
-      let px = 84, righeT = a_capo(blocchi[0].font.upper ? blocchi[0].testo.toUpperCase() : blocchi[0].testo, blocchi[0].font, px, larg)
-      while (righeT.length > 3 && px > 34) { px -= 4; righeT = a_capo(blocchi[0].font.upper ? blocchi[0].testo.toUpperCase() : blocchi[0].testo, blocchi[0].font, px, larg) }
+      // il titolo è un elemento grafico: breve, prende tutta la forza che può (fino a cinque righe, corpo grande); lungo, si stringe
+      const nW = blocchi[0].testo.split(/\s+/).length, maxRighe = nW <= 4 ? 3 : nW <= 7 ? 5 : 3
+      let px = nW <= 7 ? 118 : 84, righeT = a_capo(blocchi[0].font.upper ? blocchi[0].testo.toUpperCase() : blocchi[0].testo, blocchi[0].font, px, larg)
+      // e nessuna parola spezzata o più larga della colonna
+      const troppoLarga = () => { mis.font = fontCss(blocchi[0].font as never, px); return righeT.some(t => mis.measureText(t).width > larg) }
+      while ((righeT.length > maxRighe || troppoLarga()) && px > 34) { px -= 4; righeT = a_capo(blocchi[0].font.upper ? blocchi[0].testo.toUpperCase() : blocchi[0].testo, blocchi[0].font, px, larg) }
       blocchi[0].px = px
       const tutte: { t: string; f: typeof blocchi[0]['font']; px: number; col: string; dopo: number }[] = righeT.map((t, i) => ({ t, f: blocchi[0].font, px, col: blocchi[0].colore, dopo: i === righeT.length - 1 ? px * 0.45 : px * 0.08 }))
       if (blocchi[1]) for (const t of a_capo(blocchi[1].testo, blocchi[1].font, blocchi[1].px, larg * 0.92)) tutte.push({ t, f: blocchi[1].font, px: blocchi[1].px, col: blocchi[1].colore, dopo: blocchi[1].px * 0.28 })

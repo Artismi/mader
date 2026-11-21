@@ -329,7 +329,16 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   const metti = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {
     // la muffa a volte è la protagonista: grande, quasi a tutta tavola (il reel la farà crescere)
     const gen = generaDi(cv)
-    if (gen && Math.random() < 0.3) { scale = Math.min(1.15, Math.max(scale, 0.75 + Math.random() * 0.35)); x = 0.5 + (x - 0.5) * 0.3; y = 0.42 + (y - 0.5) * 0.3 }
+    // la misura della muffa non è una regola: è un suo gusto. Pesca attorno alla misura che finora gli ha dato le tavole migliori
+    // (con un po' di esplorazione); più è grande, più va verso il centro. Il gusto si sposta dopo ogni tavola (imparaScalaMuffa)
+    if (gen) {
+      const G = (st as AgentState & { scalaMuffa?: { m: number; n: number } }).scalaMuffa ?? { m: 0.45, n: 0 }
+      const esplora = 0.28 / Math.sqrt(1 + G.n / 8)
+      const sc0 = Math.max(0.18, Math.min(1.3, G.m + (r() * 2 - 1) * esplora + (r() < 0.1 ? (r() - 0.3) * 0.6 : 0)))
+      const verso = Math.max(0, Math.min(1, (sc0 - 0.4) / 0.7))
+      scale = sc0; x = x + (0.5 - x) * verso; y = y + (0.45 - y) * verso
+      gen.p = { ...gen.p, scala: sc0 }
+    }
     s = withLayer(s, { id: lid2(), kind: 'motivo', genera: gen, canvas: sfuma(cv, 0.08), x, y, scale, rot: extra.rot ?? 0, alpha: extra.alpha ?? 1, blend: extra.blend ?? 'source-over' })
   }
   // 2. i segni, in una composizione scelta dalla relazione (e diversa dalla tavola prima)
@@ -481,3 +490,18 @@ export function didascalia(st: AgentState, titolo: string, d: Deduzione | null, 
   return concorda(`${titolo}.\n\n${d ? `${d.premesse.map((p, i) => `${i + 1}. ${cap(p)}`).join('\n')}\n→ ${cap(d.testo)} (ci credo al ${Math.round(d.conf * 100)}%).` : ''}\n\n${Math.random() < 0.4 ? cap(domanda) + '\n\n' : ''}${V ? `#${V.titolo.split(' ').slice(-1)[0]} ` : ''}#generatoreprocedurale #artistaosservatore`)
 }
 void art
+
+/** il gusto della misura delle muffe si sposta: verso la misura usata se la tavola è riuscita (sopra la sua media), via se no */
+export function imparaScalaMuffa(st: AgentState, sheet: { layers: { genera?: { tool: string; p: Record<string, unknown> } }[] }, voto: number) {
+  const S = st as AgentState & { scalaMuffa?: { m: number; n: number; media?: number } }
+  const G = S.scalaMuffa ?? (S.scalaMuffa = { m: 0.45, n: 0, media: 0.5 })
+  const media = G.media ?? 0.5
+  for (const l of sheet.layers) {
+    const sc = l.genera?.tool === 'muffa' ? Number(l.genera.p.scala) : NaN
+    if (!Number.isFinite(sc)) continue
+    const passo = 0.25 / Math.sqrt(1 + G.n / 6)
+    G.m = Math.max(0.18, Math.min(1.3, G.m + passo * Math.sign(voto - media) * Math.min(1, Math.abs(voto - media) * 4) * (sc - G.m)))
+    G.n++
+  }
+  G.media = media * 0.9 + voto * 0.1
+}
