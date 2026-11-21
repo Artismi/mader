@@ -40,7 +40,7 @@ import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione } from './mind/episodio'
-import { smonta, evolviCoreografia, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
+import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
 import { testoGrafico } from './hands/testiReel'
@@ -715,6 +715,8 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
   const lett2 = lettura.slice()
   const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2)
+  // le lettere-forma sono già state disposte smontando le tavole: la partitura le registra com'erano
+  ev.coreografia.partitura = { ...partitura(ev.coreografia.partitura), lettere: scena.lettere ?? 'gigante', tratto: scena.tratto ?? 'pieno' }
   // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni
   const testi: { t0: number; t1: number; cv: HTMLCanvasElement }[] = []
   const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }
