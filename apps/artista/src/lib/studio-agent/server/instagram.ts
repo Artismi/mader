@@ -209,6 +209,22 @@ export async function pubblicaStoria(f: string): Promise<{ id: string; permalink
   return { id: pub.id }
 }
 
+/** ascoltare: per ogni contenuto pubblicato, i numeri (portata, mi piace, salvataggi, condivisioni, visualizzazioni) e i commenti.
+ *  Servono i permessi instagram_business_manage_insights e instagram_business_manage_comments: se mancano, lo dice e va avanti. */
+export async function ascoltaMedia(ids: string[]) {
+  const out: { ig: string; tipo?: string; like?: number; commenti?: number; insights: Record<string, number>; testi: { id: string; text: string; username?: string; timestamp?: string }[] }[] = []
+  const errori = new Set<string>()
+  for (const id of ids.slice(0, 30)) {
+    const x: (typeof out)[number] = { ig: id, insights: {}, testi: [] }
+    try { const m = await ig(id, { fields: 'id,media_type,media_product_type,like_count,comments_count' }) as { media_product_type?: string; media_type?: string; like_count?: number; comments_count?: number }; x.tipo = m.media_product_type ?? m.media_type; x.like = m.like_count; x.commenti = m.comments_count } catch (e) { errori.add(`dati: ${e instanceof Error ? e.message : e}`); continue }
+    const metriche = x.tipo === 'REELS' ? 'reach,saved,shares,total_interactions,views' : x.tipo === 'STORY' ? 'reach,replies,total_interactions,views' : 'reach,saved,shares,total_interactions,views'
+    try { const j = await ig(`${id}/insights`, { metric: metriche }) as { data?: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] }; for (const d of j.data ?? []) x.insights[d.name] = d.total_value?.value ?? d.values?.[0]?.value ?? 0 } catch (e) { errori.add(`statistiche: ${e instanceof Error ? e.message : e}`) }
+    if (x.tipo !== 'STORY' && (x.commenti ?? 0) > 0) { try { const j = await ig(`${id}/comments`, { fields: 'id,text,username,timestamp', limit: '50' }) as { data?: { id: string; text: string; username?: string; timestamp?: string }[] }; x.testi = j.data ?? [] } catch (e) { errori.add(`commenti: ${e instanceof Error ? e.message : e}`) } }
+    out.push(x)
+  }
+  return { media: out, errori: [...errori].slice(0, 3) }
+}
+
 // ─── modo semplice: Upload-Post (upload-post.com) ───────────────────────────
 // Upload-Post ha già la sua app Meta approvata: colleghi Instagram con un clic sul loro sito,
 // copi la chiave API, e da qui gli mandiamo direttamente i file. Niente token Meta, niente tunnel.

@@ -7,6 +7,7 @@
  */
 import type { AgentState, Work } from '../core/types'
 import { getEpisodi } from './episodio'
+import { posDi, verbi } from '../reader/concepts'
 
 export interface Discorso { tema: string; ids: string[]; giorni: number[]; voto: number; perche: string; domanda?: string; conclusione?: string }
 interface MemoriaCuratore { voti: number[]; raccontati: { tema: string; ids: string[]; day: number }[]; ultimoReel?: number }
@@ -17,7 +18,7 @@ const norm = (s?: string) => (s ?? '').toLowerCase().trim()
 const VUOTE = new Set('il lo la i gli le un uno una di a da in con su per tra fra e o ma se che chi non come più è sono era fosse essere avere ha hanno del della dei delle dello degli al alla ai alle allo agli nel nella nei nelle sul sulla questo questa quello quella anche cosa quando dove perché tutto tutti ogni sua suo suoi sue loro mio tuo tavola'.split(' '))
 /** la radice di una parola: senza la vocale finale (città/citta, tempi/tempo), almeno quattro lettere */
 const radice = (w: string) => { const x = w.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, ''); return x.length >= 5 ? x.replace(/[aeiou]$/, '') : x }
-const parole = (t: string) => t.toLowerCase().replace(/^\s*\d+\/\d+\s*·\s*/, '').split(/[^a-zàèéìòù']+/).map(w => w.replace(/^.*'/, '')).filter(w => w.length >= 4 && !VUOTE.has(w))
+const parole = (t: string) => t.toLowerCase().replace(/^\s*\d+\/\d+\s*·\s*/, '').split(/[^a-zàèéìòù']+/).map(w => w.replace(/^.*'/, '')).filter(w => w.length >= 4 && !VUOTE.has(w) && posDi(w).has('n') && !verbi().has(w) && !/^(materiale|gesto|rima|prova|stesso|stessa|cosa|parte)$/.test(w)) // solo nomi veri (non i verbi delle sue formule)
 const coseno = (a: number[], b: number[]) => { let d = 0, na = 0, nb = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] } return na && nb ? d / Math.sqrt(na * nb) : 0 }
 
 /** cerca il discorso più forte che passa per le tavole di oggi */

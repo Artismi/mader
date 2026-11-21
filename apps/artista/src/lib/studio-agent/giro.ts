@@ -7,6 +7,11 @@ import * as T from './transport'
 import { loadOrCreate, runDay } from './day'
 import { getEpisodi } from './mind/episodio'
 import { propostaDi, type Forma } from './mind/curatore'
+import { rng } from './core/rng'
+import { esito, type TipoD } from './voice/conclusioni'
+import { premiaStile, type Gusto } from './suono/beat'
+import { posDi } from './reader/concepts'
+import { GENERICI } from './mind/pensiero'
 import { cura, getProfilo } from './mind/profilo'
 import { suona, wav } from './suono/musica'
 import type { AgentState, Work } from './core/types'
@@ -27,7 +32,7 @@ type ConAttesa = AgentState & { attesa?: Attesa }
 const getAttesa = (st: AgentState): Attesa => ((st as ConAttesa).attesa ??= { giri: 0, accumulo: 0, soglia: 1.4 })
 const nuovaSoglia = (st: AgentState) => 0.9 + Math.random() * 1.2 + (st.temperature < 0.4 ? 0.4 : 0)
 
-export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; forza?: boolean; log: (m: string) => void; oreTraPost?: number; oreMax?: number }) {
+export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; forza?: boolean; deve?: string[]; log: (m: string) => void; oreTraPost?: number; oreMax?: number }) {
   let st: AgentState = await loadOrCreate()
   const fatte: string[] = []
   const una = async (seq: boolean) => {
@@ -63,6 +68,8 @@ export async function giro(o: { studi: number; sequenza?: boolean; epN: number; 
       // la forma la sceglie lui (il curatore); se sono quasi 4 ore di silenzio, almeno una storia
       let P = propostaDi(st)
       if (P?.epId !== ep.id) P = { forma: 'carosello', epId: ep.id, ids: ep.schede, perche: '', day: st.day }
+      // l'agenda: se tocca a un carosello, la sequenza esce come carosello anche se lui la terrebbe nel sito
+      if (o.deve?.includes('carosello') && (P.forma === 'niente' || P.forma === 'storia')) P = { ...P, forma: 'carosello', ids: ep.schede, perche: 'tocca a un carosello' }
       if (P.forma === 'niente' && scade) { const best = (await T.listWorks()).filter(w => ep.schede.includes(w.id)).sort((a, b) => b.interest - a.interest)[0]; if (best) P = { ...P, forma: 'storia', ids: [best.id], perche: 'quasi 4 ore di silenzio: lascio almeno un frammento' } }
       if (P.forma === 'niente') o.log('Questa sequenza resta nel sito: non la pubblico.')
       else { B.pronta = ep.id; B.tentativi = 0; B.forma = P.forma; B.storia = P.ids[0] }
@@ -209,4 +216,109 @@ export async function reelSequenza(epId: string) {
   const a = await T.leggiReel(`${epId}:audio`)
   const ra = a ? await T.igMedia(`${epId}-reel.wav`, a) : null
   return r.nome ? { video: r.nome, audio: ra?.nome ?? null } : null
+}
+
+// ─── l'agenda: i minimi di pubblicazione, e una finestra libera ─────────────────
+// Un reel almeno ogni 5 ore, un carosello almeno ogni 4 (sfalsato dal reel), una storia almeno ogni 8;
+// ogni 2 ore una finestra libera: se ha qualcosa da aggiungere, lo mette nella forma che vuole.
+type Forma3 = 'reel' | 'carosello' | 'storia'
+interface Pub { ig: string; forma: Forma3; quando: string; ep?: string; works: string[]; tipo?: string; modello?: string; stile?: string; tools: string[]; voto?: number; premiato?: boolean; visti?: string[] }
+interface Agenda { ultimo: Partial<Record<Forma3, string>>; qualsiasi?: string; pubblicati: Pub[]; pesiForma?: Partial<Record<Forma3, number>> }
+const ORE: Record<Forma3, number> = { reel: 5, carosello: 4, storia: 8 }
+const getAgenda = (st: AgentState): Agenda => {
+  const S = st as AgentState & { agenda?: Agenda }
+  if (!S.agenda) {
+    // all'inizio, l'ultimo carosello è l'ultima sequenza uscita su Instagram
+    const ult = getEpisodi(st).map(e => (e as Ep).instagram).filter(x => x?.id && !x.errore).map(x => x!.quando).sort().pop()
+    S.agenda = { ultimo: ult ? { carosello: ult } : {}, qualsiasi: ult, pubblicati: [] }
+  }
+  return S.agenda
+}
+const ore = (q?: string) => (q ? (Date.now() - new Date(q).getTime()) / 3.6e6 : 99)
+
+/** che cosa è dovuto adesso (e quanto è in ritardo), e se c'è la finestra libera */
+export async function agenda() {
+  const st = await loadOrCreate(), A = getAgenda(st)
+  const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / ORE[f]])) as Record<Forma3, number>
+  const dovute = (Object.keys(ORE) as Forma3[]).filter(f => ritardo[f] >= 1).sort((a, b) => ritardo[b] - ritardo[a])
+  return { dovute, ritardo, libera: ore(A.qualsiasi) >= 2, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
+}
+
+/** annota una pubblicazione nell'agenda, con quello che serve poi per capire cosa ha funzionato */
+export async function annotaPubblicazione(forma: Forma3, epId: string | null, workIds: string[], r: { id?: string; permalink?: string; error?: string }) {
+  if (forma === 'carosello' && epId) await annotaPost(epId, r)
+  if (r.error || !r.id) return
+  const st = await loadOrCreate(), A = getAgenda(st)
+  const ep = epId ? (getEpisodi(st).find(e => e.id === epId) as (Ep & { tipo?: string; modello?: string }) | undefined) : undefined
+  if (ep && forma !== 'carosello') ep.instagram ??= { id: r.id, permalink: r.permalink, quando: new Date().toISOString() }
+  const ids = workIds.length ? workIds : ep?.schede ?? []
+  const works = (await T.listWorks()).filter(w => ids.includes(w.id))
+  const ora = new Date().toISOString()
+  A.ultimo[forma] = ora; A.qualsiasi = ora
+  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
+  await T.putState(st)
+}
+
+/** la storia, quando nessuna sequenza ne propone una: la tavola recente più forte che non è ancora finita in una storia */
+export async function scegliStoria() {
+  const st = await loadOrCreate(), A = getAgenda(st)
+  const gia = new Set(A.pubblicati.filter(p => p.forma === 'storia').flatMap(p => p.works))
+  return (await T.listWorks()).filter(w => w.day >= st.day - 3 && !gia.has(w.id) && w.kept !== false).sort((a, b) => b.interest - a.interest)[0]?.id ?? null
+}
+
+/** i contenuti da ascoltare (gli ultimi pubblicati, con il loro id su Instagram) */
+export async function daAscoltare() { const st = await loadOrCreate(); return getAgenda(st).pubblicati.slice(-30).map(p => p.ig) }
+
+/** ascoltare: i numeri e i commenti entrano nelle sue scelte.
+ *  - lato grafico: gli strumenti delle tavole che hanno funzionato rendono di più (e li sceglierà più spesso)
+ *  - lato semantico: le mosse di pensiero e i modelli di conclusione che hanno funzionato pesano di più
+ *  - musica: lo stile del beat del reel prende il suo voto
+ *  - forma: quale forma funziona, per usare meglio la finestra libera
+ *  - i commenti: non li copia; ne prende le cose nominate, che diventano curiosità da leggere, e se lo annota */
+export async function ascolta(dati: { media: { ig: string; like?: number; commenti?: number; insights: Record<string, number>; testi: { id: string; text: string }[] }[]; errori: string[] }) {
+  const st = await loadOrCreate(), A = getAgenda(st), r = rng(st.day * 7 + A.pubblicati.length)
+  const per = new Map(dati.media.map(m => [m.ig, m]))
+  const voto = (m: (typeof dati.media)[number]) => { const I = m.insights, portata = Math.max(20, I.reach ?? 0); return ((m.like ?? 0) + 2 * (m.commenti ?? 0) + 3 * (I.saved ?? 0) + 3 * (I.shares ?? 0) + 0.02 * (I.views ?? 0)) / portata }
+  for (const p of A.pubblicati) { const m = per.get(p.ig); if (m) p.voto = voto(m) }
+  const note: string[] = []
+  // il premio arriva quando i numeri si sono assestati (dopo 8 ore), una volta sola, rispetto alla media della stessa forma
+  for (const p of A.pubblicati) {
+    if (p.premiato || p.voto === undefined || ore(p.quando) < 8) continue
+    const simili = A.pubblicati.filter(x => x.forma === p.forma && x.voto !== undefined).map(x => x.voto!)
+    if (simili.length < 3) continue
+    const media = simili.reduce((a, b) => a + b, 0) / simili.length, sd = Math.sqrt(simili.reduce((a, b) => a + (b - media) ** 2, 0) / simili.length) || 1e-3
+    const z = Math.max(-2.5, Math.min(2.5, (p.voto - media) / sd))
+    for (const t of p.tools) { const s0 = st.tools[t]; if (s0) s0.gain = 0.85 * s0.gain + 0.15 * Math.max(0, Math.min(1, 0.5 + 0.2 * z)) }
+    const PT = ((st as AgentState & { pesiTipo?: Record<string, number> }).pesiTipo ??= {})
+    if (p.tipo) PT[p.tipo] = Math.max(0.4, Math.min(2.5, (PT[p.tipo] ?? 1) * Math.exp(0.15 * z)))
+    if (p.tipo && p.modello && !p.modello.startsWith('mossa:') && Math.abs(z) > 0.5) esito(st, r, p.tipo as TipoD, p.modello, z > 0)
+    const G = (st as AgentState & { beat?: Gusto }).beat
+    if (p.stile && G) premiaStile(G, p.stile, Math.max(0, Math.min(1, (z + 2.5) / 5)))
+    A.pesiForma = { ...(A.pesiForma ?? {}), [p.forma]: Math.max(0.5, Math.min(2, ((A.pesiForma ?? {})[p.forma] ?? 1) * Math.exp(0.1 * z))) }
+    p.premiato = true
+    if (Math.abs(z) > 1) note.push(`${p.forma === 'reel' ? 'il reel' : p.forma === 'storia' ? 'la storia' : 'il carosello'} del ${new Date(p.quando).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} ${z > 0 ? 'è arrivato più del solito' : 'è passato quasi inosservato'}`)
+  }
+  // i commenti nuovi: le cose che nominano diventano curiosità (le parole degli altri non entrano nei suoi testi)
+  const nuove: string[] = []
+  for (const p of A.pubblicati) {
+    const m = per.get(p.ig); if (!m) continue
+    const visti = new Set(p.visti ?? [])
+    for (const c of m.testi) {
+      if (visti.has(c.id)) continue
+      visti.add(c.id)
+      for (const w of c.text.toLowerCase().split(/[^a-zàèéìòù]+/)) if (w.length > 4 && posDi(w).has('n') && !posDi(w).has('v') && !GENERICI.has(w)) nuove.push(w)
+    }
+    p.visti = [...visti].slice(-200)
+  }
+  const S = st as AgentState & { curiositaAltrui?: { parola: string; day: number }[] }
+  if (nuove.length) {
+    const conta = new Map<string, number>(); for (const w of nuove) conta.set(w, (conta.get(w) ?? 0) + 1)
+    const top = [...conta].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w)
+    S.curiositaAltrui = [...(S.curiositaAltrui ?? []), ...top.map(parola => ({ parola, day: st.day }))].slice(-40)
+    note.push(`sotto i miei lavori qualcuno parla di ${top.slice(0, 3).join(', ')}: ci vado a leggere`)
+  }
+  if (note.length) st.notebook = [...st.notebook, { day: st.day, date: new Date().toISOString(), intention: `Ascolto. ${note.map(n => n.charAt(0).toUpperCase() + n.slice(1)).join('. ')}.`, done: [], verbale: [], wants: [], bored: [] }].slice(-300)
+  await T.putState(st)
+  const migliore = A.pubblicati.filter(p => p.voto !== undefined).sort((a, b) => b.voto! - a.voto!)[0]
+  return { ascoltati: dati.media.length, commentiNuovi: nuove.length, migliore: migliore ? `${migliore.forma} del ${migliore.quando.slice(0, 10)} (${migliore.voto!.toFixed(3)})` : null, errori: dati.errori, note }
 }

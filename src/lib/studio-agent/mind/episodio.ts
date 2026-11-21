@@ -32,7 +32,7 @@ import { coloriDi, scegliVisiva } from './retorica'
 // ─── la visione ─────────────────────────────────────────────────────────────
 export interface Tesi { testo: string; conf: number; da: number; a: string; b: string; ritirata?: boolean }
 export interface Visione { titolo: string; tesi: Tesi[]; domanda: string; storia: { day: number; nota: string }[] }
-export interface EpisodioInfo { musica?: { partitura: import('../suono/musica').Partitura; descr: string }; lettura?: string; coppia?: string; id: string; n: number; titolo: string; day: number; schede: string[]; conclusione: string; domanda: string; caption: string }
+export interface EpisodioInfo { tipo?: string; modello?: string; musica?: { partitura: import('../suono/musica').Partitura; descr: string }; lettura?: string; coppia?: string; id: string; n: number; titolo: string; day: number; schede: string[]; conclusione: string; domanda: string; caption: string }
 type WithV = AgentState & { visione?: Visione; episodi?: EpisodioInfo[] }
 export const getVisione = (st: AgentState) => (st as WithV).visione
 export const getEpisodi = (st: AgentState) => (st as WithV).episodi ?? []
@@ -89,7 +89,7 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const giaUsate = new Set(S3.premesseUsate ?? [])
   const fresche = ds.filter(x => !x.premesse.some(p => giaUsate.has(p)))
   ds.splice(0, ds.length, ...fresche) // se resta solo roba già detta, oggi non deduce: legge
-  const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1) * (['analogia', 'ponte', 'genere', 'tensione'].includes(x.tipo) ? 1.8 : 1), 0.7) : null
+  const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1) * (['analogia', 'ponte', 'genere', 'tensione'].includes(x.tipo) ? 1.8 : 1) * ((st as AgentState & { pesiTipo?: Record<string, number> }).pesiTipo?.[x.tipo] ?? 1), 0.7) : null
   const senzaAttacco = (x: string) => { let t = x; for (const a of APERTURE.slice().sort((p, q) => q.length - p.length)) if (t.toLowerCase().startsWith(a.toLowerCase())) { t = t.slice(a.length).trim(); break } return t }
 
   // ── il materiale ──
@@ -460,7 +460,7 @@ export function chiudiEpisodio(st: AgentState, r: Rnd, info: Omit<EpisodioInfo, 
   // le tesi contraddette da una deduzione nuova escono dalla visione
   if (d) for (const t of V.tesi) if (t.a === d.a && t.b === d.b && t.testo !== d.testo && d.ritirata === false && d.conf > t.conf) { t.ritirata = true; V.storia.push({ day: st.day, nota: `lascio: ${t.testo}` }) }
   V.domanda = info.domanda
-  const ep: EpisodioInfo = { ...info, id: uid(), n: (W.episodi?.length ?? 0) + 1 }
+  const ep: EpisodioInfo = { ...info, id: uid(), n: (W.episodi?.length ?? 0) + 1, ...(d ? { tipo: d.tipo, modello: d.modello } : {}) }
   W.episodi = [...(W.episodi ?? []), ep].slice(-300)
   const A = ensureAtlante(st)
   if (d) A.deduzioni = [...(A.deduzioni ?? []), { ...d, day: st.day }].slice(-150)

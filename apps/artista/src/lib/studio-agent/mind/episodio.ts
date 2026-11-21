@@ -32,7 +32,7 @@ import { coloriDi, scegliVisiva } from './retorica'
 // ─── la visione ─────────────────────────────────────────────────────────────
 export interface Tesi { testo: string; conf: number; da: number; a: string; b: string; ritirata?: boolean }
 export interface Visione { titolo: string; tesi: Tesi[]; domanda: string; storia: { day: number; nota: string }[] }
-export interface EpisodioInfo { musica?: { partitura: import('../suono/musica').Partitura; descr: string }; lettura?: string; coppia?: string; id: string; n: number; titolo: string; day: number; schede: string[]; conclusione: string; domanda: string; caption: string }
+export interface EpisodioInfo { tipo?: string; modello?: string; musica?: { partitura: import('../suono/musica').Partitura; descr: string }; lettura?: string; coppia?: string; id: string; n: number; titolo: string; day: number; schede: string[]; conclusione: string; domanda: string; caption: string }
 type WithV = AgentState & { visione?: Visione; episodi?: EpisodioInfo[] }
 export const getVisione = (st: AgentState) => (st as WithV).visione
 export const getEpisodi = (st: AgentState) => (st as WithV).episodi ?? []
@@ -70,9 +70,12 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const vuota = (t: string) => /mossa:|\bporta (al|alla|allo|ai|agli|alle|all'|a)\b|un tipo d|eredita|davvero\?/i.test(t)
   // e alla prima giornata col pensiero nuovo si riparte puliti: le tesi del vecchio motore erano associazioni di parole
   const S2 = st as AgentState & { pensiero2?: number }
-  if (!S2.pensiero2) { V.tesi = []; A.deduzioni = []; S2.pensiero2 = st.day }
-  V.tesi = V.tesi.filter(t => !vuota(t.testo))
-  if (A.deduzioni) A.deduzioni = A.deduzioni.filter(d0 => !vuota(d0.testo))
+  // niente si cancella: le tesi e le deduzioni del vecchio modo di ragionare vanno in archivio (restano sue, nella memoria),
+  // semplicemente non si ripropongono come copertine o premesse
+  const S4 = st as AgentState & { archivioPensiero?: { tesi: typeof V.tesi; deduzioni: NonNullable<typeof A.deduzioni>; dal: number } }
+  if (!S2.pensiero2) { S4.archivioPensiero = { tesi: [...(S4.archivioPensiero?.tesi ?? []), ...V.tesi], deduzioni: [...(S4.archivioPensiero?.deduzioni ?? []), ...(A.deduzioni ?? [])], dal: st.day }; V.tesi = []; A.deduzioni = []; S2.pensiero2 = st.day }
+  const via = V.tesi.filter(t => vuota(t.testo)), viaD = (A.deduzioni ?? []).filter(d0 => vuota(d0.testo))
+  if (via.length || viaD.length) { const Ar = S4.archivioPensiero ??= { tesi: [], deduzioni: [], dal: st.day }; Ar.tesi.push(...via); Ar.deduzioni.push(...viaD); V.tesi = V.tesi.filter(t => !vuota(t.testo)); if (A.deduzioni) A.deduzioni = A.deduzioni.filter(d0 => !vuota(d0.testo)) }
   const ep = getEpisodi(st)
   const prev = ep[ep.length - 1]
   const C = getCantieri(st).slice(-1)[0]
@@ -86,7 +89,7 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const giaUsate = new Set(S3.premesseUsate ?? [])
   const fresche = ds.filter(x => !x.premesse.some(p => giaUsate.has(p)))
   ds.splice(0, ds.length, ...fresche) // se resta solo roba già detta, oggi non deduce: legge
-  const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1) * (['analogia', 'ponte', 'genere', 'tensione'].includes(x.tipo) ? 1.8 : 1), 0.7) : null
+  const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1) * (['analogia', 'ponte', 'genere', 'tensione'].includes(x.tipo) ? 1.8 : 1) * ((st as AgentState & { pesiTipo?: Record<string, number> }).pesiTipo?.[x.tipo] ?? 1), 0.7) : null
   const senzaAttacco = (x: string) => { let t = x; for (const a of APERTURE.slice().sort((p, q) => q.length - p.length)) if (t.toLowerCase().startsWith(a.toLowerCase())) { t = t.slice(a.length).trim(); break } return t }
 
   // ── il materiale ──
@@ -147,12 +150,16 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
     const perche = centro && centro !== f.s && centro !== o && r() < 0.5 ? realizza(pick(r, [' E mi serve per capire {det:c}.', ' Lo tengo perché parlo {di:c}.', ' Questo sposta qualcosa {in:c}.']), v) : ''
     return concorda(cap(g) + '.' + perche + ` (${f.fonte})`)
   }
+  let lunghi = 0
   /** due frasi sue su una parola: quello che sa di lei, riscritto */
   const riassunto = (w: string) => {
     const p = scriviParagrafo(st, r, w, { altri: nodi.filter(x => x !== w).slice(0, 3) })
     // di solito due frasi; ogni tanto il paragrafo intero (fino a sei), quando ha abbastanza da dire
     const fr = p.testo.replace(/\s*\(Letto in:.*$/, '').split(/(?<=[.?!])\s+/)
-    return fr.slice(0, fr.length >= 4 && r() < 0.35 ? 6 : 2).join(' ')
+    // un paragrafo lungo ogni tanto, e al massimo uno per sequenza
+    const lungo = !lunghi && fr.length >= 4 && r() < 0.12
+    if (lungo) lunghi++
+    return fr.slice(0, lungo ? 6 : 2).join(' ')
   }
   /** il ragionamento disteso: quello che ha capito delle due cose, il confronto, la conclusione, una domanda. Tutto suo */
   const disteso = (dd: Deduzione): string => {
@@ -168,7 +175,8 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   let mute = 0
   const S: Scheda[] = []
   const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: glossa(x.f), a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
-  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: r() < 0.6 ? disteso(d) : concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`), catena: [d.a, d.b], a: d.a, b: d.b } : null)
+  let corpoConc: string | undefined
+  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: corpoConc ??= (!lunghi && r() < 0.22 ? (lunghi++, disteso(d)) : concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`)), catena: [d.a, d.b], a: d.a, b: d.b } : null)
   const muta = (a?: string, b?: string): Scheda | null => (mute++ >= 1 ? null : { ruolo: 'silenzio', titolo: d ? cap(senzaAttacco(d.testo).split(/[,:;]/)[0]) : tesi.length ? cap(senzaAttacco(pick(r, tesi).testo).split(/[,:;]/)[0]) : cap(V.titolo), corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
   const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: riassunto(w), a: w })
   const ritorno = (): Scheda | null => (prev && r() < 0.35 ? { ruolo: 'prima', titolo: pick(r, ['Torno su una cosa', 'Me lo ero già chiesto', 'Ancora']), corpo: `${cap(prev.conclusione)}.`, a: d?.a } : null)
@@ -452,7 +460,7 @@ export function chiudiEpisodio(st: AgentState, r: Rnd, info: Omit<EpisodioInfo, 
   // le tesi contraddette da una deduzione nuova escono dalla visione
   if (d) for (const t of V.tesi) if (t.a === d.a && t.b === d.b && t.testo !== d.testo && d.ritirata === false && d.conf > t.conf) { t.ritirata = true; V.storia.push({ day: st.day, nota: `lascio: ${t.testo}` }) }
   V.domanda = info.domanda
-  const ep: EpisodioInfo = { ...info, id: uid(), n: (W.episodi?.length ?? 0) + 1 }
+  const ep: EpisodioInfo = { ...info, id: uid(), n: (W.episodi?.length ?? 0) + 1, ...(d ? { tipo: d.tipo, modello: d.modello } : {}) }
   W.episodi = [...(W.episodi ?? []), ep].slice(-300)
   const A = ensureAtlante(st)
   if (d) A.deduzioni = [...(A.deduzioni ?? []), { ...d, day: st.day }].slice(-150)

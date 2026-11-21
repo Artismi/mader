@@ -6,7 +6,7 @@
  *   POST shader {url}
  */
 import { NextResponse } from 'next/server'
-import { apriTunnel, leggiConf, leggiMedia, pubblica, pubblicaStoria, pubblicaUploadPost, salvaMedia, salvaToken, salvaUploadPost, stato } from '@/lib/studio-agent/server/instagram'
+import { apriTunnel, ascoltaMedia, leggiConf, leggiMedia, pubblica, pubblicaStoria, pubblicaUploadPost, salvaMedia, salvaToken, salvaUploadPost, stato } from '@/lib/studio-agent/server/instagram'
 import { define, explore, fetchShader, page, rss, wikiFeatured, wikiRandom, wikiSearch, wikiVoce } from '@/lib/studio-agent/server/web'
 
 export const runtime = 'nodejs'
@@ -54,6 +54,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (op === 'ig-token') return NextResponse.json(await salvaToken(String(body.token ?? '')))
     if (op === 'ig-tunnel') return NextResponse.json({ tunnel: await apriTunnel() })
     if (op === 'up-chiave') return NextResponse.json(await salvaUploadPost(String(body.key ?? ''), String(body.user ?? '')))
+    if (op === 'ig-ascolta') return NextResponse.json(await ascoltaMedia((body.ids as string[] | undefined) ?? []))
     if (op === 'ig-storia') return NextResponse.json(await pubblicaStoria(String(body.file ?? '')))
     if (op === 'ig-pubblica') return NextResponse.json(await (leggiConf().upKey ? pubblicaUploadPost : pubblica)(Array.isArray(body.file) ? body.file : [], String(body.didascalia ?? '')))
     if (op === 'esplora') return NextResponse.json([await explore(String(body.url ?? ''), String(body.word ?? ''), Array.isArray(body.skip) ? body.skip : [])].filter(Boolean))

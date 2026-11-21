@@ -64,26 +64,71 @@ try {
   } else log('nessuna memoria: nasce adesso')
 
   // il lavoro
-  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, forza: !!process.env.CURATORE_FORZA, oreTraPost: Number(process.env.ORE_MIN ?? 0.5), oreMax: Number(process.env.ORE_MAX ?? 4), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
+  // l'agenda: che cosa è dovuto (reel ogni 5 ore, carosello ogni 4, storia ogni 8) e se c'è la finestra libera (ogni 2 ore)
+  const AG = await pg.evaluate(() => window.__artista.agenda())
+  log(`agenda: ${AG.dovute.length ? `tocca a ${AG.dovute.join(', ')}` : 'niente di dovuto'}${AG.libera ? '; finestra libera' : ''} (ultima uscita ${AG.daUltima > 90 ? 'mai' : `${AG.daUltima.toFixed(1)} ore fa`})`)
+  const vuoleSequenza = AG.dovute.includes('reel') || AG.dovute.includes('carosello')
+  const r = await pg.evaluate(o => window.__artista.giro({ ...o, log: m => console.log(m) }), { studi: STUDI, epN: TAVOLE, reel: REEL, forza: !!process.env.CURATORE_FORZA || AG.dovute.includes('reel'), deve: AG.dovute, ...(vuoleSequenza && !process.env.SEQUENZA ? { sequenza: true } : {}), oreTraPost: Number(process.env.ORE_MIN ?? 0.5), oreMax: Number(process.env.ORE_MAX ?? 4), ...(process.env.SEQUENZA ? { sequenza: process.env.SEQUENZA === 'si' } : {}) })
   log(`giro fatto: ${r.nome}, giorno ${r.giorno}, ${r.opere} tavole nuove${r.episodio ? `, sequenza nuova ${r.episodio}` : ''}${r.pronta ? `; sequenza pronta ${r.pronta}${r.puoPubblicare ? ', si pubblica' : ', aspetta (mezz’ora minima dal post prima)'}` : ''}`)
 
-  // la forma l'ha scelta lui: reel, carosello o storia. Reel e storie si pubblicano solo col nostro via (PUBBLICA_REEL / PUBBLICA_STORIE = si)
-  if (r.pronta && r.puoPubblicare) log(`forma scelta: ${r.forma}`)
-  let forma = r.forma
-  if (forma === 'reel' && process.env.PUBBLICA_REEL !== 'si') { log('il reel resta nel sito finché non dai il via: intanto esce il carosello della sequenza'); forma = 'carosello' }
-  if (r.pronta && r.puoPubblicare && forma === 'storia' && r.storia) {
+  // il brano della sequenza, per il sito (mp3)
+  if (r.episodio) {
     try {
-      const nome = await pg.evaluate(([w, e]) => window.__artista.preparaStoria(w, e), [r.storia, r.pronta])
-      mkdirSync(join(MEM, 'storie'), { recursive: true }); copyFileSync(join(MEDIA, nome), join(MEM, 'storie', `${r.pronta}.jpg`))
-      if (process.env.PUBBLICA_STORIE === 'si' && ig.collegato) {
-        const esito = await api('ig-storia', { file: nome }).catch(e => ({ error: String(e) }))
-        log(esito.error ? `Instagram (storia): errore — ${esito.error}` : `Instagram: storia pubblicata ${esito.id}`)
-        await pg.evaluate(([id, e]) => window.__artista.annotaPost(id, e), [r.pronta, esito])
-      } else { log('storia pronta, resta nel sito finché non dai il via'); await pg.evaluate(id => window.__artista.lasciaNelSito(id), r.pronta) }
+      const nome = await pg.evaluate(id => window.__artista.branoSequenza(id), r.episodio)
+      if (nome) { mkdirSync(join(MEM, 'audio'), { recursive: true }); execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, nome), '-c:a', 'libmp3lame', '-b:a', '128k', join(MEM, 'audio', `${r.episodio}.mp3`)]) }
+    } catch (e) { log('brano non salvato:', e.message) }
+  }
+  // il reel: video + il suo beat (per il sito, e per Instagram se tocca a lui)
+  let reelFile = null
+  if (r.episodio && REEL) {
+    try {
+      const rv = await pg.evaluate(id => window.__artista.reelSequenza(id), r.episodio)
+      const v = rv?.video ?? (typeof rv === 'string' ? rv : null)
+      const brano = rv?.audio ? join(MEDIA, rv.audio) : join(MEDIA, `${r.episodio}-brano.wav`)
+      if (v && existsSync(brano)) {
+        mkdirSync(join(MEM, 'reel'), { recursive: true })
+        reelFile = join(MEM, 'reel', `${r.episodio}.mp4`)
+        execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, v), '-i', brano, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest', '-movflags', '+faststart', reelFile])
+        log('reel montato con il brano')
+        const vecchi = readdirSync(join(MEM, 'reel')).map(f => ({ f, t: statSync(join(MEM, 'reel', f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(6)
+        for (const x of vecchi) rmSync(join(MEM, 'reel', x.f))
+      }
+    } catch (e) { log('reel non montato:', e.message) }
+  }
+
+  // che cosa esce adesso: prima quello che è dovuto (il più in ritardo), poi la finestra libera, dove sceglie lui.
+  // Mai due uscite a meno di 40 minuti: così reel e carosello vengono sfalsati.
+  const PUB_REEL = process.env.PUBBLICA_REEL !== 'no', PUB_STORIE = process.env.PUBBLICA_STORIE !== 'no'
+  const possibili = { reel: !!reelFile && PUB_REEL, carosello: !!r.pronta, storia: PUB_STORIE }
+  let scelta = null, perche = ''
+  if (ig.collegato && AG.daUltima >= 0.66) {
+    for (const f of AG.dovute) if (possibili[f]) { scelta = f; perche = `tocca a ${f === 'reel' ? 'un reel' : f === 'storia' ? 'una storia' : 'un carosello'}`; break }
+    if (!scelta && AG.libera && r.pronta) { const f = possibili[r.forma] ? r.forma : 'carosello'; scelta = f; perche = 'finestra libera: ho qualcosa da aggiungere' }
+  }
+  if (scelta) log(`esce ${scelta === 'reel' ? 'un reel' : scelta === 'storia' ? 'una storia' : 'un carosello'} (${perche})`)
+  else if (r.pronta) log('la sequenza aspetta la sua finestra')
+  const didascalia = async ep => (await pg.evaluate(([id, n]) => window.__artista.preparaPost(id, n), [ep, PER_POST])).didascalia
+  if (scelta === 'reel') {
+    try {
+      const nome = `${r.episodio}-pubblico.mp4`; copyFileSync(reelFile, join(MEDIA, nome))
+      const esito = await api('ig-pubblica', { file: [nome], didascalia: await didascalia(r.episodio) }).catch(e => ({ error: String(e) }))
+      log(esito.error ? `Instagram (reel): errore — ${esito.error}` : `Instagram: reel pubblicato ${esito.permalink ?? esito.id}`)
+      await pg.evaluate(([e, x]) => window.__artista.annotaPubblicazione('reel', e, [], x), [r.episodio, esito])
+    } catch (e) { log('reel non pubblicato:', e.message) }
+  }
+  if (scelta === 'storia') {
+    try {
+      const w = (r.forma === 'storia' && r.storia) || await pg.evaluate(() => window.__artista.scegliStoria())
+      if (!w) throw new Error('nessuna tavola per la storia')
+      const nome = await pg.evaluate(([w, e]) => window.__artista.preparaStoria(w, e), [w, r.pronta ?? w])
+      mkdirSync(join(MEM, 'storie'), { recursive: true }); copyFileSync(join(MEDIA, nome), join(MEM, 'storie', `${w}.jpg`))
+      const esito = await api('ig-storia', { file: nome }).catch(e => ({ error: String(e) }))
+      log(esito.error ? `Instagram (storia): errore — ${esito.error}` : `Instagram: storia pubblicata ${esito.id}`)
+      await pg.evaluate(([e, w, x]) => window.__artista.annotaPubblicazione('storia', e, [w], x), [r.forma === 'storia' ? r.pronta : null, w, esito])
+      if (!esito.error && r.forma === 'storia' && r.pronta) await pg.evaluate(id => window.__artista.lasciaNelSito(id), r.pronta)
     } catch (e) { log('storia non riuscita:', e.message) }
   }
-  // il carosello
-  if (forma === 'carosello' && r.pronta && r.puoPubblicare && (ig.collegato || process.env.PROVA_VIDEO)) {
+  if (scelta === 'carosello') {
     try {
       const p = await pg.evaluate(([id, n]) => window.__artista.preparaPost(id, n), [r.pronta, PER_POST])
       const file = []
@@ -93,36 +138,25 @@ try {
         execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-loop', '1', '-framerate', '30', '-i', join(MEDIA, x.jpg), '-i', join(MEDIA, x.wav), '-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-vf', 'scale=1080:1350', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest', '-movflags', '+faststart', join(MEDIA, out)])
         file.push(out)
       }
-      if (!ig.collegato) { log(`prova: ${file.length} slide pronte (${file.join(', ')})`); throw new Error('prova senza Instagram') }
       log(`pubblico ${file.length} slide…`)
       const esito = await api('ig-pubblica', { file, didascalia: p.didascalia }).catch(e => ({ error: String(e) }))
       log(esito.error ? `Instagram: errore — ${esito.error}` : `Instagram: pubblicato ${esito.permalink ?? esito.id}`)
-      await pg.evaluate(([id, e]) => window.__artista.annotaPost(id, e), [r.pronta, esito])
+      await pg.evaluate(([id, x]) => window.__artista.annotaPubblicazione('carosello', id, [], x), [r.pronta, esito])
     } catch (e) { log('Instagram: errore —', e.message) }
-  } else if (r.pronta && !ig.collegato) log('Instagram non collegato: la sequenza resta nel sito')
-
-  // il brano della sequenza, per il sito (mp3)
-  if (r.episodio) {
-    try {
-      const nome = await pg.evaluate(id => window.__artista.branoSequenza(id), r.episodio)
-      if (nome) { mkdirSync(join(MEM, 'audio'), { recursive: true }); execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, nome), '-c:a', 'libmp3lame', '-b:a', '128k', join(MEM, 'audio', `${r.episodio}.mp3`)]) }
-    } catch (e) { log('brano non salvato:', e.message) }
   }
+  if (!ig.collegato && r.pronta) log('Instagram non collegato: la sequenza resta nel sito')
 
-  // il reel: video + brano intero, per il sito (non si pubblica finché non lo decidiamo)
-  if (r.episodio && REEL) {
+  // ascoltare: i numeri e i commenti di quello che ha pubblicato entrano nelle sue scelte
+  if (ig.collegato) {
     try {
-      const rv = await pg.evaluate(id => window.__artista.reelSequenza(id), r.episodio)
-      const v = rv?.video ?? (typeof rv === 'string' ? rv : null)
-      const brano = rv?.audio ? join(MEDIA, rv.audio) : join(MEDIA, `${r.episodio}-brano.wav`)
-      if (v && existsSync(brano)) {
-        mkdirSync(join(MEM, 'reel'), { recursive: true })
-        execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(MEDIA, v), '-i', brano, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest', '-movflags', '+faststart', join(MEM, 'reel', `${r.episodio}.mp4`)])
-        log('reel montato con il brano')
-        const tieni = readdirSync(join(MEM, 'reel')).map(f => ({ f, t: statSync(join(MEM, 'reel', f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(4)
-        for (const x of tieni) rmSync(join(MEM, 'reel', x.f))
+      const ids = await pg.evaluate(() => window.__artista.daAscoltare())
+      if (ids.length) {
+        const dati = await api('ig-ascolta', { ids })
+        const a = await pg.evaluate(d => window.__artista.ascolta(d), dati)
+        log(`ascolto: ${a.ascoltati} contenuti, ${a.commentiNuovi} parole nuove dai commenti${a.migliore ? `; il più arrivato: ${a.migliore}` : ''}${a.errori.length ? ` — non riesco a leggere tutto: ${a.errori.join(' | ')}` : ''}`)
+        for (const n of a.note) log(`  ${n}`)
       }
-    } catch (e) { log('reel non montato:', e.message) }
+    } catch (e) { log('ascolto non riuscito:', e.message) }
   }
 
   // salva la memoria (immagini solo delle opere recenti, il resto vive su Instagram e nel sito)

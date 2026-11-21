@@ -66,7 +66,9 @@ export function openRicerca(st: AgentState, r: Rnd): Ricerca | undefined {
     const seen = t.words.filter(w => done.has(w)).length
     return (1 + voids) * Math.log(2 + t.weight) / (1 + seen * 2)
   }, st.temperature)
-  const word = theme.words[0]
+  // a volte la ricerca parte da una cosa nominata sotto i suoi lavori (i commenti): una curiosità che gli viene da fuori
+  const altrui = ((st as AgentState & { curiositaAltrui?: { parola: string; day: number }[] }).curiositaAltrui ?? []).filter(c => c.day >= st.day - 20 && !done.has(c.parola))
+  const word = altrui.length && r() < 0.5 ? altrui[altrui.length - 1 - Math.floor(r() * Math.min(3, altrui.length))].parola : theme.words[0]
   const length = { curioso: 8, annoiato: 5, inquieto: 5, giocoso: 6, cupo: 10, calmo: 12 }[st.mood]
   return {
     id: uid(), word, words: theme.words.slice(1, 6), question: pick(r, QUESTIONS)(word),

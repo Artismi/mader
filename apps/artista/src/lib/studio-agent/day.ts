@@ -170,6 +170,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   // una ricerca aperta su una parola vuota («inoltre», «alcuni»): la lascia e ne apre una vera (con temi rifatti)
   if (st.ricerca && !st.ricerca.closed && (GENERICI.has(st.ricerca.word) || !posDi(st.ricerca.word).has('n') || posDi(st.ricerca.word).has('r'))) {
     log(`Lascio la ricerca su "${st.ricerca.word}": non è una cosa, è una parola di passaggio.`)
+    st.ricerca.closed = true; st.ricercheChiuse = [...(st.ricercheChiuse ?? []), st.ricerca].slice(-30) // chiusa e archiviata, non buttata
     st.ricerca = undefined; if (E0) st.themes = computeThemes(E0, freqOf(st.words), 10, r)
   }
   if (!st.ricerca || st.ricerca.closed) {
@@ -453,7 +454,10 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
       }
     } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
   }
-  void fogli; void infoReel
+  // l'agenda vuole un reel e nessun discorso tra più giornate è pronto: racconta la sequenza di oggi
+  if (hooks.reel && hooks.reelForza && !video && fogli.length >= 2) {
+    try { log('Reel: nessun discorso tra più giornate, racconto la sequenza di oggi.'); const rr = await faiReel(st, r, fogli, infoReel, { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log); if (rr) { video = rr.video; audioReel = rr.audio } } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
+  }
   const descrMusica = `${GENERE_NOME[partitura.genere]}, ${partitura.bpm} bpm, ${partitura.risolve ? 'chiude risolta' : 'resta sospesa'}`
   log(`Musica: ${descrMusica}. Le tavole durano da ${Math.min(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} a ${Math.max(...partitura.sezioni.map((_, k) => durata(partitura, k))).toFixed(1)} secondi, quanto serve per leggerle.${partitura.grooveCodice ? ` Il groove me lo scrivo: ${partitura.grooveCodice}.` : ''}`)
   const prec = getEpisodi(st).slice(-1)[0] as ({ conclusione?: string; domanda?: string } | undefined)
@@ -705,6 +709,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     if (!migliore || o.voto > migliore.voto) migliore = { ...b, voto: o.voto, stile, orecchio: o }
   }
   const { audio, brano, stile, orecchio } = migliore!
+  ;(st as ConMovimento & { ultimoReelStile?: string }).ultimoReelStile = stile.id
   gusto.pattern = [...gusto.pattern, brano.pattern].slice(-24)
   const forte = forte0
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
