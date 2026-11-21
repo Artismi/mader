@@ -22,7 +22,7 @@ import { pensa, GENERICI } from '../mind/pensiero'
 import { dici, trovaEsempio } from '../mind/retorica'
 import { concludi, type TipoD } from './conclusioni'
 import { singolare } from './lingua'
-import { accorda, art, concorda, genere, isNome, isNomeQ, osservaGenere, realizza } from './lingua'
+import { accorda, art, concorda, genere, isNome, isNomeQ, osservaGenere, realizza, nomeComune } from './lingua'
 
 export interface Fatto { s: string; v: Verbo; forma: string; o?: string; compl: { prep: string; n: string; pre?: string; sup?: string }[]; neg: boolean; rifl: boolean; fonte: string
   /** le parole com'erano nella fonte: il soggetto intero, il gruppo del verbo, quello che segue (in ordine) */
@@ -41,28 +41,53 @@ const PREP: Record<string, string> = {
 const VUOTI = new Set(['migliaia', 'centinaia', 'milioni', 'decine', 'cosa', 'cose', 'modo', 'parte', 'fatto', 'volta', 'tipo', 'caso', 'anno', 'anni', 'numero', 'serie'])
 const nome = (w: string) => w.length > 2 && !VUOTI.has(w) && isNomeQ(w)
 
-/** smonta una frase in fatti: le proposizioni che l'analizzatore riconosce (soggetto, verbo, oggetto, complementi) */
+// ─── capire, non copiare ────────────────────────────────────────────────────
+// Dalla frase letta tiene solo lo scheletro: chi, che gesto (il verbo all'infinito), su che cosa.
+// Le parole dell'autore restano nella fonte. I nomi propri diventano quello che sono
+// («Roma» → città, «il Gran Sasso» → massiccio): lo impara dalle letture stesse («X è un…»)
+// o dal lessico; se non sa che cosa sono, li lascia cadere (prende poco, e solo quello che capisce).
+const CATEG = new Map<string, Map<string, string>>() // nome → (lettura → categoria)
+let CATEG_K = ''
+export function imparaCategorie(st: AgentState) {
+  const k = `${st.readings.length}|${st.readings[st.readings.length - 1]?.title ?? ''}`
+  if (k === CATEG_K) return
+  CATEG_K = k
+  for (const rd of st.readings.slice(-40)) for (const fr of sentences(rd.text).slice(0, 60)) for (const p of proposizioni(fr, '')) {
+    if (p.verbo.lemma === 'essere' && p.sogg.proprio && p.ogg && !p.ogg.proprio) { const m = CATEG.get(p.sogg.testa.toLowerCase()) ?? new Map(); if (!m.has(rd.title)) m.set(rd.title, singolare(p.ogg.testa.toLowerCase())); CATEG.set(p.sogg.testa.toLowerCase(), m) }
+  }
+}
+/** la categoria di un nome proprio: solo quella imparata dalle letture (il lessico generico sbaglia: «Roma» → «national capital») */
+// la categoria imparata nella stessa lettura; da un'altra solo se tutte le letture dicono la stessa (il fiume Fino non è il film «Fino a prova contraria»)
+const categoria = (nome: string, fonte: string) => { const m = CATEG.get(nome.toLowerCase()); if (!m) return null; const c = m.get(fonte) ?? (new Set(m.values()).size === 1 ? [...m.values()][0] : null); return c && /^[a-zàèéìòù]+$/.test(c) && nomeComune(c) ? c : null }
+
+/** smonta una frase in fatti: lo scheletro di quello che dice, con parole sue (teste, infiniti, categorie) */
 export function fattiDi(frase: string, fonte: string): Fatto[] {
   const V = verbi()
   const argomento = fonte.replace(/\s*\(.*\)\s*$/, '').replace(/^.*\/\s*/, '')
   const out: Fatto[] = []
   for (const p of proposizioni(frase, argomento)) {
-    const lemma = p.verbo.lemma
-    const v: Verbo = V.get(lemma) ?? V.get(p.verbo.forma) ?? { inf: lemma, con: (/rre$/.test(lemma) ? 'rre' : lemma.slice(-3)) as Verbo['con'], stem: lemma.slice(0, -3) }
-    const testa = (g: { testa: string; proprio: boolean }) => (g.proprio ? g.testa.toLowerCase() : singolare(g.testa.toLowerCase()))
-    const s = testa(p.sogg)
-    const o = p.ogg ? testa(p.ogg) : undefined
-    if (!s || s === o) continue
-    out.push({
-      s, v, forma: p.verbo.forma, o, neg: p.verbo.neg, rifl: p.verbo.rifl, fonte,
-      compl: p.compl.map(k => ({ prep: k.prep, n: testa(k.g), sup: k.g.testa.toLowerCase() })),
-      parole: { s: p.sogg.proprio ? p.sogg.sup : p.sogg.sup.charAt(0).toLowerCase() + p.sogg.sup.slice(1), v: p.verbo.sup, resto: p.seguito, proprio: p.sogg.proprio },
-    })
+    const v = V.get(p.verbo.lemma)
+    if (!v) continue // un verbo che non conosce: non lo capisce, non lo dice
+    // una testa comune deve essere un nome del dizionario (non «lascia», che è un verbo)
+    const testa = (g: { testa: string; proprio: boolean }) => { if (g.proprio) return categoria(g.testa, fonte); const w = singolare(g.testa.toLowerCase()); return nomeComune(w) ? w : null }
+    // il passivo con l'agente si gira all'attivo («fu fondata da Foschi» → Foschi fonda); senza agente si lascia
+    let sogg: { testa: string; proprio: boolean } | undefined = p.sogg, ogg: { testa: string; proprio: boolean } | undefined = p.ogg
+    let compl = p.compl
+    // il passivo con l'agente si gira all'attivo, ma solo se il participio è quello regolare di quel verbo («composta» non è di «compostare»)
+    if (p.verbo.passivo) {
+      const part = p.verbo.sup.split(' ').pop() ?? '', base = v.con === 'are' ? v.stem + 'at' : v.con === 'ere' ? v.stem + 'ut' : v.con === 'ire' ? v.stem + 'it' : ''
+      if (!base || part.slice(0, -1) !== base) continue
+      const ag = compl.find(k => k.prep === 'da'); if (!ag) continue; ogg = p.sogg; sogg = ag.g; compl = compl.filter(k => k !== ag) }
+    const s = testa(sogg)
+    const o = ogg ? testa(ogg) : undefined
+    if (!s || (ogg && !o) || s === o) continue
+    const cs = compl.map(k => ({ prep: k.prep, n: testa(k.g) ?? '' })).filter(k => k.n)
+    if (!o && !cs.length) continue
+    out.push({ s, v, forma: p.verbo.passivo ? v.inf : p.verbo.forma, o: o ?? undefined, neg: p.verbo.neg, rifl: p.verbo.rifl && !p.verbo.passivo, fonte, compl: cs.slice(0, 1).map(k => ({ ...k, sup: k.n })) })
   }
-  return out.slice(0, 3)
+  return out.slice(0, 2)
 }
-/** il fatto detto con le parole della fonte (ridotte all'essenziale): grammaticale per costruzione */
-const conParole = (f: Fatto, quanti = 2) => [f.parole!.s, f.parole!.v, ...f.parole!.resto.slice(0, quanti)].join(' ').replace(/\s+/g, ' ').replace(/' /g, "'").trim()
+
 const COPULA = /^(avere|potere|dovere|volere|diventare|essere|sembrare|restare|rimanere|nascere|apparire|stare|crescere|morire|vivere|andare|venire|tornare|cadere)$/
 const RELATIVI = /^(chi|che|cui|il quale|la quale)$/
 function fattiClausola(frase: string, fonte: string): Fatto[] {
@@ -133,6 +158,7 @@ export function fattiSu(st: AgentState, concetto: string, max = 40): Fatto[] {
 const CACHE = new Map<string, Fatto[]>()
 function fattiSuRaw(st: AgentState, concetto: string, max: number): Fatto[] {
   if (!conceptsReady()) return []
+  imparaCategorie(st)
   const out: Fatto[] = []
   const seen = new Set<string>()
   for (const rd of st.readings) for (const s of sentences(rd.text).slice(0, 150)) {
@@ -170,7 +196,6 @@ const varia = (r: Rnd, w: string, usate: Set<string>) => {
 
 /** riscrive un fatto in una costruzione scelta */
 function riscrivi(r: Rnd, f: Fatto, usate: Set<string>, forza?: 'attiva' | 'passiva' | 'scissa' | 'domanda' | 'generale'): string {
-  if (f.parole) { usate.add(f.s); return conParole(f) } // le sue parole vengono dalla fonte: le ridice così (le costruzioni rifatte a mano storpiavano)
   const S = varia(r, f.s, usate)
   const O = f.o ? varia(r, f.o, usate) : null
   const v3 = coniuga(f.v, f.forma, S)
@@ -197,10 +222,7 @@ function aggrega(r: Rnd, fs: Fatto[], usate: Set<string>): string[] {
   for (const f of fs) perS.set(f.s, [...(perS.get(f.s) ?? []), f])
   const out: string[] = []
   for (const [s, g] of perS) {
-    if (g.length >= 2 && g.every(f => f.parole)) {
-      const azioni = g.slice(0, 3).map(f => [f.parole!.v, ...f.parole!.resto.slice(0, 1)].join(' '))
-      out.push(`${g[0].parole!.s} ${azioni.slice(0, -1).join(', ')} e ${azioni[azioni.length - 1]}`.replace(/' /g, "'"))
-    } else if (g.length >= 2) {
+    if (g.length >= 2) {
       const azioni = g.slice(0, 3).map(f => `${f.neg ? 'non ' : ''}${f.rifl ? 'si ' : ''}${coniuga(f.v, f.forma, s)}${f.o ? ' ' + d(f.o) : ''}${complemento(f)}`)
       out.push(`${d(varia(r, s, usate))} ${azioni.slice(0, -1).join(', ')} e ${azioni[azioni.length - 1]}`)
     } else out.push(riscrivi(r, g[0], usate))

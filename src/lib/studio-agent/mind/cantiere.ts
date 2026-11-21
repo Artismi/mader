@@ -17,6 +17,7 @@
  *    da cui nascerà il cantiere successivo.
  * Il cantiere si esporta come testo (markdown) e diventa pagine e diapositive.
  */
+import { fattiDi, fraseDi } from '../voice/scrittura'
 import type { AgentState } from '../core/types'
 import { pick, uid, weighted, type Rnd } from '../core/rng'
 import { sentences } from '../reader/tokenize'
@@ -79,9 +80,12 @@ function componi(r: Rnd, cs: Cand[], gia: Set<string>, n: number): { testo: stri
   if (!scelte.length) return { testo: '', fonti: [], usate: [] }
   const parti: string[] = []
   scelte.forEach((c, i) => {
-    let t = c.t.replace(/\s+/g, ' ').replace(/^[«"]|[»"]$/g, '')
+    // la frase della fonte non entra: entra quello che ne ha capito, detto da lui
+    const f = fattiDi(c.t, c.fonte)[0]
+    if (!f) return
+    let t = fraseDi(f)
     if (!/[.!?]$/.test(t)) t += '.'
-    if (i === 0) parti.push(`Secondo «${c.fonte}», ${t.charAt(0).toLowerCase()}${t.slice(1)}`)
+    if (!parti.length) parti.push(`${pick(r, ['Da quello che ho letto', 'Leggendo', 'Ho capito questo'])}: ${t}`)
     else if (RX_CONTRO.test(t.slice(0, 30))) parti.push(`Eppure ${t.charAt(0).toLowerCase()}${t.slice(1)}`)
     else if (RX_CAUSA.test(t)) parti.push(`Ne viene che ${t.charAt(0).toLowerCase()}${t.slice(1)}`)
     else parti.push(pick(r, ['Inoltre', 'E ancora:', 'In più,', 'Accanto a questo,']) + ' ' + t.charAt(0).toLowerCase() + t.slice(1))

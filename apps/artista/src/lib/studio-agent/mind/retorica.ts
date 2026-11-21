@@ -19,6 +19,8 @@
  *    contiene, gradino per gradino nel lessico, fino al tutto. Quanto ci tiene a questa voce (la vocazione) cambia
  *    con quello che succede ai testi che la usano.
  */
+import { lette } from './pensiero'
+import { fattiSu, fraseDi } from '../voice/scrittura'
 import type { AgentState } from '../core/types'
 import { pick, type Rnd } from '../core/rng'
 import { categorie, iperonimo, verbi } from '../reader/concepts'
@@ -215,20 +217,15 @@ export function alFuturo(t: string): string | null {
   }
   return null
 }
-/** una parabola: un racconto letto altrove, con i suoi nomi sostituiti dai concetti di adesso */
-function parabola(R: Retorica, r: Rnd, a: string, b: string): string | null {
-  const V = R.voci?.racconto ?? []
-  for (let tent = 0; tent < 12 && V.length; tent++) {
-    const f = V[Math.floor(r() * V.length)]
-    let k = 0
-    const out = f.replace(/\b(il|lo|la|l'|i|gli|le|un|uno|una|un')\s?([a-zà-ü]{4,})\b/g, (m, _d, n: string) => {
-      if (k >= 2 || !categorie(n).includes('n')) return m
-      const c = k++ === 0 ? a : b
-      return art(c, /^(un|uno|una|un')$/.test(_d) ? 'ind' : 'det')
-    })
-    if (k === 2) return pulisci(out)
-  }
-  return null
+/** una parabola, raccontata da lui: dalle letture prende solo un gesto (un verbo), lo fa fare ai concetti di adesso
+ *  dentro una piccola storia sua. Le parole e i racconti degli altri restano dove sono. */
+function parabola(st: AgentState, r: Rnd, a: string, b: string): string | null {
+  const gesti = lette(st).filter(x => x.f.o && !/^(essere|avere|fare|venire|dare|andare|potere|dovere|volere|stare)$/.test(x.f.v.inf))
+  if (gesti.length < 3) return null
+  const g = gesti[Math.floor(r() * gesti.length)].f
+  const f = fraseDi({ ...g, s: a, o: b, compl: [], neg: false, rifl: false })
+  const T = ['una volta, in un posto che non so dire, {f}; e da allora nessuno ci ha più fatto caso', 'racconto una cosa: {f}; poi è venuta la sera, come sempre', 'c\'è un posto dove {f}, e basta', 'mi dicono che {f}; non ci credo, poi lo vedo', 'nel paese dove sono nato {f}, e nessuno lo chiamava per nome', 'un giorno {f}; il giorno dopo era già una legge']
+  return pick(r, T).replace('{f}', f)
 }
 /** risale dal concetto a ciò che lo contiene, nel lessico, fino a tre gradini */
 function scala(st: AgentState, r: Rnd, a: string): string | null {
@@ -243,7 +240,7 @@ function scala(st: AgentState, r: Rnd, a: string): string | null {
 
 // ── 3. dire: le mosse ──
 export interface Materia { a: string; b: string; premesse: string[]; conclusione: string; nuda?: string; conf: number; segno: 1 | -1; tipo: string; fonte?: string; esempio?: string; citazione?: string }
-const REL_TIPO: Record<string, RelR> = { catena: 'causa', lunga: 'causa', dipendenza: 'causa', interrotta: 'contrasto', contesa: 'contrasto', disaccordo: 'contrasto', eredita: 'somiglianza', ritrattazione: 'contrasto' }
+const REL_TIPO: Record<string, RelR> = { catena: 'causa', lunga: 'causa', dipendenza: 'causa', interrotta: 'contrasto', contesa: 'contrasto', disaccordo: 'contrasto', eredita: 'somiglianza', ritrattazione: 'contrasto', analogia: 'somiglianza', ponte: 'somiglianza', genere: 'somiglianza', tensione: 'contrasto' }
 const pulisci = (t: string) => t.replace(/\s+/g, ' ').replace(/[.;:,\s]+$/, '').trim()
 const min = (t: string) => (/^[A-ZÀ-Ü]{2}/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1))
 const mai = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
@@ -264,11 +261,11 @@ function scrivi(st: AgentState, r: Rnd, ops: Op[], rel: RelR, m: Materia, nuda =
       case 'L': { const c = connettivo(st, r, rel); if (!c) return null; attacco = c; break }
       case 'D': { const c = connettivo(st, r, 'dubbio'); if (!c) return null; attacco = c; break }
       case 'E': if (!m.esempio) return null; if (!metti(m.esempio)) return null; break
-      case 'R': if (!m.citazione) return null; pezzi.push(`«${m.citazione}»${m.fonte ? `, dice ${m.fonte}` : ''}`); break
+      case 'R': return null // niente citazioni: le parole degli altri non entrano
       case 'Q': pezzi.push(`${mai(m.b)}${m.segno > 0 ? '' : ' no'}, davvero?`); break
       case 'N': { const c = connettivo(st, r, 'contrasto'); if (!c) return null; attacco = c; break }
       case 'F': { if ((getRetorica(st).voci?.futuro.length ?? 0) < 3) return null; const f = alFuturo(pulisci(nuda ? (m.nuda ?? m.conclusione) : m.conclusione)); if (!f || !metti(f)) return null; break }
-      case 'P': { if ((getRetorica(st).voci?.racconto.length ?? 0) < 3) return null; const p = parabola(getRetorica(st), r, m.a, m.b); if (!p || !metti(p)) return null; break }
+      case 'P': { const p = parabola(st, r, m.a, m.b); if (!p || !metti(p)) return null; break }
       case 'U': { const u = scala(st, r, r() < 0.5 ? m.a : m.b); if (!u || !metti(u)) return null; break }
     }
   }
@@ -343,18 +340,10 @@ export const descriviMossa = (ops: Op[]) => ops.map(o => NOMI_OP[o]).join(' → 
 /** ricorda anche i testi scritti in altri modi, così la novità si misura su tutto */
 export function ricorda(st: AgentState, t: string) { const R = getRetorica(st); R.memoria = [...R.memoria, t].slice(-80) }
 
-/** un esempio concreto dalla lettura: una frase della fonte con un nome proprio, una data o un luogo, che nomina il concetto */
+/** un esempio concreto: un fatto letto su uno dei due concetti, ridetto da lui (mai la frase della fonte) */
 export function trovaEsempio(st: AgentState, fonti: string[], a: string, b: string): { esempio?: string; citazione?: string; fonte?: string } {
-  const F = getRetorica(st).fonti ?? {}
-  const fonte = fonti.find(f => F[f]?.length)
-  if (!fonte) return {}
-  const frasi = F[fonte]
-  const con = (f: string) => f.toLowerCase().includes(a.toLowerCase()) || f.toLowerCase().includes(b.toLowerCase())
-  const esempio = frasi.find(f => con(f) && f.length < 170 && /\b1\d{3}\b|\b20\d{2}\b|\s[A-Z][a-zà-ü]{3,}/.test(f.slice(1)))
-  const cit = frasi.find(f => con(f) && f !== esempio)
-  const w = cit?.split(' ') ?? []
-  const k = Math.max(0, w.findIndex(x => x.toLowerCase().includes(a.toLowerCase()) || x.toLowerCase().includes(b.toLowerCase())) - 3)
-  return { fonte, esempio: esempio ? pulisci(esempio) : undefined, citazione: cit ? pulisci(w.slice(k, k + 10).join(' ')) : undefined }
+  const f = [...fattiSu(st, a, 12), ...fattiSu(st, b, 12)].find(x => fonti.includes(x.fonte) && x.o)
+  return f ? { fonte: f.fonte, esempio: fraseDi(f) } : {}
 }
 
 // ── 4. mostrare: la stessa relazione con l'impaginazione ──

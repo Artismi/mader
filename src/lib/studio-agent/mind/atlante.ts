@@ -19,6 +19,7 @@
  * LE TESI. Ogni enunciato resta: domani può riprenderlo, contraddirlo,
  * proseguirlo (B diventa il nuovo A). Così il senso si costruisce nel tempo.
  */
+import { fattiDi, fraseDi } from '../voice/scrittura'
 import type { AgentState, Reading } from '../core/types'
 import { pick, range, weighted, type Rnd } from '../core/rng'
 import { RECIPES, defaults, runRecipe, shuffle as shuffleParams, type Tone } from '@/components/studio/genera/recipes'
@@ -168,7 +169,9 @@ export function enunciato(st: AgentState, r: Rnd, parola: string, precedente?: E
   } else if (filo && a === filo) { postura = 'prosegue'; perche = `proseguo da ieri: là arrivavo a ${a}, da qui vado a ${b}` }
   else if (r() < 0.2) { postura = 'rovescia'; rel = ROVESCIO[rel] }
   const frase = dire(r, a, b, rel, postura)
-  return { a, b, rel, citazione: citazione(f.t, a, b), fonte: f.fonte, frase, postura, perche }
+  // non la frase dell'autore: quello che ne ha capito, con parole sue
+  const capito = f.fonte === 'dizionario' ? undefined : fattiDi(f.t, f.fonte)[0]
+  return { a, b, rel, citazione: capito ? fraseDi(capito) : f.fonte === 'dizionario' ? f.t : '', fonte: f.fonte, frase, postura, perche }
 }
 
 function dire(r: Rnd, a: string, b: string, rel: Rel, postura: Tesi['postura']): string {
