@@ -150,12 +150,25 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   /** due frasi sue su una parola: quello che sa di lei, riscritto */
   const riassunto = (w: string) => {
     const p = scriviParagrafo(st, r, w, { altri: nodi.filter(x => x !== w).slice(0, 3) })
-    return p.testo.replace(/\s*\(Letto in:.*$/, '').split(/(?<=[.?!])\s+/).slice(0, 2).join(' ')
+    // di solito due frasi; ogni tanto il paragrafo intero (fino a sei), quando ha abbastanza da dire
+    const fr = p.testo.replace(/\s*\(Letto in:.*$/, '').split(/(?<=[.?!])\s+/)
+    return fr.slice(0, fr.length >= 4 && r() < 0.35 ? 6 : 2).join(' ')
+  }
+  /** il ragionamento disteso: quello che ha capito delle due cose, il confronto, la conclusione, una domanda. Tutto suo */
+  const disteso = (dd: Deduzione): string => {
+    const fa = (w: string) => scriviParagrafo(st, r, w, { altri: [dd.a, dd.b].filter(x => x !== w) }).testo.replace(/\s*\(Letto in:.*$/, '').split(/(?<=[.?!])\s+/).filter(x => !/^(Riassumendo|Metto insieme|Provo a ragionare|Seguo un filo|Ne ricavo|Comincio dalla definizione|Sulla carta|Se guardo il dizionario)/.test(x)).slice(0, 2).join(' ')
+    const apre = pick(r, ['Parto da due cose che ho capito leggendo, in posti lontani.', 'Le ho trovate in letture che non si conoscono.', 'Due cose, da due parti diverse.'])
+    const prem = dd.premesse.map((p0, i) => (i ? pick(r, ['Dall\'altra parte', 'Altrove', 'E poi']) + ', ' + p0 : cap(p0))).join('. ')
+    const c1 = fa(dd.a), c2 = dd.b !== dd.a ? fa(dd.b) : ''
+    const passo = pick(r, ['Messe vicine, cambiano tutte e due.', 'Non le avrei mai accostate, eppure.', 'Il punto non è che si somigliano: è dove si somigliano.'])
+    const dubbio = dd.conf < 0.5 ? pick(r, [' Non ne sono sicuro, ma la tengo.', ' Può darsi che sia solo una rima.']) : ''
+    const dom = realizza(pick(r, ['Resta da capire chi dei due ha imparato dall\'altro.', 'E se fosse {det:b} a spiegare {det:a}, e non il contrario?', 'Cosa succede {a:a} il giorno che {det:b} smette?']), { a: dd.a, b: dd.b })
+    return concorda([apre, prem + '.', c1, c2, passo, cap(senzaAttacco(dd.testo)).replace(/\.?$/, '.') + dubbio, dom].filter(Boolean).join(' ').replace(/\.\./g, '.'))
   }
   let mute = 0
   const S: Scheda[] = []
   const pre = (x: Fat): Scheda => ({ ruolo: 'premessa', titolo: cap(x.titolo), corpo: glossa(x.f), a: x.f?.s, b: x.f?.o ?? x.f?.compl[0]?.n, rel: x.f ? REL_VERBO(x.f) : 'accanto', fonte: x.f?.fonte })
-  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`), catena: [d.a, d.b], a: d.a, b: d.b } : null)
+  const conc = (): Scheda | null => (d ? { ruolo: 'conclusione', titolo: cap(senzaAttacco(d.testo)), corpo: r() < 0.6 ? disteso(d) : concorda(`${pick(r, ['Ci arrivo così', 'Il ragionamento', 'Metto in fila'])}: ${d.premesse.join('; ')}.${d.conf < 0.4 ? pick(r, [' Non ne sono sicuro.', ' È un\'ipotesi.']) : ''}`), catena: [d.a, d.b], a: d.a, b: d.b } : null)
   const muta = (a?: string, b?: string): Scheda | null => (mute++ >= 1 ? null : { ruolo: 'silenzio', titolo: d ? cap(senzaAttacco(d.testo).split(/[,:;]/)[0]) : tesi.length ? cap(senzaAttacco(pick(r, tesi).testo).split(/[,:;]/)[0]) : cap(V.titolo), corpo: '', a: a ?? pick(r, nodi.length ? nodi : [V.titolo]), b: b ?? (nodi.length > 1 ? pick(r, nodi) : undefined), rel: pick(r, ['causa', 'dentro', 'identita', 'diventa', 'contro'] as Rel[]) })
   const parola = (w: string): Scheda => ({ ruolo: 'parola', titolo: w.toUpperCase(), corpo: riassunto(w), a: w })
   const ritorno = (): Scheda | null => (prev && r() < 0.35 ? { ruolo: 'prima', titolo: pick(r, ['Torno su una cosa', 'Me lo ero già chiesto', 'Ancora']), corpo: `${cap(prev.conclusione)}.`, a: d?.a } : null)

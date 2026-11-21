@@ -205,7 +205,7 @@ function riscrivi(r: Rnd, f: Fatto, usate: Set<string>, forza?: 'attiva' | 'pass
   const p = part(f.v)
   const trans = !!O && !COPULA.test(f.v.inf)
   const h = O ? iperonimo(O) : null
-  const scelte = ['attiva', 'attiva', 'scissa', ...(trans ? ['domanda'] : []), ...(trans && p && !f.rifl ? ['passiva', 'passiva'] : []), ...(trans && h && h !== O && isNome(h) && sinonimi(O!).length && r() < 0.3 ? ['generale'] : [])]
+  const scelte = ['attiva', 'attiva', ...(COPULA.test(f.v.inf) ? [] : ['scissa']), ...(trans ? ['domanda'] : []), ...(trans && p && !f.rifl ? ['passiva', 'passiva'] : []), ...(trans && h && h !== O && isNome(h) && sinonimi(O!).length && r() < 0.3 ? ['generale'] : [])]
   const k = forza && scelte.includes(forza) ? forza : pick(r, scelte)
   switch (k) {
     case 'passiva': return `${d(O!)} ${non}${genere(O!).n === 'p' ? 'vengono' : 'viene'} ${accorda(p!, O!)} ${art(S, 'da')}${comp}`

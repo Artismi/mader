@@ -190,7 +190,8 @@ export async function impaginaTesti(s0: Sheet, r: Rnd, t: Testi, st: StileTipo, 
 
   // ── il corpo e la fonte: in uno spazio libero, mai sopra il titolo ──
   const piccoli: { text: string; size: number; maxW: number; F: Face }[] = []
-  if (t.corpo) piccoli.push({ text: t.corpo.length > 420 ? t.corpo.slice(0, 420).replace(/\s\S*$/, '') + '…' : t.corpo, size: t.corpo.length > 260 ? 0.022 : 0.026, maxW: modo === 'colonna' ? 0.34 : 0.6, F: FL })
+  // il corpo: anche un paragrafo lungo (fino a ~800 caratteri), più piccolo e più largo quando è lungo
+  if (t.corpo) piccoli.push({ text: t.corpo.length > 820 ? t.corpo.slice(0, 820).replace(/\s\S*$/, '') + '…' : t.corpo, size: t.corpo.length > 520 ? 0.0185 : t.corpo.length > 260 ? 0.022 : 0.026, maxW: modo === 'colonna' ? 0.36 : t.corpo.length > 520 ? 0.72 : 0.6, F: FL })
   if (t.fonte) piccoli.push({ text: t.fonte, size: 0.015, maxW: 0.7, F: FACES.mono })
   for (const p of piccoli) {
     let size = p.size, prov = righe(p.text, p.F, size * M, p.maxW * W, '#000')

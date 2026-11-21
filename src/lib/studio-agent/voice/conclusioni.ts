@@ -62,7 +62,7 @@ const G: Record<TipoD, { apre: string[]; corpo: string[]; coda: string[] }> = {
   // il pensiero che lega letture diverse: {a} e {b} i due soggetti (o il concetto ponte), {x} e {y} quello su cui agiscono
   analogia: {
     apre: ['forse', 'mi viene un\'analogia:', 'a guardarle insieme,', 'per somiglianza,', 'azzardo:'],
-    corpo: ['{det:a} {sa} {a:x} come {det:b} {sb} {a:y}', 'quello che {det:a} {ea} per {det:x}, {det:b} lo {eb} per {det:y}', '{det:a} e {det:b} fanno lo stesso gesto su cose diverse: {det:x}, {det:y}', 'cambia il materiale ({x}, {y}) ma il gesto è lo stesso: {det:a} e {det:b} fanno la stessa cosa'],
+    corpo: ['{det:a} {sa} {a:x} come {det:b} {sb} {a:y}', 'quello che {det:a} {ea} per {det:x}, {det:b} {eb} per {det:y}', '{det:a} e {det:b} fanno lo stesso gesto su cose diverse: {det:x}, {det:y}', 'cambia il materiale ({x}, {y}) ma il gesto è lo stesso: {det:a} e {det:b} fanno la stessa cosa'],
     coda: ['', ', e nessuno dei due lo sa', ': è una rima, non una prova', ', e la rima dice qualcosa {di:a}', ', se l\'analogia regge'],
   },
   ponte: {
