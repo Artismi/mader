@@ -170,6 +170,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   // una ricerca aperta su una parola vuota («inoltre», «alcuni»): la lascia e ne apre una vera (con temi rifatti)
   if (st.ricerca && !st.ricerca.closed && (GENERICI.has(st.ricerca.word) || !posDi(st.ricerca.word).has('n') || posDi(st.ricerca.word).has('r'))) {
     log(`Lascio la ricerca su "${st.ricerca.word}": non è una cosa, è una parola di passaggio.`)
+    st.ricerca.closed = true; st.ricercheChiuse = [...(st.ricercheChiuse ?? []), st.ricerca].slice(-30) // chiusa e archiviata, non buttata
     st.ricerca = undefined; if (E0) st.themes = computeThemes(E0, freqOf(st.words), 10, r)
   }
   if (!st.ricerca || st.ricerca.closed) {

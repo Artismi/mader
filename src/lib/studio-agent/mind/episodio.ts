@@ -70,9 +70,12 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const vuota = (t: string) => /mossa:|\bporta (al|alla|allo|ai|agli|alle|all'|a)\b|un tipo d|eredita|davvero\?/i.test(t)
   // e alla prima giornata col pensiero nuovo si riparte puliti: le tesi del vecchio motore erano associazioni di parole
   const S2 = st as AgentState & { pensiero2?: number }
-  if (!S2.pensiero2) { V.tesi = []; A.deduzioni = []; S2.pensiero2 = st.day }
-  V.tesi = V.tesi.filter(t => !vuota(t.testo))
-  if (A.deduzioni) A.deduzioni = A.deduzioni.filter(d0 => !vuota(d0.testo))
+  // niente si cancella: le tesi e le deduzioni del vecchio modo di ragionare vanno in archivio (restano sue, nella memoria),
+  // semplicemente non si ripropongono come copertine o premesse
+  const S4 = st as AgentState & { archivioPensiero?: { tesi: typeof V.tesi; deduzioni: NonNullable<typeof A.deduzioni>; dal: number } }
+  if (!S2.pensiero2) { S4.archivioPensiero = { tesi: [...(S4.archivioPensiero?.tesi ?? []), ...V.tesi], deduzioni: [...(S4.archivioPensiero?.deduzioni ?? []), ...(A.deduzioni ?? [])], dal: st.day }; V.tesi = []; A.deduzioni = []; S2.pensiero2 = st.day }
+  const via = V.tesi.filter(t => vuota(t.testo)), viaD = (A.deduzioni ?? []).filter(d0 => vuota(d0.testo))
+  if (via.length || viaD.length) { const Ar = S4.archivioPensiero ??= { tesi: [], deduzioni: [], dal: st.day }; Ar.tesi.push(...via); Ar.deduzioni.push(...viaD); V.tesi = V.tesi.filter(t => !vuota(t.testo)); if (A.deduzioni) A.deduzioni = A.deduzioni.filter(d0 => !vuota(d0.testo)) }
   const ep = getEpisodi(st)
   const prev = ep[ep.length - 1]
   const C = getCantieri(st).slice(-1)[0]
