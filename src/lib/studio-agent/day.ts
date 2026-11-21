@@ -49,7 +49,7 @@ import { lavora, type Lavoro } from './mind/cantiere'
 import { formatoDi, rendiPagina } from './mind/pagina'
 import { scegliLinguaggio, esitoLinguaggio } from './mind/linguaggi'
 import { componi, durata, GENERE_NOME, wav } from './suono/musica'
-import { FACES, type FaceId } from '@/components/studio/genera/fonts'
+import { FACES, loadLabFonts, type FaceId } from '@/components/studio/genera/fonts'
 import { tavolozza, diversifica, aggiornaAtlante, enunciato, ensureAtlante, mettiInScena, registraTesi, scriviEnunciato, type Enunciato, type ModoTesto } from './mind/atlante'
 import { costruisci, impagina, progetta, scenaFeatures, toneFor, type Forma } from './mind/scena'
 import { flaws, readability } from './eyes/judgement'
@@ -683,7 +683,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     const corpo = (s: Sheet) => s.layers.filter(l => !TESTI.has(l.kind) && l.scale < 0.99).length
     const tieni = fogli.map((f, i) => ({ i, c: corpo(f) })).filter(x => x.c >= 2).map(x => x.i)
     // e quelle povere a vedersi (poco contrasto, pochi bordi) cedono il posto alle più ricche, se ce ne sono abbastanza
-    const ricco = (s: Sheet) => { const c = flatten(s, 0.04), d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data, w = c.width; let m = 0, m2 = 0, bordi = 0, n = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m += l; m2 += l * l; n++; if ((i / 4) % w && Math.abs(l - (d[i - 4] + d[i - 3] + d[i - 2]) / 765) > 0.12) bordi++ } return Math.sqrt(Math.max(0, m2 / n - (m / n) ** 2)) + (bordi / n) * 0.8 }
+    const ricco = (s: Sheet) => { const c = flatten(s, 0.04), d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data, w = c.width; let m = 0, m2 = 0, bordi = 0, n = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 765; m += l; m2 += l * l; n++; if ((i / 4) % w && Math.abs(l - (d[i - 4] + d[i - 3] + d[i - 2]) / 765) > 0.12) bordi++ } return Math.sqrt(Math.max(0, m2 / n - (m / n) ** 2)) + (bordi / n) * 0.8 + 0.06 * Math.min(3, s.layers.filter(l => /retino|punti|grana|pattern|duotono|sfasa|ornato|caleido/.test(l.kind) || (l.blend !== 'source-over' && !TESTI.has(l.kind))).length) }
     const rv = tieni.map(i => ricco(fogli[i])), top = Math.max(...rv, 1e-6)
     const ricche = tieni.filter((_, k) => rv[k] >= top * 0.45)
     if (ricche.length >= 3) tieni.splice(0, tieni.length, ...ricche)
@@ -695,7 +695,10 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   // il tempo di lettura di ogni tavola (parole dei suoi testi), e del reel intero: la musica dura quanto serve
   const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text && l.meta.size * (720 / s.W) >= 24).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
   const legge = (n: number) => (n ? 1 + n * 0.28 : 0) // il ritmo dei sottotitoli
-  const scena = smonta(fogli, r)
+  // la partitura parte dall'ultima che ha funzionato (a volte da capo): la costruzione a strati si evolve con lui
+  const ultimaP = M.memoria.length && r() < 0.6 ? M.memoria[M.memoria.length - 1].partitura : undefined
+  await loadLabFonts() // i caratteri delle tavole (fraktur, mono…) devono esserci prima di scrivere
+  const scena = smonta(fogli, r, ultimaP)
   void parole
   const lettura = scena.parole.map(legge)
   const forte0 = info.reduce((m, x, i) => (x.interesse > info[m].interesse ? i : m), 0)
@@ -716,7 +719,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const lett2 = lettura.slice()
   const ev = evolviCoreografia(scena, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, lett2)
   // le lettere-forma sono già state disposte smontando le tavole: la partitura le registra com'erano
-  ev.coreografia.partitura = { ...partitura(ev.coreografia.partitura), lettere: scena.lettere ?? 'gigante', tratto: scena.tratto ?? 'pieno' }
+  ev.coreografia.partitura = { ...partitura(ev.coreografia.partitura), ...(scena.strati ?? {}), rullante: partitura(ev.coreografia.partitura).rullante, fineFrase: partitura(ev.coreografia.partitura).fineFrase, cambio: partitura(ev.coreografia.partitura).cambio }
   // i testi del reel: la domanda all'inizio, la conclusione verso la fine, impaginati dai suoi generatori, senza aloni
   const testi: { t0: number; t1: number; cv: HTMLCanvasElement }[] = []
   const palette = (s: Sheet) => { const c = flatten(s, 0.05), g = c.getContext('2d')!, d = g.getImageData(0, 0, c.width, c.height).data, out: string[] = []; for (let i = 0; i < d.length; i += 4 * 37) out.push('#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('')); return out }

@@ -36,7 +36,12 @@ export function look(st: AgentState, s: Sheet, intention: Intention): Look {
   // struttura: un elemento che comanda (Kandinsky), un vuoto che lavora, un baricentro sui terzi (Arnheim)
   const dominance = Math.max(f.punti ?? 0, f.linee ?? 0, f.superfici ?? 0)
   const vuotoBuono = f.vuoto > 0.12 && f.vuoto < 0.65 ? 1 : 0.35
-  const struct = 0.3 * dominance + 0.2 * vuotoBuono + 0.2 * f.terzi + 0.3 * (f.forma ?? 0.5)
+  // la stratificazione: una materia (retino, grana, duotono, fusione) che lavora sopra una figura vale; tante figure appoggiate una accanto all'altra (il mucchio) no
+  const MAT = /retino|punti|grana|duotono|sfasa|materia|caleido|ornato/, TXT = /testo|tipografia|etichette|firma|piastra/
+  const nMat = s.layers.filter(l => MAT.test(l.kind) || (l.blend !== 'source-over' && !TXT.test(l.kind))).length
+  const nFig = s.layers.filter(l => !MAT.test(l.kind) && !TXT.test(l.kind) && l.blend === 'source-over' && l.scale < 0.99).length
+  const strati = Math.min(1, nMat / 2) * (nFig >= 1 ? 1 : 0.5) - Math.max(0, nFig - 4) * 0.12
+  const struct = 0.27 * dominance + 0.17 * vuotoBuono + 0.17 * f.terzi + 0.27 * (f.forma ?? 0.5) + 0.12 * strati
   // rumore: tanti elementi diversi, pelle troppo fitta, nessuno che comanda
   const noise = Math.max(0, Math.min(1, Math.max(0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dominance, (f.rumore ?? 0) * 1.3)))
   const noisePenalty = noise > 0.45 ? (noise - 0.45) / 0.55 : 0

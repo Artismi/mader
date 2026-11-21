@@ -16,7 +16,9 @@ const riduci = (c: HTMLCanvasElement, lato: number) => {
   return { c: o, k }
 }
 
-export function serializza(s: Sheet, lato = 900): FoglioSalvato {
+// la materia fine (retini, grane, punti) in webp compresso si impasta: va salvata senza perdite, alla misura del reel
+const FINE = /retino|punti|grana|pattern|ornato|caleido|sfasa|duotono|materia|onde/
+export function serializza(s: Sheet, lato = 1080): FoglioSalvato {
   return {
     W: s.W, H: s.H, bg: s.bg,
     layers: s.layers.map(l => {
@@ -24,7 +26,7 @@ export function serializza(s: Sheet, lato = 900): FoglioSalvato {
       const { canvas: _c, genera, ...resto } = l
       void _c
       return {
-        ...resto, k, img: c.toDataURL('image/webp', 0.85),
+        ...resto, k, img: c.toDataURL('image/webp', FINE.test(l.kind) || l.blend !== 'source-over' ? 1 : 0.88),
         // il corpo del testo segue la riduzione (serve a capire se si legge)
         meta: l.meta ? { ...l.meta, size: l.meta.size * k } : undefined,
         genera: genera ? { tool: genera.tool, p: genera.p, fonte: genera.fonte ? riduci(genera.fonte, 512).c.toDataURL('image/webp', 0.8) : undefined } : undefined,
