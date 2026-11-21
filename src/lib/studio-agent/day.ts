@@ -14,6 +14,8 @@ import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ri
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { serializza, ricostruisci } from './hands/cassetto'
+import { GENERICI } from './mind/pensiero'
+import { posDi } from './reader/concepts'
 import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, type Sheet } from './hands/sheet'
@@ -165,6 +167,11 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   // 2 · ricerca in corso (struttura su più giorni) e parola del giorno
   const E0 = st.words.docs > 3 ? embed(st.words, 1200, 24, st.seed) : null
   if (E0 && (!st.themes?.length || st.day % 7 === 0)) st.themes = computeThemes(E0, freqOf(st.words), 10, r)
+  // una ricerca aperta su una parola vuota («inoltre», «alcuni»): la lascia e ne apre una vera (con temi rifatti)
+  if (st.ricerca && !st.ricerca.closed && (GENERICI.has(st.ricerca.word) || !posDi(st.ricerca.word).has('n') || posDi(st.ricerca.word).has('r'))) {
+    log(`Lascio la ricerca su "${st.ricerca.word}": non è una cosa, è una parola di passaggio.`)
+    st.ricerca = undefined; if (E0) st.themes = computeThemes(E0, freqOf(st.words), 10, r)
+  }
   if (!st.ricerca || st.ricerca.closed) {
     st.ricerca = openRicerca(st, r)
     if (st.ricerca) log(`Apro una ricerca su "${st.ricerca.word}" (${st.ricerca.words.join(', ')}), per ${st.ricerca.length} giorni. ${st.ricerca.question}`)

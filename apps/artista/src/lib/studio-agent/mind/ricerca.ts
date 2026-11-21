@@ -7,6 +7,8 @@
  * I temi sono gruppi di parole vicine nello spazio delle parole (k-medie
  * sulle direzioni della SVD): sono la sua mappa dei significati.
  */
+import { posDi } from '../reader/concepts'
+import { GENERICI } from './pensiero'
 import type { AgentState, Ricerca, Theme } from '../core/types'
 import { pick, uid, weighted, type Rnd } from '../core/rng'
 import { STOP } from '../reader/tokenize'
@@ -16,7 +18,7 @@ import { looksItalian } from '../reader/tokenize'
 
 export function computeThemes(E: Embedding, freq: (w: string) => number, k = 10, r: Rnd): Theme[] {
   // i temi si fanno con i nomi: verbi e avverbi li legano ma non li nominano
-  const idx = E.words.map((_w, i) => i).filter(i => { const w = E.words[i]; return !STOP.has(w) && w.length > 3 && looksItalian(w) && pos(w) === 'nome' }).slice(0, 500)
+  const idx = E.words.map((_w, i) => i).filter(i => { const w = E.words[i]; return !STOP.has(w) && w.length > 3 && looksItalian(w) && pos(w) === 'nome' && posDi(w).has('n') && !posDi(w).has('r') && !GENERICI.has(w) && !/^(alcun|inoltre|quanto|primo|prima|ultimo|nuovo|volta|modo|fino|venne|diverse|molti|spesso)/.test(w) }).slice(0, 500)
   if (idx.length < k * 3) return []
   const dim = E.vecs[0].length
   let cent = Array.from({ length: k }, () => Float32Array.from(E.vecs[idx[Math.floor(r() * idx.length)]]))

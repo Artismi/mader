@@ -64,6 +64,8 @@ export const isNomeQ = (w: string) => !!LEX?.get(w)
 /** il genere visto nei testi letti («la fine», «il fine»): vince su quello del dizionario */
 const VISTO = new Map<string, { m: number; f: number }>()
 export function osservaGenere(w: string, g: G) { const x = VISTO.get(w) ?? { m: 0, f: 0 }; x[g]++; VISTO.set(w, x) }
+/** è un nome comune (nel dizionario dei generi)? I nomi propri non ci sono */
+export const nomeComune = (w: string) => !!LEX?.has(w.toLowerCase())
 export function genere(s: string) {
   const h = head(s)
   const vis = VISTO.get(h)
@@ -94,6 +96,11 @@ const unisci = (a: string, s: string) => (/'$/.test(a) ? a + s : a + ' ' + s)
 /** l'articolo giusto davanti a una parola o a un gruppo nominale */
 export function art(s: string, tipo: Tipo = 'det'): string {
   if (!s) return s
+  // un nome proprio non prende l'articolo («Roma», «a Roma»); un gruppo che l'articolo ce l'ha già lo tiene (e lo fonde con la preposizione)
+  if (/^[A-ZÀ-Ý]/.test(s)) return tipo === 'det' || tipo === 'ind' ? s : `${tipo} ${s}`
+  if (/^(questo|questa|questi|queste|quel|quello|quella|quei|quegli|quelle|ogni|alcuni|alcune|tutti|tutte|ciascun|ciascuna|nessun|nessuna|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|cento|mille|\d+)\s/i.test(s)) return tipo === 'det' || tipo === 'ind' ? s : `${tipo} ${s}`
+  const ha = s.match(/^(il|lo|la|i|gli|le|l')\s?(.*)$/i)
+  if (ha && (ha[1].endsWith("'") || /\s/.test(s.slice(ha[1].length, ha[1].length + 1)))) { const d0 = ha[1].toLowerCase(); return tipo === 'det' ? s : tipo === 'ind' ? s : unisci(PREP[tipo]?.[d0] ?? `${tipo} ${d0}`, ha[2]) }
   const g = genere(s)
   return unisci(forma(tipo, g.g, g.n === 'p', head(s)), s)
 }

@@ -18,7 +18,7 @@ export interface Layer {
   blend: Blend
   flipX?: boolean
   /** per i testi: cosa c'è scritto, colore e corpo in px del foglio (serve a capire se si legge) */
-  meta?: { text: string; color: string; size: number }
+  meta?: { text: string; color: string; size: number; font?: { family: string; weight: number; italic?: boolean; upper?: boolean }; ruolo?: 'titolo' | 'corpo' | 'fonte' | 'numero' }
   /** come è nato: lo strumento, i suoi parametri e (se ne aveva bisogno) l'immagine su cui ha lavorato. Serve per ridisegnarlo in un altro momento della sua vita (crescita, fase) */
   genera?: { tool: string; p: Record<string, unknown>; fonte?: HTMLCanvasElement }
 }

@@ -15,7 +15,7 @@ import type { AgentState } from '../core/types'
 import { pick, weighted, type Rnd } from '../core/rng'
 import { realizza } from './lingua'
 
-export type TipoD = 'catena' | 'lunga' | 'dipendenza' | 'contesa' | 'disaccordo' | 'eredita' | 'ritrattazione' | 'interrotta'
+export type TipoD = 'catena' | 'lunga' | 'dipendenza' | 'contesa' | 'disaccordo' | 'eredita' | 'ritrattazione' | 'interrotta' | 'analogia' | 'ponte' | 'genere' | 'tensione'
 interface Modello { tpl: string; tipo: TipoD; peso: number; usi: number; nato: number; da?: string }
 interface Repertorio { modelli: Modello[]; usiPezzi: Record<string, number> }
 type WithR = AgentState & { conclusioni?: Repertorio }
@@ -58,6 +58,27 @@ const G: Record<TipoD, { apre: string[]; corpo: string[]; coda: string[] }> = {
     apre: ['eppure', 'però', 'a guardare la catena,', 'attenzione:'],
     corpo: ['il filo {da:a} {a:b} si spezza a metà', '{det:a} non arriva {a:b}: in mezzo qualcosa dice di no', 'da {a} a {b} la strada è sbarrata', 'tra {det:a} e {det:b} c\'è un muro, e il muro è un «non»'],
     coda: ['', ', e il punto di rottura è {det:x}', ': non tutto passa', ', anche se sembrava una strada dritta'],
+  },
+  // il pensiero che lega letture diverse: {a} e {b} i due soggetti (o il concetto ponte), {x} e {y} quello su cui agiscono
+  analogia: {
+    apre: ['forse', 'mi viene un\'analogia:', 'a guardarle insieme,', 'per somiglianza,', 'azzardo:'],
+    corpo: ['{det:a} {sa} {a:x} come {det:b} {sb} {a:y}', 'quello che {det:a} {ea} per {det:x}, {det:b} lo {eb} per {det:y}', '{det:a} e {det:b} fanno lo stesso gesto su cose diverse: {det:x}, {det:y}', 'cambia il materiale ({x}, {y}) ma il gesto è lo stesso: {det:a} e {det:b} fanno la stessa cosa'],
+    coda: ['', ', e nessuno dei due lo sa', ': è una rima, non una prova', ', e la rima dice qualcosa {di:a}', ', se l\'analogia regge'],
+  },
+  ponte: {
+    apre: ['c\'è un punto dove due letture si toccano:', 'strano:', 'le letture si incrociano:', 'mi accorgo di una cosa:'],
+    corpo: ['{det:a} {sa} in due storie che non si parlano: in una va verso {det:x}, nell\'altra verso {det:y}', 'lo stesso nome fa due lavori: con {det:x} e con {det:y}', '{det:a} {ea} il ponte tra {det:x} e {det:y}', 'tra {det:x} e {det:y} c\'è un passaggio, e il passaggio si chiama {a}'],
+    coda: ['', ', e forse il ponte regge più di quanto sembra', ': chi passa da una parte all\'altra?', ', anche se le fonti non lo sanno'],
+  },
+  genere: {
+    apre: ['sembra una regola:', 'a guardare bene,', 'forse', 'ne ricavo una cosa generale:'],
+    corpo: ['{det:a} e {det:b} sono due modi di essere {ind:x}', 'sotto {det:a} e {det:b} c\'è la stessa cosa: {ind:x}', 'quello che hanno in comune {det:a} e {det:b} ha un nome: {x}'],
+    coda: ['', ', e la regola chiede un\'eccezione', ': lo verifico alla prossima lettura', ', o almeno così mi pare'],
+  },
+  tensione: {
+    apre: ['qui qualcosa non torna:', 'c\'è un attrito:', 'eppure:', 'a guardare bene,'],
+    corpo: ['{det:a} tiene insieme {det:x} e {det:y}, che si escludono', 'da una parte {det:x}, dall\'altra {det:y}: {det:a} non sceglie', '{det:a} dice una cosa e il suo contrario: {x}, {y}'],
+    coda: ['', ', e forse è lì che vive', ': il contrario non è un errore', ', e non so ancora da che parte stare'],
   },
   ritrattazione: {
     apre: ['mi devo correggere:', 'mi contraddico:', 'ritiro una cosa:'],

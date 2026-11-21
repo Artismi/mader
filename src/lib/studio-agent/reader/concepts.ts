@@ -75,6 +75,16 @@ export function senses(word: string): number[] {
   return []
 }
 export const known = (w: string) => senses(w).length > 0
+/** le categorie grammaticali possibili di una parola (n nome, v verbo, a aggettivo, r avverbio), anche dalle forme flesse */
+const posCache = new Map<string, Set<string>>()
+export function posDi(word: string): Set<string> {
+  const w = word.toLowerCase(), hit = posCache.get(w)
+  if (hit) return hit
+  const out = new Set<string>()
+  if (data) for (const f of forms(w)) for (const i of data.lex[f] ?? []) out.add(data.syn[i][2] === 's' ? 'a' : data.syn[i][2])
+  if (posCache.size > 20000) posCache.clear()
+  posCache.set(w, out); return out
+}
 
 export interface Triple { a: string; rel: Rel; b: string }
 

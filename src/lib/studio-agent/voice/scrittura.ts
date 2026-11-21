@@ -17,12 +17,16 @@ import type { AgentState } from '../core/types'
 import { pick, type Rnd } from '../core/rng'
 import { sentences } from '../reader/tokenize'
 import { describe, iperonimo, sinonimi, verbi, conceptsReady, type Verbo } from '../reader/concepts'
+import { proposizioni } from '../reader/frasi'
+import { pensa, GENERICI } from '../mind/pensiero'
 import { dici, trovaEsempio } from '../mind/retorica'
 import { concludi, type TipoD } from './conclusioni'
 import { singolare } from './lingua'
 import { accorda, art, concorda, genere, isNome, isNomeQ, osservaGenere, realizza } from './lingua'
 
-export interface Fatto { s: string; v: Verbo; forma: string; o?: string; compl: { prep: string; n: string; pre?: string; sup?: string }[]; neg: boolean; rifl: boolean; fonte: string }
+export interface Fatto { s: string; v: Verbo; forma: string; o?: string; compl: { prep: string; n: string; pre?: string; sup?: string }[]; neg: boolean; rifl: boolean; fonte: string
+  /** le parole com'erano nella fonte: il soggetto intero, il gruppo del verbo, quello che segue (in ordine) */
+  parole?: { s: string; v: string; resto: string[]; proprio: boolean } }
 
 const ART = new Set(['il', 'lo', 'la', 'i', 'gli', 'le', "l'", 'un', 'uno', 'una', "un'"])
 const PREP: Record<string, string> = {
@@ -37,10 +41,28 @@ const PREP: Record<string, string> = {
 const VUOTI = new Set(['migliaia', 'centinaia', 'milioni', 'decine', 'cosa', 'cose', 'modo', 'parte', 'fatto', 'volta', 'tipo', 'caso', 'anno', 'anni', 'numero', 'serie'])
 const nome = (w: string) => w.length > 2 && !VUOTI.has(w) && isNomeQ(w)
 
-/** smonta una frase in fatti (uno per verbo principale riconosciuto) */
+/** smonta una frase in fatti: le proposizioni che l'analizzatore riconosce (soggetto, verbo, oggetto, complementi) */
 export function fattiDi(frase: string, fonte: string): Fatto[] {
-  return frase.split(/[:;]|,\s*(?=(?:ma|però|mentre|perché|quando|che|e)\s)/i).slice(0, 3).flatMap(c => fattiClausola(c, fonte)).slice(0, 2)
+  const V = verbi()
+  const argomento = fonte.replace(/\s*\(.*\)\s*$/, '').replace(/^.*\/\s*/, '')
+  const out: Fatto[] = []
+  for (const p of proposizioni(frase, argomento)) {
+    const lemma = p.verbo.lemma
+    const v: Verbo = V.get(lemma) ?? V.get(p.verbo.forma) ?? { inf: lemma, con: (/rre$/.test(lemma) ? 'rre' : lemma.slice(-3)) as Verbo['con'], stem: lemma.slice(0, -3) }
+    const testa = (g: { testa: string; proprio: boolean }) => (g.proprio ? g.testa.toLowerCase() : singolare(g.testa.toLowerCase()))
+    const s = testa(p.sogg)
+    const o = p.ogg ? testa(p.ogg) : undefined
+    if (!s || s === o) continue
+    out.push({
+      s, v, forma: p.verbo.forma, o, neg: p.verbo.neg, rifl: p.verbo.rifl, fonte,
+      compl: p.compl.map(k => ({ prep: k.prep, n: testa(k.g), sup: k.g.testa.toLowerCase() })),
+      parole: { s: p.sogg.proprio ? p.sogg.sup : p.sogg.sup.charAt(0).toLowerCase() + p.sogg.sup.slice(1), v: p.verbo.sup, resto: p.seguito, proprio: p.sogg.proprio },
+    })
+  }
+  return out.slice(0, 3)
 }
+/** il fatto detto con le parole della fonte (ridotte all'essenziale): grammaticale per costruzione */
+const conParole = (f: Fatto, quanti = 2) => [f.parole!.s, f.parole!.v, ...f.parole!.resto.slice(0, quanti)].join(' ').replace(/\s+/g, ' ').replace(/' /g, "'").trim()
 const COPULA = /^(avere|potere|dovere|volere|diventare|essere|sembrare|restare|rimanere|nascere|apparire|stare|crescere|morire|vivere|andare|venire|tornare|cadere)$/
 const RELATIVI = /^(chi|che|cui|il quale|la quale)$/
 function fattiClausola(frase: string, fonte: string): Fatto[] {
@@ -148,6 +170,7 @@ const varia = (r: Rnd, w: string, usate: Set<string>) => {
 
 /** riscrive un fatto in una costruzione scelta */
 function riscrivi(r: Rnd, f: Fatto, usate: Set<string>, forza?: 'attiva' | 'passiva' | 'scissa' | 'domanda' | 'generale'): string {
+  if (f.parole) { usate.add(f.s); return conParole(f) } // le sue parole vengono dalla fonte: le ridice così (le costruzioni rifatte a mano storpiavano)
   const S = varia(r, f.s, usate)
   const O = f.o ? varia(r, f.o, usate) : null
   const v3 = coniuga(f.v, f.forma, S)
@@ -174,7 +197,10 @@ function aggrega(r: Rnd, fs: Fatto[], usate: Set<string>): string[] {
   for (const f of fs) perS.set(f.s, [...(perS.get(f.s) ?? []), f])
   const out: string[] = []
   for (const [s, g] of perS) {
-    if (g.length >= 2) {
+    if (g.length >= 2 && g.every(f => f.parole)) {
+      const azioni = g.slice(0, 3).map(f => [f.parole!.v, ...f.parole!.resto.slice(0, 1)].join(' '))
+      out.push(`${g[0].parole!.s} ${azioni.slice(0, -1).join(', ')} e ${azioni[azioni.length - 1]}`.replace(/' /g, "'"))
+    } else if (g.length >= 2) {
       const azioni = g.slice(0, 3).map(f => `${f.neg ? 'non ' : ''}${f.rifl ? 'si ' : ''}${coniuga(f.v, f.forma, s)}${f.o ? ' ' + d(f.o) : ''}${complemento(f)}`)
       out.push(`${d(varia(r, s, usate))} ${azioni.slice(0, -1).join(', ')} e ${azioni[azioni.length - 1]}`)
     } else out.push(riscrivi(r, g[0], usate))
@@ -280,6 +306,8 @@ export interface Deduzione {
 }
 
 const DIPENDE = /^(dipendere|vivere|nascere|derivare|crescere|nutrire|reggere)$/
+/** i verbi che fanno passare qualcosa da una cosa all'altra: solo questi fanno catena (con gli altri, «porta a» sarebbe un'associazione di parole) */
+const CAUSALI = /^(portare|causare|provocare|produrre|generare|determinare|creare|permettere|favorire|impedire|ridurre|aumentare|alimentare|spingere|costringere|trasformare|distruggere|costruire|fondare|governare|controllare|dominare|influenzare|sostenere|nutrire|reggere|muovere|cambiare|guidare|formare|originare|scatenare|accendere|spegnere|minacciare|proteggere|difendere|liberare|unire|dividere|separare|attirare|respingere|sostituire|eliminare|limitare|regolare|organizzare|dirigere|ispirare|influire)$/
 interface Arco { da: string; a: string; f: Fatto; segno: 1 | -1; conf: number }
 
 /** il grafo dei fatti: chi agisce su cosa, chi regge cosa; la fiducia cresce con le fonti che lo dicono */
@@ -290,11 +318,11 @@ function grafo(st: AgentState, fs: Fatto[]): Arco[] {
   const conf = (s0: string, o: string) => Math.min(0.95, 0.7 + 0.1 * ((quante.get(`${s0}|${o}`)?.size ?? 1) - 1))
   for (const f of fs) {
     const segno: 1 | -1 = f.neg ? -1 : 1
-    if (f.o) archi.push({ da: f.s, a: f.o, f, segno, conf: conf(f.s, f.o) })
+    if (f.o && (CAUSALI.test(f.v.inf) || DIPENDE.test(f.v.inf))) archi.push({ da: f.s, a: f.o, f, segno, conf: conf(f.s, f.o) })
     for (const k of f.compl) {
       if (k.prep === 'senza') archi.push({ da: k.n, a: f.s, f, segno: 1, conf: 0.6 }) // senza A, X… → A regge X
       else if (DIPENDE.test(f.v.inf) && ['da', 'di', 'a', 'intorno'].includes(k.prep)) archi.push({ da: k.n, a: f.s, f, segno, conf: 0.6 })
-      else if (!f.o && ['a', 'in', 'su', 'verso', 'contro'].includes(k.prep)) archi.push({ da: f.s, a: k.n, f, segno: k.prep === 'contro' ? -1 : segno, conf: 0.5 })
+      else if (!f.o && CAUSALI.test(f.v.inf) && ['a', 'in', 'su', 'verso', 'contro'].includes(k.prep)) archi.push({ da: f.s, a: k.n, f, segno: k.prep === 'contro' ? -1 : segno, conf: 0.5 })
     }
   }
   // «senza il lavoro la città si svuota»: anche dalle frasi intere
@@ -321,7 +349,9 @@ export function deduci(st: AgentState, r: Rnd, concetti: string[]): Deduzione[] 
     // la retorica sua: se ha imparato abbastanza modi di legare, dice la conclusione con una mossa propria
     const ex = trovaEsempio(st, fonti, a, b)
     // la conclusione "nuda": solo il legame tra i due capi, detto con il verbo più semplice
-    const nuda = realizza(segno > 0 ? (passi > 2 ? '{det:a}, alla lontana, porta {a:b}' : '{det:a} porta {a:b}') : '{det:a} non porta {a:b}', { a, b })
+    // la conclusione "nuda": il legame tra i due capi detto con la relazione che è davvero (non sempre «porta a»)
+    const NUDE: Partial<Record<TipoD, string>> = { catena: '{det:a} arriva fino {a:b}', lunga: '{det:a}, alla lontana, arriva fino {a:b}', dipendenza: '{det:a} regge {det:b}', interrotta: '{det:a} non arriva {a:b}', contesa: '{det:a} e {det:b} vogliono la stessa cosa', disaccordo: 'su {det:a} e {det:b} le fonti non si accordano', eredita: '{det:a} somiglia {a:b}', analogia: '{det:a} e {det:b} fanno lo stesso gesto', ponte: '{det:a} tiene insieme due storie', genere: '{det:a} e {det:b} sono della stessa specie', tensione: '{det:a} tiene insieme due contrari' }
+    const nuda = realizza(NUDE[t2] ?? '{det:a} e {det:b} si toccano', { a, b })
     const mia = dici(st, r, { a, b, premesse, conclusione: c.testo, nuda, conf, segno, tipo: t2, ...ex })
     if (mia) c = { testo: mia.testo, modello: `mossa:${mia.mossa}` }
     out.push({ tipo: t2, a, b, premesse, testo: c.testo, segno, conf, passi, modello: c.modello })
@@ -368,15 +398,14 @@ export function deduci(st: AgentState, r: Rnd, concetti: string[]): Deduzione[] 
   for (const f1 of fs) for (const f2 of fs) {
     if (f1.s === f2.s && f1.v.inf === f2.v.inf && f1.o === f2.o && f1.neg !== f2.neg && f1.fonte !== f2.fonte && f1.o) metti('disaccordo', f1.s, f1.o, { a: f1.s, b: f1.o }, [frase(f1), frase(f2)], -1, 0.5, 1)
   }
-  // eredità dal genere (ipotesi)
-  for (const c of concetti) {
-    const h = iperonimo(c, new Set(concetti))
-    if (!h || h === c) continue
-    const fh = fattiSu(st, h, 10).find(f => f.s === h && f.o)
-    if (fh) metti('eredita', c, fh.o!, { a: c, b: fh.o!, x: h }, [`${art(c, 'det')} è un tipo di ${h}`, frase(fh)], fh.neg ? -1 : 1, 0.35, 2)
-  }
+  // eredità dal genere: «A è un tipo di H, H fa B ⇒ A eredita B» — tolta: era il ragionamento più vuoto (la lega eredita il supporto)
+
+  // il pensiero tra letture diverse (analogie, ponti, regole, tensioni)
+  out.push(...pensa(st, r, concetti))
   const seen = new Set<string>()
-  return out.filter(d => { const k = `${d.tipo}|${d.a}|${d.b}|${d.segno}`; if (seen.has(k)) return false; seen.add(k); return true })
+  // il critico: concetti vuoti e fonti finte fuori
+  return out.filter(d => !GENERICI.has(d.a) && !GENERICI.has(d.b) && d.a !== d.b && !d.premesse.some(p => /campione|wikipedia-/i.test(p)))
+    .filter(d => { const k = `${d.tipo}|${d.a}|${d.b}|${d.segno}`; if (seen.has(k)) return false; seen.add(k); return true })
     .sort((x, y) => y.conf * (1 + (y.passi - 1) * 0.25) - x.conf * (1 + (x.passi - 1) * 0.25) + (r() - 0.5) * 0.2)
 }
 

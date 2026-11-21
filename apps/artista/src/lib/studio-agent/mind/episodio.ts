@@ -66,6 +66,13 @@ export type FormaSeq = 'lineare' | 'a ritroso' | 'contrappunto' | 'crescendo' | 
 export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null, frase: (f: Fatto) => string, letture: Reading[] = []): { schede: Scheda[]; d: Deduzione | null; titolo: string; domanda: string; lettura?: string; forma: FormaSeq } {
   const V = ensureVisione(st, r)
   const A = ensureAtlante(st)
+  // le tesi del vecchio modo di ragionare («l'essere porta alla stagione», «eredita», nomi di mosse finiti nel testo) non si ripropongono
+  const vuota = (t: string) => /mossa:|\bporta (al|alla|allo|ai|agli|alle|all'|a)\b|un tipo d|eredita|davvero\?/i.test(t)
+  // e alla prima giornata col pensiero nuovo si riparte puliti: le tesi del vecchio motore erano associazioni di parole
+  const S2 = st as AgentState & { pensiero2?: number }
+  if (!S2.pensiero2) { V.tesi = []; A.deduzioni = []; S2.pensiero2 = st.day }
+  V.tesi = V.tesi.filter(t => !vuota(t.testo))
+  if (A.deduzioni) A.deduzioni = A.deduzioni.filter(d0 => !vuota(d0.testo))
   const ep = getEpisodi(st)
   const prev = ep[ep.length - 1]
   const C = getCantieri(st).slice(-1)[0]
@@ -74,7 +81,12 @@ export function pianifica(st: AgentState, r: Rnd, N: number, filo: string | null
   const dallaDomanda = new Set((prev?.domanda ?? '').toLowerCase().split(/[^a-zàèéìòù]+/))
   const ds = deduci(st, r, [...new Set([...dallaDomanda].filter(w => w.length > 3 && A.concetti[w]).concat(concetti))].slice(0, 9))
     .filter(d => !V.tesi.some(t => t.testo === d.testo) && !giaFatte.has(`${d.a}|${d.b}`) && !giaFatte.has(`${d.b}|${d.a}`))
-  const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1), 0.7) : null
+  // le premesse già usate di recente non tornano (né le stesse frasi, né lo stesso gesto con altre parole)
+  const S3 = st as AgentState & { premesseUsate?: string[] }
+  const giaUsate = new Set(S3.premesseUsate ?? [])
+  const fresche = ds.filter(x => !x.premesse.some(p => giaUsate.has(p)))
+  ds.splice(0, ds.length, ...fresche) // se resta solo roba già detta, oggi non deduce: legge
+  const d = ds.length ? weighted(r, ds, x => (x.conf + 0.1) * (1 + (x.passi - 1) * 0.8) * (dallaDomanda.has(x.a) || dallaDomanda.has(x.b) ? 3 : 1) * (filo && (x.a === filo || x.b === filo) ? 1.5 : 1) * (x.tipo === 'contesa' ? 0.5 : 1) * (['analogia', 'ponte', 'genere', 'tensione'].includes(x.tipo) ? 1.8 : 1), 0.7) : null
   const senzaAttacco = (x: string) => { let t = x; for (const a of APERTURE.slice().sort((p, q) => q.length - p.length)) if (t.toLowerCase().startsWith(a.toLowerCase())) { t = t.slice(a.length).trim(); break } return t }
 
   // ── il materiale ──
@@ -421,6 +433,7 @@ export function chiudiEpisodio(st: AgentState, r: Rnd, info: Omit<EpisodioInfo, 
   const V = ensureVisione(st, r)
   if (d && !d.ritirata && d.conf > 0.3) {
     V.tesi = [...V.tesi, { testo: d.testo, conf: d.conf, da: st.day, a: d.a, b: d.b }].slice(-12)
+    ;(st as AgentState & { premesseUsate?: string[] }).premesseUsate = [...((st as AgentState & { premesseUsate?: string[] }).premesseUsate ?? []), ...d.premesse].slice(-80)
     V.storia.push({ day: st.day, nota: `aggiungo: ${d.testo}` })
   }
   // le tesi contraddette da una deduzione nuova escono dalla visione
