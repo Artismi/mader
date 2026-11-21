@@ -19,7 +19,7 @@
  *    dei gesti, novità rispetto a quelle già fatte. Vince la migliore; i suoi gesti si rafforzano nella memoria.
  */
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
-import type { Layer, Sheet } from './sheet'
+import { rettangoloVuoto, flatten, type Layer, type Sheet } from './sheet'
 import type { Brano } from '../suono/beat'
 import { toolById, type ToolCtx } from './tools'
 import { fontCss } from '@/components/studio/genera/raster'
@@ -166,8 +166,23 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       const fCorpo = corpo?.meta?.font ?? blocchi[0].font
       if (sotto && r() < 0.5) blocchi.push({ testo: paragrafo ? sotto : frase, font: fCorpo, px: paragrafo ? 26 : 30, colore: corpo!.meta!.color })
       // il colore della tavola, se si stacca dal fondo; se no il chiaro o lo scuro
+      // dove va il testo e di che colore: si guarda quello che c'è davvero sotto (la tavola com'è, nella fascia alta e in quella bassa);
+      // vince la fascia più calma, e il colore è quello che si stacca da lì
       const lb = lum(bordo(s))
-      for (const b of blocchi) if (Math.abs(lum(b.colore) - lb) < 0.5) b.colore = lb > 0.5 ? '#111111' : '#f4f2ec'
+      // la tavola senza le sue parole (nel reel non ci sono)
+      const piatta = flatten({ ...s, layers: s.layers.filter(l => !TESTO.has(l.kind)) }, 0.25), pq = piatta.getContext('2d', { willReadFrequently: true })!
+      const kV = W / s.W, oyV = (H - s.H * kV) / 2
+      const sottoTesto = (y0: number, y1: number) => {
+        let m = 0, m2 = 0, n = 0
+        for (let y = y0; y < y1; y += 8) for (let x = 48; x < W - 150; x += 8) {
+          const sy = (y - oyV) / kV, sx = x / kV
+          let l = lb
+          if (sy >= 0 && sy < s.H) { const d = pq.getImageData(Math.floor(sx * 0.25), Math.floor(sy * 0.25), 1, 1).data; l = (0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]) / 255 }
+          m += l; m2 += l * l; n++
+        }
+        const mu = m / Math.max(1, n); return { mu, sd: Math.sqrt(Math.max(0, m2 / Math.max(1, n) - mu * mu)) }
+      }
+
       const mis = document.createElement('canvas').getContext('2d')!
       const a_capo = (testo: string, f: typeof blocchi[0]['font'], px: number, larg: number) => { mis.font = fontCss(f as never, px); const out: string[] = []; let riga = ''; for (const w of testo.split(' ')) { const prova = riga ? riga + ' ' + w : w; if (mis.measureText(prova).width > larg && riga) { out.push(riga); riga = w } else riga = prova } if (riga) out.push(riga); return out }
       // le zone di Instagram: in alto nome e audio, in basso didascalia e mi piace, a destra i pulsanti. Il testo da leggere sta fuori
@@ -179,7 +194,20 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       const tutte: { t: string; f: typeof blocchi[0]['font']; px: number; col: string; dopo: number }[] = righeT.map((t, i) => ({ t, f: blocchi[0].font, px, col: blocchi[0].colore, dopo: i === righeT.length - 1 ? px * 0.45 : px * 0.08 }))
       if (blocchi[1]) for (const t of a_capo(blocchi[1].testo, blocchi[1].font, blocchi[1].px, larg * 0.92)) tutte.push({ t, f: blocchi[1].font, px: blocchi[1].px, col: blocchi[1].colore, dopo: blocchi[1].px * 0.28 })
       const alto = tutte.reduce((a, x) => a + x.px * 1.1 + x.dopo, 0)
-      let y = fascia === 'alto' ? 200 : H - 330 - alto
+      const fA = sottoTesto(200, 200 + alto), fB = sottoTesto(H - 330 - alto, H - 330)
+      // la fascia scelta per il reel, se sotto è calma; altrimenti l'altra, se è più calma
+      const qui = fascia === 'alto' ? fA : fB, la = fascia === 'alto' ? fB : fA
+      const dove = qui.sd <= 0.12 || qui.sd <= la.sd ? fascia : fascia === 'alto' ? 'basso' : 'alto'
+      const f0 = dove === fascia ? qui : la
+      // il colore: quello della tavola se si stacca da quello che c'è sotto, se no il più lontano tra scuro e chiaro
+      // il contrasto vero (WCAG, sulla luce lineare): almeno 4.5:1 per le righe piccole, 3.5:1 per il titolo grande
+      const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+      const lumW = (h: string) => { const m0 = h.replace('#', ''); return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * lin(parseInt(m0.slice(i, i + 2), 16) / 255), 0) }
+      const sottoL = lin(f0.mu), cr = (h: string) => { const a = lumW(h); return (Math.max(a, sottoL) + 0.05) / (Math.min(a, sottoL) + 0.05) }
+      // se sotto è agitato, la soglia sale (il fondo prende in prestito un po' del contrasto)
+      const agitato = 1 + f0.sd * 2
+      for (const x of tutte) if (cr(x.col) < (x.px >= 48 ? 3.5 : 4.5) * agitato) x.col = cr('#111111') > cr('#f4f2ec') ? '#111111' : '#f4f2ec'
+      let y = dove === 'alto' ? 200 : H - 330 - alto
       tutte.forEach((x, i) => {
         const c = document.createElement('canvas'), q0 = c.getContext('2d')!; q0.font = fontCss(x.f as never, x.px)
         c.width = Math.ceil(q0.measureText(x.t).width + 8); c.height = Math.ceil(x.px * 1.3)
@@ -188,6 +216,30 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
         y += x.px * 1.1 + x.dopo
       })
       parole[ti] = tit.meta!.text.split(/\s+/).length + (blocchi[1]?.testo.split(/\s+/).length ?? 0)
+    }
+    // la redazione degli strati: fuori quelli generici (i blocchi di colore a caso, i grafici senza dati che parlano),
+    // e la pila di un'ombra (tante copie spostate) diventa uno strato solo
+    const copertura = (cv: HTMLCanvasElement) => { const t = document.createElement('canvas'); t.width = 32; t.height = 32; const q = t.getContext('2d')!; q.drawImage(cv, 0, 0, 32, 32); const d = q.getImageData(0, 0, 32, 32).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 30) n++; return n / 1024 }
+    const figure0 = s.layers.filter(l => !TESTO.has(l.kind) && !ATMO.has(l.kind) && l.kind !== 'grafico' && l.kind !== 'colore').length
+    const strati: Layer[] = []
+    // i rettangoli vuoti restano solo se sono il protagonista (la figura più grande della tavola)
+    const figL = s.layers.filter(l => !TESTO.has(l.kind) && !ATMO.has(l.kind) && !MATERIA.has(l.kind))
+    const protagonista = figL.reduce((m, l) => (l.scale > (m?.scale ?? 0) ? l : m), undefined as Layer | undefined)
+    for (const l of s.layers) {
+      if (!TESTO.has(l.kind) && l !== protagonista && (l.kind === 'grafico' || l.scale < 0.99) && rettangoloVuoto(l.canvas)) continue
+      if (l.kind === 'colore' && copertura(l.canvas) < 0.85) continue
+      if (l.kind === 'grafico' && figure0 >= 1) continue
+      const prec = strati[strati.length - 1]
+      if (l.kind === 'ombra' && prec?.kind === 'ombra' && prec.blend === l.blend) {
+        // si fondono nella stessa tela, alla scala della tavola
+        const c = document.createElement('canvas'); c.width = s.W; c.height = s.H; const q = c.getContext('2d')!
+        const base = (prec as Layer & { _pila?: boolean })._pila ? prec : null
+        if (base) q.drawImage(base.canvas, 0, 0); else drawL(q, s, prec)
+        drawL(q, s, l)
+        strati[strati.length - 1] = Object.assign({ ...l, canvas: c, x: 0.5, y: 0.5, scale: Math.max(s.W, s.H) / Math.min(s.W, s.H), rot: 0, alpha: 1 }, { _pila: true })
+        continue
+      }
+      strati.push(l)
     }
     const metti = (l: Layer, li: number) => {
       if (tit && TESTO.has(l.kind)) return // le parole di questa tavola le ha già messe la griglia
@@ -255,7 +307,7 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       nodi.push(intero())
     }
     // ogni livello è uno strato: entra nel suo ordine e nel suo modo (il retino a punti, il campo a tendina, la figura a strappo)
-    s.layers.forEach((l: Layer, li) => { const k0 = nodi.length; metti(l, li); for (let q = k0; q < nodi.length; q++) { nodi[q].strato = li; nodi[q].rivela ??= rivelaDi(l, nodi[q], P0) } })
+    strati.forEach((l: Layer, li) => { const k0 = nodi.length; metti(l, li); for (let q = k0; q < nodi.length; q++) { nodi[q].strato = li; nodi[q].rivela ??= rivelaDi(l, nodi[q], P0) } })
     // ── il generatore vivo e le lettere-forma: il movimento nasce da qui, non da filtri sull'immagine ──
     {
       const inizio = nodi.indexOf(radice)
@@ -383,6 +435,10 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
   }
   return { nodi, bg: fogli.map(bordo), tavole: fogli.length, parole, lettere: P0.lettere, tratto: P0.tratto, strati: P0, rango }
 }
+function drawL(q: CanvasRenderingContext2D, s: Sheet, l: Layer) {
+  const k = (Math.min(s.W, s.H) * l.scale) / Math.max(l.canvas.width, l.canvas.height)
+  q.save(); q.globalAlpha = l.alpha; q.translate(l.x * s.W, l.y * s.H); q.rotate(l.rot); if (l.flipX) q.scale(-1, 1); q.scale(k, k); q.drawImage(l.canvas, -l.canvas.width / 2, -l.canvas.height / 2); q.restore()
+}
 const dist2 = (a: number[], b: number[]) => a.reduce((s, x, i) => s + (x - b[i]) ** 2, 0)
 function lum(h: string) { const m = h.replace('#', ''); if (m.length < 6) return 0.5; const v = [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2] }
 
@@ -504,7 +560,13 @@ function riprese(c: Coreografia, br: Brano, n: number, forte: number, rels: (str
   let t = 0
   for (const tv of scelte) { if (t >= br.durata - 1e-6) break; const len = durata(tv); out.push({ tav: tv, t0: t, t1: Math.min(br.durata, t + len), rel: rels[tv] }); t += len }
   // il tempo che avanza: allunga l'ultima, oppure (se basta una battuta) riprende la prima per chiudere ad anello
-  if (t < br.durata - 1e-6) { if (br.durata - t >= bar - 1e-6) out.push({ tav: scelte[0], t0: t, t1: br.durata, rel: rels[scelte[0]], anello: true }); else out[out.length - 1].t1 = br.durata }
+  // il tempo che avanza: le tavole tornano a turno (ricostruite, più brevi: sono già state lette), mai una sola che tiene tutto
+  let k = 0
+  while (br.durata - t >= bar - 1e-6) {
+    const tv = scelte[k % scelte.length], len = Math.min(br.durata - t, Math.max(bar, Math.ceil((durata(tv) * 0.6) / bar) * bar))
+    out.push({ tav: tv, t0: t, t1: t + len, rel: rels[tv], anello: true }); t += len; k++
+  }
+  if (t < br.durata - 1e-6) out[out.length - 1].t1 = br.durata
   return out
 }
 
@@ -597,7 +659,7 @@ function statoStrato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano,
   passo = Math.max(beat / 4, Math.min(passo, Math.floor((dur0 * 0.5) / Math.max(1, R0.n) / (beat / 4)) * (beat / 4)))
   const testo = (n.strato ?? 0) >= 1000
   // il primo fotogramma del reel parte con i primi strati già posati (l'aggancio); il ritorno ad anello parte costruito
-  const avanti = rp.t0 === 0 ? passo * 2 : rp.anello ? passo * R0.n + beat : 0
+  const avanti = rp.t0 === 0 ? passo * 2 : rp.anello ? passo * Math.ceil(R0.n / 2) : 0 // al ritorno metà è già lì, l'altra metà si rifà
   const tl = t - rp.t0 + avanti
   const tIn = R0.k * passo + (testo ? beat : 0)
   const pi = tl - tIn
@@ -613,7 +675,8 @@ function statoStrato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano,
   // ogni due battute una figura si strappa di nuovo e si rimette (a turno), come un collage che si rifà
   const fineCostr = R0.n * passo + beat * 2
   if (tl > fineCostr && !testo) {
-    if (tipo === 'retino') s.rivela = Math.min(s.rivela ?? 1, 1 - 0.25 * (0.4 + (S.profondita ?? 0.5)) * inv(br.cassa, t, 0.2))
+    // il retino respira: sulla cassa i punti si stringono, sul rullante si stringono di più e si riaprono
+    if (tipo === 'retino') s.rivela = Math.min(s.rivela ?? 1, 1 - (0.22 + 0.25 * (S.profondita ?? 0.5)) * Math.max(inv(br.cassa, t, 0.22), 1.4 * inv(br.rullante, t, 0.16)))
     if (tipo === 'strappo' || tipo === 'posa' || tipo === 'tendina') {
       const per = bar * 2, k = Math.floor((tl - fineCostr) / per), dentro = (tl - fineCostr) - k * per
       const figure = R0.n - 1, chi = figure > 0 ? 1 + ((k * 3 + rp.tav) % figure) : -1
@@ -628,15 +691,17 @@ function statoStrato(n: Nodo, c: Coreografia, rp: Ripresa, t: number, br: Brano,
     const sig0 = g.segnale === 'k' ? inv(br.cassa, tt0, 0.1) : g.segnale === 's' ? inv(br.rullante, tt0, 0.12) : g.segnale === 'h' ? inv(br.hat, tt0, 0.05) : 0
     s.fase = tt0 / (bar * 2) * (0.5 + amp) + sig0 * 0.08 * amp + (accoppia === 'controfase' && n.gruppo ? 0.5 : 0)
   }
-  // lo spessore: gli strati più alti scivolano di più, lentamente, come se la camera girasse attorno alla tavola
-  if (!testo) {
+  // lo spessore: a ogni battuta gli strati scorrono di un passo (la camera gira attorno alla tavola a scatti, sul battere,
+  // con una molla): quelli in cima si spostano di più, il fondo resta. Ogni quattro battute il giro torna indietro.
+  if (!testo && tl > R0.n * passo) {
     const prof = R0.n > 1 ? R0.k / (R0.n - 1) : 0, pieno = n.w >= W * 0.98 && n.h >= H * 0.98
-    if (!pieno) {
-      const ph = 2 * Math.PI * (t - rp.t0) / (bar * 4) + rp.tav * 1.3
-      const A = (S.profondita ?? 0.5) * 30 * prof
-      s.dx += A * Math.sin(ph); s.dy += A * 0.45 * Math.cos(ph * 0.7)
+    if (!pieno && R0.k > 0) {
+      const tb = tl - R0.n * passo, kb = Math.floor(tb / bar), m = molla(tb - kb * bar, 9, 0.55)
+      const ang = (Math.PI / 2) * (kb + m) // un quarto di giro per battuta
+      const A = (24 + 46 * (S.profondita ?? 0.5)) * prof, verso = rp.tav % 2 ? 1 : -1
+      s.dx += verso * A * Math.sin(ang); s.dy += A * 0.3 * (1 - Math.cos(ang))
       // la cassa spinge appena gli strati in cima (la tavola respira, non trema)
-      s.sc *= 1 + 0.012 * prof * inv(br.cassa, t, 0.12)
+      s.sc *= 1 + 0.015 * prof * inv(br.cassa, t, 0.12)
     }
   }
   // la fine: si smonta dall'alto, nell'ultimo battito (il fondo resta: sopra si costruisce la tavola dopo)
@@ -723,7 +788,7 @@ export function descriviCoreografia(c: Coreografia): string {
 }
 
 // ── il disegno ──
-export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreografia; riprese: Ripresa[]; testi?: { t0: number; t1: number; cv: HTMLCanvasElement }[]; finitura?: (cv: HTMLCanvasElement, t: number) => HTMLCanvasElement | null; copertina?: (ms: number) => void }): Promise<Blob | null> {
+export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreografia; riprese: Ripresa[]; testi?: { t0: number; t1: number; cv: HTMLCanvasElement }[]; finitura?: (cv: HTMLCanvasElement, t: number) => HTMLCanvasElement | null; copertina?: (ms: number) => void; leggibilita?: (x: { media: number; peggiore: number; salvati: number; campioni: number }) => void }): Promise<Blob | null> {
   if (typeof VideoEncoder === 'undefined') return null
   const { scena, brano: br, coreografia: c } = o
   const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H, frameRate: FPS }, fastStart: 'in-memory' })
@@ -822,6 +887,11 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   const colpo = (t: number) => { let i = -1; for (let j = 0; j < br.rullante.length; j++) if (br.rullante[j] <= t) i = j; return i >= 0 && t - br.rullante[i] < 0.5 ? { i, e: Math.exp(-(t - br.rullante[i]) / 0.09) } : null }
   const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; const gtmp = tmp.getContext('2d')!
   let tintaCambio = ''
+  // la leggibilità: quanti pixel sotto ai testi non fanno contrasto, in media e nel caso peggiore; quante volte ha dovuto rimediare
+  const leggi = { campioni: 0, somma: 0, peggiore: 0, salvati: 0 }
+  const lumLin = (r0: number, g0: number, b0: number) => { const f = (v: number) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(r0) + 0.7152 * f(g0) + 0.0722 * f(b0) }
+  const lumT = new Map<HTMLCanvasElement, number>()
+  const lumTesto = (sp: HTMLCanvasElement) => { if (lumT.has(sp)) return lumT.get(sp)!; const d = sp.getContext('2d')!.getImageData(0, 0, sp.width, sp.height).data; let R1 = 0, G1 = 0, B1 = 0, a = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) { R1 += d[i]; G1 += d[i + 1]; B1 += d[i + 2]; a++ } const v = a ? lumLin(R1 / a, G1 / a, B1 / a) : 0; lumT.set(sp, v); return v }
   // le maschere con cui uno strato si rivela: punti che crescono (il retino), una tendina, uno strappo di carta
   const mTmp = new Map<number, HTMLCanvasElement>()
   const dirDi = (n: Nodo) => { const d = ['alto', 'sinistra', 'basso', 'destra'], k = (d.indexOf(scena.strati?.dir ?? 'basso') + (scena.rango?.get(n.id)?.k ?? 0)) % 4; return d[k] }
@@ -899,7 +969,7 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       if (n.ruolo !== 'fondo' && n.ruolo !== 'testo' && t >= br.cambio && t < br.cambio + beat * 4) {
         const ts = br.cambio + ((rango.get(n.id) ?? 0) % 8) * beat / 4, u = t - ts
         // a strati: sul cambio la tavola si rifà, strato per strato, sui sedicesimi
-        if (scena.strati && !n.vivo && s.rivela !== undefined && n.rivela && ['retino', 'tendina', 'strappo'].includes(n.rivela)) s.rivela = Math.min(s.rivela, u < 0 ? 0 : clamp(u / beat))
+        if (scena.strati && !n.vivo && s.rivela !== undefined && n.rivela && ['retino', 'tendina', 'strappo'].includes(n.rivela)) { if ((scena.rango?.get(n.id)?.k ?? 0) % 2 === 1) s.rivela = Math.min(s.rivela, 0.2 + 0.8 * (u < 0 ? 0 : clamp(u / beat))) } // si rifà metà della tavola, a strati alterni: mai il vuoto
         else if (P.cambio === 'sboccia' && !n.vivo) { const m = u < 0 ? 0 : molla(u, 16, 0.32); s.sc *= m; s.rot += (1 - m) * 0.4 }
         if (P.cambio === 'ricresce' && n.vivo) s.crescita = Math.min(s.crescita ?? 1, clamp(u / (beat * 2)))
         if (P.cambio === 'muta' && n.vivo) s.fase = (s.fase ?? 0) + 0.5 * clamp(u / beat)
@@ -908,6 +978,26 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
       if (s.alpha <= 0.002 || s.sc <= 0.002) continue
       // indietro se passa sotto un testo
       if (n.ruolo !== 'fondo' && n.ruolo !== 'testo' && sotto.length) { const x0 = n.x + s.dx - n.w * s.sc / 2, y0 = n.y + s.dy - n.h * s.sc / 2, x1 = x0 + n.w * s.sc, y1 = y0 + n.h * s.sc; const ov = sotto.reduce((a, b) => a + Math.max(0, Math.min(x1, b.x1) - Math.max(x0, b.x0)) * Math.max(0, Math.min(y1, b.y1) - Math.max(y0, b.y0)), 0) / Math.max(1, (x1 - x0) * (y1 - y0)); if (ov > 0.05) s.alpha *= 1 - 0.65 * Math.min(1, ov * 2) }
+      // il testo da leggere: prima di posarlo si guarda cosa c'è sotto la sua scatola; se più di un pixel su sei non gli fa
+      // contrasto (sotto 3:1), si scrive in contrappunto (scuro dove sotto è chiaro, chiaro dove è scuro), senza aloni
+      if (n.ruolo === 'testo' && n.sprite && s.alpha > 0.05) {
+        const w = n.w * s.sc, h = n.h * s.sc, x0 = n.x + s.dx - w / 2, y0 = n.y + s.dy - h / 2
+        const bx = Math.max(0, Math.floor(x0)), by = Math.max(0, Math.floor(y0)), bw = Math.min(W - bx, Math.ceil(w)), bh = Math.min(H - by, Math.ceil(h))
+        if (bw > 2 && bh > 2) {
+          const lt = lumTesto(n.sprite), d = g.getImageData(bx, by, bw, bh).data
+          let cattivi = 0, tot = 0
+          const soglia = h >= 50 ? 3 : 4.5
+          for (let i = 0; i < d.length; i += 4 * 5) { const lb = lumLin(d[i], d[i + 1], d[i + 2]); const cr = (Math.max(lt, lb) + 0.05) / (Math.min(lt, lb) + 0.05); tot++; if (cr < soglia) cattivi++ }
+          const frac = cattivi / Math.max(1, tot)
+          if (s.alpha > 0.5) { leggi.campioni++; leggi.somma += frac; leggi.peggiore = Math.max(leggi.peggiore, frac) }
+          if (frac > 0.16 && s.alpha > 0.3) {
+            leggi.salvati++
+            const sp = n.sprite
+            contrappunto(q => { q.globalAlpha = clamp(s.alpha); q.drawImage(sp, x0, y0, w, h) })
+            continue
+          }
+        }
+      }
       g.save()
       g.globalAlpha = clamp(s.alpha); g.globalCompositeOperation = n.blend
       if (n.linea) {
@@ -946,5 +1036,6 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
   if (errore) return null
   muxer.finalize()
   o.copertina?.(copertina.ms)
+  o.leggibilita?.({ media: leggi.campioni ? leggi.somma / leggi.campioni : 0, peggiore: leggi.peggiore, salvati: leggi.salvati, campioni: leggi.campioni })
   return new Blob([muxer.target.buffer], { type: 'video/mp4' })
 }

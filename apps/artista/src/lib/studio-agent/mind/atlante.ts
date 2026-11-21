@@ -39,9 +39,10 @@ import type { Sogg } from './scena'
 import { disegnaGeneratore, ensureOfficina, generatoreById, scriviGeneratore } from './officina'
 import type { Features } from '../core/types'
 import type { Deduzione } from '../voice/scrittura'
+import { disegnaMacchia, macchiaDa, segnoBocciato, type Macchia } from '../hands/macchia'
 
 export type Rel = 'contro' | 'causa' | 'dentro' | 'identita' | 'diventa' | 'accanto'
-export interface Motivo { forma: Sogg | 'ricetta' | 'codice'; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
+export interface Motivo { forma: Sogg | 'ricetta' | 'codice' | 'macchia'; macchia?: Macchia; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
 export interface Concetto { word: string; motivo?: Motivo; frasi: number; usi: number; ultima: number }
 export interface Frase { t: string; fonte: string; nomi: string[]; day: number; usata?: number; rel?: Rel }
 export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita' | 'deduce'; riuscita?: number }
@@ -249,9 +250,13 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   const sh = shapeOf(w)
   const a = anchorOf(w)
   const trama = a?.feature === 'linee' || a?.feature === 'orizzontali' ? 'righe' : a?.feature === 'punti' || a?.feature === 'elementi' ? 'punti' : a?.feature === 'vuoto' ? 'contorno' : a?.feature === 'complessita' ? 'tratteggio' : pick(r, ['pieno', 'pieno', 'righe', 'punti', 'tratteggio', 'contorno'] as const)
-  const pool = TEXTLESS()
-  // niente forma nota: a volte scrive un generatore suo per questo concetto
-  if (!sh && r() < 0.65) {
+  const pool = TEXTLESS().filter(x => x.id !== 'simbolo')
+  // niente forma nota: la macchia (inchiostro, caffè, muffa) è la sua materia di base; a volte un generatore suo
+  if (!sh && r() < 0.55) {
+    c.motivo = { forma: 'macchia', macchia: macchiaDa(Math.floor(r() * 1e9)), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+    return c.motivo
+  }
+  if (!sh && r() < 0.6) {
     const vuole: Features = {}
     if (a?.feature) vuole[a.feature] = (a.dir ?? 1) > 0 ? 0.7 : 0.15
     const g = scriviGeneratore(st, r, w, vuole)
@@ -267,6 +272,7 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
 let ST: AgentState | null = null
 async function disegnaMotivo(m: Motivo, t: Tone, q: number, override?: string): Promise<HTMLCanvasElement> {
   const color = override ?? (m.colore === 'acc' ? t.acc : t.ink)
+  if (m.forma === 'macchia') return disegnaMacchia(m.macchia ?? macchiaDa(m.seed), color)
   if (m.forma === 'codice' && ST) {
     const g = generatoreById(ST, m.gen)
     if (g) return disegnaGeneratore(ST, g, 600, color, null)
@@ -295,6 +301,8 @@ async function disegnaMotivo(m: Motivo, t: Tone, q: number, override?: string): 
       case 'punti': for (let i = 0; i < 160; i++) { const an = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * R; const rr = 3 + rnd() * 9; g.moveTo(Math.cos(an) * d + rr, Math.sin(an) * d); g.arc(Math.cos(an) * d, Math.sin(an) * d, rr, 0, Math.PI * 2) } break
     }
   }
+  // un rettangolo pieno di un colore solo non è un segno: copre e basta. Rettangoli e colonne hanno sempre una trama
+  if ((m.forma === 'rettangolo' || m.forma === 'colonna') && m.trama === 'pieno') m = { ...m, trama: 'righe' }
   const lineare = m.forma === 'onde' || m.forma === 'traccia'
   g.fillStyle = g.strokeStyle = color
   if (lineare) { g.lineWidth = m.forma === 'traccia' ? 22 : 9; g.lineCap = 'round'; path(); g.stroke(); return cv }
@@ -343,20 +351,18 @@ export function tavolozza(t: Tone, r: Rnd, scelte?: Armonia[]): { colori: string
 /** un campo di colore: sfumatura o blocchi, fusi con un metodo che cambia il colore sotto */
 export function campoColore(s: Sheet, r: Rnd, col: string[]): Layer {
   const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
-  if (r() < 0.6) {
+  if (r() < 0.6 || !s.layers.some(l => l.kind === 'motivo')) {
     const radiale = r() < 0.4
     const gr = radiale ? g.createRadialGradient(s.W * range(r, 0.2, 0.8), s.H * range(r, 0.2, 0.8), 0, s.W / 2, s.H / 2, s.H * 0.8)
       : (() => { const a = r() * Math.PI; return g.createLinearGradient(s.W / 2 - Math.cos(a) * s.W, s.H / 2 - Math.sin(a) * s.H, s.W / 2 + Math.cos(a) * s.W, s.H / 2 + Math.sin(a) * s.H) })()
     gr.addColorStop(0, pick(r, col)); gr.addColorStop(range(r, 0.35, 0.65), pick(r, col)); gr.addColorStop(1, pick(r, col))
     g.fillStyle = gr; g.fillRect(0, 0, s.W, s.H)
-  } else {
-    for (let i = 0; i < 2 + Math.floor(r() * 3); i++) {
-      g.fillStyle = pick(r, col)
-      g.save(); g.translate(s.W * r(), s.H * r()); g.rotate(r() < 0.5 ? 0 : (r() - 0.5) * 1.2)
-      if (r() < 0.5) g.fillRect(-s.W * 0.3, -s.H * 0.15, s.W * range(r, 0.3, 0.9), s.H * range(r, 0.15, 0.5))
-      else { g.beginPath(); g.arc(0, 0, s.W * range(r, 0.15, 0.4), 0, Math.PI * 2); g.fill() }
-      g.restore()
-    }
+  } else if (s.layers.some(l => l.kind === 'motivo')) {
+    // non blocchi a caso: l'eco dei suoi segni, ingranditi e sfocati, fa da campo (il colore nasce da quello che c'è)
+    const m = s.layers.filter(l => l.kind === 'motivo')
+    g.filter = `blur(${Math.round(s.W * 0.03)}px)`
+    for (const l of m.slice(0, 3)) { g.fillStyle = pick(r, col); const k = range(r, 1.8, 3); const side = Math.min(s.W, s.H) * l.scale * k, kk = side / Math.max(l.canvas.width, l.canvas.height); const sil = newCanvas(l.canvas.width, l.canvas.height), q = sil.getContext('2d')!; q.drawImage(l.canvas, 0, 0); q.globalCompositeOperation = 'source-in'; q.fillStyle = g.fillStyle as string; q.fillRect(0, 0, sil.width, sil.height); g.save(); g.translate(l.x * s.W, l.y * s.H); g.rotate(l.rot); g.scale(kk, kk); g.drawImage(sil, -sil.width / 2, -sil.height / 2); g.restore() }
+    g.filter = 'none'
   }
   return { ...fullLayer(s, lid(), 'colore', cv, pick(r, ['multiply', 'overlay', 'color', 'hue', 'soft-light', 'hard-light', 'screen', 'difference', 'color-burn']) as GlobalCompositeOperation, range(r, 0.45, 0.95)) }
 }
@@ -427,7 +433,19 @@ const lid = () => `m${Math.random().toString(36).slice(2, 9)}`
 /** il segno di un concetto, disegnato netto (per pagine e diapositive) */
 export async function segnoDi(st: AgentState, r: Rnd, w: string, t: Tone, ctx: ToolCtx): Promise<HTMLCanvasElement> {
   ST = st
-  return disegnaMotivo(motivoDi(st, r, w), t, ctx.quality)
+  return segnoGiudicato(motivoDi(st, r, w), t, ctx.quality)
+}
+/** il segno passa dal suo occhio prima di entrare in tavola */
+async function segnoGiudicato(m: Motivo, t: Tone, q: number, override?: string): Promise<HTMLCanvasElement> {
+  // i simboli da repertorio (pugnali, emblemi) non sono segni suoi: diventano macchia
+  if (m.forma === 'ricetta' && m.recipe === 'simbolo') Object.assign(m, { forma: 'macchia', macchia: macchiaDa(m.seed) })
+  const cv = await disegnaMotivo(m, t, q, override)
+  if (m.forma === 'macchia') return cv
+  // se ripete, se è un anello vuoto, se non ha massa, il segno rinasce come macchia (e resta così)
+  const no = segnoBocciato(cv)
+  if (!no) return cv
+  Object.assign(m, { forma: 'macchia', macchia: macchiaDa(m.seed), forza: 0.4, bocciato: no })
+  return disegnaMotivo(m, t, q, override)
 }
 
 export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: Sheet, ctx: ToolCtx): Promise<Messa> {
@@ -473,7 +491,7 @@ export async function mettiInScena(st: AgentState, r: Rnd, e: Enunciato, start: 
   const colA = mA.colore === 'acc' ? colori[1] : armonia !== 'tono' && r() < 0.4 ? colori[2] : colori[0]
   const colB = mB.colore === 'acc' ? colori[1] : armonia !== 'tono' && r() < 0.4 ? colori[3] ?? colori[0] : colori[0]
   const rendi = (c: HTMLCanvasElement, col: string) => (stile === 'pennello' ? pennella(c, col, r, colori) : stile === 'maschera' ? maschera(c, r, ctx, colori) : c)
-  const [bA, bB] = await Promise.all([disegnaMotivo(mA, t, ctx.quality, colA), disegnaMotivo(mB, t, ctx.quality, colB)])
+  const [bA, bB] = await Promise.all([segnoGiudicato(mA, t, ctx.quality, colA), segnoGiudicato(mB, t, ctx.quality, colB)])
   const cA = rendi(bA, colA), cB = stile === 'maschera' && r() < 0.5 ? bB : rendi(bB, colB)
   passi.push({ tool: 'scena:stile', params: { stile, armonia }, kept: true, delta: 0 })
   const lay = (cv: HTMLCanvasElement, x: number, y: number, scale: number, extra: Partial<{ alpha: number; blend: GlobalCompositeOperation; rot: number }> = {}) => {

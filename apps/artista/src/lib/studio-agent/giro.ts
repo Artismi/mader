@@ -10,6 +10,7 @@ import { propostaDi, type Forma } from './mind/curatore'
 import { rng } from './core/rng'
 import { esito, type TipoD } from './voice/conclusioni'
 import { premiaStile, type Gusto } from './suono/beat'
+import { impara } from './eyes/gusto'
 import { posDi } from './reader/concepts'
 import { GENERICI } from './mind/pensiero'
 import { cura, getProfilo } from './mind/profilo'
@@ -281,6 +282,7 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
   const voto = (m: (typeof dati.media)[number]) => { const I = m.insights, portata = Math.max(20, I.reach ?? 0); return ((m.like ?? 0) + 2 * (m.commenti ?? 0) + 3 * (I.saved ?? 0) + 3 * (I.shares ?? 0) + 0.02 * (I.views ?? 0)) / portata }
   for (const p of A.pubblicati) { const m = per.get(p.ig); if (m) p.voto = voto(m) }
   const note: string[] = []
+  let opere: Work[] | null = null
   // il premio arriva quando i numeri si sono assestati (dopo 8 ore), una volta sola, rispetto alla media della stessa forma
   for (const p of A.pubblicati) {
     if (p.premiato || p.voto === undefined || ore(p.quando) < 8) continue
@@ -295,6 +297,8 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
     const G = (st as AgentState & { beat?: Gusto }).beat
     if (p.stile && G) premiaStile(G, p.stile, Math.max(0, Math.min(1, (z + 2.5) / 5)))
     A.pesiForma = { ...(A.pesiForma ?? {}), [p.forma]: Math.max(0.5, Math.min(2, ((A.pesiForma ?? {})[p.forma] ?? 1) * Math.exp(0.1 * z))) }
+    // il gusto visivo impara da come sono arrivate le tavole pubblicate (le misure di ognuna, con il loro esito)
+    if (p.works?.length) { opere ??= await T.listWorks(); for (const id of p.works) { const w = opere.find(x => x.id === id); if (w?.visual?.features) impara(st, w.visual.features, (z + 2.5) / 5) } }
     p.premiato = true
     if (Math.abs(z) > 1) note.push(`${p.forma === 'reel' ? 'il reel' : p.forma === 'storia' ? 'la storia' : 'il carosello'} del ${new Date(p.quando).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} ${z > 0 ? 'è arrivato più del solito' : 'è passato quasi inosservato'}`)
   }

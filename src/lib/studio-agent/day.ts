@@ -706,7 +706,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   let migliore: { audio: AudioBuffer; brano: Awaited<ReturnType<typeof suonaBeat>>['brano']; voto: number; stile: ReturnType<typeof scegliStile>; orecchio: ReturnType<typeof ascoltaBeat> } | null = null
   for (let k = 0; k < 3; k++) {
     const stile = scegliStile(gusto, r, st.day)
-    const b = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(15, Math.min(40, servono)), memoria: gusto.pattern })
+    const b = await suonaBeat(stile, { seme: Math.floor(r() * 1e9), parola: t.parola, secondi: Math.max(10, Math.min(40, servono)), memoria: gusto.pattern })
     const o = ascoltaBeat(b.audio, b.brano.cassa, b.brano.rullante)
     premiaStile(gusto, stile.id, Math.max(0, Math.min(1, (o.voto + 1) / 3)))
     if (!migliore || o.voto > migliore.voto) migliore = { ...b, voto: o.voto, stile, orecchio: o }
@@ -728,7 +728,9 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   // niente testi sovrapposti: le parole del reel sono quelle delle tavole, al loro posto, nel loro carattere (la domanda va nella didascalia)
   void conImg
   let copertinaMs = 0
-  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, copertina: ms => { copertinaMs = ms } })
+  let legg = { media: 0, peggiore: 0, salvati: 0, campioni: 0 }
+  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, copertina: ms => { copertinaMs = ms }, leggibilita: x => { legg = x } })
+  log(`Reel: leggibilità dei testi — pixel senza contrasto sotto le parole ${(legg.media * 100).toFixed(1)}% in media, ${(legg.peggiore * 100).toFixed(1)}% nel fotogramma peggiore; scritti in contrappunto ${legg.salvati} volte su ${legg.campioni}.`)
   if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
   // memoria del movimento: la coreografia scelta, e gli accoppiamenti che hanno funzionato si rafforzano
   M.memoria = [...M.memoria, ev.coreografia].slice(-20)

@@ -8,13 +8,14 @@
  */
 import type { AgentState, Features, Gesture, Intention, ToolSense } from '../core/types'
 import { weighted, type Rnd } from '../core/rng'
-import { flatten, type Sheet } from '../hands/sheet'
+import { flatten, rettangoloVuoto, type Sheet } from '../hands/sheet'
 import { TOOLS, type Tool, type ToolCtx } from '../hands/tools'
 import { applica } from '../hands/tools'
 import { measure, rasterize } from '../eyes/measure'
 import { patches } from '../eyes/visual-words'
 import { flaws as flawsOf, readability } from '../eyes/judgement'
 import { judge } from './criteria'
+import { gusto } from '../eyes/gusto'
 import { expectedProgress, novelty, wundt } from './taste'
 import type { Mood } from '../core/types'
 
@@ -35,24 +36,34 @@ export function look(st: AgentState, s: Sheet, intention: Intention): Look {
   const alive = Math.min(1, f.densita * 4 + f.bordi * 2)
   // struttura: un elemento che comanda (Kandinsky), un vuoto che lavora, un baricentro sui terzi (Arnheim)
   const dominance = Math.max(f.punti ?? 0, f.linee ?? 0, f.superfici ?? 0)
-  const vuotoBuono = f.vuoto > 0.12 && f.vuoto < 0.65 ? 1 : 0.35
+  // il vuoto lavora finché è poco: oltre un terzo della tavola, nelle sue tavole generiche, è niente
+  const vuotoBuono = f.vuoto > 0.06 && f.vuoto < 0.3 ? 1 : f.vuoto < 0.45 ? 0.6 : 0.3
   // la stratificazione: una materia (retino, grana, duotono, fusione) che lavora sopra una figura vale; tante figure appoggiate una accanto all'altra (il mucchio) no
   const MAT = /retino|punti|grana|duotono|sfasa|materia|caleido|ornato/, TXT = /testo|tipografia|etichette|firma|piastra/
   const nMat = s.layers.filter(l => MAT.test(l.kind) || (l.blend !== 'source-over' && !TXT.test(l.kind))).length
   const nFig = s.layers.filter(l => !MAT.test(l.kind) && !TXT.test(l.kind) && l.blend === 'source-over' && l.scale < 0.99).length
   const strati = Math.min(1, nMat / 2) * (nFig >= 1 ? 1 : 0.5) - Math.max(0, nFig - 4) * 0.12
+  // i rettangoli vuoti (di un colore solo, che riempiono il loro riquadro) coprono col niente: valgono solo se sono il protagonista
+  const figureL = s.layers.filter(l => !MAT.test(l.kind) && !TXT.test(l.kind) && l.scale < 0.99)
+  const grande = figureL.reduce((m, l) => (l.scale > (m?.scale ?? 0) ? l : m), undefined as typeof figureL[0] | undefined)
+  const vuoti = figureL.filter(l => l !== grande && rettangoloVuoto(l.canvas)).length + s.layers.filter(l => l.scale >= 0.99 && l.kind === 'grafico' && rettangoloVuoto(l.canvas)).length
+  const noiseVuoti = Math.min(0.5, vuoti * 0.15)
   const struct = 0.27 * dominance + 0.17 * vuotoBuono + 0.17 * f.terzi + 0.27 * (f.forma ?? 0.5) + 0.12 * strati
   // rumore: tanti elementi diversi, pelle troppo fitta, nessuno che comanda
   const noise = Math.max(0, Math.min(1, Math.max(0.45 * f.elementi + 0.35 * f.complessita + 0.25 * f.entropia - 0.5 * dominance, (f.rumore ?? 0) * 1.3)))
   const noisePenalty = noise > 0.45 ? (noise - 0.45) / 0.55 : 0
-  const base = 0.3 * fit + 0.15 * crit + 0.2 * won + 0.15 * prog + 0.2 * struct
+  // la materia (il suo gusto, che impara): bordi, tinte, poco vuoto. Prima mancava: l'interesse premiava solo novità e progresso
+  const materia = gusto(st, f) * Math.min(1.5, st.voices.materia ?? 1)
+  const base = 0.25 * fit + 0.12 * crit + 0.16 * won + 0.12 * prog + 0.17 * struct + 0.18 * materia
   // difetti che chiunque vedrebbe (vuota, illeggibile, pattern a caso…): pesano quanto la voce "pubblico"
   const read = readability(s)
   const fl = flawsOf(f, read, fit, s.layers.map(l => l.kind))
   const care = Math.min(1.5, st.voices.pubblico ?? 1)
   const flawPenalty = Math.min(0.45, fl.reduce((a, x) => a + x.severity, 0) * 0.12 * care)
-  const score = base * (0.4 + 0.6 * alive) * (1 - 0.6 * noisePenalty) * (1 - flawPenalty)
-  return { f, words, ps, score, parts: { intenzione: fit, criteri: crit, novita: nov, wundt: won, progresso: prog, struttura: struct, rumore: noise, leggibilita: read.leggibilita } }
+  // piatta: pochi bordi, poche tinte e un po' di vuoto (12 delle 29 tavole generiche, 1 delle 24 belle): campiture e niente materia
+  const piatta = f.bordi < 0.4 && f.tinte < 0.18 && f.vuoto > 0.2 ? Math.min(0.3, (0.4 - f.bordi) + (0.18 - f.tinte)) : 0
+  const score = base * (0.4 + 0.6 * alive) * (1 - 0.6 * noisePenalty) * (1 - flawPenalty) * (1 - noiseVuoti) * (1 - piatta)
+  return { f, words, ps, score, parts: { intenzione: fit, criteri: crit, novita: nov, wundt: won, progresso: prog, struttura: struct, rumore: noise, leggibilita: read.leggibilita, materia } }
 }
 
 function histogramQuick(cb: number[][], ps: number[][]) {

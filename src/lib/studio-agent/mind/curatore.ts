@@ -7,6 +7,7 @@
  */
 import type { AgentState, Work } from '../core/types'
 import { getEpisodi } from './episodio'
+import { gusto } from '../eyes/gusto'
 import { posDi, verbi } from '../reader/concepts'
 
 export interface Discorso { tema: string; ids: string[]; giorni: number[]; voto: number; perche: string; domanda?: string; conclusione?: string }
@@ -22,7 +23,11 @@ const parole = (t: string) => t.toLowerCase().replace(/^\s*\d+\/\d+\s*·\s*/, ''
 const coseno = (a: number[], b: number[]) => { let d = 0, na = 0, nb = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] } return na && nb ? d / Math.sqrt(na * nb) : 0 }
 
 /** cerca il discorso più forte che passa per le tavole di oggi */
+/** quanto vale una tavola per il racconto: l'interesse (novità, progresso) e il gusto (la materia che ha) */
+let ST_C: AgentState | null = null
+const valore = (w: Work) => 0.6 * w.interest + 0.4 * (ST_C && w.visual?.features ? gusto(ST_C, w.visual.features) : 0.5)
 export function cerca(st: AgentState, tutte: Work[], nelCassetto: Set<string>, oggi: string[]): Discorso | null {
+  ST_C = st
   const C = memoriaCuratore(st)
   const eps = getEpisodi(st)
   const epDi = new Map<string, (typeof eps)[number]>(); for (const e of eps) for (const id of e.schede) epDi.set(id, e)
@@ -55,7 +60,7 @@ export function cerca(st: AgentState, tutte: Work[], nelCassetto: Set<string>, o
     // un solo immaginario: quanto si somigliano le tavole (parole visive)
     let sim = 0, n = 0; for (let i = 0; i < G.length; i++) for (let j = i + 1; j < G.length; j++) { sim += coseno(G[i].visual.words, G[j].visual.words); n++ }
     const coerenza = n ? sim / n : 0
-    const interesse = G.reduce((a, w) => a + w.interest, 0) / G.length
+    const interesse = G.reduce((a, w) => a + valore(w), 0) / G.length
     const giaDetto = C.raccontati.some(x => radice(x.tema) === tema0 && x.day > st.day - 10) ? 1.2 : 0
     // e già raccontato anche se cambia la parola: quanta parte di queste tavole era già in un reel recente
     const giaVisti = new Set(C.raccontati.filter(x => x.day > st.day - 14).flatMap(x => x.ids))
@@ -69,9 +74,9 @@ export function cerca(st: AgentState, tutte: Work[], nelCassetto: Set<string>, o
     if (meglio && voto <= meglio.voto) continue
     // la scelta delle tavole: almeno una per giornata, poi le più interessanti; quelle di oggi ci sono; massimo sei
     const scelte: Work[] = []
-    for (const d of giorni) { const w = G.filter(x => x.day === d).sort((a, b) => (conTema.includes(b) ? 1 : 0) - (conTema.includes(a) ? 1 : 0) || b.interest - a.interest)[0]; if (w) scelte.push(w) }
-    for (const w of G.filter(x => oggi.includes(x.id)).sort((a, b) => b.interest - a.interest).slice(0, 1)) if (!scelte.includes(w)) scelte.push(w)
-    for (const w of G.slice().sort((a, b) => b.interest - a.interest)) if (scelte.length < 6 && !scelte.includes(w)) scelte.push(w)
+    for (const d of giorni) { const w = G.filter(x => x.day === d).sort((a, b) => (conTema.includes(b) ? 1 : 0) - (conTema.includes(a) ? 1 : 0) || valore(b) - valore(a))[0]; if (w) scelte.push(w) }
+    for (const w of G.filter(x => oggi.includes(x.id)).sort((a, b) => valore(b) - valore(a)).slice(0, 1)) if (!scelte.includes(w)) scelte.push(w)
+    for (const w of G.slice().sort((a, b) => valore(b) - valore(a))) if (scelte.length < 6 && !scelte.includes(w)) scelte.push(w)
     // l'ordine del racconto: il tempo del pensiero (giorno, poi posizione nell'episodio)
     scelte.splice(6); scelte.sort((a, b) => a.day - b.day || (a.episodio?.i ?? 0) - (b.episodio?.i ?? 0))
     const ultimo = epDi.get(scelte[scelte.length - 1].id), primo = epDi.get(scelte[0].id)

@@ -90,3 +90,22 @@ export function sfuma(src: HTMLCanvasElement, frac = 0.12): HTMLCanvasElement {
   g.fillStyle = gy; g.fillRect(0, 0, W, H)
   return c
 }
+
+/** un rettangolo vuoto: una sagoma di un colore solo che riempie il suo riquadro (copre e non dice niente) */
+const vuoti = new WeakMap<HTMLCanvasElement, boolean>()
+export function rettangoloVuoto(cv: HTMLCanvasElement): boolean {
+  const v = vuoti.get(cv); if (v !== undefined) return v
+  const N = 48, t = newCanvas(N, N), g = t.getContext('2d', { willReadFrequently: true })!; g.drawImage(cv, 0, 0, N, N)
+  const d = g.getImageData(0, 0, N, N).data
+  let n = 0, x0 = N, y0 = N, x1 = -1, y1 = -1, m = [0, 0, 0], m2 = [0, 0, 0]
+  for (let i = 0; i < N * N; i++) if (d[i * 4 + 3] > 60) { n++; const x = i % N, y = (i / N) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); for (let k = 0; k < 3; k++) { m[k] += d[i * 4 + k]; m2[k] += d[i * 4 + k] ** 2 } }
+  let r = false
+  if (n > N * N * 0.01) {
+    const fill = n / ((x1 - x0 + 1) * (y1 - y0 + 1)), std = [0, 1, 2].reduce((a, k) => a + Math.sqrt(Math.max(0, m2[k] / n - (m[k] / n) ** 2)), 0) / 3
+    // anche più rettangoli piatti (barre): righe e colonne del riquadro tutte piene o tutte vuote
+    let netto = 0, tot = 0
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { tot++; const a = d[(y * N + x) * 4 + 3] > 60, dx = x < x1 ? d[(y * N + x + 1) * 4 + 3] > 60 : a, dy = y < y1 ? d[((y + 1) * N + x) * 4 + 3] > 60 : a; if (a === dx && a === dy) netto++ }
+    r = std < 14 && (fill > 0.85 || (netto / tot > 0.93 && fill > 0.3))
+  }
+  vuoti.set(cv, r); return r
+}

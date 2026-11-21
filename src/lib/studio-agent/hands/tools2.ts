@@ -180,8 +180,9 @@ const tipografia: Tool = {
 
 const grafico: Tool = {
   id: 'grafico', label: 'Grafico', nature: 'struttura', pushes: { verticali: 0.2, linee: 0.1 },
-  available: (_s, c) => !!c.dati?.length,
-  propose: (_s, c) => ({ tipo: pick(c.r, ['barre', 'punti', 'radiale']), colore: pick(c.r, colori(c)), x: range(c.r, 0.1, 0.25), y: range(c.r, 0.15, 0.5), w: range(c.r, 0.5, 0.8), h: range(c.r, 0.2, 0.4) }),
+  // un grafico con due barre non dice niente: solo se i dati bastano a mostrare un andamento
+  available: (_s, c) => (c.dati?.length ?? 0) >= 5,
+  propose: (_s, c) => ({ tipo: pick(c.r, (c.dati?.length ?? 0) >= 8 ? ['barre', 'punti', 'radiale'] : ['punti', 'radiale']), colore: pick(c.r, colori(c)), x: range(c.r, 0.1, 0.25), y: range(c.r, 0.15, 0.5), w: range(c.r, 0.5, 0.8), h: range(c.r, 0.2, 0.4) }),
   apply: async (s, p, c) => {
     const ds = (c.dati ?? []).slice(0, 12)
     if (!ds.length) return s
@@ -209,10 +210,20 @@ const grafico: Tool = {
   },
 }
 
+/** quanto una sagoma è piena: pixel opachi sul rettangolo che li contiene */
+const corpi = new WeakMap<HTMLCanvasElement, number>()
+function corpo(cv: HTMLCanvasElement) {
+  const v = corpi.get(cv); if (v !== undefined) return v
+  const t = newCanvas(48, 48), g = t.getContext('2d')!; g.drawImage(cv, 0, 0, 48, 48)
+  const d = g.getImageData(0, 0, 48, 48).data; let n = 0, x0 = 48, y0 = 48, x1 = -1, y1 = -1
+  for (let i = 0; i < 48 * 48; i++) if (d[i * 4 + 3] > 60) { n++; const x = i % 48, y = (i / 48) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+  const r = n ? n / ((x1 - x0 + 1) * (y1 - y0 + 1)) : 0; corpi.set(cv, r); return r
+}
 const ombra: Tool = {
   id: 'ombra', label: 'Ombra / estrusione', nature: 'struttura', pushes: { contrasto: 0.1, superfici: 0.1 },
-  available: s => liberi(s).some(l => l.scale < 1.2),
-  propose: (s, c) => ({ layer: pick(c.r, liberi(s).filter(l => l.scale < 1.2).length ? liberi(s).filter(l => l.scale < 1.2) : liberi(s)).id, passi: Math.round(range(c.r, 1, 14)), dx: range(c.r, -0.01, 0.01), dy: range(c.r, 0.003, 0.012), colore: pick(c.r, [c.tone.ink, '#000000', ...colori(c)]) }),
+  // l'estrusione ha senso su una sagoma piena; su un disegno a linee sottili fa solo poltiglia
+  available: s => liberi(s).some(l => l.scale < 1.2 && corpo(l.canvas) > 0.18),
+  propose: (s, c) => ({ layer: pick(c.r, liberi(s).filter(l => l.scale < 1.2 && corpo(l.canvas) > 0.18).length ? liberi(s).filter(l => l.scale < 1.2 && corpo(l.canvas) > 0.18) : liberi(s)).id, passi: Math.round(range(c.r, 1, 8)), dx: range(c.r, -0.01, 0.01), dy: range(c.r, 0.003, 0.012), colore: pick(c.r, [c.tone.ink, '#000000', ...colori(c)]) }),
   apply: async (s, p) => {
     const i = s.layers.findIndex(x => x.id === p.layer)
     if (i < 0) return s
