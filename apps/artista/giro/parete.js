@@ -14,14 +14,16 @@
   for (let i = 0; i < 256; i++) perm[i + 256] = perm[i]
   const fade = t => t * t * (3 - 2 * t)
   const h = (x, y) => perm[(perm[x & 255] + y) & 511] / 255
-  function rumore(x, y) { const X = Math.floor(x), Y = Math.floor(y), fx = fade(x - X), fy = fade(y - Y); const a = h(X, Y), b = h(X + 1, Y), c = h(X, Y + 1), d = h(X + 1, Y + 1); return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy }
+  function rumore0(x, y) { const X = Math.floor(x), Y = Math.floor(y), fx = fade(x - X), fy = fade(y - Y); const a = h(X, Y), b = h(X + 1, Y), c = h(X, Y + 1), d = h(X + 1, Y + 1); return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy }
+  // il campo si sposta appena quando si esplora la lavagna (parallasse): come guardare lo sfondo da un treno
+  const rumore = (x, y) => rumore0(x + ox * 0.002, y + oy * 0.002)
   const alfa = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})` }
 
   const fondo = P.ops.find(o => o.op === 'fondo')
   const campi = P.ops.filter(o => o.op === 'campo')
   const cv = document.getElementById('campo')
   const g = cv.getContext('2d')
-  let W = 0, H = 0, dpr = 1, energia = 0, bersaglio = 0, t0 = performance.now()
+  let W = 0, H = 0, dpr = 1, energia = 0, bersaglio = 0, t0 = performance.now(), ox = 0, oy = 0
   const stati = []
 
   function prepara() {
@@ -124,7 +126,38 @@
     }
   }
 
-  // ── i legami si tracciano una volta sola, quando entrano in vista ──
-  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visto'); io.unobserve(e.target) } }), { threshold: 0.2 })
-  document.querySelectorAll('.entra').forEach(el => io.observe(el))
+  // ── la lavagna: si esplora trascinando, si avvicina e si allontana, si torna al centro ──
+  const lav = document.getElementById('lavagna'), mondo = document.getElementById('mondo'), scala = document.getElementById('scala')
+  if (!lav || !mondo) return
+  const MW = mondo.offsetWidth, MH = mondo.offsetHeight
+  let zoom = Math.min(1, Math.max(0.35, innerWidth / 1400))
+  const applica = (z, px = lav.clientWidth / 2, py = lav.clientHeight / 2) => {
+    // tiene fermo il punto sotto il cursore (o il centro dello schermo) mentre cambia la scala
+    const wx = (lav.scrollLeft + px) / zoom, wy = (lav.scrollTop + py) / zoom
+    zoom = Math.max(0.15, Math.min(1.6, z))
+    mondo.style.transform = `scale(${zoom})`; scala.style.width = MW * zoom + 'px'; scala.style.height = MH * zoom + 'px'
+    lav.scrollLeft = wx * zoom - px; lav.scrollTop = wy * zoom - py
+  }
+  const casa = (liscio) => { const cx = +mondo.dataset.cx * zoom, cy = +mondo.dataset.cy * zoom; lav.scrollTo({ left: cx - lav.clientWidth / 2, top: cy - lav.clientHeight / 2, behavior: liscio && !lento ? 'smooth' : 'auto' }) }
+  applica(zoom); casa(false)
+  document.getElementById('piu').onclick = () => applica(zoom * 1.25)
+  document.getElementById('meno').onclick = () => applica(zoom / 1.25)
+  document.getElementById('casa').onclick = () => casa(true)
+  lav.addEventListener('wheel', e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); const b = lav.getBoundingClientRect(); applica(zoom * Math.exp(-e.deltaY * 0.0022), e.clientX - b.left, e.clientY - b.top) }, { passive: false })
+  addEventListener('keydown', e => { if (e.key === '+' || e.key === '=') applica(zoom * 1.2); else if (e.key === '-') applica(zoom / 1.2); else if (e.key === '0') casa(true) })
+  // trascinare col mouse (col dito si scorre già da sé)
+  let giu = null
+  lav.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' || e.button !== 0) return; giu = { x: e.clientX, y: e.clientY, l: lav.scrollLeft, t: lav.scrollTop, mosso: false } })
+  addEventListener('pointermove', e => { if (!giu) return; const dx = e.clientX - giu.x, dy = e.clientY - giu.y; if (!giu.mosso && Math.hypot(dx, dy) > 4) { giu.mosso = true; lav.classList.add('tira') } if (giu.mosso) { lav.scrollLeft = giu.l - dx; lav.scrollTop = giu.t - dy } })
+  addEventListener('pointerup', () => { if (giu?.mosso) setTimeout(() => lav.classList.remove('tira'), 0); giu = null })
+  lav.addEventListener('scroll', () => { ox = lav.scrollLeft / zoom; oy = lav.scrollTop / zoom }, { passive: true })
+  // le isole entrano quando le si raggiunge; passandoci sopra si accendono i loro fili
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visto'); io.unobserve(e.target) } }), { root: lav, threshold: 0.05 })
+  const fili = [...document.querySelectorAll('.filo')]
+  document.querySelectorAll('.isola').forEach(el => {
+    io.observe(el)
+    el.addEventListener('pointerenter', () => fili.forEach(f => f.classList.toggle('acceso', f.dataset.a === el.dataset.k || f.dataset.b === el.dataset.k)))
+    el.addEventListener('pointerleave', () => fili.forEach(f => f.classList.remove('acceso')))
+  })
+  lav.focus({ preventScroll: true })
 })()

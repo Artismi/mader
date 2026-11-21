@@ -175,7 +175,15 @@ export async function perIlSito() {
   }
 }
 
-export const memoria = { importa: T.importaMemoria, esporta: T.esportaMemoria }
+// la memoria passa da e verso il browser a pezzi: l'archivio in un messaggio, le tavole del cassetto una per volta (tutte insieme sforano)
+export const memoria = {
+  importa: T.importaMemoria,
+  esporta: (max?: number) => T.esportaMemoria(max, 0),
+  riponi: T.riponiFoglio,
+  prendi: T.prendiFoglio,
+  /** le tavole del cassetto da tenere: le 40 più recenti */
+  cassetto: async () => { const nel = new Set(await T.nelCassetto()); return (await T.listWorks()).filter(w => nel.has(w.id)).slice(0, 40).map(w => w.id) },
+}
 
 /** il brano intero di una sequenza (tutte le sezioni in fila), caricato sul server come WAV */
 export async function branoSequenza(epId: string) {

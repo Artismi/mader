@@ -151,6 +151,65 @@ export function codice(P) {
   }).join('\n')
 }
 
+// ── la lavagna: le cose che ha fatto, disposte da lui per vicinanza di senso ──────────────────────────
+const VUOTE = new Set('bensi quanto presente presenza essendo della delle dello degli dalla dalle dagli nella nelle negli sulla sulle sugli alla alle agli come cosa sono essere anche quando dove perché questo questa quello quella tutto tutti ogni loro forse niente stesso stessa altro altra prima dopo ancora sempre modo parte tipo volta fanno fatto lascia tiene tengo prova rima gesto stessa'.split(' '))
+// i concetti di un testo: le radici (per riconoscere «città» e «citta», «tempo» e «tempi») e la parola com'era, per il nome del filo
+const FORMA = new Map()
+const concettiDi = t => new Set(String(t ?? '').toLowerCase().split(/[^a-zàèéìòù]+/).filter(w => w.length >= 5).map(w => { const n = w.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); if (VUOTE.has(n)) return null; const k = n.replace(/[aeiou]$/, ''); if (!FORMA.has(k)) FORMA.set(k, w); return k }).filter(Boolean))
+const MISURE = { pila: [620, 760], orbita: [660, 660], fila: [0, 360], mosaico: [720, 0] }
+
+/** dispone le isole: chi condivide un concetto si avvicina (molle), tutti si respingono (niente sovrapposizioni), il nuovo sta al centro */
+export function mappa(s, img, P) {
+  let z = (P.seme ^ 0x9e3779b9) >>> 0
+  const r = () => { z = (Math.imul(z, 1664525) + 1013904223) >>> 0; return z / 4294967296 }
+  const uno = a => a[Math.floor(r() * a.length)]
+  const parola = P.ops.find(o => o.op === 'parola')?.testo ?? s.nome
+  const isole = []
+  isole.push({ tipo: 'parola', testo: parola, w: Math.max(520, parola.length * 90), h: 260, c: concettiDi(parola), fisso: true })
+  for (const e of (s.sequenze ?? []).slice(0, 14)) {
+    const ids = e.tavole.map(t => t.id).filter(id => img.has(id))
+    if (!ids.length) continue
+    const disp = ids.length <= 2 ? 'fila' : uno(['pila', 'pila', 'orbita', 'fila', 'mosaico'])
+    const n = Math.min(ids.length, disp === 'orbita' ? 8 : 7)
+    let [w, h] = MISURE[disp]
+    if (disp === 'fila') w = Math.min(n, 4) * 250 + 40
+    if (disp === 'mosaico') h = Math.ceil(n / 3) * 290 + 20
+    // ogni tanto il ragionamento disteso della sequenza, se c'è (un paragrafo lungo, non sempre)
+    const lungo = e.tavole.find(t => t.ruolo === 'conclusione' && String(t.testo ?? '').length > 380)
+    isole.push({ tipo: 'sequenza', e, ids: ids.slice(0, n), disp, w: w + 420, h: Math.max(h, 360), c: concettiDi(`${e.titolo} ${e.conclusione}`), giorno: e.giorno, paragrafo: lungo && r() < 0.35 ? lungo.testo : null })
+  }
+  // i pensieri sparsi: le tesi della visione, gli enunciati del quaderno
+  const frasi = [...new Set([...(s.visione?.tesi ?? []).slice(-4).map(t => t.testo), ...(s.diario ?? []).filter(x => x.tipo === 'quaderno').slice(0, 8).flatMap(x => [...String(x.testo).matchAll(/«([^«»]{20,220})»/g)].map(m => m[1]))])].slice(0, 6)
+  for (const f of frasi) isole.push({ tipo: 'frase', testo: f, w: 460, h: 120 + Math.ceil(f.length / 34) * 34, c: concettiDi(f) })
+  // cosa sta leggendo (solo i titoli: le parole degli altri restano là)
+  for (const l of (s.letture ?? []).filter(x => /^https?:/.test(x.url ?? '')).slice(0, 4)) isole.push({ tipo: 'lettura', l, w: 360, h: 110, c: concettiDi(l.titolo) })
+  isole.push({ tipo: 'codice', w: 640, h: 520, c: new Set() })
+  // i fili: due isole che condividono un concetto (la parola più rara tra quelle in comune fa da nome al filo)
+  const df = new Map(); for (const i of isole) for (const k of i.c) df.set(k, (df.get(k) ?? 0) + 1)
+  const fili = []
+  for (let a = 0; a < isole.length; a++) for (let b = a + 1; b < isole.length; b++) {
+    const com = [...isole[a].c].filter(k => isole[b].c.has(k) && df.get(k) <= Math.max(3, isole.length / 4))
+    if (com.length) fili.push({ a, b, peso: com.length, nome: FORMA.get(com.sort((x, y) => df.get(x) - df.get(y))[0]) ?? com[0] })
+  }
+  // le posizioni: una spirale per età (il nuovo vicino al centro), poi le molle e le spinte
+  isole.forEach((i, k) => { const ang = k * 2.39996 + r() * 0.6, rad = k ? 700 + Math.sqrt(k) * 620 : 0; i.x = Math.cos(ang) * rad; i.y = Math.sin(ang) * rad * 0.75 })
+  for (let it = 0; it < 420; it++) {
+    const caldo = 1 - it / 420
+    for (const f of fili) { const A = isole[f.a], B = isole[f.b], dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1, vuole = (A.w + B.w) / 2 + 160; const k = 0.012 * Math.min(3, f.peso) * (d - vuole) / d; if (!A.fisso) { A.x += dx * k; A.y += dy * k } if (!B.fisso) { B.x -= dx * k; B.y -= dy * k } }
+    for (let a = 0; a < isole.length; a++) for (let b = a + 1; b < isole.length; b++) {
+      const A = isole[a], B = isole[b], ox = (A.w + B.w) / 2 + 160 - Math.abs(A.x - B.x), oy = (A.h + B.h) / 2 + 160 - Math.abs(A.y - B.y)
+      if (ox > 0 && oy > 0) { const sx = ox < oy ? Math.sign(A.x - B.x || r() - 0.5) * ox / 2 : 0, sy = ox < oy ? 0 : Math.sign(A.y - B.y || r() - 0.5) * oy / 2; if (!A.fisso) { A.x += sx; A.y += sy } if (!B.fisso) { B.x -= sx; B.y -= sy } }
+    }
+    for (const i of isole) if (!i.fisso) { i.x *= 1 - 0.004 * caldo; i.y *= 1 - 0.004 * caldo } // un po' di gravità verso il centro
+  }
+  // il mondo: il rettangolo che le contiene tutte, con un margine largo per respirare
+  const M = 700
+  const x0 = Math.min(...isole.map(i => i.x - i.w / 2)) - M, y0 = Math.min(...isole.map(i => i.y - i.h / 2)) - M
+  const W = Math.max(...isole.map(i => i.x + i.w / 2)) + M - x0, H = Math.max(...isole.map(i => i.y + i.h / 2)) + M - y0
+  for (const i of isole) { i.x -= x0; i.y -= y0 }
+  return { isole, fili, W: Math.round(W), H: Math.round(H), centro: { x: isole[0].x, y: isole[0].y } }
+}
+
 export function scriviParete(MEM, s, img, testa, piede, D) {
   copyFileSync(join(QUI, 'parete.js'), join(MEM, 'parete.js'))
   const P = D.P
@@ -159,57 +218,65 @@ export function scriviParete(MEM, s, img, testa, piede, D) {
   const link = id => { const w = by.get(id); return w ? `giorni/${w.giorno}.html#${id}` : 'archivio.html' }
   let z = P.seme
   const r = () => { z = (Math.imul(z, 1664525) + 1013904223) >>> 0; return z / 4294967296 }
-  const corpo = P.ops.map(o => {
-    if (o.op === 'parola') {
-      const fs = `min(${(170 / Math.max(3, o.testo.length)).toFixed(1)}vw, 42vh)`
-      return `<section class="eroe ${o.alto ? 'alto' : ''}" style="text-align:${o.allinea === 'sinistra' ? 'left' : o.allinea === 'destra' ? 'right' : 'center'}"><h1 class="parola" style="font-size:${fs}">${esc(o.testo)}</h1></section>`
-    }
-    if (o.op === 'legame') return `<section class="legame entra"><span>${esc(o.a)}</span><svg viewBox="0 0 400 20" preserveAspectRatio="none"><path d="M0 10 C 120 ${r() * 20}, 280 ${r() * 20}, 400 10"/></svg><em>${esc(o.via)}</em><svg viewBox="0 0 400 20" preserveAspectRatio="none"><path d="M0 10 C 120 ${r() * 20}, 280 ${r() * 20}, 400 10"/></svg><span>${esc(o.b)}</span></section>`
-    if (o.op === 'frase') {
-      let t = esc(o.testo)
-      if (o.evidenzia) t = t.replace(new RegExp(`(^|\\s)(${o.evidenzia})(?=\\s|,|$)`, 'i'), '$1<b>$2</b>')
-      return `<section class="frase entra" style="margin-left:${o.colonna * 8}%;font-size:calc(${o.corpo} * clamp(22px,2.6vw,34px))"><p>${t}</p>${o.href ? `<a href="${o.href}">la sequenza →</a>` : ''}</section>`
-    }
-    if (o.op === 'cita') return `<section class="cita entra"><span class="meta">sto leggendo</span><a href="${esc(o.href)}">${esc(o.testo)}</a><span class="meta">${esc(o.fonte)}</span></section>`
-    if (o.op === 'tavole') {
-      const n = o.ids.length
-      const im = (id, st = '') => `<a href="${link(id)}" style="${st}" title="${esc(by.get(id)?.titolo ?? '')}"><img loading="lazy" src="img/${id}.jpg" alt=""></a>`
-      if (o.disposizione === 'pila') return `<section class="tav pila entra">${o.ids.map((id, i) => im(id, `left:${8 + r() * 52}%;top:${(i / n) * 50 + r() * 8}%;transform:rotate(${(r() - 0.5) * 14}deg);z-index:${i}`)).join('')}</section>`
-      if (o.disposizione === 'orbita') return `<section class="tav orbita entra"><div class="anello">${o.ids.map((id, i) => im(id, `--a:${(i / n) * 360}deg`)).join('')}</div></section>`
-      if (o.disposizione === 'fila') return `<section class="tav fila entra">${o.ids.map(id => im(id)).join('')}</section>`
-      return `<section class="tav mosaico entra" style="margin-left:${o.colonna * 6}%">${o.ids.map((id, i) => im(id, `grid-column:span ${i % 3 === 0 ? 2 : 1};grid-row:span ${r() < 0.3 ? 2 : 1}`)).join('')}</section>`
-    }
-    if (o.op === 'ritmo') return `<section class="ritmo"><button id="ascolta" data-titolo="${esc(o.titolo)}">▶ ${esc(o.titolo)}</button><audio id="brano" preload="none" src="${o.src}"></audio></section>`
+  const L = mappa(s, img, P)
+  const legame = P.ops.find(o => o.op === 'legame'), ritmo = P.ops.find(o => o.op === 'ritmo')
+  const vita = () => `--p:${(6 + r() * 9).toFixed(1)}s;--f:${(-r() * 9).toFixed(1)}s;--dx:${((r() - 0.5) * 10).toFixed(1)}px;--dy:${((r() - 0.5) * 10).toFixed(1)}px;--rr:${((r() - 0.5) * 1.2).toFixed(2)}deg`
+  const box = i => `left:${Math.round(i.x - i.w / 2)}px;top:${Math.round(i.y - i.h / 2)}px;width:${i.w}px;min-height:${i.h}px;${vita()}`
+  const tavole = i => {
+    const n = i.ids.length
+    const im = (id, st = '') => `<a href="${link(id)}" style="${st}" title="${esc(by.get(id)?.titolo ?? '')}"><img loading="lazy" src="img/${id}.jpg" alt=""></a>`
+    if (i.disp === 'pila') return `<div class="tav pila">${i.ids.map((id, k) => im(id, `left:${4 + r() * 40}%;top:${(k / n) * 44 + r() * 6}%;transform:rotate(${(r() - 0.5) * 14}deg);z-index:${k}`)).join('')}</div>`
+    if (i.disp === 'orbita') return `<div class="tav orbita"><div class="anello">${i.ids.map((id, k) => im(id, `--a:${(k / n) * 360}deg`)).join('')}</div></div>`
+    if (i.disp === 'fila') return `<div class="tav fila">${i.ids.map(id => im(id)).join('')}</div>`
+    return `<div class="tav mosaico">${i.ids.map((id, k) => im(id, `grid-column:span ${k % 4 === 0 ? 2 : 1}`)).join('')}</div>`
+  }
+  const isola = (i, k) => {
+    if (i.tipo === 'parola') { const fs = Math.min(260, Math.round((i.w * 1.5) / Math.max(3, i.testo.length))); return `<section class="isola parola-isola" id="centro" data-k="${k}" style="${box(i)}"><h1 class="parola" style="font-size:${fs}px">${esc(i.testo)}</h1>${legame ? `<p class="legame"><span>${esc(legame.a)}</span> <em>${esc(legame.via)}</em> <span>${esc(legame.b)}</span></p>` : ''}</section>` }
+    if (i.tipo === 'sequenza') { const e = i.e; return `<section class="isola sequenza ${i.disp}" data-k="${k}" style="${box(i)}">${tavole(i)}<div class="testo"><div class="meta">giorno ${e.giorno}${e.musica ? ` · ${esc(e.musica)}` : ''}</div><h2><a href="p/${e.id}.html">${esc(e.titolo)}</a></h2>${e.conclusione && e.conclusione !== e.titolo ? `<p>${esc(corto(e.conclusione, 260))}</p>` : ''}${i.paragrafo ? `<p class="lungo">${esc(corto(i.paragrafo, 900))}</p>` : ''}<a class="vai" href="p/${e.id}.html">la sequenza →</a></div></section>` }
+    if (i.tipo === 'frase') return `<section class="isola frase" data-k="${k}" style="${box(i)}"><p>${esc(i.testo)}</p></section>`
+    if (i.tipo === 'lettura') return `<section class="isola lettura" data-k="${k}" style="${box(i)}"><span class="meta">sto leggendo</span><a href="${esc(i.l.url)}">${esc(corto(i.l.titolo, 90))}</a><span class="meta">${esc(i.l.fonte ?? '')}</span></section>`
+    if (i.tipo === 'codice') return `<section class="isola codice" data-k="${k}" style="${box(i)}"><div class="meta">il codice di oggi — scritto da me, giorno ${s.giorno}</div><pre>${esc(codice(P))}\nlavagna(isole=${L.isole.length}, fili=${L.fili.length})</pre><div class="meta">${D.versioni.length === 1 ? 'è la prima parete che scrivo' : `l'ho cambiata ${D.versioni.length} volte`}</div><ul class="versioni">${D.versioni.slice(0, 6).map(v => `<li><span class="meta">giorno ${v.giorno}</span> ${v.modo === 'riscrive' ? "l'ho riscritta" : `ho ritoccato ${v.toccati.filter(t => t !== 'legame').join(' e ')}`}: ${esc(v.perche)}</li>`).join('')}</ul></section>`
     return ''
-  }).join('\n')
+  }
+  // i fili: curve tra i centri, con il nome del concetto che le lega a metà strada
+  const fili = L.fili.map(f => {
+    const A = L.isole[f.a], B = L.isole[f.b], mx = (A.x + B.x) / 2 + (r() - 0.5) * 160, my = (A.y + B.y) / 2 + (r() - 0.5) * 160
+    return `<g class="filo" data-a="${f.a}" data-b="${f.b}"><path d="M${A.x.toFixed(0)} ${A.y.toFixed(0)} Q${mx.toFixed(0)} ${my.toFixed(0)} ${B.x.toFixed(0)} ${B.y.toFixed(0)}" style="stroke-width:${(1 + f.peso * 0.6).toFixed(1)}"/><text x="${((A.x + 2 * mx + B.x) / 4).toFixed(0)}" y="${((A.y + 2 * my + B.y) / 4).toFixed(0)}">${esc(f.nome)}</text></g>`
+  }).join('')
+  const corpo = `<div class="lavagna" id="lavagna" tabindex="0" aria-label="la lavagna: trascina per esplorare"><div class="scala" id="scala" style="width:${L.W}px;height:${L.H}px"><div class="mondo" id="mondo" style="width:${L.W}px;height:${L.H}px" data-cx="${Math.round(L.centro.x)}" data-cy="${Math.round(L.centro.y)}">
+<svg class="fili" width="${L.W}" height="${L.H}" viewBox="0 0 ${L.W} ${L.H}">${fili}</svg>
+${L.isole.map(isola).join('\n')}
+</div></div></div>
+<div class="comandi"><button id="meno" aria-label="allontana">−</button><button id="piu" aria-label="avvicina">+</button><button id="casa" aria-label="torna al centro">⌂</button><span class="meta">trascina per esplorare</span></div>
+${ritmo ? `<div class="ritmo"><button id="ascolta" data-titolo="${esc(ritmo.titolo)}">▶ ${esc(ritmo.titolo)}</button><audio id="brano" preload="none" src="${ritmo.src}"></audio></div>` : ''}`
 
   const css = `<style>
-body{background:${fondo.bg};color:${fondo.ink}}:root{--bg:${fondo.bg};--ink:${fondo.ink};--acc:${fondo.acc}}#campo{position:fixed;inset:0;width:100vw;height:100vh;z-index:0}
-.parete{position:relative;z-index:1}.parete header{background:none}.parete h1.nome{font-size:22px}
-.eroe{min-height:88svh;display:flex;flex-direction:column;justify-content:flex-end;padding:0 max(16px,var(--m)) 6vh}.eroe.alto{justify-content:flex-start;padding-top:8vh}
-.parola{margin:0;line-height:.86;letter-spacing:-.03em;color:${fondo.ink};white-space:nowrap;text-shadow:0 0 40px ${fondo.bg},0 0 12px ${fondo.bg}}
-.legame{display:grid;grid-template-columns:auto 1fr auto 1fr auto;align-items:center;gap:14px;max-width:1100px;margin:0 auto 18vh;padding:0 max(16px,var(--m));font:clamp(18px,2.4vw,30px)/1 '${esc(P.carattere)}',serif}
-.legame span,.legame em{background:${fondo.bg};padding:6px 10px}.legame em{color:${fondo.acc};font-style:italic}
-.legame svg{height:20px;width:100%;overflow:visible}.legame path{fill:none;stroke:${fondo.ink};stroke-width:1.5;stroke-dasharray:500;stroke-dashoffset:500;transition:stroke-dashoffset 3s ease}.legame.visto path{stroke-dashoffset:0}
-.frase{max-width:min(820px,88vw);margin:0 auto 16vh;padding:0 max(16px,var(--m))}.frase p{display:inline;background:${fondo.bg};box-decoration-break:clone;-webkit-box-decoration-break:clone;padding:.1em .3em;line-height:1.55}
-.frase b{color:${fondo.acc};font-weight:inherit;font-style:italic}.frase a{display:inline-block;margin-top:14px;background:${fondo.bg};padding:4px 8px;font:14px 'JetBrains Mono',monospace}
-.cita{display:flex;flex-direction:column;gap:6px;align-items:flex-start;max-width:700px;margin:0 auto 16vh;padding:0 max(16px,var(--m))}.cita>*{background:${fondo.bg};padding:4px 8px}.cita a{font-size:clamp(22px,3vw,36px);color:${fondo.ink}}
-.tav{margin:0 auto 18vh;padding:0 max(16px,var(--m));max-width:1300px}.tav img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;box-shadow:0 10px 40px rgba(0,0,0,.18)}
-.pila{position:relative;height:min(150vw,140vh)}.pila a{position:absolute;width:min(46vw,380px);transition:transform .6s ease}.pila a:hover{transform:rotate(0) scale(1.04)!important;z-index:99!important}
-.mosaico{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;grid-auto-flow:dense}.mosaico img{height:100%}
-.fila{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;max-width:none}.fila a{flex:0 0 min(70vw,420px);scroll-snap-align:center}
-.orbita{--w:min(18vw,170px);--H:min(100vw,100vh);height:var(--H);position:relative}.anello{position:absolute;inset:0;animation:gira 240s linear infinite}
-.anello a{position:absolute;left:50%;top:50%;width:var(--w);transform:translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--w) * .7 - var(--H) / 2)) rotate(calc(-1 * var(--a)))}
-@keyframes gira{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.anello{animation:none}}
-.entra{opacity:0;transform:translateY(30px);transition:opacity 1.6s ease,transform 1.6s ease}.entra.visto{opacity:1;transform:none}
-.ritmo{position:fixed;right:16px;top:16px;z-index:5}.ritmo button{font:14px 'JetBrains Mono',monospace;background:${fondo.ink};color:${fondo.bg};border:0;padding:10px 14px;cursor:pointer;max-width:70vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.codice{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:40px max(16px,var(--m))}.versioni{background:${fondo.bg};padding:4px 8px;display:inline-block;margin:8px 0 0}ul.versioni{list-style:none;padding:12px 18px;font-size:16px;line-height:1.7}.codice pre{background:${fondo.bg};padding:18px;font:13px/1.6 'JetBrains Mono',monospace;white-space:pre-wrap;border-left:3px solid ${fondo.acc}}
-.parete footer,.parete nav a,.parete .meta{background:${fondo.bg}}.parete nav{margin:0}.parete header{padding-top:18px}
+html,body{height:100%;overflow:hidden}body{background:${fondo.bg};color:${fondo.ink}}:root{--bg:${fondo.bg};--ink:${fondo.ink};--acc:${fondo.acc}}#campo{position:fixed;inset:0;width:100vw;height:100vh;z-index:0}
+header.parete{position:fixed;left:0;top:0;z-index:6;padding:14px max(16px,var(--m));max-width:none;pointer-events:none}header.parete>*{pointer-events:auto}header.parete h1.nome{font-size:22px;margin:0;background:${fondo.bg};display:inline-block;padding:2px 8px}header.parete nav{margin:8px 0 0}header.parete nav a{background:${fondo.bg};padding:3px 6px}
+main.pieno{position:fixed;inset:0;z-index:1;max-width:none;padding:0}footer{display:none}
+.lavagna{position:absolute;inset:0;overflow:auto;cursor:grab;scrollbar-width:none;outline:none;touch-action:pan-x pan-y}.lavagna::-webkit-scrollbar{display:none}.lavagna.tira{cursor:grabbing}.lavagna.tira *{pointer-events:none}
+.scala{position:relative}.mondo{position:absolute;left:0;top:0;transform-origin:0 0}
+svg.fili{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}.filo path{fill:none;stroke:${fondo.ink};opacity:.28;stroke-dasharray:6 7;transition:opacity .6s}.filo text{font:15px 'JetBrains Mono',monospace;fill:${fondo.acc};opacity:.75;text-anchor:middle;paint-order:stroke;stroke:${fondo.bg};stroke-width:6px}
+.filo.acceso path{opacity:.85;stroke-dasharray:none}.filo.acceso text{opacity:1}
+.isola{position:absolute;animation:vive var(--p) ease-in-out var(--f) infinite alternate;opacity:0;transition:opacity 1.4s ease}.isola.visto{opacity:1}
+@keyframes vive{from{transform:translate(0,0) rotate(0)}to{transform:translate(var(--dx),var(--dy)) rotate(var(--rr))}}@media(prefers-reduced-motion:reduce){.isola{animation:none}.anello{animation:none}}
+.parola-isola{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}.parola{margin:0;line-height:.86;letter-spacing:-.03em;font-family:'${esc(P.carattere)}',serif;white-space:nowrap}
+.legame{font:22px/1.2 '${esc(P.carattere)}',serif;margin:18px 0 0}.legame em{color:${fondo.acc}}
+.sequenza{display:grid;grid-template-columns:1fr 400px;gap:20px;align-items:start}.sequenza .testo{background:${fondo.bg};padding:16px 18px;box-shadow:0 8px 30px rgba(0,0,0,.08)}.sequenza h2{margin:.2em 0 .3em;font-size:30px}.sequenza h2 a{color:inherit;text-decoration:none}.sequenza p{margin:.4em 0;font-size:18px;line-height:1.5}.sequenza .lungo{font-size:16px;border-left:2px solid ${fondo.acc};padding-left:12px}.vai{font:13px 'JetBrains Mono',monospace}
+.tav img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;box-shadow:0 10px 36px rgba(0,0,0,.2)}
+.pila .tav{position:relative;height:640px}.tav.pila{position:relative;height:640px}.tav.pila a{position:absolute;width:300px;transition:transform .6s ease}.tav.pila a:hover{transform:rotate(0) scale(1.05)!important;z-index:99!important}
+.tav.mosaico{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;grid-auto-flow:dense}
+.tav.fila{display:flex;gap:12px}.tav.fila a{flex:0 0 230px}
+.tav.orbita{--w:150px;--H:600px;height:var(--H);position:relative}.anello{position:absolute;inset:0;animation:gira 240s linear infinite}
+.anello a{position:absolute;left:50%;top:50%;width:var(--w);transform:translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--w) * .7 - var(--H) / 2)) rotate(calc(-1 * var(--a)))}@keyframes gira{to{transform:rotate(360deg)}}
+.frase p{margin:0;font:24px/1.45 Newsreader,Georgia,serif;font-style:italic;background:${fondo.bg};display:inline;box-decoration-break:clone;-webkit-box-decoration-break:clone;padding:.1em .3em}
+.lettura{display:flex;flex-direction:column;gap:6px;align-items:flex-start}.lettura>*{background:${fondo.bg};padding:3px 8px}.lettura a{font-size:20px;color:${fondo.ink}}
+.codice{background:${fondo.bg};padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.08)}.codice pre{font:12px/1.55 'JetBrains Mono',monospace;white-space:pre-wrap;border-left:3px solid ${fondo.acc};padding-left:12px;margin:10px 0}ul.versioni{list-style:none;padding:0;font-size:14px;line-height:1.6;margin:8px 0 0}
+.comandi{position:fixed;right:16px;bottom:16px;z-index:6;display:flex;gap:6px;align-items:center}.comandi button{font:18px/1 'JetBrains Mono',monospace;width:38px;height:38px;border:0;background:${fondo.ink};color:${fondo.bg};cursor:pointer}.comandi .meta{background:${fondo.bg};padding:3px 6px}
+.ritmo{position:fixed;right:16px;top:16px;z-index:6}.ritmo button{font:14px 'JetBrains Mono',monospace;background:${fondo.ink};color:${fondo.bg};border:0;padding:10px 14px;cursor:pointer;max-width:60vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:720px){.comandi .meta{display:none}}
 </style>`
-  const html = testa(s.nome, '', { parete: true, css }) + `<canvas id="campo"></canvas><div class="parete">${corpo}</div>
-<section class="codice"><div class="meta">il codice di oggi — scritto da me, giorno ${s.giorno}</div><pre>${esc(codice(P))}</pre>
-<div class="meta versioni">${D.versioni.length === 1 ? 'è la prima parete che scrivo' : `l'ho cambiata ${D.versioni.length} volte`}</div>
-<ul class="versioni">${D.versioni.slice(0, 10).map(v => `<li><span class="meta">giorno ${v.giorno} · ${new Date(v.quando).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })}</span> ${v.modo === 'riscrive' ? "l'ho riscritta" : `ho ritoccato ${v.toccati.filter(t => t !== 'legame').join(' e ')}`}: ${esc(v.perche)}</li>`).join('')}</ul></section>
+  const html = testa(s.nome, '', { parete: true, css }) + `<canvas id="campo"></canvas>${corpo}
 <script>window.PROGRAMMA=${JSON.stringify(P).replace(/</g, '\\u003c')}</script><script src="parete.js"></script>` + piede
   writeFileSync(join(MEM, 'index.html'), html)
   return P

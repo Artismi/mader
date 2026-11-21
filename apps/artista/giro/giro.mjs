@@ -55,10 +55,11 @@ try {
     const a = JSON.parse(readFileSync(arch, 'utf8'))
     a.images = {}
     for (const f of readdirSync(join(MEM, 'img'))) if (f.endsWith('.jpg')) a.images[f.slice(0, -4)] = 'data:image/jpeg;base64,' + readFileSync(join(MEM, 'img', f)).toString('base64')
-    // il cassetto: le tavole con i loro livelli
-    a.fogli = {}
-    if (existsSync(join(MEM, 'cassetto'))) for (const f of readdirSync(join(MEM, 'cassetto'))) if (f.endsWith('.json')) a.fogli[f.slice(0, -5)] = readFileSync(join(MEM, 'cassetto', f), 'utf8')
     await pg.evaluate(a => window.__artista.memoria.importa(a), a)
+    // il cassetto (le tavole con i loro livelli): una per volta, tutte insieme sforano il messaggio
+    if (existsSync(join(MEM, 'cassetto'))) for (const f of readdirSync(join(MEM, 'cassetto'))) if (f.endsWith('.json')) {
+      try { await pg.evaluate(([id, j]) => window.__artista.memoria.riponi(id, j), [f.slice(0, -5), readFileSync(join(MEM, 'cassetto', f), 'utf8')]) } catch (e) { log('cassetto: non riesco a riprendere', f, e.message) }
+    }
     log(`memoria ripresa: giorno ${a.state?.day ?? 0}, ${a.works.length} opere, ${Object.keys(a.images).length} immagini`)
   } else log('nessuna memoria: nasce adesso')
 
@@ -130,8 +131,12 @@ try {
   for (const [id, url] of Object.entries(m.images)) writeFileSync(join(MEM, 'img', `${id}.jpg`), Buffer.from(url.split(',')[1], 'base64'))
   for (const f of readdirSync(join(MEM, 'img'))) if (!tenere.has(f.replace(/\.jpg$/, ''))) rmSync(join(MEM, 'img', f))
   mkdirSync(join(MEM, 'cassetto'), { recursive: true })
-  for (const [id, json] of Object.entries(m.fogli ?? {})) writeFileSync(join(MEM, 'cassetto', `${id}.json`), json)
-  for (const f of readdirSync(join(MEM, 'cassetto'))) if (!(m.fogli ?? {})[f.replace(/\.json$/, '')]) rmSync(join(MEM, 'cassetto', f))
+  const tieni = new Set()
+  for (const id of await pg.evaluate(() => window.__artista.memoria.cassetto())) {
+    const j = await pg.evaluate(id => window.__artista.memoria.prendi(id), id)
+    if (j) { writeFileSync(join(MEM, 'cassetto', `${id}.json`), j); tieni.add(id) }
+  }
+  for (const f of readdirSync(join(MEM, 'cassetto'))) if (!tieni.has(f.replace(/\.json$/, ''))) rmSync(join(MEM, 'cassetto', f))
   writeFileSync(arch, JSON.stringify({ state: m.state, works: m.works }))
   // i brani: solo delle ultime 12 sequenze
   if (existsSync(join(MEM, 'audio'))) {
