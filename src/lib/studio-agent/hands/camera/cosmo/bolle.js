@@ -661,7 +661,7 @@ export function causaComune(bolle, { mondi = 300, cosmi = 2, aPriori = 0.5, etic
 // → { esiste, provati, bolla (col punto dove la cosa c'è), giudizio, scartati: [{ luogo, perche }] }
 export async function inFondo(b0, candidati = null, { massimo = 3 } = {}) {
   const b = bolla(b0), C = CONTENUTI[b.contenuto.cosa]; if (!C.superficie) return { esiste: giudica(b).esito === 'sì', provati: 0, bolla: b, giudizio: giudica(b), scartati: [] };
-  const { superficieDi } = await import('./mappa.js'), vie = (candidati && candidati.length ? candidati : [b.dove]).slice(0, massimo), scartati = [];
+  const { superficieDi } = await Promise.reject(new Error('mappa non disponibile qui')), vie = (candidati && candidati.length ? candidati : [b.dove]).slice(0, massimo), scartati = [];
   for (const d of vie) { const via = { cosmo: d.cosmo, galassia: d.galassia, stella: d.stella, pianeta: d.pianeta }, U = superficieDi(via); if (!U) { scartati.push({ luogo: luogoDi(via), perche: 'la superficie non si è potuta calcolare' }); continue; }
     const g = C.superficie(U, b.contenuto); if (g.esito !== 'sì') { scartati.push({ luogo: luogoDi(via), perche: g.perche }); continue; }
     const dove = { ...via, punto: [Math.round(g.misura.dove.lon * 100) / 100, Math.round(g.misura.dove.lat * 100) / 100] };

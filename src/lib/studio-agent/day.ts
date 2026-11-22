@@ -14,8 +14,10 @@ import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ri
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { TONES } from '@/components/studio/genera/recipes'
-import { emptySheet, flatten, type Sheet } from './hands/sheet'
-import type { ToolCtx } from './hands/tools'
+import { emptySheet, flatten, withLayer, fullLayer, type Sheet } from './hands/sheet'
+import { applica, type ToolCtx } from './hands/tools'
+import { mondo } from './hands/tools3'
+import { fondoCosmico, vesteACaso } from './hands/veste'
 import { measure, rasterize, palette } from './eyes/measure'
 import { histogram, learn, patches, seedCodebook } from './eyes/visual-words'
 import { addText, embed, freqOf, neighbors, similarity, type Embedding } from './reader/wordspace'
@@ -423,7 +425,13 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   let audioReel: Blob | null = null
   if (hooks.reel && fogli.length >= 2) {
     try {
-      const rr = await faiReel(st, r, fogli, infoReel, { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log)
+      // senza un discorso, a volte il reel è solo dei suoi mondi che crescono; altrimenti quasi sempre un mondo fa da base
+      const soloMondi = !plan.d && r() < 0.3
+      const fogliReel = soloMondi ? await fogliMondi(r, tctx, fogli[0].W, fogli[0].H, Math.min(4, Math.max(3, fogli.length)))
+        : r() < 0.85 ? await (async () => { const pM = mondo.propose(fogli[0], tctx); return Promise.all(fogli.map(f => conMondo(f, pM, tctx))) })() : fogli
+      if (soloMondi) log('Oggi niente discorso: il reel è dei miei mondi che crescono.')
+      const infoR = soloMondi ? fogliReel.map(() => ({ interesse: 0.5 })) : infoReel
+      const rr = await faiReel(st, r, fogliReel, infoR, soloMondi ? { face: F.face as FaceId, parola: intention.word } : { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log)
       if (rr) { video = rr.video; audioReel = rr.audio }
     } catch (e) { log(`Reel non riuscito: ${e instanceof Error ? e.message : e}`) }
   }
@@ -450,6 +458,26 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   return works
 }
 let paginaOggi: Lavoro | null = null
+
+// ── i mondi nel reel ──
+/** la tavola con sotto un mondo che cresce (lo stesso per tutta la sequenza: la base comune su cui le tavole si costruiscono) */
+async function conMondo(s: Sheet, p: Record<string, unknown>, c: ToolCtx): Promise<Sheet> {
+  const out = await applica(mondo, s, p, c)
+  const nuovi = out.layers.filter(l => !s.layers.some(x => x.id === l.id))
+  return { ...out, layers: [...nuovi, ...s.layers] }
+}
+/** i fogli di un reel dei mondi: cristallo e camera a tutto schermo, a volte due che si attraversano, spesso nel cielo */
+async function fogliMondi(r: () => number, c: ToolCtx, W: number, H: number, n: number): Promise<Sheet[]> {
+  const out: Sheet[] = []
+  for (let i = 0; i < n; i++) {
+    const cielo = r() < 0.6, scuro = cielo || !!(c.tone as { dark?: boolean }).dark
+    let f = emptySheet(W, H, cielo ? '#05050a' : c.tone.bg)
+    if (cielo) f = withLayer(f, fullLayer(f, `cielo${i}`, 'fondo', fondoCosmico(W, H, r, vesteACaso(r, c.colori ?? [c.tone.ink, c.tone.acc], scuro).colori)))
+    for (let j = 0, k = r() < 0.4 ? 2 : 1; j < k; j++) f = await applica(mondo, f, mondo.propose(f, c), c)
+    out.push(f)
+  }
+  return out
+}
 
 async function tavola(
   st: AgentState, r: () => number, intention: Intention, n: number, ragione: Work['ragione'],

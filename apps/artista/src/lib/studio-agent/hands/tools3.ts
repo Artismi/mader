@@ -27,13 +27,14 @@ export const mondo: Tool = {
     const veste = vesteACaso(r, c.colori?.length ? c.colori : [c.tone.ink, c.tone.acc], scuro)
     return {
       tipo, ind: cercaMondo(tipo, r) as unknown as Record<string, unknown>, veste: veste as unknown as Record<string, unknown>,
-      spessore: range(r, 1.1, 2.6), S: 900,
+      spessore: range(r, 1.1, 2.6), S: 900, scuro,
       blend: scuro ? pick(r, ['screen', 'lighter', 'source-over']) : pick(r, ['multiply', 'source-over', 'darken']),
       alpha: range(r, 0.75, 1),
     }
   },
   apply: async (s, p, c) => {
-    const T = tempoDi(c), v = p.veste as unknown as Veste, scuro = luce(s.bg) < 0.5
+    // scuro si decide alla nascita: nel reel il generatore ridisegna su un foglio neutro
+    const T = tempoDi(c), v = p.veste as unknown as Veste, scuro = typeof p.scuro === 'boolean' ? p.scuro : luce(s.bg) < 0.5
     const crudo = disegnaMondo(p.ind as unknown as Indirizzo, { S: p.S as number, colore: inchiostroDi(v, scuro), crescita: T.crescita, spessore: p.spessore as number })
     return withLayer(s, fullLayer(s, lid(), 'mondo', vesti(crudo, v), p.blend as Blend, p.alpha as number))
   },
