@@ -7,7 +7,13 @@
  */
 import { bellezza, type Seg } from './sezione'
 
-export type Gruppo = 'esagoni' | 'quadrati' | 'specchio' | 'rotazione' | 'traslazione' | 'una'
+export type Gruppo = 'esagoni' | 'quadrati' | 'specchio' | 'rotazione' | 'traslazione' | 'una' | Carta | Fregio
+/** i 17 gruppi delle carte da parati (tutti i modi di ripetere un motivo nel piano) */
+export type Carta = 'p1' | 'p2' | 'pm' | 'pg' | 'cm' | 'pmm' | 'pmg' | 'pgg' | 'cmm' | 'p4' | 'p4m' | 'p4g' | 'p3' | 'p3m1' | 'p31m' | 'p6' | 'p6m'
+/** i 7 gruppi dei fregi (ripetere lungo una striscia: le cornici, le greche, i cordoni) */
+export type Fregio = 'f1' | 'f11g' | 'f1m1' | 'f11m' | 'f2' | 'f2mg' | 'f2mm'
+export const CARTE: Carta[] = ['p1', 'p2', 'pm', 'pg', 'cm', 'pmm', 'pmg', 'pgg', 'cmm', 'p4', 'p4m', 'p4g', 'p3', 'p3m1', 'p31m', 'p6', 'p6m']
+export const FREGI: Fregio[] = ['f1', 'f11g', 'f1m1', 'f11m', 'f2', 'f2mg', 'f2mm']
 export interface Ripeti { gruppo: Gruppo; angolo: number }
 type T6 = [number, number, number, number, number, number]
 const applica = (T: T6, x: number, y: number): [number, number] => [T[0] * x + T[1] * y + T[4], T[2] * x + T[3] * y + T[5]]
@@ -16,9 +22,64 @@ const riflIntorno = (th: number, cx: number, cy: number): T6 => { const c = Math
 const componi = (A: T6, B: T6): T6 => [A[0] * B[0] + A[1] * B[2], A[0] * B[1] + A[1] * B[3], A[2] * B[0] + A[3] * B[2], A[2] * B[1] + A[3] * B[3], A[0] * B[4] + A[1] * B[5] + A[4], A[2] * B[4] + A[3] * B[5] + A[5]]
 const ID: T6 = [1, 0, 0, 1, 0, 0]
 
-export interface Geometria { gruppo: Gruppo; dominio: [number, number][]; copie: T6[]; poligono: [number, number][]; reticolo: { a: [number, number]; b: [number, number] } | null; centro: [number, number] }
+export interface Geometria { gruppo: Gruppo; dominio: [number, number][]; copie: T6[]; poligono: [number, number][]; reticolo: { a: [number, number]; b: [number, number] } | null; centro: [number, number]; fregio?: boolean }
+
+// ---------- i 17 gruppi e i 7 fregi, costruiti tutti allo stesso modo: un reticolo, le operazioni del gruppo (una matrice
+// e una traslazione in frazioni del reticolo), un pezzo di piano (il dominio) di area cella/ordine attorno al centro.
+type Op = [number[], number, number]
+const I = [1, 0, 0, 1], R2 = [-1, 0, 0, -1], MX = [-1, 0, 0, 1], MY = [1, 0, 0, -1], R4 = [0, -1, 1, 0], R43 = [0, 1, -1, 0], DXY = [0, 1, 1, 0], DAN = [0, -1, -1, 0]
+const rot = (t: number) => [Math.cos(t), -Math.sin(t), Math.sin(t), Math.cos(t)], rifl = (t: number) => [Math.cos(2 * t), Math.sin(2 * t), Math.sin(2 * t), -Math.cos(2 * t)]
+const conC = (ops: Op[]): Op[] => [...ops, ...ops.map(([m, u, v]) => [m, u + 0.5, v + 0.5] as Op)]
+const OPS: Record<Carta | Fregio, Op[]> = {
+  p1: [[I, 0, 0]], p2: [[I, 0, 0], [R2, 0, 0]], pm: [[I, 0, 0], [MX, 0, 0]], pg: [[I, 0, 0], [MX, 0, 0.5]],
+  cm: conC([[I, 0, 0], [MX, 0, 0]]), pmm: [[I, 0, 0], [R2, 0, 0], [MX, 0, 0], [MY, 0, 0]],
+  pmg: [[I, 0, 0], [R2, 0, 0], [MX, 0.5, 0], [MY, 0.5, 0]], pgg: [[I, 0, 0], [R2, 0, 0], [MX, 0.5, 0.5], [MY, 0.5, 0.5]],
+  cmm: conC([[I, 0, 0], [R2, 0, 0], [MX, 0, 0], [MY, 0, 0]]),
+  p4: [[I, 0, 0], [R4, 0, 0], [R2, 0, 0], [R43, 0, 0]],
+  p4m: [[I, 0, 0], [R4, 0, 0], [R2, 0, 0], [R43, 0, 0], [MX, 0, 0], [MY, 0, 0], [DXY, 0, 0], [DAN, 0, 0]],
+  p4g: [[I, 0, 0], [R4, 0, 0], [R2, 0, 0], [R43, 0, 0], [MX, 0.5, 0.5], [MY, 0.5, 0.5], [DXY, 0.5, 0.5], [DAN, 0.5, 0.5]],
+  p3: [0, 1, 2].map(k => [rot((2 * Math.PI * k) / 3), 0, 0] as Op),
+  p3m1: [...[0, 1, 2].map(k => [rot((2 * Math.PI * k) / 3), 0, 0] as Op), ...[0, 1, 2].map(k => [rifl(Math.PI / 2 + (2 * Math.PI * k) / 3), 0, 0] as Op)],
+  p31m: [...[0, 1, 2].map(k => [rot((2 * Math.PI * k) / 3), 0, 0] as Op), ...[0, 1, 2].map(k => [rifl((2 * Math.PI * k) / 3), 0, 0] as Op)],
+  p6: [0, 1, 2, 3, 4, 5].map(k => [rot((Math.PI * k) / 3), 0, 0] as Op),
+  p6m: [...[0, 1, 2, 3, 4, 5].map(k => [rot((Math.PI * k) / 3), 0, 0] as Op), ...[0, 1, 2, 3, 4, 5].map(k => [rifl((Math.PI * k) / 6), 0, 0] as Op)],
+  f1: [[I, 0, 0]], f11g: [[I, 0, 0], [MY, 0.5, 0]], f1m1: [[I, 0, 0], [MX, 0, 0]], f11m: [[I, 0, 0], [MY, 0, 0]],
+  f2: [[I, 0, 0], [R2, 0, 0]], f2mg: [[I, 0, 0], [R2, 0, 0], [MX, 0.5, 0], [MY, 0.5, 0]], f2mm: [[I, 0, 0], [R2, 0, 0], [MX, 0, 0], [MY, 0, 0]],
+}
+const isCarta = (g: string): g is Carta => (CARTE as string[]).includes(g)
+const isFregio = (g: string): g is Fregio => (FREGI as string[]).includes(g)
+function geometriaGruppo(g: Carta | Fregio, angolo: number, lato: number): Geometria {
+  const l = lato, O: [number, number] = [l / 2, l / 2], th = (angolo * Math.PI) / 180
+  // la forma del reticolo: dall'angolo (una parte dell'indirizzo) vengono anche le proporzioni, dove il gruppo le lascia libere
+  const fr = ((angolo % 37) / 37), ratio = 0.62 + 0.76 * fr
+  let A: [number, number] = [l, 0], B: [number, number] = [0, l]
+  if (g === 'p1' || g === 'p2') B = [l * (0.18 + 0.3 * fr), l * (0.75 + 0.3 * (1 - fr))]
+  else if (['pm', 'pg', 'pmm', 'pmg', 'pgg', 'cm', 'cmm'].includes(g)) B = [0, l * ratio]
+  else if (['p3', 'p3m1', 'p31m', 'p6', 'p6m'].includes(g)) B = [l / 2, (l * Math.sqrt(3)) / 2]
+  const fregio = isFregio(g)
+  if (fregio) B = [0, l * 1e4]
+  const ops = OPS[g]
+  // la rotazione di tutto (il gruppo resta lo stesso)
+  const Rt = rot(th), ruota = (v: [number, number]): [number, number] => [Rt[0] * v[0] + Rt[1] * v[1], Rt[2] * v[0] + Rt[3] * v[1]]
+  const Ar = ruota(A), Br = ruota(B)
+  const copie: T6[] = ops.map(([m, u, v]) => {
+    // m nel riferimento ruotato: R·m·R⁻¹; poi attorno a O, poi la traslazione u·a + v·b
+    const Ri = rot(-th), mm = [Rt[0] * (m[0] * Ri[0] + m[1] * Ri[2]) + Rt[1] * (m[2] * Ri[0] + m[3] * Ri[2]), Rt[0] * (m[0] * Ri[1] + m[1] * Ri[3]) + Rt[1] * (m[2] * Ri[1] + m[3] * Ri[3]), Rt[2] * (m[0] * Ri[0] + m[1] * Ri[2]) + Rt[3] * (m[2] * Ri[0] + m[3] * Ri[2]), Rt[2] * (m[0] * Ri[1] + m[1] * Ri[3]) + Rt[3] * (m[2] * Ri[1] + m[3] * Ri[3])]
+    const tx = u * Ar[0] + (fregio ? 0 : v * Br[0]), ty = u * Ar[1] + (fregio ? 0 : v * Br[1])
+    return [mm[0], mm[1], mm[2], mm[3], O[0] - mm[0] * O[0] - mm[1] * O[1] + tx, O[1] - mm[2] * O[0] - mm[3] * O[1] + ty] as T6
+  })
+  // il dominio: un parallelogramma di area cella/ordine con un vertice nel centro (dove stanno gli assi e i centri di rotazione)
+  const sc = 1 / Math.sqrt(ops.length)
+  let dominio: [number, number][]
+  if (fregio) { const h = l * 0.42; const a2 = ruota([l * sc * 1.2, 0]), n2 = ruota([0, h]); dominio = [[O[0], O[1]], [O[0] + a2[0], O[1] + a2[1]], [O[0] + a2[0] + n2[0], O[1] + a2[1] + n2[1]], [O[0] + n2[0], O[1] + n2[1]]] }
+  else { const a2: [number, number] = [Ar[0] * sc, Ar[1] * sc], b2: [number, number] = [Br[0] * sc, Br[1] * sc]; dominio = [[O[0], O[1]], [O[0] + a2[0], O[1] + a2[1]], [O[0] + a2[0] + b2[0], O[1] + a2[1] + b2[1]], [O[0] + b2[0], O[1] + b2[1]]] }
+  const poligono: [number, number][] = fregio ? dominio : [[O[0], O[1]], [O[0] + Ar[0], O[1] + Ar[1]], [O[0] + Ar[0] + Br[0], O[1] + Ar[1] + Br[1]], [O[0] + Br[0], O[1] + Br[1]]]
+  return { gruppo: g, dominio, copie, poligono, reticolo: { a: Ar, b: Br }, centro: O, fregio }
+}
+
 
 export function geometria(rip: Ripeti, lato: number): Geometria {
+  if (isCarta(rip.gruppo) || isFregio(rip.gruppo)) return geometriaGruppo(rip.gruppo, rip.angolo, lato)
   const g = rip.gruppo, a = (rip.angolo * Math.PI) / 180, l = lato, O: [number, number] = [l / 2, l / 2]
   if (g === 'esagoni' || g === 'quadrati') {
     const n = g === 'esagoni' ? 6 : 4, r = l / 2, R = r / Math.cos(Math.PI / n)
@@ -88,7 +149,7 @@ export function bellezzaPattern(seg: Seg[], rip: Ripeti, lato: number) {
   const { im, N } = rasterizzaPattern(M)
   let pieno = 0; for (const v of im) pieno += v; pieno /= N * N
   if (pieno < 0.02) return { ...zero, pieno }
-  const sPieno = Math.exp(-(((pieno - 0.2) / 0.1) ** 2))
+  const sPieno = Math.exp(-(((pieno - (M.fregio ? 0.1 : 0.2)) / (M.fregio ? 0.06 : 0.1)) ** 2))
   const et = new Int32Array(N * N).fill(-1), coda = new Int32Array(N * N), aree: number[] = []
   for (let s = 0; s < N * N; s++) {
     if (im[s] || et[s] >= 0) continue
@@ -118,7 +179,7 @@ export function bellezzaPattern(seg: Seg[], rip: Ripeti, lato: number) {
   const sPulizia = tutto ? 1 - fr / tutto : 0
   const c16 = new Float64Array(16), q = N / 4; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) c16[Math.floor(y / q) * 4 + Math.floor(x / q)] += im[y * N + x]
   const tot = c16.reduce((a, b) => a + b, 0); let H = 0; for (const c of c16) if (c) { const p = c / tot; H -= p * Math.log(p) }
-  const sEq = H / Math.log(16)
+  const sEq = M.fregio ? 1 : H / Math.log(16)
   const totale = sPieno * (0.15 + 0.85 * sCelle) * (0.2 + 0.8 * sNitido) * (0.25 + 0.75 * sDistese) * (0.5 + 0.5 * sPulizia) * (0.4 + 0.6 * sEq)
   return { totale, pieno, celle: sCelle, nitido: sNitido, distese: sDistese, pulizia: sPulizia, equilibrio: sEq }
 }

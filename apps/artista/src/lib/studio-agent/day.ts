@@ -15,6 +15,9 @@ import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { serializza, ricostruisci } from './hands/cassetto'
 import { gusto as gustoVisivo } from './eyes/gusto'
+import { aggiornaCollezione, imparaCollezione, indirizzoPer } from './hands/tools3'
+import { disegnaCamera } from './hands/camera'
+import { disegnaCristallo } from './hands/cristallo'
 import { GENERICI } from './mind/pensiero'
 import { posDi } from './reader/concepts'
 import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
@@ -163,6 +166,8 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   const visits = st.visits.filter(v => !v.read)
   if (visits.length) log(`Trovo ${visits.length} note lasciate in studio.`)
   ensureVetrina(st, r)
+  // i mondi (cristallo, camera): la ricerca lunga della giornata aggiorna la sua collezione di indirizzi belli, per nicchia
+  { const t0 = Date.now(); aggiornaCollezione(st, st.day); const C0 = (st as AgentState & { collezione?: { cristallo?: object; camera?: object } }).collezione; log(`Collezione dei mondi: ${Object.keys(C0?.cristallo ?? {}).length} cristalli, ${Object.keys(C0?.camera ?? {}).length} camere (${((Date.now() - t0) / 1000).toFixed(1)} s).`) }
   if (await loadConcepts()) log('Ho il lessico: 50.000 parole italiane con i loro legami.')
   await loadInglese()
   const sc = ensureScuola(st, r)
@@ -429,6 +434,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     try { await T.riponiFoglio(saved.id, JSON.stringify(serializza(sheet))) } catch (e) { log(`Cassetto: ${e instanceof Error ? e.message : e}`) }
     // la misura delle muffe impara da come è venuta la tavola (interesse e gusto per la materia insieme)
     imparaScalaMuffa(st, sheet, 0.5 * saved.interest + 0.5 * gustoVisivo(st, f))
+    imparaCollezione(st, sheet, 0.5 * saved.interest + 0.5 * gustoVisivo(st, f))
     works.push(saved); riuscite.push(i)
     if (sc.b && ultimaImpaginazione()) esitoVisivo(st, sc.rel ?? 'accanto', ultimaImpaginazione()!, saved.interest)
     if (hooks.reel) { fogli.push(sheet); infoReel.push({ rel: sc.rel, interesse: saved.interest }) }
@@ -474,7 +480,15 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
       // le tavole buone di oggi sono poche? ne fa di nuove apposta, ragionando sulle ultime giornate, e le mette insieme alle buone
       let fogliR = fogli, infoR = infoReel, esclusiAH: string[] = []
       const bo = buone(st, fogli, intention)
-      if (bo.length < 4) {
+      // a volte il reel è dei suoi mondi che si creano nel tempo (cristallo, camera, muffa), a tutto schermo, strato su strato.
+      // Quanto spesso è un suo tratto, che si sposta con come arrivano questi reel
+      const SM = st as AgentState & { reelMondi?: { p: number } }
+      if (r() < (SM.reelMondi ??= { p: 0.3 }).p) {
+        fogliR = fogliMondi(st, r, fogli[0], 4); infoR = fogliR.map(() => ({ interesse: 0.5 }))
+        ;(st as AgentState & { ultimoReelMondi?: boolean }).ultimoReelMondi = true
+        log('Reel: questa volta i miei mondi che crescono, senza parole.')
+      } else if (bo.length < 4) {
+        ;(st as AgentState & { ultimoReelMondi?: boolean }).ultimoReelMondi = false
         const ah = await tavoleAdHoc(st, r, { log, intention, readings, quante: 4 - bo.length + 1, fast: hooks.fast, suggerito: plan.d?.a ?? intention.word, perche: `delle tavole di oggi solo ${bo.length} reggono un reel` })
         for (const w of ah.works) hooks.onWork?.(w)
         esclusiAH = ah.works.map(w => w.id)
@@ -846,4 +860,29 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   log(`Reel: beat ${brano.descr} (orecchio: punch cassa ${orecchio.punchCassa.toFixed(1)} dB, rullante ${orecchio.punchRullante.toFixed(1)} dB, baricentro ${Math.round(orecchio.baricentro)} Hz); ${descr}. Copertina a ${(copertinaMs / 1000).toFixed(1)} s. ${(video.size / 1e6).toFixed(1)} MB.`)
   ;(st as ConMovimento & { copertine?: Record<string, number> }).copertine = { ...((st as ConMovimento & { copertine?: Record<string, number> }).copertine ?? {}), ultima: copertinaMs }
   return { video, audio: wav(audio) }
+}
+
+/** le tavole di un reel dei mondi: su un fondo della giornata, un mondo a tutto schermo e a volte un secondo che lo attraversa */
+function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n: number): Sheet[] {
+  const W0 = base?.W ?? 800, H0 = base?.H ?? 1000, bg = base?.bg ?? '#141414'
+  const lb = lum0(bg.length >= 7 ? bg : '#141414')
+  const tinte = [...new Set((base?.layers ?? []).map(l => l.meta?.color).filter((c): c is string => !!c && Math.abs(lum0(c) - lb) > 0.35)), lb > 0.5 ? '#1b1a18' : '#efe9dc']
+  const out: Sheet[] = []
+  for (let i = 0; i < n; i++) {
+    let f = emptySheet(W0, H0, bg)
+    const strati = 1 + (r() < 0.5 ? 1 : 0)
+    for (let k = 0; k < strati; k++) {
+      const q = r(), tipo = q < 0.45 ? 'camera' : q < 0.85 ? 'cristallo' : 'muffa'
+      const colore = tinte[Math.floor(r() * tinte.length)]
+      if (tipo === 'muffa') {
+        const seme = Math.floor(r() * 1e9), cv = disegnaMuffa(seme, colore, 900)
+        f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: 'motivo', canvas: cv, x: 0.5, y: 0.47, scale: 1.1 + r() * 0.3, rot: r() * 6.283, alpha: 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900 } } }] }
+      } else {
+        const indirizzo = indirizzoPer(tipo, r, String(st.day)), cv = tipo === 'camera' ? disegnaCamera(indirizzo, { S: 900, colore, fondo: null }) : disegnaCristallo(indirizzo, { S: 900, colore, fondo: null })
+        f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: k === 0 ? 1.3 : 0.8 + r() * 0.4, rot: k === 0 ? 0 : (r() - 0.5) * 0.8, alpha: k === 0 ? 1 : 0.85, blend: k === 0 ? 'source-over' : lb > 0.5 ? 'multiply' : 'screen', genera: { tool: tipo, p: { indirizzo, colore, S: 900 } } }] }
+      }
+    }
+    out.push(f)
+  }
+  return out
 }

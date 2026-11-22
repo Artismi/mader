@@ -259,7 +259,9 @@ const ore = (q?: string) => (q ? (Date.now() - new Date(q).getTime()) / 3.6e6 : 
 export async function agenda() {
   const st = await loadOrCreate(), A = getAgenda(st)
   // il ritmo di ogni forma si accorcia o si allunga con quanto quella forma arriva davvero (la portata misurata, pesiForma)
-  const peso = (f: Forma3) => (A.pesiForma ?? {})[f] ?? 1
+  // prima di avere misure, i reel pesano di più (sono loro che arrivano ai non-follower); poi decide la portata misurata
+  const PRIMA: Record<Forma3, number> = { reel: 2, carosello: 0.6, storia: 0.7 }
+  const peso = (f: Forma3) => (A.pesiForma ?? {})[f] ?? PRIMA[f]
   const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / (ORE[f] / peso(f))])) as Record<Forma3, number>
   const dovute = (Object.keys(ORE) as Forma3[]).filter(f => ritardo[f] >= 1).sort((a, b) => ritardo[b] - ritardo[a])
   return { dovute, ritardo, libera: ore(A.qualsiasi) >= 2, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
@@ -276,7 +278,7 @@ export async function annotaPubblicazione(forma: Forma3, epId: string | null, wo
   const works = (await T.listWorks()).filter(w => ids.includes(w.id))
   const ora = new Date().toISOString()
   A.ultimo[forma] = ora; A.qualsiasi = ora
-  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, astratta: forma === 'reel' ? (st as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
+  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, astratta: forma === 'reel' ? (st as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta : undefined, mondi: forma === 'reel' ? (st as AgentState & { ultimoReelMondi?: boolean }).ultimoReelMondi : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
   await T.putState(st)
 }
 
@@ -345,6 +347,7 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
     if (p.works?.length) { opere ??= await T.listWorks(); for (const id of p.works) { const w = opere.find(x => x.id === id); if (w?.visual?.features) impara(st, w.visual.features, (z + 2.5) / 5) } }
     // la voglia di una tavola astratta in mezzo si sposta con come è arrivato il reel che l'aveva (o non l'aveva)
     if (p.forma === 'reel' && typeof (p as { astratta?: boolean }).astratta === 'boolean') { const SA = ((st as AgentState & { astratta?: { p: number } }).astratta ??= { p: 0.65 }); SA.p = Math.max(0.25, Math.min(0.9, SA.p + 0.04 * z * ((p as { astratta?: boolean }).astratta ? 1 : -1))) }
+    if (p.forma === 'reel' && typeof (p as { mondi?: boolean }).mondi === 'boolean') { const SM = ((st as AgentState & { reelMondi?: { p: number } }).reelMondi ??= { p: 0.3 }); SM.p = Math.max(0.1, Math.min(0.8, SM.p + 0.05 * z * ((p as { mondi?: boolean }).mondi ? 1 : -1))) }
     p.premiato = true
     if (Math.abs(z) > 1) note.push(`${p.forma === 'reel' ? 'il reel' : p.forma === 'storia' ? 'la storia' : 'il carosello'} del ${new Date(p.quando).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} ${z > 0 ? 'è arrivato più del solito' : 'è passato quasi inosservato'}`)
   }
