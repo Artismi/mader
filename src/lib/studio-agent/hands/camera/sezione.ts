@@ -54,6 +54,27 @@ export function rasterizzaSezione(seg: Seg[], lato: number, N = 96) {
   return m
 }
 
+/** gli spigoli di una sezione libera: quanta parte dell'inchiostro è ripassata da molti tratti (scarabocchio, gomitolo)
+ *  e quanta sta in nodi affollati. Si conta per tratto: i giunti tra segmenti consecutivi danno 2-3, i ripassi veri di più. */
+export function affollamento(seg: Seg[], lato: number, N = 96) {
+  const conta = new Uint8Array(N * N), timbro = new Int32Array(N * N).fill(-1), k = N / lato
+  seg.forEach(([a, b, c, d, w], id) => {
+    const n = Math.max(1, Math.ceil(Math.hypot(c - a, d - b) * k * 1.5)), r = Math.max(0.6, (w * k) / 2)
+    for (let i = 0; i <= n; i++) {
+      const x = (a + ((c - a) * i) / n) * k, y = (b + ((d - b) * i) / n) * k
+      for (let yy = Math.floor(y - r); yy <= Math.ceil(y + r); yy++) for (let xx = Math.floor(x - r); xx <= Math.ceil(x + r); xx++) {
+        if (xx < 0 || yy < 0 || xx >= N || yy >= N) continue
+        const pp = yy * N + xx
+        if ((xx + 0.5 - x) ** 2 + (yy + 0.5 - y) ** 2 <= r * r && timbro[pp] !== id) { timbro[pp] = id; if (conta[pp] < 255) conta[pp]++ }
+      }
+    }
+  })
+  let ink = 0, tre = 0, cinque = 0
+  for (let i = 0; i < N * N; i++) { const v = conta[i]; if (!v) continue; ink++; if (v >= 4) tre++; if (v >= 6) cinque++ }
+  const ripassi = Math.max(0, 1 - 5 * (ink ? tre / ink : 0)), nodi = Math.max(0, 1 - 14 * (ink ? cinque / ink : 0))
+  return { ripassi, nodi, fattore: (0.3 + 0.7 * ripassi) * (0.45 + 0.55 * nodi) }
+}
+
 export function bellezza(seg: Seg[], lato: number) {
   const N = 96, m = rasterizzaSezione(seg, lato, N)
   let pieno = 0; for (const v of m) pieno += v; pieno /= N * N
@@ -84,6 +105,7 @@ export function bellezza(seg: Seg[], lato: number) {
   const sOrdine = tutto ? pesi.slice(0, 4).reduce((a, b) => a + b, 0) / tutto : 0
   let fr = 0; for (const w of perTraccia.values()) if (w < 0.15 * lato) fr += w
   const sPulizia = tutto ? 1 - fr / tutto : 0
-  const totale = sPieno * (0.35 + 0.65 * sEq) * (0.25 + 1.2 * sSim + 0.8 * sRip) * (0.4 + 0.6 * sCurve) * (0.3 + 0.7 * sOrdine) * (0.4 + 0.6 * sPulizia)
-  return { totale, pieno, equilibrio: sEq, simmetria: sSim, ripetizione: sRip, curve: sCurve, ordine: sOrdine, pulizia: sPulizia }
+  const af = affollamento(seg, lato, N)
+  const totale = sPieno * (0.35 + 0.65 * sEq) * (0.25 + 1.2 * sSim + 0.8 * sRip) * (0.4 + 0.6 * sCurve) * (0.3 + 0.7 * sOrdine) * (0.4 + 0.6 * sPulizia) * af.fattore
+  return { totale, pieno, ripassi: af.ripassi, nodi: af.nodi, equilibrio: sEq, simmetria: sSim, ripetizione: sRip, curve: sCurve, ordine: sOrdine, pulizia: sPulizia }
 }

@@ -147,7 +147,7 @@ function simulaOnde(indirizzo: string): Simulato {
   const b = new Uint8Array(G * G)
   for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const v = f[j * (G + 1) + i]; let n = 0; for (const lv of livelli) if (v > lv) n++; b[j * G + i] = n % 2 }
   const p = { famiglia: 'onde', finestra: { L } } as unknown as Pattern
-  const pu = pulisci(out, L)
+  const pu = pulisci(out, L, false) // le curve di livello non si ripassano per costruzione
   return { chiusura: pu.chiusura, p, L, tratti: pu.tratti, famiglia: 'onde/' + (esa ? 'esagonale' : 'quadrato') + (chirale ? '/chirale' : ''), ms: performance.now() - t0, stile: stileDi(indirizzo, 'onde'), vmax: 1, bande: { G, b } }
 }
 
@@ -164,7 +164,7 @@ function simula(indirizzo: string, budgetMs = 650): Simulato {
   if (p.orbiteDa) {
     const cr = creaCristallo({ ...vincola(p.reticolo), atomi: p.atomi, w: p.w, U0: p.U0 })
     const E = 0.5 * (p.v0[0] ** 2 + p.v0[1] ** 2) + cr.campo(p.r0[0], p.r0[1], 0, null)
-    const L0 = catalogo(cr, E, p.B, { semi: p.orbiteDa.semi, max: 8, tempoMax: Math.min(450, budgetMs * 0.6), radice: `artista/${indirizzo}/${E}` }) as unknown[]
+    const L0 = catalogo(cr, E, p.B, { semi: p.orbiteDa.semi, max: 8, tempoMax: 4000, radice: `artista/${indirizzo}/${E}` }) as unknown[]
     if (L0.length) {
       // prima le orbite che si richiudono nella stessa cella (anelli, rosette), poi i canali; la scelta dal caso dell'indirizzo
       const c2 = sorgente(`orbite/${indirizzo}`), chiuse = (L0 as { m: number[] }[]).filter(o => !o.m[0] && !o.m[1]), aperte = (L0 as { m: number[] }[]).filter(o => o.m[0] || o.m[1])
@@ -232,7 +232,7 @@ function simula(indirizzo: string, budgetMs = 650): Simulato {
  *    gli stati di crescita non ripassano.
  * Restituisce la quota di capi chiusi (saldati o fuori finestra) sul totale.
  */
-function pulisci(out: Tratto[], L: number): { tratti: Tratto[]; chiusura: number } {
+function pulisci(out: Tratto[], L: number, ripassi = true): { tratti: Tratto[]; chiusura: number } {
   if (!out.length) return { tratti: out, chiusura: 1 }
   const k = 560 / L, eps = 1e-6 * L
   // 1) le catene
@@ -276,28 +276,51 @@ function pulisci(out: Tratto[], L: number): { tratti: Tratto[]; chiusura: number
     const r = capi[best]; if (best < j) { q.x = r.x; q.y = r.y } // si salda sul capo già fissato
   })
   capi.forEach((q, j) => { const [i0, i1] = catene[q.c]; if (!chiuso[j]) return; if (q.fine) { out[i1 - 1].x2 = q.x; out[i1 - 1].y2 = q.y } else { out[i0].x1 = q.x; out[i0].y1 = q.y } })
-  // 3) i ripassi: una griglia di 1.5 px con, per cella, le direzioni (16 spicchi su 180°) già tracciate
-  const C = 1.5, N = Math.ceil(560 / C) + 2, dir = new Uint16Array(N * N)
+  // 3) i ripassi: una griglia di 1.5 px con, per cella, le direzioni (16 spicchi su 180°) già tracciate e chi le ha
+  //    tracciate (catena e ascissa lungo la catena: il proprio tratto appena precedente non conta come ripasso)
+  if (!ripassi) { let ch = 0; for (let j = 0; j < chiuso.length; j++) ch += chiuso[j]; return { tratti: out, chiusura: ch / capi.length } }
+  const C = 1, N = Math.ceil(560 / C) + 2, dir = new Uint16Array(N * N), chi = new Int32Array(N * N).fill(-1), dove = new Float32Array(N * N)
   const cella = (x: number, y: number) => { const X = Math.floor((x * k + 280) / C) + 1, Y = Math.floor((280 - y * k) / C) + 1; return X < 1 || Y < 1 || X >= N - 1 || Y >= N - 1 ? -1 : Y * N + X }
+  const catenaDi = new Int32Array(out.length), ascissa = new Float32Array(out.length)
+  catene.forEach(([i0, i1], c) => { let u = 0; for (let i = i0; i < i1; i++) { catenaDi[i] = c; ascissa[i] = u; u += Math.hypot(out[i].x2 - out[i].x1, out[i].y2 - out[i].y1) * k } })
   const ordine = out.map((_, i) => i).sort((p, q) => out[p].t - out[q].t || p - q)
   const tieni = new Uint8Array(out.length)
-  const campioni: number[] = []
+  const campioni: number[] = [], posti: number[] = []
   for (const i of ordine) {
     const s = out[i], dx = s.x2 - s.x1, dy = s.y2 - s.y1, lp = Math.hypot(dx, dy) * k
     if (lp < 0.01) continue
     let an = Math.atan2(dy, dx); if (an < 0) an += Math.PI; if (an >= Math.PI) an -= Math.PI
     const b = Math.floor(an / Math.PI * 16) % 16, m = (1 << b) | (1 << ((b + 1) % 16)) | (1 << ((b + 15) % 16))
-    const ns = Math.max(2, Math.ceil(lp / C)); let coperti = 0, dentro = 0; campioni.length = 0
+    const ci = catenaDi[i], ns = Math.max(2, Math.ceil(lp / C)); let coperti = 0, dentro = 0; campioni.length = 0; posti.length = 0
     for (let j = 0; j <= ns; j++) {
       const c = cella(s.x1 + dx * j / ns, s.y1 + dy * j / ns); if (c < 0) continue
-      dentro++; campioni.push(c)
+      const u = ascissa[i] + lp * j / ns
+      dentro++; campioni.push(c); posti.push(u)
       let gia = false
-      for (let oy = -1; oy <= 1 && !gia; oy++) for (let ox = -1; ox <= 1; ox++) if (dir[c + oy * N + ox] & m) { gia = true; break }
+      for (let oy = -1; oy <= 1 && !gia; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const q = c + oy * N + ox
+        if (!(dir[q] & m)) continue
+        if (chi[q] === ci && Math.abs(dove[q] - u) < 10) continue
+        gia = true; break
+      }
       if (gia) coperti++
     }
     if (dentro && coperti >= dentro * 0.85) continue
     tieni[i] = 1
-    for (const c of campioni) dir[c] |= 1 << b
+    for (let j = 0; j < campioni.length; j++) { const c = campioni[j]; dir[c] |= 1 << b; chi[c] = ci; dove[c] = posti[j] }
+  }
+  // niente tratteggi: lungo ogni catena un pezzetto tenuto in mezzo a pezzi tolti si toglie, un buco corto tra pezzi
+  // tenuti si richiude (la linea resta intera o sparisce intera, non a trattini)
+  const lun = (i: number) => Math.hypot(out[i].x2 - out[i].x1, out[i].y2 - out[i].y1) * k
+  for (const [vale, soglia] of [[1, 8], [0, 6]] as const) for (const [i0, i1] of catene) {
+    let i = i0
+    while (i < i1) {
+      if (tieni[i] !== vale) { i++; continue }
+      let j = i, u = 0; while (j < i1 && tieni[j] === vale) { u += lun(j); j++ }
+      const prima = i > i0 ? tieni[i - 1] : (vale ? 0 : -1), dopo = j < i1 ? tieni[j] : (vale ? 0 : -1)
+      if (u < soglia && prima === 1 - vale && dopo === 1 - vale) for (let q = i; q < j; q++) tieni[q] = 1 - vale
+      i = j
+    }
   }
   const ok = out.filter((_, i) => tieni[i] || cella(out[i].x1, out[i].y1) < 0)
   let ch = 0; for (let j = 0; j < chiuso.length; j++) ch += chiuso[j]
@@ -327,7 +350,9 @@ function larghezza(sim: Simulato, t: Tratto, sp: number): number {
 
 function disegnaPezzi(g: CanvasRenderingContext2D, sim: Simulato, S: number, colore: string, spessore: number, da: number, a: number) {
   const k = S / sim.L, cx = S / 2, cy = S / 2, sp = spessore
-  g.strokeStyle = colore; g.lineCap = 'round'; g.lineJoin = 'round'; g.globalCompositeOperation = 'source-over'
+  // capi a taglio netto: tra un pezzo e l'altro (e tra gruppi di tono diverso) i capi tondi si sovrapporrebbero, e con
+  // l'alfa sotto 1 lascerebbero un punto ripassato a ogni giunta (nei nastri, una sbarretta dentro il canale)
+  g.strokeStyle = colore; g.lineCap = 'butt'; g.lineJoin = 'round'; g.globalCompositeOperation = 'source-over'
   const tr = sim.tratti
   for (let pz = da; pz < a; pz++) {
     const t0 = pz / Q, t1 = (pz + 1) / Q
@@ -335,19 +360,40 @@ function disegnaPezzi(g: CanvasRenderingContext2D, sim: Simulato, S: number, col
     let lo = 0, hi = tr.length
     while (lo < hi) { const m = (lo + hi) >> 1; if (tr[m].t <= t0 && pz > 0) lo = m + 1; else hi = m }
     // raggruppati per spessore (6 classi) e tono (4 classi): pochi tracciati per pezzo
-    const gruppi = new Map<number, { w: number; al: number; t: Tratto[] }>()
+    const gruppi = new Map<number, { w: number; al: number; t: Tratto[] }>(), indice = new Map<Tratto, number>()
     for (let i = pz === 0 ? 0 : lo; i < tr.length && (tr[i].t <= t1 || pz === Q - 1); i++) {
       const w = larghezza(sim, tr[i], sp), wb = Math.round(Math.log2(Math.max(0.25, w)) * 3), ab = Math.min(3, Math.floor(tr[i].l * 4))
       const key = wb * 8 + ab
       let gr = gruppi.get(key); if (!gr) { gr = { w: Math.pow(2, wb / 3), al: 0.32 + 0.2 * ab, t: [] }; gruppi.set(key, gr) }
-      gr.t.push(tr[i])
+      gr.t.push(tr[i]); if (sim.stile === 'nastro') indice.set(tr[i], i)
     }
-    const traccia = (gr: { t: Tratto[] }) => { g.beginPath(); for (const s of gr.t) { g.moveTo(cx + s.x1 * k, cy - s.y1 * k); g.lineTo(cx + s.x2 * k, cy - s.y2 * k) } }
+    // i tratti contigui diventano una polilinea sola (giunzioni vere, niente sovrapposizioni dentro la linea)
+    const traccia = (gr: { t: Tratto[] }) => {
+      g.beginPath(); let ux = NaN, uy = NaN
+      for (const s of gr.t) {
+        const x1 = cx + s.x1 * k, y1 = cy - s.y1 * k
+        if (Math.abs(x1 - ux) > 1e-3 || Math.abs(y1 - uy) > 1e-3) g.moveTo(x1, y1)
+        ux = cx + s.x2 * k; uy = cy - s.y2 * k; g.lineTo(ux, uy)
+      }
+    }
     for (const gr of [...gruppi.values()].sort((x, y) => y.w - x.w)) {
       if (sim.stile === 'nastro') {
-        // il nastro: la linea spessa, poi il suo interno svuotato; i nastri dopo passano sopra quelli prima (l'intreccio)
-        g.globalAlpha = 1; g.lineWidth = gr.w; traccia(gr); g.stroke()
-        g.globalCompositeOperation = 'destination-out'; g.lineWidth = gr.w * 0.5; g.stroke(); g.globalCompositeOperation = 'source-over'
+        // il nastro: la linea spessa, poi il suo interno svuotato; i nastri dopo passano sopra quelli prima (l'intreccio).
+        // Capi tondi (niente fessure alle giunte) e, per non lasciare la sbarretta del capo dentro il canale del tratto
+        // precedente, lo svuotamento ripassa anche il tratto che viene subito prima di ogni capo
+        g.globalAlpha = 1; g.lineCap = 'round'; g.lineWidth = gr.w; traccia(gr); g.stroke()
+        const conPrima: Tratto[] = []
+        const prol = (gr.w * 0.6) / k // dove la catena finisce (una cucitura della tessera, una saldatura) il canale prosegue un poco
+        for (const s of gr.t) {
+          const j = indice.get(s)!, pr = j > 0 ? tr[j - 1] : null, nx = j + 1 < tr.length ? tr[j + 1] : null
+          const ux = s.x2 - s.x1, uy = s.y2 - s.y1, ul = Math.hypot(ux, uy) || 1
+          if (pr && Math.abs(pr.x2 - s.x1) + Math.abs(pr.y2 - s.y1) < 1e-9) { if (conPrima[conPrima.length - 1] !== pr) conPrima.push(pr) }
+          else conPrima.push({ ...s, x1: s.x1 - (ux / ul) * prol, y1: s.y1 - (uy / ul) * prol, x2: s.x1, y2: s.y1 })
+          conPrima.push(s)
+          if (nx && Math.abs(s.x2 - nx.x1) + Math.abs(s.y2 - nx.y1) < 1e-9) conPrima.push(nx)
+          else conPrima.push({ ...s, x1: s.x2, y1: s.y2, x2: s.x2 + (ux / ul) * prol, y2: s.y2 + (uy / ul) * prol })
+        }
+        g.globalCompositeOperation = 'destination-out'; g.lineWidth = gr.w * 0.5; traccia({ t: conPrima }); g.stroke(); g.globalCompositeOperation = 'source-over'; g.lineCap = 'butt'
       } else if (sim.stile === 'luce') {
         // l'alone: tre passate, larga e lieve, media, sottile e piena
         traccia(gr)
@@ -469,7 +515,7 @@ export function lineeCristallo(indirizzo: string, o: { S?: number } = {}): { pun
 export const famigliaCristallo = (indirizzo: string) => patternDi(indirizzo).famiglia ?? ''
 
 /** quello che si misura di un motivo finito (disegnato nel suo stile, a 128 px): serve al voto e alle nicchie */
-interface Analisi { pieno: number; celleMedie: number; minuscole: number; frammenti: number; saturo: number; ripetizione: number; simmetria: number; curvatura: number; prospettiva: number; gerarchia: number }
+interface Analisi { incroci: number; sovra: number; chiusura: number; pieno: number; celleMedie: number; minuscole: number; frammenti: number; saturo: number; ripetizione: number; simmetria: number; curvatura: number; prospettiva: number; gerarchia: number }
 const analisi = new Map<string, Analisi>()
 function analizza(sim: Simulato, chiave?: string): Analisi {
   const giaFatta = chiave ? analisi.get(chiave) : undefined
@@ -522,7 +568,29 @@ function analizza(sim: Simulato, chiave?: string): Analisi {
   let w1 = 0, w2 = 0, nw = 0
   for (let i = 0; i < tr.length; i += passoC * 3) { const w = larghezza(sim, tr[i], 1); w1 += w; w2 += w * w; nw++ }
   const wm = w1 / Math.max(1, nw), gerarchia = nw ? Math.sqrt(Math.max(0, w2 / nw - wm * wm)) / (wm || 1) : 0
+  // gli spigoli: su una griglia di ~6 px, le direzioni presenti in ogni cella (8 spicchi) e quanta linea ci passa.
+  // Tre o più fasci di direzioni diverse nella stessa cella = incrocio multiplo concentrato; troppa linea = sovra-disegno
+  const G = 96, cp = 560 / G, kk = 560 / sim.L, maschera = new Uint8Array(G * G), quanta = new Float32Array(G * G)
+  for (const s of tr) {
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1, lp = Math.hypot(dx, dy) * kk; if (lp < 1e-3) continue
+    let an = Math.atan2(dy, dx); if (an < 0) an += Math.PI
+    const bit = 1 << (Math.floor(an / Math.PI * 8) % 8), ns = Math.max(1, Math.ceil(lp / (cp * 0.5)))
+    for (let j = 0; j < ns; j++) {
+      const X = Math.floor(((s.x1 + dx * (j + 0.5) / ns) * kk + 280) / cp), Y = Math.floor((280 - (s.y1 + dy * (j + 0.5) / ns) * kk) / cp)
+      if (X < 0 || Y < 0 || X >= G || Y >= G) continue
+      const q = Y * G + X; maschera[q] |= bit; quanta[q] += lp / ns
+    }
+  }
+  let celleInk = 0, multi = 0, dense = 0
+  for (let q = 0; q < G * G; q++) {
+    const mm = maschera[q]; if (!mm) continue
+    celleInk++
+    const rot = ((mm << 1) | (mm >> 7)) & 255, fasci = mm === 255 ? 1 : (mm & ~rot & 255).toString(2).replace(/0/g, '').length
+    if (fasci >= 3) multi++
+    if (quanta[q] > cp * 3.2) dense++
+  }
   const out: Analisi = {
+    incroci: multi / Math.max(1, celleInk), sovra: dense / Math.max(1, celleInk), chiusura: sim.chiusura ?? 1,
     pieno: fr, celleMedie, minuscole, frammenti, saturo: saturo / Math.max(1, pieno),
     ripetizione: Math.max(0, Math.min(1, rip)), simmetria: Math.max(0, Math.min(1, sim2)),
     curvatura: Math.min(1, nn ? (giro / nn) * 4 : 0), prospettiva: sim.p?.finestra?.R !== undefined && Number.isFinite(sim.p.finestra.R) ? 1 : 0, gerarchia: Math.min(1, gerarchia),
@@ -551,7 +619,10 @@ function voto(sim: Simulato, chiave?: string): number {
     * (1 - Math.max(0, Math.min(0.9, (A.minuscole - 0.5) * 2 * (1 - Math.min(1, A.celleMedie * 3)))))
   const ordine = 0.3 + 0.7 * Math.max(A.ripetizione, A.simmetria * 0.9)
   const gerarchia = 1 + 0.25 * A.gerarchia
-  return Math.max(0, pieno * celle * nitido * pulito * groviglio * ordine * gerarchia)
+  // gli spigoli (incroci multipli concentrati, sovra-disegno) pesano; le chiusure pulite (niente capi liberi) premiano
+  const spigoli = (1 - Math.min(0.75, A.incroci * 2.2)) * (1 - Math.min(0.7, A.sovra * 1.6))
+  const chiusura = 0.7 + 0.4 * A.chiusura
+  return Math.max(0, pieno * celle * nitido * pulito * groviglio * ordine * gerarchia * spigoli * chiusura)
 }
 
 /** le famiglie di sguardo raggiungibili dagli indirizzi */

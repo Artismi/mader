@@ -8,6 +8,8 @@
  */
 import { pick, range, type Rnd } from '../core/rng'
 import { tempoDi } from './tempo'
+import { vesti, vesteACaso, type Veste } from './veste'
+const lumH = (h: string) => { const m = (h ?? '').replace('#', ''); if (m.length < 6) return 0.5; return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * parseInt(m.slice(i, i + 2), 16) / 255, 0) }
 import { withLayer, type Sheet, type Layer, type Blend } from './sheet'
 import type { Tool, ToolCtx } from './tools'
 import * as C from './cristallo'
@@ -119,6 +121,8 @@ function mondo(tipo: 'cristallo' | 'camera'): Tool {
         rot: pieno ? 0 : (c.r() - 0.5) * 0.6,
         alpha: range(c.r, 0.7, 1),
         spessore: range(c.r, 1.4, 4),
+        // la veste: il colore come luce (sfumature dei preset del software, armonie, la tavola), il bagliore, la grana
+        veste: vesteACaso(c.r, [c.tone.ink, c.tone.acc], lumH(c.tone.bg) < 0.5),
         blend: pick(c.r, ['source-over', 'source-over', 'multiply', 'screen', 'overlay'] as Blend[]),
       }
     },
@@ -128,7 +132,8 @@ function mondo(tipo: 'cristallo' | 'camera'): Tool {
       const cv = tipo === 'cristallo'
         ? disegnaCristallo(p.indirizzo as string, { S, colore: p.colore as string, fondo: null, fino: T.crescita, spessore: p.spessore as number })
         : disegnaCamera(p.indirizzo as string, { S, colore: p.colore as string, fondo: null, fino: T.crescita })
-      const l: Layer = { id: lid(), kind: tipo, canvas: cv, x: p.x as number, y: p.y as number, scale: p.scala as number, rot: p.rot as number, alpha: p.alpha as number, blend: p.blend as Blend }
+      const vestito = p.veste ? vesti(cv, p.veste as Veste) : cv
+      const l: Layer = { id: lid(), kind: tipo, canvas: vestito, x: p.x as number, y: p.y as number, scale: p.scala as number, rot: p.rot as number, alpha: p.alpha as number, blend: p.blend as Blend }
       return withLayer(s, l)
     },
   }

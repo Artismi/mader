@@ -209,7 +209,9 @@ export function cercaCamere(seme: string, n: number, budgetMs = 3000): { indiriz
     const fine = Math.max(0.05, a.fetta[0]) * tMax
     const seg = segmentiSezione(tracce, a.finestra, { fine, durata: Math.max(0.05, a.fetta[1]) * fine }, a.vista)
     if (seg.length < 30) return 0
-    return bellezzaFinestra(seg, a.ripeti, a.finestra.lato).totale
+    const v = bellezzaFinestra(seg, a.ripeti, a.finestra.lato).totale
+    // le tracce libere viste dall'alto sono spesso scarabocchi: valgono meno, e si cercano soprattutto di sbieco
+    return a.ripeti.gruppo === 'una' && !a.vista.inclinazione ? v * 0.7 : v
   }
   let u = 0
   const tempoRicerca = budgetMs * 0.75
@@ -226,7 +228,7 @@ export function cercaCamere(seme: string, n: number, budgetMs = 3000): { indiriz
         numero,
         finestra: { centro: [ct[0] + tra(-60, 60), ct[1] + tra(-60, 60)], lato: modo === 'tracce' ? tra(160, 520) : tra(70, 340) },
         // la sezione inclinata dello spaziotempo: le spirali diventano eliche, onde, trocoidi, cordoni
-        vista: c() < (modo === 'tracce' ? 0.3 : 0.5) ? VISTA_SOPRA : { inclinazione: tra(15, 78), rotazione: tra(0, 360), scalaTempo: tra(2, 9) },
+        vista: c() < (modo === 'tracce' ? 0.12 : 0.5) ? VISTA_SOPRA : { inclinazione: tra(15, 78), rotazione: tra(0, 360), scalaTempo: tra(2, 9) },
         fetta: [tra(0.35, 1), c() < 0.5 ? 1 : tra(0.15, 0.8)],
         ripeti: modo === 'tracce' ? { gruppo: 'una', angolo: 0 } : { gruppo: modo === 'carta' ? GRUPPI_CARTA[Math.floor(c() * GRUPPI_CARTA.length)] : FREGI[Math.floor(c() * FREGI.length)], angolo: modo === 'fregio' && c() < 0.7 ? Math.round(c() * 4) * 90 + Math.round(tra(-4, 4)) : Math.round(tra(0, 360)) },
       }

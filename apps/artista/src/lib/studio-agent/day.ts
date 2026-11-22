@@ -18,6 +18,7 @@ import { gusto as gustoVisivo } from './eyes/gusto'
 import { aggiornaCollezione, imparaCollezione, indirizzoPer } from './hands/tools3'
 import { disegnaCamera } from './hands/camera'
 import { disegnaCristallo } from './hands/cristallo'
+import { vesti, vesteACaso, fondoCosmico } from './hands/veste'
 import { GENERICI } from './mind/pensiero'
 import { posDi } from './reader/concepts'
 import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
@@ -870,16 +871,22 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
   const out: Sheet[] = []
   for (let i = 0; i < n; i++) {
     let f = emptySheet(W0, H0, bg)
+    // spesso il cielo: un fondo cosmico (profondo, una nebulosa accennata, polvere di stelle), e la luce delle linee che si accende sopra
+    const cielo = r() < 0.6, vesteF = vesteACaso(r, tinte, cielo || lb < 0.5)
+    if (cielo) f = { ...f, bg: '#05050a', layers: [{ id: `cielo${i}`, kind: 'fondo', canvas: fondoCosmico(W0, H0, r, vesteF.colori), x: 0.5, y: 0.5, scale: Math.max(W0, H0) / Math.min(W0, H0), rot: 0, alpha: 1, blend: 'source-over' }] }
     const strati = 1 + (r() < 0.5 ? 1 : 0)
     for (let k = 0; k < strati; k++) {
       const q = r(), tipo = q < 0.45 ? 'camera' : q < 0.85 ? 'cristallo' : 'muffa'
-      const colore = tinte[Math.floor(r() * tinte.length)]
+      // sul cielo l'inchiostro è luce (un colore della veste), mai scuro su scuro
+      const colore = cielo ? vesteF.colori[Math.floor(r() * vesteF.colori.length)] : tinte[Math.floor(r() * tinte.length)]
       if (tipo === 'muffa') {
         const seme = Math.floor(r() * 1e9), cv = disegnaMuffa(seme, colore, 900)
         f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: 'motivo', canvas: cv, x: 0.5, y: 0.47, scale: 1.1 + r() * 0.3, rot: r() * 6.283, alpha: 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900 } } }] }
       } else {
-        const indirizzo = indirizzoPer(tipo, r, String(st.day)), cv = tipo === 'camera' ? disegnaCamera(indirizzo, { S: 900, colore, fondo: null }) : disegnaCristallo(indirizzo, { S: 900, colore, fondo: null })
-        f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: k === 0 ? 1.3 : 0.8 + r() * 0.4, rot: k === 0 ? 0 : (r() - 0.5) * 0.8, alpha: k === 0 ? 1 : 0.85, blend: k === 0 ? 'source-over' : lb > 0.5 ? 'multiply' : 'screen', genera: { tool: tipo, p: { indirizzo, colore, S: 900 } } }] }
+        const indirizzo = indirizzoPer(tipo, r, String(st.day)), veste = k === 0 ? vesteF : vesteACaso(r, tinte, cielo || lb < 0.5)
+        const crudo = tipo === 'camera' ? disegnaCamera(indirizzo, { S: 900, colore, fondo: null }) : disegnaCristallo(indirizzo, { S: 900, colore, fondo: null }), cv = vesti(crudo, veste)
+        const scuroF = cielo || lb < 0.5
+        f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: k === 0 ? 1.3 : 0.8 + r() * 0.4, rot: k === 0 ? 0 : (r() - 0.5) * 0.8, alpha: k === 0 ? 1 : 0.85, blend: k === 0 ? 'source-over' : scuroF ? 'screen' : 'multiply', genera: { tool: tipo, p: { indirizzo, colore, S: 900, veste } } }] }
       }
     }
     out.push(f)
