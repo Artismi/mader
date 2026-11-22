@@ -14,10 +14,9 @@ import type { AgentState, Genome, Gesture, Intention, NotebookEntry, Reading, Ri
 import { rng, pick, weighted, uid } from './core/rng'
 import * as T from './transport'
 import { TONES } from '@/components/studio/genera/recipes'
-import { emptySheet, flatten, withLayer, fullLayer, type Sheet } from './hands/sheet'
+import { emptySheet, flatten, type Sheet } from './hands/sheet'
 import { applica, type ToolCtx } from './hands/tools'
 import { mondo } from './hands/tools3'
-import { fondoCosmico, vesteACaso } from './hands/veste'
 import { measure, rasterize, palette } from './eyes/measure'
 import { histogram, learn, patches, seedCodebook } from './eyes/visual-words'
 import { addText, embed, freqOf, neighbors, similarity, type Embedding } from './reader/wordspace'
@@ -470,13 +469,13 @@ async function conMondo(s: Sheet, p: Record<string, unknown>, c: ToolCtx): Promi
   let k = 0; while (k < s.layers.length && ATMO.has(s.layers[k].kind)) k++
   return { ...out, layers: [...s.layers.slice(0, k), ...nuovi, ...s.layers.slice(k)] }
 }
-/** i fogli di un reel dei mondi: cristallo e camera a tutto schermo, a volte due che si attraversano, spesso nel cielo */
+/** i fogli di un reel dei mondi: cristallo e camera a tutto schermo, a volte due che si attraversano */
 async function fogliMondi(r: () => number, c: ToolCtx, W: number, H: number, n: number): Promise<Sheet[]> {
   const out: Sheet[] = []
   for (let i = 0; i < n; i++) {
-    const cielo = r() < 0.6, scuro = cielo || !!(c.tone as { dark?: boolean }).dark
-    let f = emptySheet(W, H, cielo ? '#05050a' : c.tone.bg)
-    if (cielo) f = withLayer(f, fullLayer(f, `cielo${i}`, 'fondo', fondoCosmico(W, H, r, vesteACaso(r, c.colori ?? [c.tone.ink, c.tone.acc], scuro).colori)))
+    // niente cielo stellato: solo i pattern e le linee, sul fondo del tono
+    const f0 = emptySheet(W, H, c.tone.bg)
+    let f = f0
     for (let j = 0, k = r() < 0.4 ? 2 : 1; j < k; j++) f = await applica(mondo, f, mondo.propose(f, c), c)
     out.push(f)
   }

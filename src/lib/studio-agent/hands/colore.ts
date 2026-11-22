@@ -86,9 +86,9 @@ export const ASTRALI: string[][] = [
 ]
 
 /** sfumature di un tono: dentro la sua tinta, o dal fondo all'accento, o una astrale */
-export function sfumaturaDi(tinte: string[], r: () => number, scuro: boolean): string[] {
+export function sfumaturaDi(tinte: string[], r: () => number, scuro: boolean, astrali = true): string[] {
   const acc = accentoDi(tinte)
-  const q = r()
+  const q = astrali ? r() : r() * 0.8
   if (!acc || q > 0.8) return ASTRALI[Math.floor(r() * ASTRALI.length)]
   const a = hexToLch(acc), C = Math.max(0.05, a.c)
   if (q < 0.35) return scuro ? [lch(0.16, C * 0.4, a.h), acc, lch(0.93, C * 0.25, a.h + 15)] : [lch(0.3, C * 0.7, a.h - 10), acc, lch(0.9, C * 0.3, a.h + 10)]

@@ -24,7 +24,8 @@ export const mondo: Tool = {
   propose: (s, c: ToolCtx) => {
     const r: Rnd = c.r, scuro = luce(s.bg) < 0.5
     const tipo: TipoMondo = r() < 0.5 ? 'camera' : 'cristallo'
-    const veste = vesteACaso(r, c.colori?.length ? c.colori : [c.tone.ink, c.tone.acc], scuro)
+    // il colore del mondo viene dalla tavolozza della tavola, non da sfumature astrali esterne
+    const veste = vesteACaso(r, c.colori?.length ? c.colori : [c.tone.ink, c.tone.acc], scuro, false)
     return {
       tipo, ind: cercaMondo(tipo, r) as unknown as Record<string, unknown>, veste: veste as unknown as Record<string, unknown>,
       spessore: range(r, 1.1, 2.6), S: 900, scuro,

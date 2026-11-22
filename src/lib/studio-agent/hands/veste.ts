@@ -10,8 +10,8 @@ export interface Veste { luce: 'mono' | 'lineare' | 'radiale' | 'iride'; colori:
 
 export const SFUMATURE: string[][] = ASTRALI
 
-export function vesteACaso(r: () => number, tinte: string[] = [], scuro = true): Veste {
-  const colori = sfumaturaDi(tinte, r, scuro)
+export function vesteACaso(r: () => number, tinte: string[] = [], scuro = true, astrali = true): Veste {
+  const colori = sfumaturaDi(tinte, r, scuro, astrali)
   const q = r()
   // l'iride (conica) solo fra tinte vicine: altrimenti è una ruota dei colori
   const luce: Veste['luce'] = q < 0.22 ? 'mono' : q < 0.55 ? 'lineare' : q < 0.88 || colori.length > 2 ? 'radiale' : 'iride'
