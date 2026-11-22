@@ -12,7 +12,7 @@
  *   API "Instagram con login Instagram" (graph.instagram.com): non serve una pagina Facebook.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, createWriteStream, chmodSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, createWriteStream, chmodSync, readdirSync, statSync, unlinkSync, renameSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 
@@ -93,27 +93,40 @@ const URL_BIN: Record<string, string> = {
   win32: 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe',
   linux: 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64',
 }
+// un solo download alla volta, in un file temporaneo: solo quando è chiuso davvero diventa il programma
+// (lanciarlo mentre è ancora aperto in scrittura dà ETXTBSY: è quello che fermava i caroselli)
+let scaricando: Promise<void> | null = null
 async function scaricaCloudflared() {
   if (existsSync(BIN)) return
-  const url = URL_BIN[platform()]
-  if (!url) throw new Error('Su questo sistema installa cloudflared a mano (su Mac: brew install cloudflared).')
-  const res = await fetch(url, { redirect: 'follow' })
-  if (!res.ok || !res.body) throw new Error('Non riesco a scaricare cloudflared')
-  await new Promise<void>((ok, ko) => {
-    const out = createWriteStream(BIN)
-    const r = res.body!.getReader()
-    const pump = () => r.read().then(({ done, value }) => { if (done) { out.end(); return } out.write(value); pump() }).catch(ko)
-    out.on('finish', () => ok()); out.on('error', ko)
-    pump()
-  })
-  if (platform() !== 'win32') chmodSync(BIN, 0o755)
+  if (scaricando) return scaricando
+  scaricando = (async () => {
+    const url = URL_BIN[platform()]
+    if (!url) throw new Error('Su questo sistema installa cloudflared a mano (su Mac: brew install cloudflared).')
+    const res = await fetch(url, { redirect: 'follow' })
+    if (!res.ok || !res.body) throw new Error('Non riesco a scaricare cloudflared')
+    const tmp = BIN + '.part'
+    await new Promise<void>((ok, ko) => {
+      const out = createWriteStream(tmp)
+      const r = res.body!.getReader()
+      const pump = () => r.read().then(({ done, value }) => { if (done) { out.end(); return } out.write(value); pump() }).catch(ko)
+      out.on('close', () => ok()); out.on('error', ko)
+      pump()
+    })
+    if (platform() !== 'win32') chmodSync(tmp, 0o755)
+    renameSync(tmp, BIN)
+  })().finally(() => { scaricando = null })
+  return scaricando
 }
 /** apre il tunnel (se non è già aperto) e restituisce l'indirizzo pubblico */
 export async function apriTunnel(porta = Number(process.env.PORT ?? 3123)): Promise<string> {
   if (tunnelUrl && tunnel && tunnel.exitCode === null) return tunnelUrl
   await scaricaCloudflared()
   tunnelUrl = null
-  tunnel = spawn(BIN, ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${porta}`], { stdio: ['ignore', 'pipe', 'pipe'] })
+  // se il sistema dice ancora che il file è occupato, si riprova un attimo dopo
+  for (let k = 0; ; k++) {
+    try { tunnel = spawn(BIN, ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${porta}`], { stdio: ['ignore', 'pipe', 'pipe'] }); break }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ETXTBSY' || k >= 5) throw e; await new Promise(r => setTimeout(r, 400)) }
+  }
   return new Promise((ok, ko) => {
     const t = setTimeout(() => ko(new Error('Il tunnel non si apre (controlla la connessione)')), 45000)
     const leggi = (b: Buffer) => { const m = b.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/); if (m && !tunnelUrl) { tunnelUrl = m[0]; clearTimeout(t); setTimeout(() => ok(tunnelUrl!), 4000) } }
