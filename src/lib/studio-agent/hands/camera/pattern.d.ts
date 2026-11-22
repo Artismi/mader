@@ -1,0 +1,1 @@
+export function motivo(segmenti: number[][], ripeti: { gruppo: string; angolo: number }, lato: number): { segmenti: number[][]; dentro: number[][]; reticolo: { a: [number, number]; b: [number, number] } | null; centro: [number, number] }
