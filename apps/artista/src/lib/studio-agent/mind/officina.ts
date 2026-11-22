@@ -259,7 +259,13 @@ export function scriviGeneratore(st: AgentState, r: Rnd, concetto: string, vuole
     testo: t === 'tartaruga' ? testoT(best.p as TNode[]) : `f(x, y) = ${testoE(best.p as ENode)}`,
     nato: st.day, concetto, critica: best.g, punteggio: +best.s.toFixed(3), usi: 0, f: best.f,
   }
-  O.gen = [...O.gen, gen].slice(-120)
+  // il tetto dei generatori non cancella quelli che un segno dell'atlante usa ancora (prima si cancellavano: due segni su tre restavano orfani, vuoti)
+  {
+    const usati = new Set(Object.values((st as AgentState & { atlante?: { concetti?: Record<string, { motivo?: { forma?: string; gen?: string } }> } }).atlante?.concetti ?? {}).map(c => c.motivo?.forma === 'codice' ? c.motivo.gen : undefined).filter(Boolean) as string[])
+    let tutti = [...O.gen, gen]
+    while (tutti.length > 120) { const i = tutti.findIndex(g => !usati.has(g.id) && g !== gen); if (i < 0) break; tutti.splice(i, 1) }
+    O.gen = tutti
+  }
   // apprendimento di libreria: il pezzo ripetuto più ricco diventa una funzione sua
   if (t === 'tartaruga' && best.s > 0.45) {
     let cand: TNode[] | null = null
