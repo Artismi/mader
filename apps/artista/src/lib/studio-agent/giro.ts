@@ -258,7 +258,9 @@ const ore = (q?: string) => (q ? (Date.now() - new Date(q).getTime()) / 3.6e6 : 
 /** che cosa è dovuto adesso (e quanto è in ritardo), e se c'è la finestra libera */
 export async function agenda() {
   const st = await loadOrCreate(), A = getAgenda(st)
-  const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / ORE[f]])) as Record<Forma3, number>
+  // il ritmo di ogni forma si accorcia o si allunga con quanto quella forma arriva davvero (la portata misurata, pesiForma)
+  const peso = (f: Forma3) => (A.pesiForma ?? {})[f] ?? 1
+  const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / (ORE[f] / peso(f))])) as Record<Forma3, number>
   const dovute = (Object.keys(ORE) as Forma3[]).filter(f => ritardo[f] >= 1).sort((a, b) => ritardo[b] - ritardo[a])
   return { dovute, ritardo, libera: ore(A.qualsiasi) >= 2, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
 }
@@ -300,6 +302,31 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
   const voto = (m: (typeof dati.media)[number]) => { const I = m.insights, portata = Math.max(20, I.reach ?? 0); return ((m.like ?? 0) + 2 * (m.commenti ?? 0) + 3 * (I.saved ?? 0) + 3 * (I.shares ?? 0) + 0.02 * (I.views ?? 0)) / portata }
   for (const p of A.pubblicati) { const m = per.get(p.ig); if (m) p.voto = voto(m) }
   const note: string[] = []
+  // la portata assoluta: quante persone ha raggiunto (copertura o visualizzazioni se il token le dà; se no like e commenti).
+  // Serve a confrontare le forme tra loro: un carosello lo vedono solo i follower, un reel anche gli altri
+  let misuraVera = false
+  for (const p of A.pubblicati) {
+    const m = per.get(p.ig); if (!m) continue
+    const I = m.insights, vista = Math.max(I.reach ?? 0, I.views ?? 0)
+    if (vista > 0) misuraVera = true
+    ;(p as Pub & { portata?: number; vera?: boolean }).portata = vista > 0 ? vista : (m.like ?? 0) + 3 * (m.commenti ?? 0)
+    ;(p as Pub & { vera?: boolean }).vera = vista > 0
+  }
+  {
+    // per ogni forma la portata tipica degli ultimi (in logaritmo, così un caso eccezionale non decide tutto), confrontata con la media di tutte
+    const ult = A.pubblicati.slice(-30).filter(p => (p as Pub & { portata?: number }).portata !== undefined && ore(p.quando) >= 6 && (!misuraVera || (p as Pub & { vera?: boolean }).vera))
+    const per0: Partial<Record<Forma3, number[]>> = {}
+    for (const p of ult) (per0[p.forma as Forma3] ??= []).push(Math.log1p((p as Pub & { portata?: number }).portata!))
+    const medie = Object.entries(per0).filter(([, v]) => v!.length >= 2).map(([f, v]) => [f, v!.reduce((a, b) => a + b, 0) / v!.length] as const)
+    if (medie.length >= 2) {
+      const tutte = medie.reduce((a, [, m]) => a + m, 0) / medie.length
+      const prima = { ...(A.pesiForma ?? {}) }
+      A.pesiForma = { ...(A.pesiForma ?? {}) }
+      for (const [f, m0] of medie) A.pesiForma[f as Forma3] = Math.max(0.4, Math.min(2.5, Math.exp(0.9 * (m0 - tutte))))
+      const best = medie.slice().sort((a, b) => b[1] - a[1])[0]
+      if (Math.abs((A.pesiForma[best[0] as Forma3] ?? 1) - (prima[best[0] as Forma3] ?? 1)) > 0.05) note.push(`${best[0] === 'reel' ? 'i reel' : best[0] === 'storia' ? 'le storie' : 'i caroselli'} arrivano a più persone: li faccio più spesso (${misuraVera ? 'dalla copertura' : 'da like e commenti, le visualizzazioni non le vedo'})`)
+    }
+  }
   let opere: Work[] | null = null
   // il premio arriva quando i numeri si sono assestati (dopo 8 ore), una volta sola, rispetto alla media della stessa forma
   for (const p of A.pubblicati) {
@@ -314,7 +341,6 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
     if (p.tipo && p.modello && !p.modello.startsWith('mossa:') && Math.abs(z) > 0.5) esito(st, r, p.tipo as TipoD, p.modello, z > 0)
     const G = (st as AgentState & { beat?: Gusto }).beat
     if (p.stile && G) premiaStile(G, p.stile, Math.max(0, Math.min(1, (z + 2.5) / 5)))
-    A.pesiForma = { ...(A.pesiForma ?? {}), [p.forma]: Math.max(0.5, Math.min(2, ((A.pesiForma ?? {})[p.forma] ?? 1) * Math.exp(0.1 * z))) }
     // il gusto visivo impara da come sono arrivate le tavole pubblicate (le misure di ognuna, con il loro esito)
     if (p.works?.length) { opere ??= await T.listWorks(); for (const id of p.works) { const w = opere.find(x => x.id === id); if (w?.visual?.features) impara(st, w.visual.features, (z + 2.5) / 5) } }
     // la voglia di una tavola astratta in mezzo si sposta con come è arrivato il reel che l'aveva (o non l'aveva)
