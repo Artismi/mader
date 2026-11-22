@@ -20,6 +20,7 @@
  * proseguirlo (B diventa il nuovo A). Così il senso si costruisce nel tempo.
  */
 import { fattiDi, fraseDi } from '../voice/scrittura'
+import { armoniaSu, rampa, hexToLch, type Armonia } from '../hands/colore'
 import type { AgentState, Reading } from '../core/types'
 import { pick, range, weighted, type Rnd } from '../core/rng'
 import { RECIPES, defaults, runRecipe, shuffle as shuffleParams, type Tone } from '@/components/studio/genera/recipes'
@@ -342,18 +343,11 @@ function hueOf(hx: string) {
   const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4
   return h * 60
 }
-export type Armonia = 'tono' | 'complementare' | 'analoga' | 'triade' | 'acida' | 'notturna'
-/** una tavolozza oltre il tono: armonie costruite sull'accento */
+export type { Armonia } from '../hands/colore'
+/** una tavolozza oltre il tono: armonie in OKLCH sull'accento (un colore forte, gli altri a sostegno) */
 export function tavolozza(t: Tone, r: Rnd, scelte?: Armonia[]): { colori: string[]; armonia: Armonia } {
-  const armonia = pick(r, scelte?.length ? scelte : ['tono', 'complementare', 'analoga', 'triade', 'acida', 'notturna'] as Armonia[])
-  const h = hueOf(t.acc)
-  const extra = armonia === 'complementare' ? [hslHex(h + 180, 0.8, 0.5), hslHex(h + 160, 0.6, 0.35)]
-    : armonia === 'analoga' ? [hslHex(h + 30, 0.75, 0.55), hslHex(h - 30, 0.7, 0.45)]
-    : armonia === 'triade' ? [hslHex(h + 120, 0.75, 0.5), hslHex(h + 240, 0.75, 0.5)]
-    : armonia === 'acida' ? [hslHex(h + 90 + r() * 90, 1, 0.55), hslHex(h + 200, 1, 0.6)]
-    : armonia === 'notturna' ? [hslHex(h + 200, 0.5, 0.18), hslHex(h + 220, 0.6, 0.35)]
-    : [t.acc, t.ink]
-  return { colori: [t.ink, t.acc, ...extra], armonia }
+  const armonia = pick(r, scelte?.length ? scelte : ['tono', 'tono', 'complementare', 'analoga', 'triade', 'acida', 'notturna'] as Armonia[])
+  return { colori: armoniaSu(t.acc, t.ink, armonia, r), armonia }
 }
 
 /** un campo di colore: sfumatura o blocchi, fusi con un metodo che cambia il colore sotto */
@@ -363,7 +357,9 @@ export function campoColore(s: Sheet, r: Rnd, col: string[]): Layer {
     const radiale = r() < 0.4
     const gr = radiale ? g.createRadialGradient(s.W * range(r, 0.2, 0.8), s.H * range(r, 0.2, 0.8), 0, s.W / 2, s.H / 2, s.H * 0.8)
       : (() => { const a = r() * Math.PI; return g.createLinearGradient(s.W / 2 - Math.cos(a) * s.W, s.H / 2 - Math.sin(a) * s.H, s.W / 2 + Math.cos(a) * s.W, s.H / 2 + Math.sin(a) * s.H) })()
-    gr.addColorStop(0, pick(r, col)); gr.addColorStop(range(r, 0.35, 0.65), pick(r, col)); gr.addColorStop(1, pick(r, col))
+    // due capi soli, dentro la tavolozza, e una rampa percettiva fra loro
+    const c0 = pick(r, col), c1 = pick(r, col.filter(c => c !== c0).length ? col.filter(c => c !== c0) : col)
+    const tappe = rampa([c0, c1], 7); tappe.forEach((c, i) => gr.addColorStop(i / (tappe.length - 1), c))
     g.fillStyle = gr; g.fillRect(0, 0, s.W, s.H)
   } else if (s.layers.some(l => l.kind === 'motivo')) {
     // non blocchi a caso: l'eco dei suoi segni, ingranditi e sfocati, fa da campo (il colore nasce da quello che c'è)
@@ -372,7 +368,7 @@ export function campoColore(s: Sheet, r: Rnd, col: string[]): Layer {
     for (const l of m.slice(0, 3)) { g.fillStyle = pick(r, col); const k = range(r, 1.8, 3); const side = Math.min(s.W, s.H) * l.scale * k, kk = side / Math.max(l.canvas.width, l.canvas.height); const sil = newCanvas(l.canvas.width, l.canvas.height), q = sil.getContext('2d')!; q.drawImage(l.canvas, 0, 0); q.globalCompositeOperation = 'source-in'; q.fillStyle = g.fillStyle as string; q.fillRect(0, 0, sil.width, sil.height); g.save(); g.translate(l.x * s.W, l.y * s.H); g.rotate(l.rot); g.scale(kk, kk); g.drawImage(sil, -sil.width / 2, -sil.height / 2); g.restore() }
     g.filter = 'none'
   }
-  return { ...fullLayer(s, lid(), 'colore', cv, pick(r, ['multiply', 'overlay', 'color', 'hue', 'soft-light', 'hard-light', 'screen', 'difference', 'color-burn']) as GlobalCompositeOperation, range(r, 0.45, 0.95)) }
+  return { ...fullLayer(s, lid(), 'colore', cv, pick(r, (hexToLch(s.bg.length >= 7 ? s.bg : '#808080').l > 0.6 ? ['multiply', 'multiply', 'soft-light', 'color-burn', 'color'] : ['screen', 'soft-light', 'soft-light', 'overlay', 'color'])) as GlobalCompositeOperation, range(r, 0.45, 0.95)) }
 }
 
 /** il segno disegnato a pennellate: tratti dentro la forma, qualcuno che scappa fuori */
@@ -423,7 +419,7 @@ export function maschera(base: HTMLCanvasElement, r: Rnd, ctx: ToolCtx, colori: 
   }
   if (!fatto) {
     const gr = g.createLinearGradient(0, 0, W, H)
-    gr.addColorStop(0, pick(r, colori)); gr.addColorStop(1, pick(r, colori))
+    rampa([pick(r, colori), pick(r, colori)], 7).forEach((c, i, a) => gr.addColorStop(i / (a.length - 1), c))
     g.fillStyle = gr; g.fillRect(0, 0, W, H)
   }
   g.globalCompositeOperation = 'destination-in'

@@ -46,7 +46,7 @@ function patternDi(indirizzo: string): Pattern & { orbiteDa?: { semi: number; qu
   if (!/^-?\d+$/.test(s)) { const p = leggi(s) as unknown as Pattern; p.famiglia = 'testo'; return p }
   const k = Number(s), c = sorgente(`artista/${k}`)
   const p = casuale(k) as unknown as Pattern & { orbiteDa?: { semi: number; quante: number; sorgente: boolean } }
-  const u = c('famiglia'), fam = u < 0.3 ? 'orbite' : u < 0.52 ? 'canale' : u < 0.6 ? 'lastra' : u < 0.75 ? 'viaggio' : 'onde'
+  const u = c('famiglia'), fam = u < 0.36 ? 'orbite' : u < 0.6 ? 'canale' : u < 0.66 ? 'lastra' : u < 0.86 ? 'viaggio' : 'onde'
   if (fam === 'onde') { p.famiglia = 'onde'; p.vista = 'onde'; p.finestra = { ...p.finestra, L: 1, R: Infinity }; return p }
   const piano = fam === 'orbite' || fam === 'viaggio'
   if (piano) {
@@ -59,7 +59,7 @@ function patternDi(indirizzo: string): Pattern & { orbiteDa?: { semi: number; qu
     p.v0 = [vv * Math.cos(an), vv * Math.sin(an), 0]
     p.B = fam === 'viaggio' ? [0, 0, (vv / (0.15 + 0.45 * c('raggio viaggio'))) * (c('verso') < 0.5 ? 1 : -1)] : c('magnete piano') < 0.6 ? [0, 0, (vv / (0.2 + 1.2 * c('raggio piano'))) * (c('verso') < 0.5 ? 1 : -1)] : [0, 0, 0]
     p.finestra = { ...p.finestra, n: [0, 0, 1], psi: 2 * Math.PI * c('psi piano'), C: combina(p.atomi[0].p, A) as Vec, R: Infinity, L: fam === 'viaggio' ? 6 + 6 * c('L viaggio') : 2.5 + 3 * c('L orbite') }
-    if (fam === 'viaggio') { p.vista = 'viaggio'; p.tempo = 30 + 60 * c('tempo viaggio'); p.v0 = p.v0.map(x => x * 1.6) as Vec }
+    if (fam === 'viaggio') { p.vista = 'viaggio'; p.tempo = 14 + 36 * c('tempo viaggio'); p.v0 = p.v0.map(x => x * 1.6) as Vec }
     if (fam === 'orbite') {
       p.orbiteDa = { semi: 40, quante: 1 + Math.floor(c('quante orbite') * 4), sorgente: c('sorgente orbite') < 0.62 }
       if (p.orbiteDa.sorgente) {
@@ -74,11 +74,15 @@ function patternDi(indirizzo: string): Pattern & { orbiteDa?: { semi: number; qu
     // la finestra lungo un piano semplice: lì il cristallo si ripete (con prospettiva o, una volta su tre, carta da parati)
     const sempl = direzioniSemplici(cr, 2) as unknown as { n: Vec }[]
     const n0 = sempl[Math.floor(c('piano semplice') * sempl.length)].n, ln = Math.hypot(...n0)
-    p.finestra = { ...p.finestra, n: n0.map(x => x / ln) as Vec, R: c('lontano canale') < 0.35 ? Infinity : p.finestra.R }
+    // il corridoio prospettico: la finestra vicina (un punto di fuga netto e l'attenuazione con la profondità)
+    p.finestra = { ...p.finestra, n: n0.map(x => x / ln) as Vec, R: c('lontano canale') < 0.35 ? Infinity : (p.finestra.L / 2) * Math.pow(10, 0.1 + 0.55 * c('vicino canale')) }
     if (fam === 'canale' || fam === 'lastra') {
       // il lancio lungo una fila: un vettore del reticolo semplice, appena storto, con l'energia alta (incanalamento)
       const fila = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 1, 1]][Math.floor(c('fila') * 7)]
-      const d = combina(fila, A) as Vec, l = Math.hypot(...d), E = 2 + 8 * c('energia canale'), vv = Math.sqrt(2 * E), st = 0.04 * c('storto')
+      // nel corridoio prospettico il lancio va lungo la normale della finestra (dentro la profondità): le file convergono
+      // in un punto di fuga
+      const corridoio = Number.isFinite(p.finestra.R) && c('corridoio') < 0.6
+      const d = (corridoio ? p.finestra.n.map(x => (c('verso corridoio') < 0.5 ? x : -x)) : combina(fila, A)) as Vec, l = Math.hypot(...d), E = 2 + 8 * c('energia canale'), vv = Math.sqrt(2 * E), st = 0.04 * c('storto')
       p.v0 = d.map((x, i) => (x / l + st * (c(`storto ${i}`) - 0.5)) * vv) as Vec
       p.B = c('magnete canale') < 0.3 ? p.B : [0, 0, 0]
     }
@@ -92,10 +96,11 @@ function patternDi(indirizzo: string): Pattern & { orbiteDa?: { semi: number; qu
 /** lo stile, dal caso dell'indirizzo, pesato per famiglia (i nastri e le campiture stanno bene sulle linee chiuse) */
 function stileDi(indirizzo: string, fam: string): Stile {
   const u = sorgente(`stile/${indirizzo}`)('stile'), f = fam.split('/')[0]
-  const pesi: [Stile, number][] = f === 'orbite' ? [['filo', 1], ['gerarchia', 1.2], ['nastro', 2], ['campitura', 1.6], ['luce', 1], ['tratteggio', 0.6]]
+  // il sapore astrale: traiettorie sottili con gerarchia e alone; nastro e campitura restano, ma come rarità
+  const pesi: [Stile, number][] = f === 'orbite' ? [['filo', 1.4], ['gerarchia', 2], ['nastro', 0.7], ['campitura', 0.35], ['luce', 1.6], ['tratteggio', 0.2]]
     : f === 'onde' ? [['campitura', 2.4], ['nastro', 1.4], ['tratteggio', 1], ['filo', 0.6]]
-    : f === 'viaggio' ? [['filo', 1.2], ['gerarchia', 1.4], ['luce', 1.6], ['nastro', 0.5]]
-    : [['filo', 1.4], ['gerarchia', 1.6], ['luce', 1], ['nastro', 0.4], ['campitura', 0.4]]
+    : f === 'viaggio' ? [['filo', 1.2], ['gerarchia', 1.6], ['luce', 1.8], ['nastro', 0.2]]
+    : [['filo', 1.4], ['gerarchia', 2], ['luce', 1.4], ['nastro', 0.2], ['campitura', 0.15]]
   const tot = pesi.reduce((a, [, w]) => a + w, 0); let x = u * tot
   for (const [st, w] of pesi) { if ((x -= w) <= 0) return st }
   return 'filo'
@@ -281,8 +286,8 @@ function pulisci(out: Tratto[], L: number, ripassi = true): { tratti: Tratto[]; 
   if (!ripassi) { let ch = 0; for (let j = 0; j < chiuso.length; j++) ch += chiuso[j]; return { tratti: out, chiusura: ch / capi.length } }
   const C = 1, N = Math.ceil(560 / C) + 2, dir = new Uint16Array(N * N), chi = new Int32Array(N * N).fill(-1), dove = new Float32Array(N * N)
   const cella = (x: number, y: number) => { const X = Math.floor((x * k + 280) / C) + 1, Y = Math.floor((280 - y * k) / C) + 1; return X < 1 || Y < 1 || X >= N - 1 || Y >= N - 1 ? -1 : Y * N + X }
-  const catenaDi = new Int32Array(out.length), ascissa = new Float32Array(out.length)
-  catene.forEach(([i0, i1], c) => { let u = 0; for (let i = i0; i < i1; i++) { catenaDi[i] = c; ascissa[i] = u; u += Math.hypot(out[i].x2 - out[i].x1, out[i].y2 - out[i].y1) * k } })
+  const catenaDi = new Int32Array(out.length), ascissa = new Float32Array(out.length), lungCat = new Float32Array(catene.length)
+  catene.forEach(([i0, i1], c) => { let u = 0; for (let i = i0; i < i1; i++) { catenaDi[i] = c; ascissa[i] = u; u += Math.hypot(out[i].x2 - out[i].x1, out[i].y2 - out[i].y1) * k }; lungCat[c] = u })
   const ordine = out.map((_, i) => i).sort((p, q) => out[p].t - out[q].t || p - q)
   const tieni = new Uint8Array(out.length)
   const campioni: number[] = [], posti: number[] = []
@@ -295,7 +300,10 @@ function pulisci(out: Tratto[], L: number, ripassi = true): { tratti: Tratto[]; 
     for (let j = 0; j <= ns; j++) {
       const c = cella(s.x1 + dx * j / ns, s.y1 + dy * j / ns); if (c < 0) continue
       const u = ascissa[i] + lp * j / ns
-      dentro++; campioni.push(c); posti.push(u)
+      campioni.push(c); posti.push(u)
+      // vicino ai capi della catena (dove un'altra catena la continua: un lotto dopo, una copia saldata) non si giudica
+      if (u < 3 || u > lungCat[ci] - 3) continue
+      dentro++
       let gia = false
       for (let oy = -1; oy <= 1 && !gia; oy++) for (let ox = -1; ox <= 1; ox++) {
         const q = c + oy * N + ox
@@ -305,19 +313,19 @@ function pulisci(out: Tratto[], L: number, ripassi = true): { tratti: Tratto[]; 
       }
       if (gia) coperti++
     }
-    if (dentro && coperti >= dentro * 0.85) continue
+    if (dentro >= 2 && coperti >= dentro * 0.85) continue
     tieni[i] = 1
     for (let j = 0; j < campioni.length; j++) { const c = campioni[j]; dir[c] |= 1 << b; chi[c] = ci; dove[c] = posti[j] }
   }
   // niente tratteggi: lungo ogni catena un pezzetto tenuto in mezzo a pezzi tolti si toglie, un buco corto tra pezzi
   // tenuti si richiude (la linea resta intera o sparisce intera, non a trattini)
   const lun = (i: number) => Math.hypot(out[i].x2 - out[i].x1, out[i].y2 - out[i].y1) * k
-  for (const [vale, soglia] of [[1, 8], [0, 6]] as const) for (const [i0, i1] of catene) {
+  for (const [vale, soglia] of [[1, 18], [0, 12]] as const) for (const [i0, i1] of catene) {
     let i = i0
     while (i < i1) {
       if (tieni[i] !== vale) { i++; continue }
       let j = i, u = 0; while (j < i1 && tieni[j] === vale) { u += lun(j); j++ }
-      const prima = i > i0 ? tieni[i - 1] : (vale ? 0 : -1), dopo = j < i1 ? tieni[j] : (vale ? 0 : -1)
+      const prima = i > i0 ? tieni[i - 1] : -1, dopo = j < i1 ? tieni[j] : -1 // i capi della catena non contano: un pezzo corto in fondo resta
       if (u < soglia && prima === 1 - vale && dopo === 1 - vale) for (let q = i; q < j; q++) tieni[q] = 1 - vale
       i = j
     }
@@ -611,17 +619,20 @@ function voto(sim: Simulato, chiave?: string): number {
   const campana = (x: number, c: number, w: number) => Math.exp(-(((x - c) / w) ** 2))
   const pieno = sim.stile === 'campitura' || sim.stile === 'tratteggio' || sim.stile === 'nastro' || sim.bande ? campana(A.pieno, 0.55, 0.3)
     : sim.stile === 'gerarchia' ? campana(A.pieno, 0.42, 0.26) : campana(A.pieno, 0.3, 0.2)
-  const celle = 0.25 + 0.75 * Math.min(1, A.celleMedie * 1.7)
+  const linee = !(sim.stile === 'campitura' || sim.stile === 'tratteggio' || sim.bande)
+  const fuga = A.prospettiva > 0 // nel corridoio prospettico i tratti corti che convergono sono la profondità, non coriandoli
+  const celle = fuga ? 0.75 + 0.25 * Math.min(1, A.celleMedie * 1.7) : linee ? 0.55 + 0.45 * Math.min(1, A.celleMedie * 1.7) : 0.25 + 0.75 * Math.min(1, A.celleMedie * 1.7)
   const nitido = 1 - Math.min(1, A.saturo * (sim.stile === 'nastro' || sim.stile === 'campitura' ? 0.6 : 1.8))
-  const pulito = 1 - Math.min(1, A.frammenti * 1.3) * 0.75 - Math.min(sim.stile === 'nastro' ? 0.25 : 0.4, A.minuscole * 0.6)
+  const pulito = 1 - Math.min(1, A.frammenti * (fuga ? 0.5 : 1.3)) * 0.75 - Math.min(sim.stile === 'nastro' ? 0.25 : 0.4, A.minuscole * 0.6)
   // il groviglio: molto inchiostro senza celle, oppure tante isole minuscole senza celle medie (gomitoli di cerchi)
   const groviglio = (1 - Math.max(0, Math.min(0.85, (A.pieno - 0.3) * 2.5 * (1 - Math.min(1, A.celleMedie * 2)))))
     * (1 - Math.max(0, Math.min(0.9, (A.minuscole - 0.5) * 2 * (1 - Math.min(1, A.celleMedie * 3)))))
-  const ordine = 0.3 + 0.7 * Math.max(A.ripetizione, A.simmetria * 0.9)
-  const gerarchia = 1 + 0.25 * A.gerarchia
+  const ordine = 0.3 + 0.7 * Math.max(A.ripetizione, A.simmetria)
+  // il sapore astrale: la gerarchia delle linee, la profondità (prospettiva con l'attenuazione), le traiettorie curve
+  const gerarchia = (1 + 0.6 * A.gerarchia) * (A.prospettiva ? 1.35 : 1) * (linee ? 1 + 0.35 * A.curvatura : 1)
   // gli spigoli (incroci multipli concentrati, sovra-disegno) pesano; le chiusure pulite (niente capi liberi) premiano
   const spigoli = (1 - Math.min(0.75, A.incroci * 2.2)) * (1 - Math.min(0.7, A.sovra * 1.6))
-  const chiusura = 0.7 + 0.4 * A.chiusura
+  const chiusura = 0.6 + 0.5 * A.chiusura
   return Math.max(0, pieno * celle * nitido * pulito * groviglio * ordine * gerarchia * spigoli * chiusura)
 }
 
@@ -657,7 +668,20 @@ export function cercaCristalli(seme: string, n: number, budgetMs: number): { ind
   const presi: typeof prove = [], perFam = new Map<string, number>(), tetto = Math.max(1, Math.ceil(n / 4))
   // la varietà: la famiglia di sguardo e lo stile insieme (non più di un quarto dei posti a una sola coppia)
   const chiave = (f: string) => `${f.split('/')[0]}·${f.split('·')[1] ?? ''}`
-  for (const p of prove) { if (presi.length >= n) break; const f = chiave(p.famiglia); if ((perFam.get(f) ?? 0) >= tetto) continue; perFam.set(f, (perFam.get(f) ?? 0) + 1); presi.push(p) }
-  for (const p of prove) { if (presi.length >= n) break; if (!presi.includes(p)) presi.push(p) }
+  // i motivi posati (onde, campiture, tratteggi) sono una rarità: non più di ~15% dei posti
+  const posato = (f: string) => f.startsWith('onde') || /\u00b7(campitura|tratteggio)$/.test(f)
+  const tettoPosati = Math.max(1, Math.round(n * 0.15))
+  const posati = prove.filter(p => posato(p.famiglia)), altri = prove.filter(p => !posato(p.famiglia))
+  const prendi = (da: typeof prove, quanti: number, conTetto: boolean) => {
+    for (const p of da) {
+      if (presi.length >= n || quanti <= 0) break
+      if (presi.includes(p)) continue
+      const f = chiave(p.famiglia); if (conTetto && (perFam.get(f) ?? 0) >= tetto) continue
+      perFam.set(f, (perFam.get(f) ?? 0) + 1); presi.push(p); quanti--
+    }
+  }
+  prendi(posati, tettoPosati, true)
+  prendi(altri, n, true); prendi(altri, n, false); prendi(posati, n, false)
+  presi.sort((a, b) => b.voto - a.voto)
   return presi
 }

@@ -59,11 +59,15 @@ export function getRetorica(st: AgentState): Retorica {
 const nota = (st: AgentState, n: string) => { const R = getRetorica(st); R.diario = [...R.diario, { day: st.day, nota: n }].slice(-80) }
 
 // ── 1. leggere: connettivi e immaginario ──
+// pigmenti, non colori da interfaccia: inchiostri da stampa e terre (profondi, mai il default dello schermo)
+const PIG: Record<string, string> = {
+  rosso: '#b3261e', blu: '#1f2f6b', azzurro: '#4a7a96', celeste: '#9fb8c4', verde: '#2f4a3a', giallo: '#d9a520', nero: '#141312', bianco: '#efebe2',
+  grigio: '#7e7a72', viola: '#4b2a5c', arancione: '#c8501e', rosa: '#c98a8f', marrone: '#5e3b26', oro: '#b8913a', argento: '#a9a8a2',
+  porpora: '#6b1e45', turchese: '#2f7f7a', ocra: '#b9822e', cremisi: '#8c1424', scarlatto: '#c42b1c', bruno: '#4a3022', cenere: '#a8a59c', avorio: '#efe8d6',
+}
 const COLORI: Record<string, string> = {
-  rosso: '#c8102e', blu: '#1d4ed8', azzurro: '#38bdf8', celeste: '#7dd3fc', verde: '#15803d', giallo: '#facc15', nero: '#111111', bianco: '#f5f5f0',
-  grigio: '#8a8a8a', viola: '#7c3aed', arancione: '#f97316', rosa: '#f472b6', marrone: '#7c4a2a', oro: '#c9a227', dorato: '#c9a227', argento: '#c0c0c0',
-  porpora: '#7e1e5a', turchese: '#14b8a6', ocra: '#cc8a2e', cremisi: '#9b111e', scarlatto: '#ff2400', bruno: '#5b3a29', cenere: '#b2beb5', avorio: '#f4efe1',
-  rossa: '#c8102e', nera: '#111111', bianca: '#f5f5f0', gialla: '#facc15', verdi: '#15803d', rossi: '#c8102e', neri: '#111111', bianchi: '#f5f5f0', blu_: '#1d4ed8',
+  ...PIG, dorato: PIG.oro, rossa: PIG.rosso, rossi: PIG.rosso, nera: PIG.nero, neri: PIG.nero, bianca: PIG.bianco, bianchi: PIG.bianco,
+  gialla: PIG.giallo, verdi: PIG.verde, blu_: PIG.blu,
 }
 export const coloreDi = (w: string) => COLORI[w.toLowerCase()]
 const parole = (s: string): string[] => s.toLowerCase().match(/[a-zàèéìòù']+/g) ?? []

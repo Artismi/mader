@@ -192,6 +192,50 @@ export function senzaRipassi(segs: Seg[], eps: number, traslazioni: [number, num
   return out
 }
 
+/** i capi sospesi: un tratto che finisce a un pelo da un'altra linea la raggiunge (se le manca poco) o viene rifilato
+ *  sull'incrocio (se la passa di poco). Niente baffi né spiragli vicino ai nodi. */
+export function chiudiCapi(segs: Seg[], raggio: number): Seg[] {
+  const out = segs.map(s => s.slice() as Seg), q = raggio / 30
+  const k = (x: number, y: number) => `${Math.round(x / q)},${Math.round(y / q)}`
+  const grado = new Map<string, number>()
+  for (const s of out) for (const [x, y] of [[s[0], s[1]], [s[2], s[3]]]) { const kk = k(x, y); grado.set(kk, (grado.get(kk) ?? 0) + 1) }
+  const cel = raggio, griglia = new Map<string, number[]>()
+  out.forEach((s, i) => {
+    const x0 = Math.floor(Math.min(s[0], s[2]) / cel), x1 = Math.floor(Math.max(s[0], s[2]) / cel), y0 = Math.floor(Math.min(s[1], s[3]) / cel), y1 = Math.floor(Math.max(s[1], s[3]) / cel)
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 400) return
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const kk = `${x},${y}`; const a = griglia.get(kk); if (a) a.push(i); else griglia.set(kk, [i]) }
+  })
+  const vicini = (x: number, y: number) => { const r = new Set<number>(), gx = Math.floor(x / cel), gy = Math.floor(y / cel); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const t of griglia.get(`${gx + i},${gy + j}`) ?? []) r.add(t); return r }
+  const parente = (s: Seg, o: Seg) => s[5] === o[5] && Math.abs(s[6] - o[6]) < 4
+  const aggiunte: Seg[] = []
+  out.forEach((s, i) => {
+    for (const capo of [0, 1]) {
+      const px = capo ? s[2] : s[0], py = capo ? s[3] : s[1], ox = capo ? s[0] : s[2], oy = capo ? s[1] : s[3]
+      if ((grado.get(k(px, py)) ?? 0) !== 1) continue
+      const L = Math.hypot(px - ox, py - oy); if (L < 1e-9) continue
+      const dx = (px - ox) / L, dy = (py - oy) / L
+      let taglio = -1, migliore = raggio, Q: [number, number] | null = null
+      for (const j of vicini(px, py)) {
+        if (j === i) continue
+        const o = out[j]; if (parente(s, o)) continue
+        // l'incrocio col proprio segmento, vicino al capo: rifila
+        const ex = o[2] - o[0], ey = o[3] - o[1], den = (px - ox) * ey - (py - oy) * ex
+        if (Math.abs(den) > 1e-12) {
+          const t = ((o[0] - ox) * ey - (o[1] - oy) * ex) / den, u = ((o[0] - ox) * (py - oy) - (o[1] - oy) * (px - ox)) / den
+          if (t > 0.02 && t <= 1 && u >= 0 && u <= 1 && (1 - t) * L < raggio && t > taglio) taglio = t
+        }
+        // il punto più vicino dell'altra linea, davanti al capo: raggiungi
+        const ll = ex * ex + ey * ey, w = ll ? Math.max(0, Math.min(1, ((px - o[0]) * ex + (py - o[1]) * ey) / ll)) : 0
+        const qx = o[0] + ex * w, qy = o[1] + ey * w, d = Math.hypot(qx - px, qy - py)
+        if (d > 1e-9 && d < migliore && ((qx - px) * dx + (qy - py) * dy > 0.2 * d || d < raggio * 0.7)) { migliore = d; Q = [qx, qy] }
+      }
+      if (taglio > 0) { const nx = ox + (px - ox) * taglio, ny = oy + (py - oy) * taglio; if (capo) { s[2] = nx; s[3] = ny } else { s[0] = nx; s[1] = ny } }
+      else if (Q) aggiunte.push([px, py, Q[0], Q[1], s[4], s[5], s[6] + (capo ? 0.5 : -0.5), s[7]])
+    }
+  })
+  return out.concat(aggiunte)
+}
+
 export interface Motivo extends Geometria { dentro: Seg[]; segmenti: Seg[] }
 export function motivo(seg: Seg[], rip: Ripeti, lato: number): Motivo {
   const G = geometria(rip, lato), out: Seg[] = []
@@ -205,7 +249,10 @@ export function motivo(seg: Seg[], rip: Ripeti, lato: number): Motivo {
     let run: typeof pezzi = []
     const chiudi = () => {
       if (!run.length) return
-      const aperto = run[0].a === 'aperto' || run[run.length - 1].b === 'aperto'
+      // anche il bordo della finestra è un taglio: una traccia che finisce lì è una linea tranciata, non un capo
+      const sulBordo = (x: number, y: number) => Math.min(Math.abs(x), Math.abs(y), Math.abs(x - lato), Math.abs(y - lato)) < lato * 2e-3
+      const p0 = run[0], p1 = run[run.length - 1]
+      const aperto = p0.a === 'aperto' || p1.b === 'aperto' || (!p0.a && sulBordo(p0.s[0], p0.s[1])) || (!p1.b && sulBordo(p1.s[2], p1.s[3]))
       // un pezzo tagliato a metà da un lato aperto in mezzo al tratto lo spezza: si scarta tutto il tratto
       const ferito = run.some((p, k) => (k > 0 && p.a === 'aperto') || (k < run.length - 1 && p.b === 'aperto'))
       if (!aperto && !ferito) dentro.push(...run.map(p => p.s))
@@ -229,7 +276,7 @@ export function motivo(seg: Seg[], rip: Ripeti, lato: number): Motivo {
   }
   for (const T of G.copie) for (const s of dentro) { const p = applica(T, s[0], s[1]), q = applica(T, s[2], s[3]); out.push([p[0], p[1], q[0], q[1], s[4], s[5], s[6], s[7]]) }
   const tr: [number, number][] = G.reticolo ? (G.fregio ? [G.reticolo.a] : [G.reticolo.a, G.reticolo.b, [G.reticolo.a[0] + G.reticolo.b[0], G.reticolo.a[1] + G.reticolo.b[1]], [G.reticolo.a[0] - G.reticolo.b[0], G.reticolo.a[1] - G.reticolo.b[1]]]) : []
-  return { ...G, dentro, segmenti: senzaRipassi(out, lato / 450, tr) }
+  return { ...G, dentro, segmenti: senzaRipassi(chiudiCapi(senzaRipassi(out, lato / 450, tr), lato * 0.045), lato / 450, tr) }
 }
 
 export function rasterizzaPattern(M: Motivo, N = 128) {
