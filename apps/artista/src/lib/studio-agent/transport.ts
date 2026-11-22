@@ -113,7 +113,7 @@ export async function importaMemoria(a: Archivio) {
   await tx('state', 'readwrite', s => s.clear()); await tx('works', 'readwrite', s => s.clear()); await tx('images', 'readwrite', s => s.clear())
   if (a.state) await putState(a.state)
   for (const w of a.works) await tx('works', 'readwrite', s => s.put({ ...w, image: '' }))
-  for (const [id, url] of Object.entries(a.images)) { const b = await (await fetch(url)).blob(); await tx('images', 'readwrite', s => s.put(b, id)) }
+  for (const [id, url] of Object.entries(a.images ?? {})) { const b = await (await fetch(url)).blob(); await tx('images', 'readwrite', s => s.put(b, id)) }
   for (const [id, json] of Object.entries(a.fogli ?? {})) await riponiFoglio(id, json)
   urls.clear()
 }
@@ -146,3 +146,23 @@ export async function nelCassetto(): Promise<string[]> { const ks = await tx<IDB
 // ─── il reel di una sequenza (video senza audio; l'audio lo aggiunge chi monta) ───
 export async function salvaReel(epId: string, v: Blob) { await tx('images', 'readwrite', s => s.put(v, `reel:${epId}`)) }
 export async function leggiReel(epId: string): Promise<Blob | null> { return (await tx<Blob | undefined>('images', 'readonly', s => s.get(`reel:${epId}`))) ?? null }
+
+/** un'immagine alla volta (tutte insieme in un messaggio solo fanno cadere il browser) */
+export async function riponiImmagine(id: string, url: string) { const b = await (await fetch(url)).blob(); await tx('images', 'readwrite', s => s.put(b, id)) }
+
+/** le opere più recenti con un'immagine (gli id), e l'immagine di una in JPEG: il salvataggio va una alla volta */
+export async function recentiConImmagine(max = 400): Promise<string[]> {
+  const works = await tx<Work[]>('works', 'readonly', s => s.getAll())
+  works.sort((a, b) => b.day - a.day || b.createdAt.localeCompare(a.createdAt))
+  const out: string[] = []
+  for (const w of works.slice(0, max)) { const b = await tx<Blob | undefined>('images', 'readonly', s => s.get(w.id)); if (b) out.push(w.id) }
+  return out
+}
+export async function immagineJpeg(id: string): Promise<string | null> {
+  const blob = await tx<Blob | undefined>('images', 'readonly', s => s.get(id))
+  if (!blob) return null
+  const bmp = await createImageBitmap(blob)
+  const cv = new OffscreenCanvas(bmp.width, bmp.height); cv.getContext('2d')!.drawImage(bmp, 0, 0)
+  const j = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.82 })
+  return await new Promise<string>(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.readAsDataURL(j) })
+}

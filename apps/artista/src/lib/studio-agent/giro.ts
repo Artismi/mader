@@ -201,6 +201,9 @@ export async function perIlSito() {
 // la memoria passa da e verso il browser a pezzi: l'archivio in un messaggio, le tavole del cassetto una per volta (tutte insieme sforano)
 export const memoria = {
   importa: T.importaMemoria,
+  immagine: T.riponiImmagine,
+  recenti: T.recentiConImmagine,
+  jpeg: T.immagineJpeg,
   esporta: (max?: number) => T.esportaMemoria(max, 0),
   riponi: T.riponiFoglio,
   prendi: T.prendiFoglio,

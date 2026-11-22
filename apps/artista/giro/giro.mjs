@@ -54,8 +54,11 @@ try {
   if (existsSync(arch)) {
     const a = JSON.parse(readFileSync(arch, 'utf8'))
     a.images = {}
-    for (const f of readdirSync(join(MEM, 'img'))) if (f.endsWith('.jpg')) a.images[f.slice(0, -4)] = 'data:image/jpeg;base64,' + readFileSync(join(MEM, 'img', f)).toString('base64')
     await pg.evaluate(a => window.__artista.memoria.importa(a), a)
+    // le immagini una alla volta: tutte insieme in un messaggio solo, con centinaia di tavole, fanno cadere il browser
+    for (const f of readdirSync(join(MEM, 'img'))) if (f.endsWith('.jpg')) {
+      try { await pg.evaluate(([id, u]) => window.__artista.memoria.immagine(id, u), [f.slice(0, -4), 'data:image/jpeg;base64,' + readFileSync(join(MEM, 'img', f)).toString('base64')]) } catch (e) { log('immagine: non riesco a riprendere', f, e.message) }
+    }
     // il cassetto (le tavole con i loro livelli): una per volta, tutte insieme sforano il messaggio
     if (existsSync(join(MEM, 'cassetto'))) for (const f of readdirSync(join(MEM, 'cassetto'))) if (f.endsWith('.json')) {
       try { await pg.evaluate(([id, j]) => window.__artista.memoria.riponi(id, j), [f.slice(0, -5), readFileSync(join(MEM, 'cassetto', f), 'utf8')]) } catch (e) { log('cassetto: non riesco a riprendere', f, e.message) }
@@ -160,9 +163,14 @@ try {
   }
 
   // salva la memoria (immagini solo delle opere recenti, il resto vive su Instagram e nel sito)
-  const m = await pg.evaluate(() => window.__artista.memoria.esporta(400))
-  const tenere = new Set(Object.keys(m.images))
-  for (const [id, url] of Object.entries(m.images)) writeFileSync(join(MEM, 'img', `${id}.jpg`), Buffer.from(url.split(',')[1], 'base64'))
+  const m = await pg.evaluate(() => window.__artista.memoria.esporta(0))
+  // le immagini una alla volta (tutte insieme in un messaggio solo fanno cadere il browser); quelle già su disco non si rifanno
+  const tenere = new Set(await pg.evaluate(() => window.__artista.memoria.recenti(400)))
+  mkdirSync(join(MEM, 'img'), { recursive: true })
+  for (const id of tenere) {
+    if (existsSync(join(MEM, 'img', `${id}.jpg`))) continue
+    try { const url = await pg.evaluate(id => window.__artista.memoria.jpeg(id), id); if (url) writeFileSync(join(MEM, 'img', `${id}.jpg`), Buffer.from(url.split(',')[1], 'base64')) } catch (e) { log('immagine: non riesco a salvare', id, e.message) }
+  }
   for (const f of readdirSync(join(MEM, 'img'))) if (!tenere.has(f.replace(/\.jpg$/, ''))) rmSync(join(MEM, 'img', f))
   mkdirSync(join(MEM, 'cassetto'), { recursive: true })
   const tieni = new Set()
