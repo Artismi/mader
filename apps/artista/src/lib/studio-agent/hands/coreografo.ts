@@ -64,7 +64,7 @@ interface Nodo {
 export type Rivela = 'retino' | 'tendina' | 'strappo' | 'alba' | 'posa' | 'crescita' | 'righe' | 'cresce'
 const MASCHERE = new Set<Rivela>(['retino', 'tendina', 'strappo', 'cresce'])
 /** i generatori che possono fare da protagonisti (crescono e reggono lo schermo) */
-const FORTI = new Set(['muffa', 'flusso', 'caleido', 'traccia', 'ornato', 'geometria', 'pattern'])
+const FORTI = new Set(['muffa', 'camera', 'cristallo', 'flusso', 'caleido', 'traccia', 'ornato', 'geometria', 'pattern'])
 const MATERIA = new Set(['retino', 'punti', 'grana', 'duotono', 'sfasa', 'materia', 'caleido', 'pattern', 'onde', 'ornato'])
 /** come si rivela uno strato: dalla sua natura (il retino a punti che crescono, il campo a tendina, la carta a strappo) */
 function rivelaDi(l: Layer, n: Nodo, P: Partitura): Rivela {

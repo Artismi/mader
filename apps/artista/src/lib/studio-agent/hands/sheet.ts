@@ -113,5 +113,8 @@ export function rettangoloVuoto(cv: HTMLCanvasElement): boolean {
 /** la ricetta di un segno di muffa (se il canvas ne è uno), da portare nel livello: il reel lo farà ricrescere */
 export function generaDi(cv: HTMLCanvasElement): Layer['genera'] | undefined {
   const m = (cv as HTMLCanvasElement & { __muffa?: { seme: number; colore: string; S: number } }).__muffa
-  return m ? { tool: 'muffa', p: { seme: m.seme, colore: m.colore, S: m.S } } : undefined
+  if (m) return { tool: 'muffa', p: { seme: m.seme, colore: m.colore, S: m.S } }
+  // i mondi fisici (cristallo, camera) portano la loro ricetta: l'indirizzo
+  const q = (cv as HTMLCanvasElement & { __ricetta?: { tool: string; p: Record<string, unknown> } }).__ricetta
+  return q ? { tool: q.tool, p: { ...q.p } } : undefined
 }

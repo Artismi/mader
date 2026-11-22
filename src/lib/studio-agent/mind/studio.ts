@@ -86,13 +86,16 @@ function urgency(t: Tool, s: Sheet, st: AgentState, intention: Intention, f: Fea
   if (intention.tools.includes(t.id)) u += 1.5
   const sense: ToolSense | undefined = st.tools[t.id]
   if (sense && sense.uses > 2) u += sense.gain * 2
+  // il principiante: uno strumento con poca esperienza si prova di più, finché non la ha (curiosità, non regola: scende con gli usi)
+  const usi = sense?.uses ?? 0
+  if (usi < 25) u += 2.2 * (1 - usi / 25)
   if (MOOD_TOOLS[mood].includes(t.id)) u += 0.8
   if (f) {
     // spinta verso ciò che manca: effetto atteso (appreso, o ipotesi iniziale) · distanza dal bersaglio
     const eff = sense && sense.uses > 2 ? sense.effect : t.pushes
     for (const [k, target] of Object.entries(intention.targets)) u += Math.max(0, (eff[k] ?? 0) * (target - (f[k] ?? 0))) * 6
   }
-  if (!s.layers.length) u *= ['semina', 'geometria', 'pattern', 'traccia', 'shader', 'scrivi'].includes(t.id) ? 2 : 0.05
+  if (!s.layers.length) u *= ['semina', 'geometria', 'pattern', 'traccia', 'shader', 'scrivi', 'cristallo', 'camera'].includes(t.id) ? 2 : 0.05
   if (t.id === 'schiaccia') u *= 0.3
   // troppi fogli sovrapposti: meno aggiungere, più togliere e unire
   if (s.layers.length > 7) u *= ['togli', 'schiaccia', 'disponi', 'taglia'].includes(t.id) ? 2.5 : 0.35

@@ -16,6 +16,7 @@ export { tempoDi, finestra }
 import { newCanvas, withLayer, replaceLayer, fullLayer, flatten, sfuma, type Sheet, type Layer, type Blend } from './sheet'
 import { runShader } from './shader'
 import { NUOVI } from './tools2'
+import { MONDI } from './tools3'
 
 export interface ToolCtx {
   r: Rnd
@@ -499,7 +500,7 @@ export async function applica(tool: Tool, s: Sheet, p: Params, c: ToolCtx): Prom
   return { ...out, layers: out.layers.map(l => (prima.has(l.id) ? l : { ...l, genera: { tool: tool.id, p, fonte } })) }
 }
 /** gli strumenti che sanno crescere e vivere */
-export const ANIMABILI = new Set(['pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico'])
+export const ANIMABILI = new Set(['pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico', 'cristallo', 'camera'])
 
-export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI]
+export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI, ...MONDI]
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)

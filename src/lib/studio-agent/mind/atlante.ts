@@ -40,9 +40,12 @@ import { disegnaGeneratore, ensureOfficina, generatoreById, scriviGeneratore } f
 import type { Features } from '../core/types'
 import type { Deduzione } from '../voice/scrittura'
 import { disegnaMacchia, macchiaDa, segnoBocciato, type Macchia } from '../hands/macchia'
+import { disegnaCristallo } from '../hands/cristallo'
+import { disegnaCamera } from '../hands/camera'
+import { indirizzoPer } from '../hands/tools3'
 
 export type Rel = 'contro' | 'causa' | 'dentro' | 'identita' | 'diventa' | 'accanto'
-export interface Motivo { forma: Sogg | 'ricetta' | 'codice' | 'macchia'; macchia?: Macchia; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
+export interface Motivo { forma: Sogg | 'ricetta' | 'codice' | 'macchia' | 'cristallo' | 'camera'; macchia?: Macchia; indirizzo?: string; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
 export interface Concetto { word: string; motivo?: Motivo; frasi: number; usi: number; ultima: number }
 export interface Frase { t: string; fonte: string; nomi: string[]; day: number; usata?: number; rel?: Rel }
 export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita' | 'deduce'; riuscita?: number }
@@ -252,8 +255,11 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   const trama = a?.feature === 'linee' || a?.feature === 'orizzontali' ? 'righe' : a?.feature === 'punti' || a?.feature === 'elementi' ? 'punti' : a?.feature === 'vuoto' ? 'contorno' : a?.feature === 'complessita' ? 'tratteggio' : pick(r, ['pieno', 'pieno', 'righe', 'punti', 'tratteggio', 'contorno'] as const)
   const pool = TEXTLESS().filter(x => x.id !== 'simbolo')
   // niente forma nota: la macchia (inchiostro, caffè, muffa) è la sua materia di base; a volte un generatore suo
-  if (!sh && r() < 0.55) {
-    c.motivo = { forma: 'macchia', macchia: macchiaDa(Math.floor(r() * 1e9)), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+  // niente forma nota: un mondo suo. La muffa, il cristallo, la camera (i mondi fisici: un indirizzo dà sempre lo stesso segno)
+  if (!sh && r() < 0.7) {
+    const q = r(), giorno = String(st.day)
+    c.motivo = q < 0.4 ? { forma: 'macchia', macchia: macchiaDa(Math.floor(r() * 1e9)), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+      : { forma: q < 0.7 ? 'camera' : 'cristallo', indirizzo: indirizzoPer(q < 0.7 ? 'camera' : 'cristallo', r, giorno), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
     return c.motivo
   }
   if (!sh && r() < 0.6) {
@@ -273,6 +279,8 @@ let ST: AgentState | null = null
 async function disegnaMotivo(m: Motivo, t: Tone, q: number, override?: string): Promise<HTMLCanvasElement> {
   const color = override ?? (m.colore === 'acc' ? t.acc : t.ink)
   if (m.forma === 'macchia') return disegnaMacchia(m.macchia ?? macchiaDa(m.seed), color)
+  if (m.forma === 'cristallo') return disegnaCristallo(m.indirizzo ?? String(m.seed), { S: 900, colore: color, fondo: null })
+  if (m.forma === 'camera') return disegnaCamera(m.indirizzo ?? String(m.seed), { S: 900, colore: color, fondo: null })
   if (m.forma === 'codice' && ST) {
     const g = generatoreById(ST, m.gen)
     if (g) return disegnaGeneratore(ST, g, 600, color, null)
@@ -440,11 +448,14 @@ async function segnoGiudicato(m: Motivo, t: Tone, q: number, override?: string):
   // i simboli da repertorio (pugnali, emblemi) non sono segni suoi: diventano macchia
   if (m.forma === 'ricetta' && m.recipe === 'simbolo') Object.assign(m, { forma: 'macchia', macchia: macchiaDa(m.seed) })
   const cv = await disegnaMotivo(m, t, q, override)
-  if (m.forma === 'macchia') return cv
-  // se ripete, se è un anello vuoto, se non ha massa, il segno rinasce come macchia (e resta così)
+  if (m.forma === 'macchia' || m.forma === 'cristallo' || m.forma === 'camera') return cv
+  // se ripete, se è un anello vuoto, se non ha massa (o il suo generatore non c'è più), il segno rinasce in un mondo suo
+  // (muffa, camera, cristallo) e resta così
   const no = segnoBocciato(cv)
   if (!no) return cv
-  Object.assign(m, { forma: 'macchia', macchia: macchiaDa(m.seed), forza: 0.4, bocciato: no })
+  const dado = Math.random()
+  if (dado < 0.4) Object.assign(m, { forma: 'macchia', macchia: macchiaDa(m.seed), forza: 0.4, bocciato: no })
+  else { const mondo = dado < 0.7 ? 'camera' : 'cristallo'; Object.assign(m, { forma: mondo, indirizzo: indirizzoPer(mondo, () => Math.random(), new Date().toISOString().slice(0, 10)), forza: 0.4, bocciato: no }) }
   return disegnaMotivo(m, t, q, override)
 }
 
