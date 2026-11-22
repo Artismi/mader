@@ -430,6 +430,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
       const fogliReel = soloMondi ? await fogliMondi(r, tctx, fogli[0].W, fogli[0].H, Math.min(4, Math.max(3, fogli.length)))
         : r() < 0.85 ? await (async () => { const pM = mondo.propose(fogli[0], tctx); return Promise.all(fogli.map(f => conMondo(f, pM, tctx))) })() : fogli
       if (soloMondi) log('Oggi niente discorso: il reel è dei miei mondi che crescono.')
+      else if (fogliReel !== fogli) log('Sotto le tavole del reel cresce un mondo.')
       const infoR = soloMondi ? fogliReel.map(() => ({ interesse: 0.5 })) : infoReel
       const rr = await faiReel(st, r, fogliReel, infoR, soloMondi ? { face: F.face as FaceId, parola: intention.word } : { domanda: plan.domanda, conclusione: plan.d?.testo, face: F.face as FaceId, parola: plan.d?.a ?? intention.word }, log)
       if (rr) { video = rr.video; audioReel = rr.audio }
@@ -464,7 +465,10 @@ let paginaOggi: Lavoro | null = null
 async function conMondo(s: Sheet, p: Record<string, unknown>, c: ToolCtx): Promise<Sheet> {
   const out = await applica(mondo, s, p, c)
   const nuovi = out.layers.filter(l => !s.layers.some(x => x.id === l.id))
-  return { ...out, layers: [...nuovi, ...s.layers] }
+  // sopra i fondi pieni (altrimenti li copre), sotto tutto il resto
+  const ATMO = new Set(['fondo', 'campo', 'colore', 'ricetta', 'semina', 'materia', 'luce', 'shader', 'grana'])
+  let k = 0; while (k < s.layers.length && ATMO.has(s.layers[k].kind)) k++
+  return { ...out, layers: [...s.layers.slice(0, k), ...nuovi, ...s.layers.slice(k)] }
 }
 /** i fogli di un reel dei mondi: cristallo e camera a tutto schermo, a volte due che si attraversano, spesso nel cielo */
 async function fogliMondi(r: () => number, c: ToolCtx, W: number, H: number, n: number): Promise<Sheet[]> {

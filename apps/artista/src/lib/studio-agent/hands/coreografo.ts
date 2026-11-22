@@ -62,7 +62,7 @@ const clamp = (x: number, a = 0, b = 1) => Math.max(a, Math.min(b, x))
 
 const TESTO = new Set(['testo', 'tipografia', 'etichette', 'firma', 'piastra'])
 const ATMO = new Set(['campo', 'colore', 'color', 'grana', 'duotono', 'shader', 'luce', 'materia', 'ombra'])
-const TRAMA = new Set(['pattern', 'retino', 'ornato', 'caleido', 'flusso', 'sfasa', 'onde', 'punti', 'pannelli', 'orizzonte', 'mappa'])
+const TRAMA = new Set(['pattern', 'retino', 'ornato', 'caleido', 'flusso', 'sfasa', 'onde', 'punti', 'pannelli', 'orizzonte', 'mappa', 'mondo'])
 
 /** le componenti connesse della trasparenza di un livello: ognuna diventa un oggetto */
 function componenti(cv: HTMLCanvasElement, cella: number, max: number) {
