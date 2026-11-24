@@ -619,12 +619,21 @@ function riprese(c: Coreografia, br: Brano, n: number, forte: number, rels: (str
   while (scelte.length > 2 && scelte.reduce((a, tv) => a + durata(tv), 0) > br.durata - bar) { const via = scelte.slice(1, -1).filter(x => x !== forte)[0]; if (via === undefined) break; scelte = scelte.filter(x => x !== via) }
   let t = 0
   for (const tv of scelte) { if (t >= br.durata - 1e-6) break; const len = durata(tv); out.push({ tav: tv, t0: t, t1: Math.min(br.durata, t + len), rel: rels[tv] }); t += len }
-  // il tempo che avanza: allunga l'ultima, oppure (se basta una battuta) riprende la prima per chiudere ad anello
-  // il tempo che avanza: le tavole tornano a turno (ricostruite, più brevi: sono già state lette), mai una sola che tiene tutto
-  let k = 0
-  while (br.durata - t >= bar - 1e-6 && k < scelte.length) {
-    const tv = scelte[k % scelte.length], len = Math.min(br.durata - t, Math.max(bar, Math.ceil((durata(tv) * 0.6) / bar) * bar))
-    out.push({ tav: tv, t0: t, t1: t + len, rel: rels[tv], anello: true }); t += len; k++
+  // il tempo che avanza non riporta indietro nessuna tavola (sarebbe la stessa due volte): si allargano quelle che ci sono,
+  // la più forte di più, così gli elementi hanno il tempo di posarsi e respirare
+  // prima entrano le tavole rimaste fuori (nel loro ordine), poi si allarga quello che c'è, al massimo di metà
+  const fuori = tutte.filter(x => !scelte.includes(x))
+  while (br.durata - t >= bar - 1e-6 && fuori.length) {
+    const tv = fuori.shift()!, len = Math.min(br.durata - t, durata(tv))
+    out.push({ tav: tv, t0: 0, t1: len, rel: rels[tv] }); t += len
+  }
+  out.sort((a, b) => a.tav - b.tav)
+  { let u = 0; for (const rp of out) { const l = rp.t1 - rp.t0; rp.t0 = u; rp.t1 = u + l; u += l } }
+  const resto = br.durata - t
+  if (resto > 1e-6 && out.length) {
+    const pesi = out.map(rp => (rp.tav === forte ? 1.6 : 1) * (rp.t1 - rp.t0)), tot = pesi.reduce((x, y) => x + y, 0)
+    let u = 0
+    out.forEach((rp, i) => { const len = (rp.t1 - rp.t0) + resto * pesi[i] / tot; rp.t0 = u; rp.t1 = u + len; u += len })
   }
   if (t < br.durata - 1e-6) out[out.length - 1].t1 = br.durata
   return out

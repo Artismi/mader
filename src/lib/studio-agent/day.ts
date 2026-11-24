@@ -730,13 +730,16 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     if (tieni.length >= 2 && tieni.length < fogli.length) { log(`Reel: lascio fuori ${fogli.length - tieni.length} tavole che sono solo parole.`); fogli = tieni.map(i => fogli[i]); info = tieni.map(i => info[i]) }
   }
   // poche tavole fanno un reel che gira a vuoto: ne riprende dal cassetto, di altri giorni, quelle che hanno a che fare con la parola e più materia
+  // le tavole del cassetto già passate in un reel recente non tornano (gli ultimi 40 usi)
+  const GR = st0 as AgentState & { giaNeiReel?: string[] }
+  const usa = (id: string) => { GR.giaNeiReel = [...(GR.giaNeiReel ?? []).filter(x => x !== id), id].slice(-40) }
   if (fogli.length < 4) {
     try {
-      const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set(t.esclusi ?? [])
+      const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set([...(t.esclusi ?? []), ...((st0 as AgentState & { giaNeiReel?: string[] }).giaNeiReel ?? [])])
       const radice = t.parola.toLowerCase().slice(0, 5)
       const cand = tutte.filter(w => nel.has(w.id) && !via.has(w.id)).map(w => ({ w, v: 0.6 * w.interest + 0.4 * (w.visual?.features ? gustoVisivo(st0, w.visual.features) : 0.5) + (radice && `${w.title ?? ''} ${w.intention?.word ?? ''}`.toLowerCase().includes(radice) ? 0.5 : 0) })).sort((a, b) => b.v - a.v)
       let presi = 0
-      for (const { w } of cand) { if (fogli.length >= 4) break; const j = await T.prendiFoglio(w.id); if (!j) continue; fogli = [...fogli, await ricostruisci(JSON.parse(j))]; info = [...info, { interesse: w.interest }]; presi++ }
+      for (const { w } of cand) { if (fogli.length >= 4) break; const j = await T.prendiFoglio(w.id); if (!j) continue; usa(w.id); fogli = [...fogli, await ricostruisci(JSON.parse(j))]; info = [...info, { interesse: w.interest }]; presi++ }
       if (presi) log(`Reel: le tavole di oggi sono poche, ne riprendo ${presi} dal cassetto.`)
     } catch (e) { log(`Cassetto: ${e instanceof Error ? e.message : e}`) }
   }
@@ -756,10 +759,10 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       if (qa < 0.55) { try { astratta = fogliMondi(st0, r, vicina, 1)[0]; come = 'un mio mondo composto, a strati' } catch { astratta = null } }
       if (!astratta && qa < 0.8) {
         try {
-          const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set(t.esclusi ?? [])
+          const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set([...(t.esclusi ?? []), ...((st0 as AgentState & { giaNeiReel?: string[] }).giaNeiReel ?? [])])
           const c = tutte.filter(w => nel.has(w.id) && !via.has(w.id)).map(w => ({ w, v: w.visual?.features ? gustoVisivo(st0, w.visual.features) : 0 })).sort((a, b) => b.v - a.v).slice(0, 6)
           const sc = c[Math.floor(r() * c.length)]
-          const j = sc ? await T.prendiFoglio(sc.w.id) : null
+          const j = sc ? await T.prendiFoglio(sc.w.id) : null; if (sc) usa(sc.w.id)
           if (j) { const f = await ricostruisci(JSON.parse(j)); const ls = f.layers.filter(l => !TXT.test(l.kind)); if (ls.length >= 2) { astratta = { ...f, layers: ls }; come = 'una tavola di un altro giorno, senza parole' } }
         } catch { /* niente */ }
       }
@@ -786,6 +789,34 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       void MM
     }
   }
+  // niente doppioni nello stesso reel: la stessa tavola (con o senza parole) entra una volta sola,
+  // e una frase già detta non torna su un'altra tavola (nemmeno a pezzi: FRANCOBOLLO, poi FRANCO, poi BOLLO)
+  {
+    const TXT = (l: Sheet['layers'][number]) => !!l.meta?.text
+    const firma = (f: Sheet) => new Set(f.layers.filter(l => !TXT(l)).map(l => `${l.kind}:${Math.round(l.x * 12)}:${Math.round(l.y * 12)}:${Math.round(l.scale * 6)}:${l.canvas?.width ?? 0}`))
+    const viste: Set<string>[] = [], tenute: number[] = []
+    fogli.forEach((f, i) => {
+      const fi = firma(f)
+      const doppia = fi.size > 0 && viste.some(v => { let c = 0; fi.forEach(x => { if (v.has(x)) c++ }); return c / Math.min(fi.size, v.size || 1) >= 0.6 })
+      if (!doppia || fogli.length - (i - tenute.length) <= 2) { viste.push(fi); tenute.push(i) }
+    })
+    if (tenute.length < fogli.length) log(`Reel: tolgo ${fogli.length - tenute.length} tavole che erano già nel reel.`)
+    fogli = tenute.map(i => fogli[i]); info = tenute.map(i => info[i])
+    const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+    const dette: string[] = []
+    let tolte = 0
+    fogli = fogli.map(f => {
+      const layers = f.layers.filter(l => {
+        if (!TXT(l)) return true
+        const n = norm(l.meta!.text)
+        if (n.length < 3) return true
+        if (dette.some(d => d.includes(n) || n.includes(d))) { tolte++; return false }
+        dette.push(n); return true
+      })
+      return layers.length === f.layers.length ? f : { ...f, layers }
+    })
+    if (tolte) log(`Reel: ${tolte} scritte già dette in un'altra tavola, le tolgo.`)
+  }
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
   // l'orecchio sceglie: tre beat candidati (stili diversi), vince quello che suona meglio; tutti gli stili prendono il loro voto
@@ -793,7 +824,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const parole = (s: Sheet) => s.layers.filter(l => l.meta?.text && l.meta.size * (720 / s.W) >= 24).reduce((a, l) => a + (l.meta!.text.split(/\s+/).filter(Boolean).length), 0)
   const legge = (n: number) => (n ? 1 + n * 0.28 : 0) // il ritmo dei sottotitoli
   // la partitura parte dall'ultima che ha funzionato (a volte da capo): la costruzione a strati si evolve con lui
-  const ultimaP = M.memoria.length && r() < 0.6 ? M.memoria[M.memoria.length - 1].partitura : undefined
+  const ultimaP = M.memoria.length && r() < 0.3 ? M.memoria[M.memoria.length - 1].partitura : undefined
   await loadLabFonts() // i caratteri delle tavole (fraktur, mono…) devono esserci prima di scrivere
   let scena = smonta(fogli, r, ultimaP)
   void parole
@@ -898,11 +929,20 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
     const scegli = () => { const q = r(); return q < 0.45 ? 'camera' : q < 0.88 ? 'cristallo' : 'muffa' }
     const luce = () => cielo ? vesteF.colori[Math.floor(r() * vesteF.colori.length)] : tinte[Math.floor(r() * tinte.length)]
     let principale: { tipo: string; ind: string; colore: string } | undefined
+    // lo schema: dove sta il protagonista, dove la controparte, dove resta il vuoto (mai tutto in mezzo, mai tutto pieno)
+    const schema = (['centrale', 'terzi', 'terzi', 'orizzonte', 'diagonale'] as const)[Math.floor(r() * 5)]
+    const lato = r() < 0.5 ? -1 : 1
+    const P = schema === 'centrale' ? { x: 0.5, y: 0.5, s: 1.15 } : schema === 'terzi' ? { x: 0.5 + lato * 0.17, y: 0.5, s: 1.0 } : schema === 'orizzonte' ? { x: 0.5, y: 0.66, s: 1.05 } : { x: 0.5 + lato * 0.14, y: 0.6, s: 0.95 }
+    // la controparte (intarsio) dall'altra parte, più piccola; il dettaglio nell'angolo più vuoto
+    const C = schema === 'orizzonte' ? { x: 0.5 + lato * 0.22, y: 0.24 } : { x: 0.5 - lato * 0.26, y: schema === 'diagonale' ? 0.26 : 0.3 }
+    const D = { x: 0.5 - lato * 0.3, y: schema === 'orizzonte' ? 0.2 : 0.8 }
+    // al massimo tre presenze oltre al fondale: le altre tolgono respiro
+    while (ruoli.filter(x => x !== 'fondale').length > 3) ruoli.splice(ruoli.lastIndexOf('dettaglio') >= 0 ? ruoli.lastIndexOf('dettaglio') : ruoli.length - 1, 1)
     ruoli.forEach((ruolo, k) => {
       const id = `mm${i}${k}`
       if (ruolo === 'controcanto' && principale && principale.tipo !== 'muffa') {
         const v = vesteACaso(r, tinte, scuroF), { cv } = mondo(principale.tipo, luce(), v, principale.ind)
-        f = { ...f, layers: [...f.layers, { id, kind: principale.tipo, canvas: cv, x: 0.5 + (r() - 0.5) * 0.04, y: 0.5, scale: 1.3 * (1.02 + r() * 0.08), rot: (r() < 0.5 ? 1 : -1) * (0.03 + r() * 0.07), alpha: 0.55, blend: scuroF ? 'screen' : 'multiply' }] }
+        f = { ...f, layers: [...f.layers, { id, kind: principale.tipo, canvas: cv, x: P.x + (r() - 0.5) * 0.03, y: P.y, scale: P.s * (1.02 + r() * 0.06), rot: (r() < 0.5 ? 1 : -1) * (0.03 + r() * 0.07), alpha: 0.55, blend: scuroF ? 'screen' : 'multiply' }] }
         return
       }
       let tipo = ruolo === 'principale' ? scegli() : scegli()
@@ -910,7 +950,7 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
       const colore = luce()
       if (tipo === 'muffa') {
         const seme = Math.floor(r() * 1e9), cv = disegnaMuffa(seme, colore, 900)
-        f = { ...f, layers: [...f.layers, { id, kind: 'motivo', canvas: cv, x: 0.3 + r() * 0.4, y: 0.3 + r() * 0.4, scale: ruolo === 'principale' ? 1.1 + r() * 0.3 : 0.5 + r() * 0.4, rot: r() * 6.283, alpha: ruolo === 'fondale' ? 0.35 : 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900 } } }] }
+        f = { ...f, layers: [...f.layers, { id, kind: 'motivo', canvas: cv, x: ruolo === 'principale' ? P.x : C.x, y: ruolo === 'principale' ? P.y : C.y, scale: ruolo === 'principale' ? P.s : 0.45 + r() * 0.15, rot: r() * 6.283, alpha: ruolo === 'fondale' ? 0.35 : 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900 } } }] }
         if (ruolo === 'principale') principale = { tipo, ind: '', colore }
         return
       }
@@ -927,11 +967,11 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
         if (r() < 0.5) { const gr = g.createRadialGradient(cv.width / 2, cv.height / 2, 0, cv.width / 2, cv.height / 2, cv.width * (0.3 + r() * 0.15)); gr.addColorStop(0, '#000'); gr.addColorStop(0.65, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height) }
         else { g.filter = `blur(${Math.round(cv.width * 0.02)}px)`; g.drawImage(disegnaMuffa(Math.floor(r() * 1e9), '#000', cv.width), 0, 0); g.filter = 'none' }
         g.globalCompositeOperation = 'source-in'; g.drawImage(cv, 0, 0); cv = m
-        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.25 + r() * 0.5, y: 0.25 + r() * 0.5, scale: 0.6 + r() * 0.5, rot: r() * 6.283, alpha: 1, blend: 'source-over' }] }
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: C.x, y: C.y, scale: 0.45 + r() * 0.15, rot: r() * 6.283, alpha: 1, blend: 'source-over' }] }
       } else if (ruolo === 'dettaglio') {
-        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.2 + r() * 0.6, y: 0.2 + r() * 0.6, scale: 0.35 + r() * 0.3, rot: r() * 6.283, alpha: 0.9, blend: scuroF ? 'screen' : 'multiply', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: D.x, y: D.y, scale: 0.22 + r() * 0.1, rot: r() * 6.283, alpha: 0.9, blend: scuroF ? 'screen' : 'multiply', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
       } else {
-        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: 1.3, rot: 0, alpha: 1, blend: 'source-over', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: P.x, y: P.y, scale: P.s, rot: 0, alpha: 1, blend: 'source-over', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
       }
     })
     out.push(f)
