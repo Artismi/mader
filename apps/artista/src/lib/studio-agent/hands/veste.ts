@@ -45,6 +45,7 @@ export function vesti(cv: HTMLCanvasElement, v: Veste): HTMLCanvasElement {
     g.drawImage(col, 0, 0); g.filter = `blur(${Math.round(W * 0.004)}px)`; g.drawImage(col, 0, 0); g.restore()
   }
   g.drawImage(col, 0, 0)
+  col.width = 0; col.height = 0 // la tela di passaggio non serve più
   // la grana: polvere sull'inchiostro
   if (v.grana > 0) {
     const d = g.getImageData(0, 0, W, H), p = d.data

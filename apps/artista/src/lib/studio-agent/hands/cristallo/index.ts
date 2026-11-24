@@ -98,7 +98,8 @@ function stileDi(indirizzo: string, fam: string): Stile {
   const u = sorgente(`stile/${indirizzo}`)('stile'), f = fam.split('/')[0]
   // il sapore astrale: traiettorie sottili con gerarchia e alone; nastro e campitura restano, ma come rarità
   const pesi: [Stile, number][] = f === 'orbite' ? [['filo', 1.4], ['gerarchia', 2], ['nastro', 0.7], ['campitura', 0.35], ['luce', 1.6], ['tratteggio', 0.2]]
-    : f === 'onde' ? [['campitura', 2.4], ['nastro', 1.4], ['tratteggio', 1], ['filo', 0.6]]
+    // campitura, nastro e tratteggio (a scacchi, a fasce, a righe oblique) sanno di stoffa: restano, ma sono la rarità
+    : f === 'onde' ? [['filo', 1.6], ['gerarchia', 1.4], ['luce', 1.2], ['campitura', 0.6], ['nastro', 0.3], ['tratteggio', 0.2]]
     : f === 'viaggio' ? [['filo', 1.2], ['gerarchia', 1.6], ['luce', 1.8], ['nastro', 0.2]]
     : [['filo', 1.4], ['gerarchia', 2], ['luce', 1.4], ['nastro', 0.2], ['campitura', 0.15]]
   const tot = pesi.reduce((a, [, w]) => a + w, 0); let x = u * tot

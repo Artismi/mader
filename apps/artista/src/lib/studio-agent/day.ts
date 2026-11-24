@@ -18,6 +18,7 @@ import { gusto as gustoVisivo } from './eyes/gusto'
 import { aggiornaCollezione, imparaCollezione, indirizzoPer } from './hands/tools3'
 import { disegnaCamera } from './hands/camera'
 import { disegnaCristallo } from './hands/cristallo'
+import { hexToLch, lch } from './hands/colore'
 import { vesti, vesteACaso, fondoCosmico } from './hands/veste'
 import { GENERICI } from './mind/pensiero'
 import { posDi } from './reader/concepts'
@@ -875,8 +876,18 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
   const W0 = base?.W ?? 800, H0 = base?.H ?? 1000, bg = base?.bg ?? '#141414'
   const lb = lum0(bg.length >= 7 ? bg : '#141414')
   const tinte = [...new Set((base?.layers ?? []).map(l => l.meta?.color).filter((c): c is string => !!c && Math.abs(lum0(c) - lb) > 0.35)), lb > 0.5 ? '#1b1a18' : '#efe9dc']
-  const out: Sheet[] = []
-  for (let i = 0; i < n; i++) {
+  // se la tavola di partenza non ha colore (solo crema e nero), la veste non può restare crema su nero: pesca un accento vero,
+  // con luce e croma di chi si vede sul fondo, e le armonie vengono da lì
+  if (!tinte.some(c => hexToLch(c).c >= 0.06)) {
+    const h = r() * 360, scuroB = lb < 0.5
+    tinte.unshift(lch(scuroB ? 0.64 : 0.46, 0.13 + r() * 0.1, h))
+  }
+  const libera = (c: HTMLCanvasElement) => { c.width = 0; c.height = 0 } // le tele di passaggio si restituiscono subito: quattro tavole a strati, a 900 px, pesano
+  // quanto è piena una tavola composta: poche linee sul cielo non reggono un reel
+  const misura = (s: Sheet) => { const c = flatten(s, 0.3), m = measure(rasterize(c, 64)); libera(c); return m }
+  const punteggio = (m: Record<string, number>) => (1 - (m.vuoto ?? 0)) + Math.min(0.25, m.densita ?? 0) * 2 + (m.complessita ?? 0)
+  const regge = (m: Record<string, number>) => (m.densita ?? 0) >= 0.04 && (m.vuoto ?? 0) <= 0.6 && (m.complessita ?? 0) >= 0.1
+  const componi = (i: number): Sheet => {
     let f = emptySheet(W0, H0, bg)
     // spesso il cielo: un fondo cosmico (profondo, una nebulosa accennata, polvere di stelle), e la luce delle linee che si accende sopra
     const cielo = r() < 0.6, vesteF = vesteACaso(r, tinte, cielo || lb < 0.5)
@@ -893,7 +904,8 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
     const mondo = (tipo: string, colore: string, veste: ReturnType<typeof vesteACaso>, indirizzo?: string) => {
       const ind = indirizzo ?? indirizzoPer(tipo as 'camera' | 'cristallo', r, String(st.day))
       const crudo = tipo === 'camera' ? disegnaCamera(ind, { S: 900, colore, fondo: null }) : disegnaCristallo(ind, { S: 900, colore, fondo: null })
-      return { ind, cv: vesti(crudo, veste) }
+      const vestito = vesti(crudo, veste); libera(crudo)
+      return { ind, cv: vestito }
     }
     const scegli = () => { const q = r(); return q < 0.45 ? 'camera' : q < 0.88 ? 'cristallo' : 'muffa' }
     const luce = () => cielo ? vesteF.colori[Math.floor(r() * vesteF.colori.length)] : tinte[Math.floor(r() * tinte.length)]
@@ -919,14 +931,14 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
       if (ruolo === 'principale') principale = { tipo, ind, colore }
       if (ruolo === 'fondale') {
         // lontano: grande, sfocato, tenue
-        const b = newCanvas(cv.width, cv.height), g = b.getContext('2d')!; g.filter = `blur(${Math.round(cv.width * 0.006)}px)`; g.drawImage(cv, 0, 0); cv = b
+        const b = newCanvas(cv.width, cv.height), g = b.getContext('2d')!; g.filter = `blur(${Math.round(cv.width * 0.006)}px)`; g.drawImage(cv, 0, 0); libera(cv); cv = b
         f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: 2 + r() * 0.8, rot: r() * 6.283, alpha: 0.3 + r() * 0.15, blend: scuroF ? 'screen' : 'multiply' }] }
       } else if (ruolo === 'intarsio') {
         // un altro mondo che vive dentro una forma morbida (un'ellisse sfumata o la sagoma di una muffa)
         const m = newCanvas(cv.width, cv.height), g = m.getContext('2d')!
         if (r() < 0.5) { const gr = g.createRadialGradient(cv.width / 2, cv.height / 2, 0, cv.width / 2, cv.height / 2, cv.width * (0.3 + r() * 0.15)); gr.addColorStop(0, '#000'); gr.addColorStop(0.65, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height) }
         else { g.filter = `blur(${Math.round(cv.width * 0.02)}px)`; g.drawImage(disegnaMuffa(Math.floor(r() * 1e9), '#000', cv.width), 0, 0); g.filter = 'none' }
-        g.globalCompositeOperation = 'source-in'; g.drawImage(cv, 0, 0); cv = m
+        g.globalCompositeOperation = 'source-in'; g.drawImage(cv, 0, 0); libera(cv); cv = m
         f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.25 + r() * 0.5, y: 0.25 + r() * 0.5, scale: 0.6 + r() * 0.5, rot: r() * 6.283, alpha: 1, blend: 'source-over' }] }
       } else if (ruolo === 'dettaglio') {
         f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.2 + r() * 0.6, y: 0.2 + r() * 0.6, scale: 0.35 + r() * 0.3, rot: r() * 6.283, alpha: 0.9, blend: scuroF ? 'screen' : 'multiply', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
@@ -934,7 +946,18 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
         f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: 1.3, rot: 0, alpha: 1, blend: 'source-over', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
       }
     })
-    out.push(f)
+    return f
+  }
+  const out: Sheet[] = []
+  for (let i = 0; i < n; i++) {
+    // fino a cinque composizioni: la prima piena basta, altrimenti resta la più piena (le scartate si liberano)
+    let meglio: { f: Sheet; v: number } | null = null
+    for (let k = 0; k < 5; k++) {
+      const f = componi(i), m = misura(f), v = punteggio(m)
+      if (!meglio || v > meglio.v) { if (meglio) meglio.f.layers.forEach(l => libera(l.canvas)); meglio = { f, v } } else f.layers.forEach(l => libera(l.canvas))
+      if (regge(m)) { meglio = { f, v }; break }
+    }
+    out.push(meglio!.f)
   }
   return out
 }
