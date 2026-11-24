@@ -24,7 +24,7 @@ import { posDi } from './reader/concepts'
 import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
 import { buone, tavoleAdHoc } from './mind/adhoc'
 import { TONES } from '@/components/studio/genera/recipes'
-import { emptySheet, flatten, type Sheet } from './hands/sheet'
+import { emptySheet, flatten, newCanvas, type Sheet } from './hands/sheet'
 import { disegnaMuffa } from './hands/muffa'
 const lum0 = (h: string) => { const m = h.replace('#', ''); if (m.length < 6) return 0.5; return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * parseInt(m.slice(i, i + 2), 16) / 255, 0) }
 import type { ToolCtx } from './hands/tools'
@@ -751,7 +751,10 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       const TXT = /testo|tipografia|etichette|firma|piastra/
       const mezzo = Math.floor(fogli.length / 2), vicina = fogli[mezzo - 1] ?? fogli[0]
       let astratta: Sheet | null = null, come = ''
-      if (r() < 0.5) {
+      const qa = r()
+      // spesso un suo mondo composto (fondale, principale, controcanto, intarsio, dettaglio) che cresce strato su strato
+      if (qa < 0.55) { try { astratta = fogliMondi(st0, r, vicina, 1)[0]; come = 'un mio mondo composto, a strati' } catch { astratta = null } }
+      if (!astratta && qa < 0.8) {
         try {
           const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set(t.esclusi ?? [])
           const c = tutte.filter(w => nel.has(w.id) && !via.has(w.id)).map(w => ({ w, v: w.visual?.features ? gustoVisivo(st0, w.visual.features) : 0 })).sort((a, b) => b.v - a.v).slice(0, 6)
@@ -776,6 +779,10 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       }
       ;(st0 as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta = !!astratta
       if (astratta) { fogli = [...fogli.slice(0, mezzo), astratta, ...fogli.slice(mezzo)]; info = [...info.slice(0, mezzo), { interesse: 0.5 }, ...info.slice(mezzo)]; log(`Reel: in mezzo una tavola astratta (${come}).`) }
+      // e a volte un secondo mondo in chiusura: il reel non finisce sulle parole
+      const RM = (st0 as AgentState & { reelMondi?: { p: number } }).reelMondi?.p ?? 0.3
+      if (fogli.length >= 3 && r() < RM) { try { const m = fogliMondi(st0, r, fogli[fogli.length - 1], 1)[0]; fogli = [...fogli, m]; info = [...info, { interesse: 0.5 }]; log('Reel: chiudo su un mio mondo.') } catch { /* niente */ } }
+
       void MM
     }
   }
@@ -874,21 +881,59 @@ function fogliMondi(st: AgentState, r: () => number, base: Sheet | undefined, n:
     // spesso il cielo: un fondo cosmico (profondo, una nebulosa accennata, polvere di stelle), e la luce delle linee che si accende sopra
     const cielo = r() < 0.6, vesteF = vesteACaso(r, tinte, cielo || lb < 0.5)
     if (cielo) f = { ...f, bg: '#05050a', layers: [{ id: `cielo${i}`, kind: 'fondo', canvas: fondoCosmico(W0, H0, r, vesteF.colori), x: 0.5, y: 0.5, scale: Math.max(W0, H0) / Math.min(W0, H0), rot: 0, alpha: 1, blend: 'source-over' }] }
-    const strati = 1 + (r() < 0.5 ? 1 : 0)
-    for (let k = 0; k < strati; k++) {
-      const q = r(), tipo = q < 0.45 ? 'camera' : q < 0.85 ? 'cristallo' : 'muffa'
-      // sul cielo l'inchiostro è luce (un colore della veste), mai scuro su scuro
-      const colore = cielo ? vesteF.colori[Math.floor(r() * vesteF.colori.length)] : tinte[Math.floor(r() * tinte.length)]
+    // la composizione: non un pattern piatto, ma ruoli diversi a scale diverse
+    // fondale (grande, sfocato, lontano) → principale → controcanto (stesso mondo, appena ruotato: moiré)
+    // → intarsio (un altro mondo dentro una forma morbida) → dettaglio fine. Ne usa 3-5, mai sempre gli stessi.
+    const scuroF = cielo || lb < 0.5
+    const ruoli = ['principale'] as string[]
+    if (r() < 0.7) ruoli.unshift('fondale')
+    if (r() < 0.45) ruoli.push('controcanto')
+    if (r() < 0.55) ruoli.push('intarsio')
+    if (r() < 0.5 || ruoli.length < 3) ruoli.push('dettaglio')
+    const mondo = (tipo: string, colore: string, veste: ReturnType<typeof vesteACaso>, indirizzo?: string) => {
+      const ind = indirizzo ?? indirizzoPer(tipo as 'camera' | 'cristallo', r, String(st.day))
+      const crudo = tipo === 'camera' ? disegnaCamera(ind, { S: 900, colore, fondo: null }) : disegnaCristallo(ind, { S: 900, colore, fondo: null })
+      return { ind, cv: vesti(crudo, veste) }
+    }
+    const scegli = () => { const q = r(); return q < 0.45 ? 'camera' : q < 0.88 ? 'cristallo' : 'muffa' }
+    const luce = () => cielo ? vesteF.colori[Math.floor(r() * vesteF.colori.length)] : tinte[Math.floor(r() * tinte.length)]
+    let principale: { tipo: string; ind: string; colore: string } | undefined
+    ruoli.forEach((ruolo, k) => {
+      const id = `mm${i}${k}`
+      if (ruolo === 'controcanto' && principale && principale.tipo !== 'muffa') {
+        const v = vesteACaso(r, tinte, scuroF), { cv } = mondo(principale.tipo, luce(), v, principale.ind)
+        f = { ...f, layers: [...f.layers, { id, kind: principale.tipo, canvas: cv, x: 0.5 + (r() - 0.5) * 0.04, y: 0.5, scale: 1.3 * (1.02 + r() * 0.08), rot: (r() < 0.5 ? 1 : -1) * (0.03 + r() * 0.07), alpha: 0.55, blend: scuroF ? 'screen' : 'multiply' }] }
+        return
+      }
+      let tipo = ruolo === 'principale' ? scegli() : scegli()
+      if (ruolo === 'dettaglio' && tipo === 'muffa') tipo = 'cristallo'
+      const colore = luce()
       if (tipo === 'muffa') {
         const seme = Math.floor(r() * 1e9), cv = disegnaMuffa(seme, colore, 900)
-        f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: 'motivo', canvas: cv, x: 0.5, y: 0.47, scale: 1.1 + r() * 0.3, rot: r() * 6.283, alpha: 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900 } } }] }
-      } else {
-        const indirizzo = indirizzoPer(tipo, r, String(st.day)), veste = k === 0 ? vesteF : vesteACaso(r, tinte, cielo || lb < 0.5)
-        const crudo = tipo === 'camera' ? disegnaCamera(indirizzo, { S: 900, colore, fondo: null }) : disegnaCristallo(indirizzo, { S: 900, colore, fondo: null }), cv = vesti(crudo, veste)
-        const scuroF = cielo || lb < 0.5
-        f = { ...f, layers: [...f.layers, { id: `mm${i}${k}`, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: k === 0 ? 1.3 : 0.8 + r() * 0.4, rot: k === 0 ? 0 : (r() - 0.5) * 0.8, alpha: k === 0 ? 1 : 0.85, blend: k === 0 ? 'source-over' : scuroF ? 'screen' : 'multiply', genera: { tool: tipo, p: { indirizzo, colore, S: 900, veste } } }] }
+        f = { ...f, layers: [...f.layers, { id, kind: 'motivo', canvas: cv, x: 0.3 + r() * 0.4, y: 0.3 + r() * 0.4, scale: ruolo === 'principale' ? 1.1 + r() * 0.3 : 0.5 + r() * 0.4, rot: r() * 6.283, alpha: ruolo === 'fondale' ? 0.35 : 1, blend: 'source-over', genera: { tool: 'muffa', p: { seme, colore, S: 900 } } }] }
+        if (ruolo === 'principale') principale = { tipo, ind: '', colore }
+        return
       }
-    }
+      const veste = ruolo === 'principale' ? vesteF : vesteACaso(r, tinte, scuroF)
+      let { ind, cv } = mondo(tipo, colore, veste)
+      if (ruolo === 'principale') principale = { tipo, ind, colore }
+      if (ruolo === 'fondale') {
+        // lontano: grande, sfocato, tenue
+        const b = newCanvas(cv.width, cv.height), g = b.getContext('2d')!; g.filter = `blur(${Math.round(cv.width * 0.006)}px)`; g.drawImage(cv, 0, 0); cv = b
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: 2 + r() * 0.8, rot: r() * 6.283, alpha: 0.3 + r() * 0.15, blend: scuroF ? 'screen' : 'multiply' }] }
+      } else if (ruolo === 'intarsio') {
+        // un altro mondo che vive dentro una forma morbida (un'ellisse sfumata o la sagoma di una muffa)
+        const m = newCanvas(cv.width, cv.height), g = m.getContext('2d')!
+        if (r() < 0.5) { const gr = g.createRadialGradient(cv.width / 2, cv.height / 2, 0, cv.width / 2, cv.height / 2, cv.width * (0.3 + r() * 0.15)); gr.addColorStop(0, '#000'); gr.addColorStop(0.65, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, cv.width, cv.height) }
+        else { g.filter = `blur(${Math.round(cv.width * 0.02)}px)`; g.drawImage(disegnaMuffa(Math.floor(r() * 1e9), '#000', cv.width), 0, 0); g.filter = 'none' }
+        g.globalCompositeOperation = 'source-in'; g.drawImage(cv, 0, 0); cv = m
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.25 + r() * 0.5, y: 0.25 + r() * 0.5, scale: 0.6 + r() * 0.5, rot: r() * 6.283, alpha: 1, blend: 'source-over' }] }
+      } else if (ruolo === 'dettaglio') {
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.2 + r() * 0.6, y: 0.2 + r() * 0.6, scale: 0.35 + r() * 0.3, rot: r() * 6.283, alpha: 0.9, blend: scuroF ? 'screen' : 'multiply', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
+      } else {
+        f = { ...f, layers: [...f.layers, { id, kind: tipo, canvas: cv, x: 0.5, y: 0.5, scale: 1.3, rot: 0, alpha: 1, blend: 'source-over', genera: { tool: tipo, p: { indirizzo: ind, colore, S: 900, veste } } }] }
+      }
+    })
     out.push(f)
   }
   return out
