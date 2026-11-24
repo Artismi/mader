@@ -37,7 +37,7 @@ function mediaSotto(s: Sheet, r: Rett): string {
 interface Righe { cv: HTMLCanvasElement; w: number; h: number }
 /** compone un testo in un canvas: righe, interlinea, contorno, alone, evidenziatore */
 function righe(text: string, F: Face, sizePx: number, maxPx: number, color: string, o: { lead?: number; stroke?: string; alone?: string; evid?: string; align?: CanvasTextAlign; impila?: boolean } = {}): Righe {
-  const T = perCarattere(F.upper ? text.toUpperCase() : text, F.family)
+  const T = perCarattere(F.upper && text.length <= 40 ? text.toUpperCase() : text, F.family)
   const probe = newCanvas(4, 4).getContext('2d')!
   probe.font = fontCss(F, sizePx)
   let lines: string[]

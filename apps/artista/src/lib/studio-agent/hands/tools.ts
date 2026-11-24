@@ -288,8 +288,9 @@ const scrivi: Tool = {
 export async function textLayer(s: Sheet, o: { text: string; face: FaceId; sizePx: number; color: string; x: number; y: number; rot?: number; align?: CanvasTextAlign; blend?: Blend; kind?: string; maxW?: number }): Promise<Sheet> {
   await loadLabFonts()
   const face: Face = FACES[o.face] ?? FACES.grotesk
-  const size = Math.max(8, Math.round(o.sizePx))
-  const txt = perCarattere(face.upper ? o.text.toUpperCase() : o.text, face.family)
+  // un paragrafo lungo non si urla: corpo da lettura, non da titolo
+  const size = Math.max(8, Math.round(o.text.length > 120 ? Math.min(o.sizePx, s.W * 0.03) : o.text.length > 60 ? Math.min(o.sizePx, s.W * 0.045) : o.sizePx))
+  const txt = perCarattere(face.upper && o.text.length <= 40 ? o.text.toUpperCase() : o.text, face.family)
   const probe = newCanvas(4, 4).getContext('2d')!
   probe.font = fontCss(face, size)
   const lines = wrap(probe, txt, s.W * (o.maxW ?? 0.8))

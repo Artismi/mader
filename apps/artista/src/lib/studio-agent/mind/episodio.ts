@@ -419,7 +419,7 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   const pesante = s.layers.filter(l => ['ricetta', 'shader', 'pattern', 'grana'].includes(l.kind)).length > 0 || ultimoLay === 'zoom' || ultimoLay === 'sovrapposti'
   if (sc.follia === 'istruzione' && sc.a) { sc = { ...sc, titolo: realizza(pick(r, ['prendi {det:a}. mettilo accanto {a:b}. aspetta.', 'cerca {det:a} dove non c\'è {det:b}. scrivilo.', 'togli {det:b} {da:a}. guarda cosa resta.', 'ripeti {det:a} finché non diventa {det:b}.']), { a: sc.a, b: sc.b ?? sc.a }).toUpperCase(), corpo: sc.titolo } ; zona = { x0: 0.07, y0: 0.2, x1: 0.93 } }
   if (sc.follia === 'assenza' && sc.a) sc = { ...sc, corpo: `${sc.corpo} ${realizza('(Qui doveva esserci {det:a}. Non c\'è.)', { a: sc.a })}`.trim() }
-  if (L?.tipo.maiuscolo && sc.titolo.length < 90) sc = { ...sc, titolo: sc.titolo.toUpperCase() }
+  if (L?.tipo.maiuscolo && sc.titolo.length <= 40) sc = { ...sc, titolo: sc.titolo.toUpperCase() }
   // il testo: un'idea tipografica per tavola (mai la stessa di quella prima), con le due regole ferme
   const vietate: Impagina[] = ultimoTipo ? [ultimoTipo] : []
   if (sc.ruolo === 'parola') vietate.push('colonna', 'verticale')
