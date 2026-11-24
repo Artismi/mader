@@ -25,7 +25,7 @@ const coseno = (a: number[], b: number[]) => { let d = 0, na = 0, nb = 0; for (l
 /** cerca il discorso più forte che passa per le tavole di oggi */
 /** quanto vale una tavola per il racconto: l'interesse (novità, progresso) e il gusto (la materia che ha) */
 let ST_C: AgentState | null = null
-const valore = (w: Work) => 0.6 * w.interest + 0.4 * (ST_C && w.visual?.features ? gusto(ST_C, w.visual.features) : 0.5)
+const valore = (w: Work) => w.interest + 0 * (ST_C && w.visual?.features ? gusto(ST_C, w.visual.features) : 0.5)
 export function cerca(st: AgentState, tutte: Work[], nelCassetto: Set<string>, oggi: string[]): Discorso | null {
   ST_C = st
   const C = memoriaCuratore(st)

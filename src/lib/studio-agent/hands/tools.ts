@@ -133,9 +133,10 @@ const geometria: Tool = {
   pushes: { superfici: 0.3, simmetria: 0.1, bordi: 0.1 },
   available: () => true,
   propose: (s, c) => ({
-    shape: pick(c.r, ['cerchio', 'rettangolo', 'linea', 'triangolo', 'arco', 'croce']),
-    x: range(c.r, 0.1, 0.9), y: range(c.r, 0.1, 0.9), size: range(c.r, 0.08, 0.7),
-    rot: range(c.r, 0, Math.PI), fill: chance(c.r, 0.55), stroke: range(c.r, 1, 18),
+    // una forma che sta nella composizione: sui terzi, dritta (o a 45°), sottile; piena solo il cerchio (mai un blocco ruotato a caso)
+    shape: pick(c.r, ['cerchio', 'cerchio', 'arco', 'linea', 'rettangolo', 'croce']),
+    x: pick(c.r, [1 / 3, 0.5, 2 / 3]), y: pick(c.r, [1 / 3, 0.5, 2 / 3]), size: range(c.r, 0.1, 0.38),
+    rot: pick(c.r, [0, 0, Math.PI / 2, Math.PI / 4]), fill: false, stroke: range(c.r, 1, 3.5),
     color: colorOf(c.tone, c.r), alpha: range(c.r, 0.6, 1),
     blend: chance(c.r, 0.2) ? 'difference' : 'source-over',
   }),
@@ -225,15 +226,16 @@ const traccia: Tool = {
   pushes: { linee: 0.3, diagonali: 0.1, bordi: 0.1 },
   available: () => true,
   propose: (s, c) => {
-    const n = Math.floor(range(c.r, 1, c.mood === 'inquieto' ? 9 : 4))
+    // un gesto solo (al massimo due), lungo e fluido: non scarabocchi spessi sparsi
+    const n = chance(c.r, 0.75) ? 1 : 2
     const strokes = Array.from({ length: n }, () => {
       const pts: [number, number][] = []
       let x = range(c.r, 0.05, 0.95), y = range(c.r, 0.05, 0.95), a = range(c.r, 0, Math.PI * 2)
-      const len = Math.floor(range(c.r, 6, 40)), curl = range(c.r, 0, 0.6)
+      const len = Math.floor(range(c.r, 25, 60)), curl = range(c.r, 0, 0.22)
       for (let i = 0; i < len; i++) { pts.push([x, y]); a += (c.r() - 0.5) * curl; x += Math.cos(a) * 0.025; y += Math.sin(a) * 0.025 }
       return pts
     })
-    return { strokes, width: range(c.r, 2, 40), taper: chance(c.r, 0.7), color: colorOf(c.tone, c.r), alpha: range(c.r, 0.6, 1), dry: chance(c.r, 0.35) }
+    return { strokes, width: range(c.r, 1.2, 6), taper: true, color: colorOf(c.tone, c.r), alpha: range(c.r, 0.6, 1), dry: chance(c.r, 0.35) }
   },
   apply: async (s, p, c) => {
     const T = tempoDi(c)
