@@ -243,7 +243,8 @@ export async function reelSequenza(epId: string) {
 type Forma3 = 'reel' | 'carosello' | 'storia'
 interface Pub { ig: string; forma: Forma3; quando: string; ep?: string; works: string[]; tipo?: string; modello?: string; stile?: string; tools: string[]; voto?: number; premiato?: boolean; visti?: string[] }
 interface Agenda { ultimo: Partial<Record<Forma3, string>>; qualsiasi?: string; pubblicati: Pub[]; pesiForma?: Partial<Record<Forma3, number>> }
-const ORE: Record<Forma3, number> = { reel: 5, carosello: 4, storia: 8 }
+// reel obbligato ogni 2 ore; e ogni 45 minuti deve uscire qualcosa (la forma che arriva di più tra carosello e storia)
+const ORE: Record<Forma3, number> = { reel: 2, carosello: Infinity, storia: Infinity }
 const getAgenda = (st: AgentState): Agenda => {
   const S = st as AgentState & { agenda?: Agenda }
   if (!S.agenda) {
@@ -262,9 +263,14 @@ export async function agenda() {
   // prima di avere misure, i reel pesano di più (sono loro che arrivano ai non-follower); poi decide la portata misurata
   const PRIMA: Record<Forma3, number> = { reel: 2, carosello: 0.6, storia: 0.7 }
   const peso = (f: Forma3) => (A.pesiForma ?? {})[f] ?? PRIMA[f]
-  const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / (ORE[f] / peso(f))])) as Record<Forma3, number>
+  const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / (f === 'reel' ? ORE[f] : ORE[f] / peso(f))])) as Record<Forma3, number>
   const dovute = (Object.keys(ORE) as Forma3[]).filter(f => ritardo[f] >= 1).sort((a, b) => ritardo[b] - ritardo[a])
-  return { dovute, ritardo, libera: ore(A.qualsiasi) >= 2, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
+  // ogni 45 minuti esce qualcosa: il reel è favorito, ma sceglie lui (estrazione pesata su quanto ogni forma arriva)
+  if (!dovute.length && ore(A.qualsiasi) >= 0.75) {
+    const w = { reel: peso('reel') * 2.5, carosello: peso('carosello'), storia: peso('storia') }, tot = w.reel + w.carosello + w.storia
+    let q = Math.random() * tot; dovute.push((Object.keys(w) as Forma3[]).find(f => (q -= w[f]) <= 0) ?? 'reel')
+  }
+  return { dovute, ritardo, libera: ore(A.qualsiasi) >= 0.75, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
 }
 
 /** annota una pubblicazione nell'agenda, con quello che serve poi per capire cosa ha funzionato */
