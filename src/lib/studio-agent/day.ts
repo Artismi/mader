@@ -25,6 +25,7 @@ import { cerca, merita, raccontato, decidiForma } from './mind/curatore'
 import { buone, tavoleAdHoc } from './mind/adhoc'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, newCanvas, type Sheet } from './hands/sheet'
+import { occhio } from './hands/occhio'
 import { disegnaMuffa } from './hands/muffa'
 const lum0 = (h: string) => { const m = h.replace('#', ''); if (m.length < 6) return 0.5; return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * parseInt(m.slice(i, i + 2), 16) / 255, 0) }
 import type { ToolCtx } from './hands/tools'
@@ -414,6 +415,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     const sc = plan.schede[i]
     let sheet
     try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face, { studio: sc.ruolo === 'parola' && r() < 0.5 ? undefined : studio, colori, L }) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
+    { const oc = occhio(sheet); sheet = oc.sheet; if (oc.note.length) log(`Occhio (${i + 1}): ${[...new Set(oc.note)].join('; ')}.`) }
     const final = flatten(sheet, 1)
     const R = rasterize(final)
     const f = measure(R)
@@ -595,6 +597,8 @@ async function tavola(
     const tenuti = red.passi.filter(p => p.kept).map(p => p.tool.replace('redazione:', ''))
     if (tenuti.length) log(`Redazione: ${tenuti.join(', ')}.`)
   }
+  // l'occhio del designer: sistema quello che c'è (testi che toccano, protagonista sperduto, figure che si coprono, margini)
+  if (!rottura) { const oc = occhio(res.sheet); res.sheet = oc.sheet; if (oc.note.length) log(`Occhio: ${[...new Set(oc.note)].join('; ')}.`) }
   if (fast) hooks.preview?.(flatten(res.sheet, 0.5))
 
   // guardare la tavola finita
