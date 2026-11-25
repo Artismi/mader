@@ -454,7 +454,7 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   }
   compatta(S.citta)
   S.diarioCitta = [...(S.diarioCitta ?? []), { giorno: st.day, quando: new Date().toISOString(), cittaGiorno: S.citta.giorno, verbale: v }].slice(-60)
-  S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]) }
+  S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]), fili: (() => { const per = new Map<number, [number, number, number][]>(); for (const f of Tt.fili) { for (const k of [f[0], f[1]]) { const l = per.get(k) ?? []; l.push(f); per.set(k, l) } } const tieni = new Set<string>(); for (const l of per.values()) for (const f of l.sort((x, y) => y[2] - x[2]).slice(0, 4)) tieni.add(f[0] + '|' + f[1]); return Tt.fili.filter(f => tieni.has(f[0] + '|' + f[1])).map(f => [f[0], f[1], +f[2].toFixed(3)]) })() }
   await T.putState(st)
   o.log(`la città: giorno ${S.citta.giorno}, ${v.length} battute, ${Tt.quartieri.length} quartieri`)
   return v
@@ -463,7 +463,7 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
 /** la città per il sito: il territorio, gli abitanti, le ultime giornate, le decisioni, la mostra, le annotazioni */
 export async function perLaCitta() {
   const st = await loadOrCreate()
-  const S = st as AgentState & { citta?: import('./mind/citta').Citta; diarioCitta?: { giorno: number; quando: string; cittaGiorno: number; verbale: { fase: string; chi: string; tipo: string; testo: string }[] }[]; territorio?: { quartieri: { id: number; nome: string; x: number; y: number; n: number; concetti: string[] }[]; piazza: { x: number; y: number }; insiemi: { id: string; nome: string; tipo: string; casa: { x: number; y: number }; raggio: number; n: number }[]; punti: [string, number, number, number][] } }
+  const S = st as AgentState & { citta?: import('./mind/citta').Citta; diarioCitta?: { giorno: number; quando: string; cittaGiorno: number; verbale: { fase: string; chi: string; tipo: string; testo: string }[] }[]; territorio?: { quartieri: { id: number; nome: string; x: number; y: number; n: number; concetti: string[] }[]; piazza: { x: number; y: number }; insiemi: { id: string; nome: string; tipo: string; casa: { x: number; y: number }; raggio: number; n: number }[]; punti: [string, number, number, number][]; fili?: [number, number, number][] } }
   const C = S.citta, Tt = S.territorio
   if (!C || !Tt) return null
   const works = new Map((await T.listWorks()).map(w => [w.id, w]))
@@ -475,6 +475,7 @@ export async function perLaCitta() {
     osservatorio: C.osservatorio ? { campioni: C.osservatorio.campioni, scoperte: C.osservatorio.scoperte.slice(-8).reverse(), ipotesi: C.osservatorio.ipotesi.filter(h => h.stato !== 'aperta').slice(-6).reverse().map(h => ({ testo: h.testo, stato: h.stato, fiducia: h.fiducia, chi: h.chi })) } : null,
     punti: Tt.punti.map(([id, x, y, q]) => { const w = works.get(id); return { id, x, y, q, t: (w?.title ?? '').slice(0, 90), g: w?.day ?? 0, i: +(w?.interest ?? 0.5).toFixed(2), k: w?.kept ? 1 : 0 } }),
     abitanti: C.abitanti.map(a => { const ins = Tt.insiemi.find(i => i.id === a.id); return { id: a.id, nome: a.nome, tipo: a.tipo, carica: a.carica, casa: ins?.casa ?? a.casa, raggio: ins?.raggio ?? a.raggio, n: ins?.n ?? 0, visti: a.visti.slice(-12), vesti: a.vesti ?? [], fem: !!a.fem, carattere: a.carattere } }),
+    fili: Tt.fili ?? [],
     costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [] } : null,
     giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
     decisioni: (C.decisioni ?? []).slice(-12).reverse().map(d => ({ cosa: d.cosa, stato: d.stato, fino: d.fino, esito: d.esito ?? null, chi: d.chi })),
