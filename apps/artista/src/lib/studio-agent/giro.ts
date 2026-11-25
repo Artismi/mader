@@ -414,6 +414,26 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   S.citta ??= fondaCitta(opere, Tt, st.seed ?? 11)
   const cerca = async (f: string, q: string, n: number) => (await T.read(`mode=fonte&f=${encodeURIComponent(f)}&q=${encodeURIComponent(q)}&n=${n}`)) as unknown as import('./mind/citta').Lettura[]
   const v = await giornata(S.citta, opere, Tt, { seme: st.day, cerca, ricerche: 8, giornoAgente: st.day, strumenti: (await import('./hands/tools')).TOOLS.map(t => t.id) })
+  if ((globalThis as { __officina?: boolean }).__officina && !S.citta.officina?.richieste.length) { // per le prove: un giro d'officina forzato
+    const m = S.citta.abitanti.filter(a => a.tipo === 'mestiere'), a = m[Math.floor(Math.random() * m.length)]
+    S.citta.officina ??= { richieste: [], esiti: [], tenuti: [] }
+    const tenuti = S.citta.officina.tenuti, base = tenuti[Math.floor(Math.random() * tenuti.length)]
+    S.citta.officina.richieste.push({ autore: a.nome, scopo: 'prova', strumenti: Object.keys(a.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)), modo: base && Math.random() < 0.6 ? 'ramo' : 'zero', base: base?.id, giorno: S.citta.giorno })
+  }
+  // l'officina: i generatori chiesti oggi si scrivono e si provano qui, nel browser (su un foglio vuoto e su tavole del cassetto)
+  if (S.citta.officina?.richieste.length) {
+    try {
+      const { officinaGiro } = await import('./mind/officinaCitta')
+      const { riportaOfficina } = await import('./mind/citta')
+      const { ricostruisci } = await import('./hands/cassetto')
+      const r = rng(Date.now() % 1e9), nel = await T.nelCassetto(), fogli: { sheet: Awaited<ReturnType<typeof ricostruisci>>; parola: string }[] = []
+      for (const id of nel.sort(() => r() - 0.5).slice(0, 3)) { try { const j = await T.prendiFoglio(id); if (j) fogli.push({ sheet: await ricostruisci(JSON.parse(j)), parola: '' }) } catch { /* pazienza */ } }
+      const ctxDi = (parola: string) => ({ r, tone: { id: 'x', label: '', bg: '#ebe6dc', ink: '#121212', acc: '#e3361b', dark: false }, intention: { word: parola, register: 'poetico', targets: {}, tools: [], why: '' }, mood: st.mood, say: () => parola, shaders: [], quality: 1 }) as unknown as import('./hands/tools').ToolCtx
+      const esiti = await officinaGiro(st, r, S.citta.officina.richieste, fogli, ctxDi, o.log)
+      riportaOfficina(S.citta, esiti)
+      for (const e of esiti) v.push({ fase: 'bottega', chi: e.richiesta.autore, tipo: 'officina', testo: `${e.programma.nome}: ${e.perche} — ${e.testo}` })
+    } catch (e) { o.log(`officina saltata: ${e instanceof Error ? e.message : e}`) }
+  }
   compatta(S.citta)
   S.diarioCitta = [...(S.diarioCitta ?? []), { giorno: st.day, quando: new Date().toISOString(), cittaGiorno: S.citta.giorno, verbale: v }].slice(-60)
   S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]) }

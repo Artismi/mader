@@ -46,7 +46,10 @@ export type Piano = { giorno: number; chi: string; cosa: string; stato: string; 
 export type Decisione = { id: string; giorno: number; giornoAgente: number; chi: string; cosa: string; tipo: Azione['tipo']; param: Record<string, unknown>; fino: number; stato: 'in vigore' | 'scaduta' | 'revocata'; favorevoli: string[]; prima?: number; esito?: string }
 export type Commissione = import('./sospese').Commissione
 export type Mostra = { giorno: number; curatore: string; opere: { id: string; titolo: string; autore: string; perche: string }[] }
-export type Citta = { bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
+export type RichiestaOfficina = { autore: string; scopo: string; strumenti: string[]; modo: 'zero' | 'ramo' | 'innesto'; base?: string; giorno: number }
+export type EsitoOfficina = { autore: string; nome: string; testo: string; tenuto: boolean; perche: string; scopo: string; giorno: number; discusso?: boolean }
+export type Cantiere = { id: string; giorno: number; chi: string; cosa: string; passi: { testo: string; dove: 'biblioteca' | 'bottega' | 'officina' | 'sito'; stato: 'da fare' | 'fatto' | 'aspetta' }[] }
+export type Citta = { officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
@@ -282,6 +285,11 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   // mestieri a digiuno
   for (const s of mest) if (s.n < tot * 0.03) osservazioni.push({ tipo: 'problema', chi: s.abitante.id, testo: `Le mie mani le avete usate in ${s.n} tavole su ${tot}. ${s.abitante.strumenti!.join(', ')}: quasi mai.`, nucleo: `${s.abitante.nome} lavora quasi mai`, argomento: 'digiuno:' + s.abitante.id, tema: Object.fromEntries(s.abitante.strumenti!.map(x => ['m:' + x, 1])), nomi: [], peso: 1.1, dati: { azione: { tipo: 'solo', mestiere: s.abitante.id, strumenti: s.abitante.strumenti! }, cerca: s.abitante.strumenti!.slice(0, 2).join(' '), proposta: `Una tavola dove comincia ${s.abitante.nome} e gli altri seguono.`, domanda: `Cosa sanno fare ${s.abitante.strumenti!.slice(0, 3).join(', ')} che nessun altro fa?` } })
 
+  // l'officina di ieri: i programmi provati tornano in piazza (tenuti o buttati, con la causa)
+  for (const e of (C.officina?.esiti ?? []).filter(x => !x.discusso).slice(-3)) {
+    e.discusso = true
+    osservazioni.push({ tipo: 'officina', chi: e.autore, testo: e.tenuto ? `In officina ho scritto «${e.nome}»: ${e.perche}. Ora è uno strumento di tutti: ${e.testo.slice(0, 140)}` : `Ho provato «${e.nome}» in officina e l'ho buttato: ${e.perche}. Lo scrivo così non lo rifacciamo.`, nucleo: `il programma «${e.nome}»`, argomento: 'officina:' + e.nome, tema: vettoreDi(`${e.scopo} ${e.testo}`), nomi: [], peso: 1, dati: e.tenuto ? { domanda: `Su quali tavole lo usiamo, «${e.nome}»?`, rovescio: 'Funziona perché è prudente: il prossimo ramo lo spingerei.' } : { battuta: 'Anche i rami secchi fanno legna.', proposta: undefined } })
+  }
   // 3. il guizzo: emergente dal carattere (visionario, poco prudente) e da quanto ha visto di nuovo; al massimo uno al giorno
   const guizzi = C.abitanti.map(a => [a, R.guizzo * (1 + a.carattere.visionario * 4) * (1 - a.carattere.prudente * 0.5) * (1 + a.visti.length / 400)] as const).filter(([, p]) => r() < p).sort((x, y) => y[1] - x[1])
   if (guizzi.length) {
@@ -432,6 +440,8 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   }
   for (const c of C.bottega) if (c.stato === 'in attesa' && c.giorno < C.giorno - 6) c.stato = 'scaduta'
   // le commissioni nuove: chi ha più voglia (tensioni accumulate, letture portate, carattere) chiede una tavola; al massimo una in attesa per volta
+  C.cantieri ??= []
+  const cantiereScopo = () => { for (const c of C.cantieri!) { const p = c.passi.find(x => x.dove === 'officina' && x.stato === 'da fare'); if (p) { p.stato = 'fatto'; return p.testo.match(/«([^»]+)»/)?.[1] ?? null } } return null }
   const noti = new Set(o.strumenti ?? [])
   const strumentiDi = (a: Abitante) => Object.keys(a.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)).filter(t => !noti.size || noti.has(t))
   const formaDi = (k: string) => { for (let i = opere.length - 1; i >= Math.max(0, opere.length - 600); i--) { const p = opere[i].intention?.word; if (p && radice(p) === k) return p } return null }
@@ -461,6 +471,32 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
       }
     }
   }
+  // l'officina: chi ha voglia di costruirsi un attrezzo scrive (o ramifica) un generatore. Chi ha un programma tenuto
+  // tende a farne un ramo; un visionario prova da zero o un innesto. Al massimo una richiesta per giornata.
+  C.officina ??= { richieste: [], esiti: [], tenuti: [] }
+  const artigiani = C.abitanti.filter(a => a.tipo === 'mestiere' && strumentiDi(a).length)
+  const stati = (C.officina as { storia?: { chi: string; giorno: number; scopo: string }[] }).storia ??= []
+  const daPoco = (a: Abitante) => stati.filter(x => x.chi === a.id && x.giorno >= C.giorno - 8).length
+  const inventore = artigiani.sort((x, y) => (y.carattere.visionario + y.tensione * 0.3 + r() * 0.8 - daPoco(y) * 0.9) - (x.carattere.visionario + x.tensione * 0.3 + r() * 0.8 - daPoco(x) * 0.9))[0]
+  const ultimaOfficina = stati.at(-1)?.giorno ?? -99
+  if (inventore && C.giorno - ultimaOfficina >= 2 && r() < 0.3 + inventore.carattere.visionario * 0.5) {
+    const miei = C.officina.tenuti.filter(t => t.autore === inventore.id)
+    const tutti = C.officina.tenuti
+    const modo: RichiestaOfficina['modo'] = miei.length && r() < 0.55 ? 'ramo' : tutti.length >= 2 && r() < 0.25 + inventore.carattere.visionario * 0.3 ? 'innesto' : 'zero'
+    const base = modo === 'ramo' ? miei[Math.floor(r() * miei.length)] : modo === 'innesto' ? tutti[Math.floor(r() * tutti.length)] : undefined
+    const altrui = C.abitanti.filter(a => a.tipo === 'mestiere' && a !== inventore && (inventore.peso[a.id] ?? 0) >= 0)
+    const prestito = altrui.length && r() < 0.5 ? strumentiDi(altrui[Math.floor(r() * altrui.length)]) : []
+    // lo scopo: un cantiere che aspetta un attrezzo, oppure una parola di oggi (una commissione, una lettura), oppure una delle sue
+    const usati = new Set(stati.filter(x => x.chi === inventore.id).map(x => x.scopo))
+    const oggiParole = [...C.bottega.filter(c => c.giorno === C.giorno).map(c => c.parola), ...C.rete.filter(n => n.giorno === C.giorno && n.tipo === 'lettura').map(n => n.testo.match(/su «([^»]+)»/)?.[1]).filter(Boolean) as string[]]
+    const sue = Object.entries(inventore.interessi).filter(([k]) => !k.startsWith('m:')).map(([k]) => formaDi(k)).filter(Boolean) as string[]
+    const candidati = [...oggiParole, ...sue].filter(w => !usati.has(w))
+    const scopo = cantiereScopo() ?? candidati[Math.floor(r() * Math.min(candidati.length, 5))] ?? sue[Math.floor(r() * sue.length)] ?? 'forma'
+    stati.push({ chi: inventore.id, giorno: C.giorno, scopo }); if (stati.length > 60) stati.splice(0, stati.length - 60)
+    C.officina.richieste.push({ autore: inventore.nome, scopo, strumenti: [...new Set([...strumentiDi(inventore), ...prestito.slice(0, 2)])], modo, base: base?.id, giorno: C.giorno })
+    verbale.push({ fase: 'bottega', chi: inventore.id, tipo: 'officina', testo: modo === 'ramo' ? `Vado in officina a fare un ramo di «${base!.nome}».` : modo === 'innesto' ? `Vado in officina: provo a innestare «${base!.nome}» con un altro programma.` : `Vado in officina a scrivere un generatore nuovo per «${scopo}», con ${[...new Set([...strumentiDi(inventore), ...prestito.slice(0, 2)])].slice(0, 4).join(', ')}.` })
+  }
+
   // il curatore: ogni tanto mette in mostra le prove migliori della città (con il perché), così il sito ne ha una sala
   const provate = C.bottega.filter(c => c.esito && c.fatte?.length).slice(-12)
   if (provate.length >= 3 && C.giorno - (C.mostre.at(-1)?.giorno ?? -99) >= 5) {
@@ -518,7 +554,21 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
       C.decisioni.push(d)
       verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'approvato', testo: `Approvato (${p.voti.pro} a ${p.voti.contro}): ${p.cosa}${tipo === 'nome' ? '' : ` Vale fino al giorno ${d.fino}, poi si vede com'è andata.`}` })
       nota('decisione', p.cosa, p.chi)
-    } else if (passa && p.azione?.tipo === 'nota') { p.stato = 'in lista'; C.mancanti!.push({ giorno: C.giorno, chi: p.chi, cosa: p.cosa }); verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'lista', testo: `Piace (${p.voti.pro} a ${p.voti.contro}), ma non sappiamo ancora farlo: «${p.cosa}» va nella lista dei mancanti.` }) }
+    } else if (passa && p.azione?.tipo === 'nota') {
+      // come facciamo? chi l'ha proposta scompone il problema: cosa serve, dove si fa, cosa manca
+      const cosa = p.cosa.toLowerCase(), passi: Cantiere['passi'] = []
+      const parola = p.cosa.match(/«([^»]+)»/)?.[1]?.split(' e ')[0]
+      if (/ponte/.test(cosa)) { const due = (p.cosa.match(/«([^»]+)»/g) ?? []).map(x => x.slice(1, -1)); if (due.length >= 2) C.domande.push({ giorno: C.giorno, chi: p.chi, testo: `Cosa hanno in comune «${due[0]}» e «${due[1]}»?`, stato: 'aperta', cerca: `${due[0].split(' e ')[0]} ${due[1].split(' e ')[0]}` } as any) }
+      if (/ponte/.test(cosa)) passi.push({ testo: `trovare cosa hanno in comune i due quartieri`, dove: 'biblioteca', stato: 'fatto' }, { testo: `un generatore che tenga insieme le due mani, per «${parola ?? 'ponte'}»`, dove: 'officina', stato: 'da fare' }, { testo: 'la tavola-ponte', dove: 'bottega', stato: 'da fare' })
+      else if (/albero/.test(cosa)) passi.push({ testo: 'il simulatore dell\'albero (c\'è)', dove: 'bottega', stato: 'da fare' }, { testo: 'piantarlo nello spazio 3D del sito', dove: 'sito', stato: 'aspetta' })
+      else if (/mappa|disegna la città/.test(cosa)) passi.push({ testo: 'un generatore che disegni piante di città, per «città»', dove: 'officina', stato: 'da fare' }, { testo: 'la tavola-mappa dal territorio', dove: 'bottega', stato: 'da fare' })
+      else if (/scart/.test(cosa)) passi.push({ testo: 'un quartiere per gli scarti nel sito', dove: 'sito', stato: 'aspetta' })
+      else if (/debole|peggiore/.test(cosa)) passi.push({ testo: `riprendere la tavola più debole${parola ? ` di «${parola}»` : ''}`, dove: 'bottega', stato: 'da fare' })
+      else passi.push({ testo: p.cosa, dove: 'bottega', stato: 'da fare' })
+      C.cantieri!.push({ id: `k${C.giorno}.${C.cantieri!.length}`, giorno: C.giorno, chi: p.chi, cosa: p.cosa, passi })
+      p.stato = 'in lista'; C.mancanti!.push({ giorno: C.giorno, chi: p.chi, cosa: p.cosa })
+      verbale.push({ fase: 'assemblea', chi: p.chi, tipo: 'come', testo: `Come facciamo? ${passi.map((x, i) => `${i + 1}) ${x.testo} (${x.dove}${x.stato === 'aspetta' ? ', ancora non possiamo' : ''})`).join(' ')}` })
+      verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'lista', testo: `Piace (${p.voti.pro} a ${p.voti.contro}): «${p.cosa}» diventa un cantiere.` }) }
     else if (!passa && pro + contro > 0) { if (p.giorno < C.giorno - 1) p.stato = 'respinto'; verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'respinto', testo: `Non passa (${p.voti.pro} a ${p.voti.contro}): ${p.cosa}` }) }
   }
   const oggi = odg
@@ -536,4 +586,15 @@ export function compatta(C: Citta, max = 1500) {
   C.domande = C.domande.slice(-200); C.piani = C.piani.slice(-200)
   for (const a of C.abitanti) { a.storia = a.storia.slice(-60); a.visti = a.visti.slice(-200) }
   return C
+}
+
+/** gli esiti dell'officina (girata nel browser dopo la giornata) entrano nella città: domani se ne parla */
+export function riportaOfficina(C: Citta, esiti: { richiesta: { autore: string; scopo: string; giorno: number }; programma: { id: string; nome: string; punteggio?: number }; testo: string; tenuto: boolean; perche: string }[]) {
+  C.officina ??= { richieste: [], esiti: [], tenuti: [] }
+  for (const e of esiti) {
+    C.officina.esiti.push({ autore: e.richiesta.autore, nome: e.programma.nome, testo: e.testo, tenuto: e.tenuto, perche: e.perche, scopo: e.richiesta.scopo, giorno: e.richiesta.giorno })
+    if (e.tenuto) C.officina.tenuti.push({ id: e.programma.id, nome: e.programma.nome, autore: C.abitanti.find(a => a.nome === e.richiesta.autore)?.id ?? e.richiesta.autore, punteggio: e.programma.punteggio ?? 0 })
+  }
+  C.officina.richieste = []
+  C.officina.esiti = C.officina.esiti.slice(-40)
 }

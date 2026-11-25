@@ -4,6 +4,7 @@
  * applicarlo al foglio. Lo stesso strumento, usato da intenzioni diverse,
  * fa gesti diversi: il "senso" di uno strumento lo impara usandolo.
  */
+import { ricetteTenute } from '../mind/ricette'
 import { RIPOSO } from '@/components/studio/genera/recipes'
 import { acqua } from './acqua'
 import { filtro } from './filtri'
@@ -516,4 +517,18 @@ export async function applica(tool: Tool, s: Sheet, p: Params, c: ToolCtx): Prom
 export const ANIMABILI = new Set(['universo', 'pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico', 'cristallo', 'camera'])
 
 export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI, ...MONDI, acqua, filtro, luce3d, vetroTool, stiroTool, particelleTool, sciameTool, affettatoreTool, ondineTool, mosaicoTool, colataTool, ditherTool, memoriaTool, universoTool]
+// la ricetta: un generatore scritto dalla città in officina (una catena di strumenti), usato come uno strumento
+const ricettaTool: Tool = {
+  id: 'ricetta', label: 'ricetta della città', nature: 'trasformazione', pushes: {},
+  available: () => ricetteTenute().length > 0,
+  propose: (_s, c) => { const l = ricetteTenute(); return { programma: l[Math.floor(c.r() * l.length)]?.id ?? '' } },
+  apply: async (s, p, c) => {
+    const prog = ricetteTenute().find(x => x.id === p.programma); if (!prog) return s
+    const { applicaDove } = await import('../mind/quaderno')
+    let cur = s
+    for (const ps of prog.passi) { const t = TOOLS.find(x => x.id === ps.tool); if (!t || t.id === 'ricetta') continue; cur = await applicaDove(t, cur, ps.p as Params, c, ps.dove) }
+    return cur
+  },
+}
+TOOLS.push(ricettaTool)
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)
