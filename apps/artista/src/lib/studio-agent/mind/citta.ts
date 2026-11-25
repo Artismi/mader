@@ -44,7 +44,9 @@ export type Battuta = { fase: Cella; chi: string; a?: string; tipo: string; test
 export type Azione = { tipo: 'sospendi'; frase: string } | { tipo: 'solo'; mestiere: string; strumenti: string[] } | { tipo: 'nome'; nome: string } | { tipo: 'nota' }
 export type Piano = { giorno: number; chi: string; cosa: string; stato: string; argomento?: string; azione?: Azione; voti?: { pro: number; contro: number } }
 export type Decisione = { id: string; giorno: number; giornoAgente: number; chi: string; cosa: string; tipo: Azione['tipo']; param: Record<string, unknown>; fino: number; stato: 'in vigore' | 'scaduta' | 'revocata'; favorevoli: string[]; prima?: number; esito?: string }
-export type Citta = { nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
+export type Commissione = import('./sospese').Commissione
+export type Mostra = { giorno: number; curatore: string; opere: { id: string; titolo: string; autore: string; perche: string }[] }
+export type Citta = { bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
@@ -73,8 +75,9 @@ export function fondaCitta(opere: Opera[], T: Territorio, seme = 11): Citta {
   // le figure: chi guarda il tutto (il critico e il curatore ci sono già nel giro; qui chi guarda la città)
   const urb: Abitante = { id: 'urbanista', nome: "l'urbanista", tipo: 'figura', carica: 'urbanista', carattere: carattereDi(r), interessi: { citt: 1, spazi: 0.6, quartier: 0.6, strad: 0.5 }, casa: T.piazza, raggio: 300, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
   const arch: Abitante = { id: 'archivio', nome: "l'archivio", tipo: 'figura', carica: 'memoria', carattere: { ...carattereDi(r), malinconico: 0.8, testardo: 0.7 }, interessi: { memori: 1, ripet: 1, tempo: 0.5 }, casa: T.piazza, raggio: 500, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
+  const cur: Abitante = { id: 'curatore', nome: 'il curatore', tipo: 'figura', carica: 'curatore', carattere: { ...carattereDi(r), prudente: 0.6 }, interessi: { mostr: 1, tavol: 0.6, sal: 0.5 }, casa: T.piazza, raggio: 300, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
   const sag: Abitante = { id: 'saggista', nome: 'la saggista', tipo: 'figura', carica: 'saggista', carattere: { ...carattereDi(r), prudente: 0.7, credulone: 0.2 }, interessi: {}, casa: T.piazza, raggio: 200, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
-  const C: Citta = { nome: null, giorno: 0, regole: { ...REGOLE_INIZIALI }, abitanti: [...abitanti, urb, arch, sag], rete: [], piani: [], domande: [] }
+  const C: Citta = { nome: null, giorno: 0, regole: { ...REGOLE_INIZIALI }, abitanti: [...abitanti, urb, arch, sag, cur], rete: [], piani: [], domande: [] }
   for (const a of C.abitanti) tavolozza(a, r)
   return C
 }
@@ -110,7 +113,7 @@ function frasiRipetute(titoli: string[], min: number) {
 }
 
 // ── la giornata ────────────────────────────────────────────────────────────────────────────────────────────
-export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: Lettura[]; cerca?: Cerca; ricerche?: number; giornoAgente?: number; durata?: number } = {}) {
+export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: Lettura[]; cerca?: Cerca; ricerche?: number; giornoAgente?: number; durata?: number; strumenti?: string[] } = {}) {
   const r = caso((o.seme ?? 1) ^ (C.giorno * 2654435761))
   const R = C.regole, idx = new Map(opere.map((w, i) => [w.id, i]))
   C.giorno++
@@ -121,6 +124,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     else C.abitanti.push({ ...fondaCitta(opere, { ...T, insiemi: [ins] }, C.giorno).abitanti[0], storia: [`nato il giorno ${C.giorno}`] })
   }
   if (!C.abitanti.some(a => a.id === 'saggista')) C.abitanti.push({ id: 'saggista', nome: 'la saggista', tipo: 'figura', carica: 'saggista', carattere: { ...carattereDi(r), prudente: 0.7 }, interessi: {}, casa: T.piazza, raggio: 200, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] })
+  if (!C.abitanti.some(a => a.id === 'curatore')) C.abitanti.push({ id: 'curatore', nome: 'il curatore', tipo: 'figura', carica: 'curatore', carattere: { ...carattereDi(r), prudente: 0.6 }, interessi: { mostr: 1, tavol: 0.6 }, casa: T.piazza, raggio: 300, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] })
   for (const a of C.abitanti) tavolozza(a, r)
   const verbale: Battuta[] = []
   const coda: Evento[] = []
@@ -154,6 +158,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     let x = r() * pesi.reduce((s, p) => s + p[1], 0); for (const [k, w] of pesi) if ((x -= w) <= 0) return k; return 'concorda'
   }
   const di = (id?: string) => id ? ab(id)?.nome ?? id : 'qualcuno'
+  const a_ = (nome: string) => nome.replace(/^il /, 'al ').replace(/^lo /, 'allo ').replace(/^la /, 'alla ').replace(/^l'/, "all'").replace(/^chi /, 'a chi ')
   const del_ = (nome: string) => nome.replace(/^il /, 'del ').replace(/^lo /, 'dello ').replace(/^la /, 'della ').replace(/^l'/, "dell'").replace(/^chi /, 'di chi ')
   const detti = new Set(C.rete.filter(n => n.giorno >= C.giorno - 3 && n.tipo === 'battuta').map(n => n.testo))
   const giaSu = new Map<string, Set<string>>() // argomento → chi ha già parlato oggi
@@ -408,6 +413,65 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     verbale.push({ fase: 'ritorno', chi: e.chi!, tipo: 'porta', testo: e.testo }); nota('porta', e.testo, e.chi, undefined, e.tema)
     coda.push(e); discuti('ritorno', C.abitanti)
   }
+  // 5b. bottega: si guardano le prove fatte dallo studio su commissione, poi qualcuno chiede la prossima
+  for (const a of C.abitanti) a.cella = 'bottega'
+  C.bottega ??= []; C.mostre ??= []; C.mancanti ??= []
+  const perId = new Map(opere.map(w => [w.id, w]))
+  const media = opere.slice(-200).reduce((t, w) => t + (w.interest ?? 0.5), 0) / Math.max(1, Math.min(200, opere.length))
+  for (const c of C.bottega.filter(x => x.stato === 'fatta' && !x.esito)) {
+    const fatte = (c.fatte ?? []).map(id => perId.get(id)).filter(Boolean) as Opera[]
+    if (!fatte.length) continue
+    const best = fatte.slice().sort((x, y) => (y.interest ?? 0) - (x.interest ?? 0))[0]
+    const i = best.interest ?? 0.5, buona = i >= media
+    c.esito = `${Math.round(i * 100)}% (media ${Math.round(media * 100)}%)`
+    const autore = ab(c.autore)
+    if (autore) { C.credito ??= {}; (C.credito[c.autore] ??= {}).mani = Math.max(0.3, Math.min(3, ((C.credito[c.autore] ?? {}).mani ?? 1) + (buona ? 0.2 : -0.1))) }
+    const ev: Evento = { tipo: 'prova', chi: c.autore, testo: buona ? `La tavola che avevo chiesto su «${c.parola}» è venuta: «${best.title}», ${c.esito}.` : `La mia prova su «${c.parola}» non regge: «${best.title}», ${c.esito}. Ci ho imparato qualcosa.`, nucleo: `la prova ${del_(di(c.autore))} su «${c.parola}»`, argomento: 'prova:' + c.id, tema: vettoreDi(`${c.parola} ${best.title}`), nomi: c.con ? [c.con] : [], tavole: fatte.map(w => w.id), peso: 1, dati: buona ? { domanda: `Cosa la fa funzionare, e cosa è venuto per caso?`, rovescio: 'Piace, ma è la strada più facile: la prossima va spinta più in là.', battuta: 'Finalmente qualcosa di nostro.' } : { domanda: `Cosa non ha funzionato nella prova su «${c.parola}»?`, rovescio: 'Una prova che non regge dice più di una che piace.' } }
+    verbale.push({ fase: 'bottega', chi: c.autore, tipo: 'prova', testo: ev.testo }); nota('prova', ev.testo, c.autore, ev.tavole, ev.tema)
+    coda.push(ev); discuti('bottega', C.abitanti)
+  }
+  for (const c of C.bottega) if (c.stato === 'in attesa' && c.giorno < C.giorno - 6) c.stato = 'scaduta'
+  // le commissioni nuove: chi ha più voglia (tensioni accumulate, letture portate, carattere) chiede una tavola; al massimo una in attesa per volta
+  const noti = new Set(o.strumenti ?? [])
+  const strumentiDi = (a: Abitante) => Object.keys(a.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)).filter(t => !noti.size || noti.has(t))
+  const formaDi = (k: string) => { for (let i = opere.length - 1; i >= Math.max(0, opere.length - 600); i--) { const p = opere[i].intention?.word; if (p && radice(p) === k) return p } return null }
+  if (!C.bottega.some(c => c.stato === 'in attesa')) {
+    // prima i mancanti che si possono già fare con quello che c'è (un ponte, una mappa, un albero in piazza)
+    const fattibile = C.mancanti.find(m => /ponte|mappa|disegna la città|albero/i.test(m.cosa) && !C.bottega!.some(c => c.perche === m.cosa))
+    const recenti = (a: Abitante) => C.bottega!.filter(c => c.autore === a.id && c.giorno >= C.giorno - 6).length
+    const voglia = (a: Abitante) => a.tensione + Math.min(3, a.storia.filter(x => x.startsWith(`${C.giorno}:`)).length) * 0.3 + a.carattere.trascinatore * 0.5 + r() * 0.8 - recenti(a) * 1.2
+    const chi = C.abitanti.filter(a => a.tipo !== 'figura' || fattibile).sort((x, y) => voglia(y) - voglia(x))[0]
+    if (chi) {
+      // un compagno: il mestiere o la testa con cui va più d'accordo (le mani per una testa, una parola per un mestiere)
+      const compagni = C.abitanti.filter(x => x !== chi && (chi.tipo === 'testa' ? x.tipo === 'mestiere' : chi.tipo === 'mestiere' ? x.tipo === 'testa' : x.tipo !== 'figura'))
+      const con = compagni.sort((x, y) => (chi.peso[y.id] ?? 0) - (chi.peso[x.id] ?? 0) + (r() - 0.5) * 0.6)[0]
+      const lettaOggi = C.rete.filter(n => n.giorno === C.giorno && n.tipo === 'lettura' && n.chi === chi.id)[0]
+      const temaPrimo = (a: Abitante) => Object.entries(a.interessi).filter(([k]) => !k.startsWith('m:')).sort((x, y) => y[1] - x[1]).map(e => e[0]).find(k => formaDi(k))
+      let parola = '', perche = ''
+      if (fattibile && /ponte/i.test(fattibile.cosa)) { const q = fattibile.cosa.match(/«([^»]+)»/g)?.map(x => x.slice(1, -1).split(' e ')[0]) ?? []; parola = q[0] ?? 'ponte'; perche = fattibile.cosa }
+      else if (fattibile) { parola = /albero/i.test(fattibile.cosa) ? 'albero' : 'città'; perche = fattibile.cosa }
+      else if (lettaOggi) { parola = lettaOggi.testo.match(/su «([^»]+)»/)?.[1] ?? ''; perche = `dopo quello che ho letto oggi` }
+      if (!parola) { const k = temaPrimo(chi.tipo === 'testa' ? chi : con ?? chi); parola = k ? formaDi(k)! : ''; perche = chi.tipo === 'mestiere' ? 'voglio vedere cosa sanno fare le mie mani da sole su un tema vero' : 'voglio vedere questa parola con mani che non uso mai' }
+      const sts = [...new Set([...strumentiDi(chi), ...(con ? strumentiDi(con) : [])])]
+      if (parola && sts.length) {
+        const c: Commissione = { id: `c${C.giorno}.${C.bottega.length}`, giorno: C.giorno, autore: chi.id, nome: chi.nome, con: con?.nome, parola, strumenti: sts.slice(0, 6), perche, stato: 'in attesa' }
+        C.bottega.push(c)
+        verbale.push({ fase: 'bottega', chi: chi.id, tipo: 'commissione', testo: `Chiedo una tavola su «${parola}»${con ? `, insieme ${a_(con.nome)}` : ''}, con ${sts.slice(0, 3).join(', ')}: ${perche}.` })
+        nota('commissione', `${chi.nome}: una tavola su «${parola}» con ${sts.slice(0, 3).join(', ')}`, chi.id)
+      }
+    }
+  }
+  // il curatore: ogni tanto mette in mostra le prove migliori della città (con il perché), così il sito ne ha una sala
+  const provate = C.bottega.filter(c => c.esito && c.fatte?.length).slice(-12)
+  if (provate.length >= 3 && C.giorno - (C.mostre.at(-1)?.giorno ?? -99) >= 5) {
+    const scelte = provate.flatMap(c => (c.fatte ?? []).map(id => ({ w: perId.get(id), c }))).filter(x => x.w && (x.w.interest ?? 0) >= media).sort((x, y) => (y.w!.interest ?? 0) - (x.w!.interest ?? 0)).slice(0, 5)
+    if (scelte.length >= 2) {
+      const m: Mostra = { giorno: C.giorno, curatore: 'curatore', opere: scelte.map(x => ({ id: x.w!.id, titolo: x.w!.title ?? '', autore: x.c.nome, perche: `${x.c.nome}${x.c.con ? ` con ${x.c.con}` : ''}, su «${x.c.parola}»` })) }
+      C.mostre.push(m); C.mostre = C.mostre.slice(-30)
+      verbale.push({ fase: 'bottega', chi: 'curatore', tipo: 'mostra', testo: `Apro una sala nuova con ${scelte.length} tavole della bottega: ${scelte.map(x => `«${x.w!.title}» (${x.c.nome})`).join(', ')}.` })
+    }
+  }
+
   // 6. assemblea: richiama tutti, ovunque siano. Prima si guarda come vanno le decisioni in vigore, poi si vota.
   for (const a of C.abitanti) a.cella = 'assemblea'
   const oggiA = o.giornoAgente ?? Math.max(...opere.map(w => w.day))
@@ -454,7 +518,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
       C.decisioni.push(d)
       verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'approvato', testo: `Approvato (${p.voti.pro} a ${p.voti.contro}): ${p.cosa}${tipo === 'nome' ? '' : ` Vale fino al giorno ${d.fino}, poi si vede com'è andata.`}` })
       nota('decisione', p.cosa, p.chi)
-    } else if (passa && p.azione?.tipo === 'nota') { p.stato = 'in lista'; verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'lista', testo: `Piace (${p.voti.pro} a ${p.voti.contro}), ma non sappiamo ancora farlo: «${p.cosa}» va nella lista dei mancanti.` }) }
+    } else if (passa && p.azione?.tipo === 'nota') { p.stato = 'in lista'; C.mancanti!.push({ giorno: C.giorno, chi: p.chi, cosa: p.cosa }); verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'lista', testo: `Piace (${p.voti.pro} a ${p.voti.contro}), ma non sappiamo ancora farlo: «${p.cosa}» va nella lista dei mancanti.` }) }
     else if (!passa && pro + contro > 0) { if (p.giorno < C.giorno - 1) p.stato = 'respinto'; verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'respinto', testo: `Non passa (${p.voti.pro} a ${p.voti.contro}): ${p.cosa}` }) }
   }
   const oggi = odg

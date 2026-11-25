@@ -53,7 +53,7 @@ import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaI
 import { raccoltaACaso } from './hands/raccolta'
 import { impaginaMotore, sceltePer } from './hands/motore'
 import { scegliRegistro, esitoRegistro, direzioneDi, strumentiDi } from './mind/direzione'
-import { aggiornaSospese, spinta } from './mind/sospese'
+import { aggiornaSospese, spinta, prossimaCommissione, commissioneFatta } from './mind/sospese'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -257,8 +257,16 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
   if (!st.name) { st.name = chooseName(r, salientToday); log(`Mi chiamerò ${st.name}.`) }
   const intention: Intention = chooseIntention(st, r, E, salientToday, readings[0]?.title ?? '', step?.word)
   if (st.ricerca && step) intention.why += `; ricerca "${st.ricerca.word}" (${step.phase}): ${st.ricerca.question}`
+  // la bottega della città: se un abitante ha chiesto una tavola, oggi si fa la sua
+  const commissione = hooks.episodio || lavoro ? null : prossimaCommissione(st)
+  if (commissione) {
+    intention.word = commissione.parola
+    intention.tools = [...new Set([...commissione.strumenti, ...intention.tools])]
+    intention.why += `; per la città: ${commissione.nome}${commissione.con ? ` con ${commissione.con}` : ''} — ${commissione.perche}`
+    log(`Bottega della città: ${commissione.nome} chiede una tavola su «${commissione.parola}» (${commissione.strumenti.slice(0, 4).join(', ')}).`)
+  }
   // sferzata (rompe apposta la firma) oppure l'esercizio deciso ieri sera
-  const sf = sferzata(st, r)
+  const sf = commissione ? null : sferzata(st, r)
   if (sf) { Object.assign(intention.targets, sf.intention.targets); intention.tools = sf.intention.tools ?? intention.tools; intention.why += `; sferzata: ${sf.rottura}`; log(`Oggi una sferzata: ${sf.rottura}.`) }
   else { const ex = applicaEsercizio(st, intention); if (ex) log(`Esercizio di oggi: ${ex}.`) }
   if (lavoro && !sf) { intention.word = lavoro.capitolo.concetto; intention.why += `; cantiere «${lavoro.cantiere.titolo}», capitolo «${lavoro.capitolo.titolo}» (${lavoro.azione})` }
@@ -307,6 +315,7 @@ export async function runDay(input: AgentState, hooks: DayHooks): Promise<{ stat
     if (hooks.shouldStop?.()) break
   }
 
+  if (commissione && works.length) commissioneFatta(st, commissione, works.map(w => w.id))
   // quaderno della giornata
   const used = new Set(allDone)
   const neverUsed = ['semina', 'materia', 'luce', 'geometria', 'pattern', 'traccia', 'scrivi', 'grana', 'taglia', 'ripeti', 'disponi', 'togli', 'fondo', 'shader']

@@ -23,3 +23,14 @@ export function spinta(st: AgentState): string[] | null {
   const s = d.find(x => x.tipo === 'solo' && x.stato === 'in vigore' && x.fino >= st.day)
   return s ? (s.param.strumenti as string[]) : null
 }
+
+// ── le commissioni della bottega: la città chiede una tavola, lo studio la fa ─────────────────────────────
+export type Commissione = { id: string; giorno: number; autore: string; nome: string; con?: string; parola: string; strumenti: string[]; perche: string; stato: 'in attesa' | 'fatta' | 'scaduta'; fatte?: string[]; giornoAgente?: number; esito?: string }
+type ConBottega = AgentState & { citta?: { bottega?: Commissione[] } }
+/** la prossima commissione da fare (la più vecchia in attesa) */
+export function prossimaCommissione(st: AgentState): Commissione | null {
+  return (st as ConBottega).citta?.bottega?.find(c => c.stato === 'in attesa') ?? null
+}
+export function commissioneFatta(st: AgentState, c: Commissione, ids: string[]) {
+  c.stato = 'fatta'; c.fatte = ids; c.giornoAgente = st.day
+}
