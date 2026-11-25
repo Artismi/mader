@@ -9,6 +9,7 @@ import { acqua } from './acqua'
 import { filtro } from './filtri'
 import { luce3d } from './luce3d'
 import { vetroTool } from './vetro'
+import { stiroTool, tasselliTool } from './stiro'
 import { RECIPES, TONES, runRecipe, shuffle as shuffleParams, defaults, type Tone } from '@/components/studio/genera/recipes'
 import { renderFx } from '@/components/studio/fx/render'
 import { FX_DEFS, LOOKS, newFx, type FxId } from '@/components/studio/fx/catalog'
@@ -510,5 +511,5 @@ export async function applica(tool: Tool, s: Sheet, p: Params, c: ToolCtx): Prom
 /** gli strumenti che sanno crescere e vivere */
 export const ANIMABILI = new Set(['pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico', 'cristallo', 'camera'])
 
-export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI, ...MONDI, acqua, filtro, luce3d, vetroTool]
+export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI, ...MONDI, acqua, filtro, luce3d, vetroTool, stiroTool, tasselliTool]
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)
