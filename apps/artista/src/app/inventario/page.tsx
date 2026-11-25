@@ -9,6 +9,28 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('vere')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto')
+      const { luceDiScena } = await import('@/lib/studio-agent/hands/luce3d')
+      const { vetro } = await import('@/lib/studio-agent/hands/vetro')
+      const { acquaSu } = await import('@/lib/studio-agent/hands/acqua')
+      const { flatten } = await import('@/lib/studio-agent/hands/sheet')
+      const ids: string[] = await (await fetch('/cassetto/indice.json')).json()
+      const root = ref.current!
+      const metti = (cv: HTMLCanvasElement, nome: string) => { const d = document.createElement('div'); d.style.cssText = 'width:200px;margin:3px;font:11px monospace'; cv.style.width = '200px'; d.appendChild(cv); const l = document.createElement('div'); l.textContent = nome; d.appendChild(l); root.appendChild(d) }
+      const disegni = ['verticale', 'croce', 'fasce', 'orizzontale', 'riquadri', 'diagonale'] as const, modi = ['gocce', 'goccioloni', 'rugiada', 'brina', 'gocce', 'gelo'] as const
+      for (const [i, id] of ids.entries()) {
+        try {
+          const s0 = await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json())
+          const piatta = flatten(s0, 0.4)
+          metti(piatta, `${i} piatta`)
+          metti(flatten(luceDiScena(s0, { angolo: -2.3, quota: 0.022, morbidezza: 0.012, rilievo: 0.8, nebbia: 0.2 }), 0.4), `${i} luce di scena`)
+          metti(vetro(piatta, { disegno: disegni[i % 6], canna: 0.06, curva: 1.1, ombra: 0.3, seme: i * 7 + 1 }), `${i} vetro ${disegni[i % 6]}`)
+          const b = flatten(s0, 0.4), w = acquaSu(b, modi[i % 6], i * 13 + 5); b.getContext('2d')!.drawImage(w, 0, 0); metti(b, `${i} acqua ${modi[i % 6]}`)
+        } catch (e) { metti(document.createElement('canvas'), `${i} ERR ${String(e).slice(0, 40)}`) }
+      }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     if (new URLSearchParams(location.search).has('vetro')) {
       const { vetro } = await import('@/lib/studio-agent/hands/vetro')
       const root = ref.current!, tav = ['/img/a.jpg', '/img/b.jpg', '/img/c.jpg', '/img/d.jpg']

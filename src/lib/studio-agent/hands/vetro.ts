@@ -6,7 +6,7 @@
  *  - vetrata: zone con orientamenti diversi che si incrociano (a croce, a fasce, a riquadri), come vetri sovrapposti.
  * Tutto deriva dai parametri, quindi si rifà identico.
  */
-import { flatten, fullLayer, newCanvas, replaceLayer, withLayer, type Sheet } from './sheet'
+import { flatten, fullLayer, newCanvas, replaceLayer, type Sheet } from './sheet'
 import type { Tool } from './tools'
 
 export type Disegno = 'verticale' | 'orizzontale' | 'diagonale' | 'tasselli' | 'croce' | 'fasce' | 'riquadri'
@@ -65,8 +65,12 @@ export const vetroTool: Tool = {
     const o = p as unknown as OpzioniVetro & { layer: string }
     const l = o.layer ? s.layers.find(x => x.id === o.layer) : undefined
     if (l) return replaceLayer(s, l.id, { canvas: vetro(l.canvas, o) })
-    // tutta la tavola: il vetro sta sopra a tutto, come una lastra davanti alla stampa
-    const cv = vetro(flatten(s, 1), o)
-    return withLayer(s, fullLayer(s, `v${Date.now().toString(36)}`, 'vetro', cv, 'source-over'))
+    // tutta la tavola: la lastra sta davanti all'immagine ma dietro alle parole (che restano leggibili, sopra il vetro)
+    const TXT = /testo|tipografia|etichette|firma|piastra/
+    const primoTesto = s.layers.findIndex(l => TXT.test(l.kind))
+    const sotto = primoTesto < 0 ? s.layers : s.layers.slice(0, primoTesto), sopra = primoTesto < 0 ? [] : s.layers.slice(primoTesto)
+    const cv = vetro(flatten({ ...s, layers: sotto }, 1), o)
+    const lastra = fullLayer(s, `v${Date.now().toString(36)}`, 'vetro', cv, 'source-over')
+    return { ...s, layers: [...sotto, lastra, ...sopra] }
   },
 }
