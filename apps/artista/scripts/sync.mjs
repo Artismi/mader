@@ -15,7 +15,11 @@ copy('lib/studio-agent/day.ts', 'src/lib/studio-agent/day.ts')
 copy('lib/studio-agent/server/web.ts', 'src/lib/studio-agent/server/web.ts')
 copy('components/studio-agent/StudioAgent.tsx', 'src/components/studio-agent/StudioAgent.tsx')
 copy('components/studio/genera', 'src/components/studio/genera')
-for (const f of ['catalog.ts', 'gl.ts', 'render.ts', 'shaders.ts']) copy(`components/studio/fx/${f}`, `src/components/studio/fx/${f}`)
+for (const f of ['catalog.ts', 'gl.ts', 'render.ts', 'shaders.ts', 'engine.ts', 'text-styles.ts']) copy(`components/studio/fx/${f}`, `src/components/studio/fx/${f}`)
+// il motore di impaginazione del software (stili, impaginazioni, ornamenti) e i caratteri che usa
+copy('components/studio/compose', 'src/components/studio/compose')
+for (const f of ['font-loader.ts', 'font-catalog.ts', 'font-local.ts']) copy(`components/studio/libraries/${f}`, `src/components/studio/libraries/${f}`)
+copy('lib/design/compose-spec.ts', 'src/lib/design/compose-spec.ts')
 if (!existsSync(join(app, 'src/lib/studio-agent/transport.ts'))) console.warn('manca src/lib/studio-agent/transport.ts (versione browser)')
 console.log('sincronizzato')
 // i filtri WebGL del software (scritti per Fabric): girano col nostro esecutore, Fabric lo sostituisce una base minima

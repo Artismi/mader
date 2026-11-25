@@ -51,6 +51,7 @@ import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione, imparaScalaMuffa } from './mind/episodio'
 import { raccoltaACaso } from './hands/raccolta'
+import { impaginaMotore, sceltePer } from './hands/motore'
 import { scegliRegistro, esitoRegistro, direzioneDi, strumentiDi } from './mind/direzione'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
@@ -403,6 +404,10 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const dirS = direzioneDi(L)
   log(`Direzione della sequenza, dal linguaggio: ${dirS.nome} (${dirS.passi[0]}-${dirS.passi[1]} gesti per tavola dopo la scena, ${dirS.figure} figure, vuoto almeno ${Math.round(dirS.vuoto * 100)}%${dirS.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
   ;(st as AgentState & { ultimaDirezione?: string }).ultimaDirezione = dirS.id
+  // il motore di impaginazione: quanto spesso lo usa è un suo tratto (parte da metà delle sequenze)
+  const MO = st as AgentState & { motore?: { p: number } }
+  const motoreSeq = ((typeof window !== 'undefined' && (window as unknown as { __motore?: boolean }).__motore) || r() < (MO.motore ??= { p: 0 }).p) ? (() => { const sp = sceltePer(L); return { stile: sp.stili[Math.floor(r() * sp.stili.length)], lay: sp.lay.slice().sort(() => r() - 0.5), k: 0 } })() : null
+  if (motoreSeq) log(`Sequenza impaginata dal motore: stile ${motoreSeq.stile}, impaginazioni ${motoreSeq.lay.join(', ')}.`)
   const studio = async (s0: Sheet) => {
     const it: Intention = { ...intention, targets: {}, tools: [...strumentiDi(L), 'materia', 'luce', 'shader', 'traccia', 'taglia'] }
     const passi = dirS.passi[0] + Math.floor(r() * (dirS.passi[1] - dirS.passi[0] + 1))
@@ -422,7 +427,19 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     const sc = plan.schede[i]
     let sheet
     try { sheet = await rendiScheda(st, r, sc, i + 1, plan.schede.length, nEp, tctx, F.face, { studio: sc.ruolo === 'parola' && r() < 0.5 ? undefined : studio, colori, L }) } catch (e) { log(`Tavola ${i + 1} saltata: ${e instanceof Error ? e.message : e}`); continue }
-    { const oc = occhio(sheet); sheet = oc.sheet; if (oc.note.length) log(`Occhio (${i + 1}): ${[...new Set(oc.note)].join('; ')}.`) }
+    // il mestiere: a volte la tavola la impagina il motore del software (stile e impaginazione dal linguaggio), con dentro la sua arte
+    let impaginata = false
+    if (motoreSeq) {
+      try {
+        const TXT = (l: Sheet['layers'][number]) => !!l.meta?.text || /testo|tipografia|etichette|firma|piastra/.test(l.kind)
+        const arte = flatten({ ...sheet, layers: sheet.layers.filter(l => !TXT(l)) }, 1)
+        const lay = motoreSeq.lay[(i + motoreSeq.k) % motoreSeq.lay.length]
+        const imp = await impaginaMotore({ W: sheet.W, H: sheet.H, stile: motoreSeq.stile, impaginazione: lay, arte, colori: { bg: tone.bg, ink: tone.ink, accent: tone.acc }, densita: dirS.figure <= 1 ? 'essenziale' : dirS.figure >= 4 ? 'massimo' : 'ricco',
+          contenuto: (() => { const fonte = sc.fonte ? sc.fonte.split('/').pop()!.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 42) : ''; return { title: sc.titolo || plan.titolo, body: sc.corpo, quote: sc.corpo, eyebrow: `${i + 1}/${plan.schede.length}`, ...(fonte ? { meta: [fonte], author: fonte } : {}) } })() })
+        if (imp.sheet.layers.length >= 2) { sheet = imp.sheet; impaginata = true; log(`Impaginata dal motore (${i + 1}): stile ${imp.stile}, impaginazione ${imp.impaginazione}.`) }
+      } catch (e) { log(`Motore: ${e instanceof Error ? e.message : e}`) }
+    }
+    if (!impaginata) { const oc = occhio(sheet); sheet = oc.sheet; if (oc.note.length) log(`Occhio (${i + 1}): ${[...new Set(oc.note)].join('; ')}.`) }
     const final = flatten(sheet, 1)
     const R = rasterize(final)
     const f = measure(R)

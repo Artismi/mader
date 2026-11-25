@@ -10,12 +10,16 @@
     "biblioteca": "node scripts/biblioteca.mjs"
   },
   "dependencies": {
+    "blobs": "^2.3.0-beta.2",
+    "culori": "^4.0.2",
     "d3-delaunay": "^6.0.4",
+    "fabric": "^7.4.0",
     "jszip": "^3.10.2",
     "mp4-muxer": "^5.2.2",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "roughjs": "^4.6.6",
     "simplex-noise": "^4.0.3"
   },
   "devDependencies": {
