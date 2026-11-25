@@ -9,6 +9,13 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('vetro')) {
+      const { vetro } = await import('@/lib/studio-agent/hands/vetro')
+      const root = ref.current!, tav = ['/img/a.jpg', '/img/b.jpg', '/img/c.jpg', '/img/d.jpg']
+      const prove: [string, string, number, number][] = [['verticale', tav[0], 0.03, 0.9], ['orizzontale', tav[1], 0.02, 0.7], ['diagonale', tav[2], 0.025, 0.8], ['tasselli', tav[3], 0.04, 1.0], ['croce', tav[1], 0.025, 0.9], ['fasce', tav[0], 0.02, 0.8], ['riquadri', tav[2], 0.03, 0.9], ['verticale', tav[3], 0.012, 1.2]]
+      for (const [d, t, cn, cu] of prove) { const im = new Image(); im.src = t; await im.decode(); const b = document.createElement('canvas'); b.width = 432; b.height = 540; b.getContext('2d')!.drawImage(im, 0, 0, 432, 540); const v = vetro(b, { disegno: d as never, canna: cn, curva: cu, ombra: 0.3, seme: 7 }); const dv = document.createElement('div'); dv.style.cssText = 'width:216px;margin:4px;font:11px monospace'; v.style.width = '216px'; dv.appendChild(v); const l = document.createElement('div'); l.textContent = d; dv.appendChild(l); root.appendChild(dv) }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     if (new URLSearchParams(location.search).has('luce')) {
       const { luceDiScena } = await import('@/lib/studio-agent/hands/luce3d')
       const { TOOLS } = await import('@/lib/studio-agent/hands/tools'); const { emptySheet, flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng } = await import('@/lib/studio-agent/core/rng')
