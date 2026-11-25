@@ -11,6 +11,7 @@
  * Due modelli suoi possono anche incrociarsi (l'inizio di uno con la fine dell'altro).
  * I modelli che non funzionano perdono peso e spariscono.
  */
+import { libere } from '../mind/sospese'
 import type { AgentState } from '../core/types'
 import { pick, weighted, type Rnd } from '../core/rng'
 import { realizza } from './lingua'
@@ -90,7 +91,7 @@ const G: Record<TipoD, { apre: string[]; corpo: string[]; coda: string[] }> = {
 /** la conclusione di una deduzione: modello suo (se ne ha di buoni) o grammatica, evitando le ripetizioni */
 export function concludi(st: AgentState, r: Rnd, tipo: TipoD, v: Record<string, string>): { testo: string; modello: string } {
   const R = rep(st)
-  const miei = R.modelli.filter(m => m.tipo === tipo && m.peso > 0.3)
+  const miei = libere(R.modelli.filter(m => m.tipo === tipo && m.peso > 0.3), m => m.tpl)
   if (miei.length && r() < Math.min(0.6, 0.15 + miei.length * 0.08)) {
     const m = weighted(r, miei, x => x.peso / (1 + x.usi * 0.3), 0.8)
     m.usi++
@@ -98,7 +99,7 @@ export function concludi(st: AgentState, r: Rnd, tipo: TipoD, v: Record<string, 
   }
   const g = G[tipo]
   const meno = (xs: string[]) => weighted(r, xs, x => 1 / (1 + (R.usiPezzi[x] ?? 0)), 0.6)
-  const apre = meno(g.apre), corpo = meno(g.corpo), coda = meno(g.coda)
+  const apre = meno(libere(g.apre)), corpo = meno(libere(g.corpo)), coda = meno(libere(g.coda))
   for (const x of [apre, corpo, coda]) R.usiPezzi[x] = (R.usiPezzi[x] ?? 0) + 1
   // ogni tanto il conteggio si scarica, così i pezzi tornano disponibili
   if (Object.values(R.usiPezzi).reduce((a, b) => a + b, 0) > 600) for (const k of Object.keys(R.usiPezzi)) R.usiPezzi[k] = Math.floor(R.usiPezzi[k] / 2)

@@ -53,6 +53,7 @@ import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaI
 import { raccoltaACaso } from './hands/raccolta'
 import { impaginaMotore, sceltePer } from './hands/motore'
 import { scegliRegistro, esitoRegistro, direzioneDi, strumentiDi } from './mind/direzione'
+import { aggiornaSospese, spinta } from './mind/sospese'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -574,6 +575,7 @@ async function tavola(
   const Lt = rottura || pag ? null : scegliLinguaggio(st, r, [intention.word]).L
   const dir = Lt ? direzioneDi(Lt) : undefined
   if (Lt) intention.tools = [...new Set([...intention.tools, ...strumentiDi(Lt)])]
+  { const sp = spinta(st); if (sp) intention.tools = [...new Set([...sp, ...intention.tools])] } // la città ha deciso: oggi comincia quel mestiere
   const steps = dir ? dir.passi[0] + Math.floor(r() * (dir.passi[1] - dir.passi[0] + 1)) : Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : en ? 0.8 : 1))
   if (dir) log(`Direzione, dal linguaggio: ${dir.nome} (fino a ${steps} gesti dopo la scena, ${dir.figure} figure, vuoto almeno ${Math.round(dir.vuoto * 100)}%${dir.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
   log(`— Tavola ${n} (${ragione}), tono ${tone.label}.`)
@@ -735,6 +737,7 @@ async function tavola(
 export async function loadOrCreate(): Promise<AgentState> {
   const st = await T.getState()
   if (st) {
+    aggiornaSospese(st)
     // campi aggiunti dopo la prima versione
     st.history ??= []
     st.sites ??= DEFAULT_SITES.slice()

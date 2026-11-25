@@ -19,6 +19,7 @@
  * LE TESI. Ogni enunciato resta: domani può riprenderlo, contraddirlo,
  * proseguirlo (B diventa il nuovo A). Così il senso si costruisce nel tempo.
  */
+import { libere as senzaSospese } from './sospese'
 import { fattiDi, fraseDi } from '../voice/scrittura'
 import { disegnaAlbero } from '../hands/albero'
 import { RIPOSO } from '@/components/studio/genera/recipes'
@@ -191,7 +192,7 @@ function dire(r: Rnd, a: string, b: string, rel: Rel, postura: Tesi['postura']):
     accanto: ['{det:a} accanto {a:b}', '{det:a} e {det:b}, vicini senza saperlo', 'mettere {det:a} vicino {a:b}'],
   }
   const pre = { legge: '', conferma: 'ancora: ', rovescia: 'e invece ', prosegue: 'e poi ', dubita: 'forse ', deduce: 'allora ' }[postura]
-  return pre + realizza(pick(r, T[rel]), { a, b })
+  return pre + realizza(pick(r, senzaSospese(T[rel])), { a, b })
 }
 
 /** dopo la tavola: la tesi resta, i concetti si contano, i motivi si rafforzano o mutano */

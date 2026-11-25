@@ -1,0 +1,25 @@
+// Le decisioni della città che toccano la voce e le mani: frasi sospese e spinte verso un mestiere.
+// Sono scritte nello stato (st.citta) dall'assemblea; qui si leggono senza dipendenze, da chiunque scriva o scelga.
+import type { AgentState } from '../core/types'
+
+type ConCitta = AgentState & { citta?: { decisioni?: { tipo: string; param: Record<string, unknown>; fino: number; stato: string }[] } }
+let SOSPESE: string[] = []
+
+/** da chiamare quando si carica lo stato: le frasi sospese valgono finché la decisione è in vigore */
+export function aggiornaSospese(st: AgentState) {
+  const d = (st as ConCitta).citta?.decisioni ?? []
+  SOSPESE = d.filter(x => x.tipo === 'sospendi' && x.stato === 'in vigore' && x.fino >= st.day).map(x => String(x.param.frase).toLowerCase())
+  return SOSPESE
+}
+/** i modelli che non contengono una frase sospesa (se lo sono tutti, si torna a tutti: meglio una ripetizione che il silenzio) */
+export function libere<T>(xs: T[], testo: (x: T) => string = x => String(x)): T[] {
+  if (!SOSPESE.length) return xs
+  const ok = xs.filter(x => { const t = testo(x).toLowerCase(); return !SOSPESE.some(f => t.includes(f)) })
+  return ok.length ? ok : xs
+}
+/** la spinta di oggi: gli strumenti di un mestiere che la città ha deciso di far lavorare da solo */
+export function spinta(st: AgentState): string[] | null {
+  const d = (st as ConCitta).citta?.decisioni ?? []
+  const s = d.find(x => x.tipo === 'solo' && x.stato === 'in vigore' && x.fino >= st.day)
+  return s ? (s.param.strumenti as string[]) : null
+}

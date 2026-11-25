@@ -41,7 +41,10 @@ const SCIENTIFICI = new Set(['alchimista', 'ottico', 'geometra', 'giardiniere'])
 export type Nodo = { id: string; giorno: number; tipo: string; testo: string; chi?: string; vettore: Record<string, number>; legami: string[]; dove?: string[] }
 export type Evento = { tipo: string; testo: string; nucleo?: string; argomento?: string; chi?: string; tema: Record<string, number>; nomi: string[]; tavole?: string[]; peso: number; dati?: any }
 export type Battuta = { fase: Cella; chi: string; a?: string; tipo: string; testo: string }
-export type Citta = { nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: { giorno: number; chi: string; cosa: string; stato: string }[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[] }
+export type Azione = { tipo: 'sospendi'; frase: string } | { tipo: 'solo'; mestiere: string; strumenti: string[] } | { tipo: 'nome'; nome: string } | { tipo: 'nota' }
+export type Piano = { giorno: number; chi: string; cosa: string; stato: string; argomento?: string; azione?: Azione; voti?: { pro: number; contro: number } }
+export type Decisione = { id: string; giorno: number; giornoAgente: number; chi: string; cosa: string; tipo: Azione['tipo']; param: Record<string, unknown>; fino: number; stato: 'in vigore' | 'scaduta' | 'revocata'; favorevoli: string[]; prima?: number; esito?: string }
+export type Citta = { nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
@@ -107,7 +110,7 @@ function frasiRipetute(titoli: string[], min: number) {
 }
 
 // ── la giornata ────────────────────────────────────────────────────────────────────────────────────────────
-export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: Lettura[]; cerca?: Cerca; ricerche?: number } = {}) {
+export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: Lettura[]; cerca?: Cerca; ricerche?: number; giornoAgente?: number; durata?: number } = {}) {
   const r = caso((o.seme ?? 1) ^ (C.giorno * 2654435761))
   const R = C.regole, idx = new Map(opere.map((w, i) => [w.id, i]))
   C.giorno++
@@ -154,6 +157,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   const del_ = (nome: string) => nome.replace(/^il /, 'del ').replace(/^lo /, 'dello ').replace(/^la /, 'della ').replace(/^l'/, "dell'").replace(/^chi /, 'di chi ')
   const detti = new Set(C.rete.filter(n => n.giorno >= C.giorno - 3 && n.tipo === 'battuta').map(n => n.testo))
   const giaSu = new Map<string, Set<string>>() // argomento → chi ha già parlato oggi
+  const posizioni = new Map<string, Map<string, number>>() // argomento → chi era a favore (+1) o contro (-1)
   const uno = <T,>(a: T[]) => a[Math.floor(r() * a.length)]
   // dal suo punto di vista: un dato suo sulle tavole dell'evento
   const mio = (a: Abitante, e: Evento) => {
@@ -205,7 +209,8 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     if (e.chi) a.peso[e.chi] = Math.max(-1, Math.min(1, (a.peso[e.chi] ?? 0) + (tipo === 'concorda' ? 0.2 : tipo === 'obietta' || tipo === 'rovescia' ? -0.2 : 0)))
     nota('battuta', testo, a.id, e.tavole, { ...e.tema, ...vettoreDi(testo) })
     if (tipo === 'chiede') C.domande.push({ giorno: C.giorno, chi: a.id, testo, stato: 'aperta', argomento: e.argomento, cerca: e.dati?.cerca } as any)
-    if (tipo === 'propone' && !C.piani.some(p => p.cosa === testo && p.stato !== 'chiuso')) C.piani.push({ giorno: C.giorno, chi: a.id, cosa: testo, stato: 'proposto' })
+    if (tipo === 'propone' && !C.piani.some(p => p.cosa === testo && p.stato !== 'chiuso')) C.piani.push({ giorno: C.giorno, chi: a.id, cosa: testo, stato: 'proposto', argomento: e.argomento, azione: e.dati?.azione })
+    if (e.argomento) { const pos = posizioni.get(e.argomento) ?? new Map<string, number>(); posizioni.set(e.argomento, pos); pos.set(a.id, tipo === 'concorda' || tipo === 'propone' ? 1 : tipo === 'obietta' || tipo === 'rovescia' ? -1 : 0) }
     return { ...e, tipo: 'battuta', testo, chi: a.id, nomi: e.chi ? [e.chi] : [], peso: e.peso * 0.7 }
   }
   // un giro di discussione: ognuno accumula, parla chi supera la soglia; si ferma quando nessuno la supera più
@@ -258,9 +263,10 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   const giaVisti = new Set<string>()
   for (const [frase, n] of frasiRipetute(recenti.map(w => w.title ?? ''), R.ripetizione)) {
     if ([...giaVisti].some(g => g.includes(frase) || frase.includes(g))) continue
+    if ((C.decisioni ?? []).some(d => d.tipo === 'sospendi' && d.stato === 'in vigore' && (frase.includes(String(d.param.frase)) || String(d.param.frase).includes(frase)))) continue // ci abbiamo già messo mano
     giaVisti.add(frase)
     const tav = recenti.filter(w => String(w.title).toLowerCase().includes(frase)).map(w => w.id)
-    osservazioni.push({ tipo: 'problema', chi: 'archivio', testo: `Nelle ultime ${recenti.length} tavole «${frase}» torna ${n} volte. Stiamo girando in tondo.`, nucleo: `«${frase}» torna troppo`, argomento: 'frase:' + frase, tema: vettoreDi(frase), nomi: ['tipografo', 'redattore'], tavole: tav, peso: 1.2, dati: { soggetto: `torna «${frase}»`, domanda: `Cosa ci porta a ridire «${frase}»?`, proposta: `Per un po' «${frase}» non si scrive: chi la sente tornare la sostituisce con quello che ha visto davvero.`, rovescio: `Forse ripetere «${frase}» non è il male: il male è ripeterla uguale.`, battuta: `«${frase}» ormai ha una via col suo nome.`, obiezione: `Una frase che torna è anche una firma. Toglierla tutta ci rende anonimi.` } })
+    osservazioni.push({ tipo: 'problema', chi: 'archivio', testo: `Nelle ultime ${recenti.length} tavole «${frase}» torna ${n} volte. Stiamo girando in tondo.`, nucleo: `«${frase}» torna troppo`, argomento: 'frase:' + frase, tema: vettoreDi(frase), nomi: ['tipografo', 'redattore'], tavole: tav, peso: 1.2, dati: { azione: { tipo: 'sospendi', frase }, soggetto: `torna «${frase}»`, domanda: `Cosa ci porta a ridire «${frase}»?`, proposta: `Per un po' «${frase}» non si scrive: chi la sente tornare la sostituisce con quello che ha visto davvero.`, rovescio: `Forse ripetere «${frase}» non è il male: il male è ripeterla uguale.`, battuta: `«${frase}» ormai ha una via col suo nome.`, obiezione: `Una frase che torna è anche una firma. Toglierla tutta ci rende anonimi.` } })
   }
   // quartieri troppo pieni
   for (const q of T.quartieri) if (q.n / tot > R.troppoGrande) osservazioni.push({ tipo: 'problema', chi: 'urbanista', testo: `Il quartiere «${q.nome}» ha ${q.n} tavole su ${tot}: è diventato una periferia senza centro.`, nucleo: `«${q.nome}» è troppo pieno`, argomento: 'quartiere:' + q.id, tema: Object.fromEntries(q.concetti.map(c => [radice(c) ?? c, 1])), nomi: [], peso: 1, dati: { cerca: q.concetti.slice(0, 2).join(' '), proposta: `Dividere «${q.nome}» in due rioni seguendo le sue due parole: ${q.concetti.slice(0, 2).join(' / ')}.`, domanda: `Perché finiamo sempre in «${q.nome}»?` } })
@@ -269,7 +275,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   const ammucchiati = mest.filter(s => mest.filter(t => Math.hypot(t.casa.x - s.casa.x, t.casa.y - s.casa.y) < 60).length >= 4)
   if (ammucchiati.length >= 4) osservazioni.push({ tipo: 'problema', chi: 'urbanista', testo: `${ammucchiati.length} mestieri abitano nello stesso isolato: ${ammucchiati.map(s => s.abitante.nome).join(', ')}. Le mani lavorano sempre insieme, non c'è una zona di nessuno.`, nucleo: 'i mestieri stanno tutti nello stesso isolato', argomento: 'case', tema: { mani: 1, cas: 1 }, nomi: ammucchiati.map(s => s.abitante.id), peso: 1, dati: { cerca: 'divisione del lavoro artigiano', proposta: `Ogni mestiere prova una tavola da solo, senza gli altri, per vedere che terreno è suo.`, rovescio: `O forse è bello così: una bottega comune.` } })
   // mestieri a digiuno
-  for (const s of mest) if (s.n < tot * 0.03) osservazioni.push({ tipo: 'problema', chi: s.abitante.id, testo: `Le mie mani le avete usate in ${s.n} tavole su ${tot}. ${s.abitante.strumenti!.join(', ')}: quasi mai.`, nucleo: `${s.abitante.nome} lavora quasi mai`, argomento: 'digiuno:' + s.abitante.id, tema: Object.fromEntries(s.abitante.strumenti!.map(x => ['m:' + x, 1])), nomi: [], peso: 1.1, dati: { cerca: s.abitante.strumenti!.slice(0, 2).join(' '), proposta: `Una tavola dove comincia ${s.abitante.nome} e gli altri seguono.`, domanda: `Cosa sanno fare ${s.abitante.strumenti!.slice(0, 3).join(', ')} che nessun altro fa?` } })
+  for (const s of mest) if (s.n < tot * 0.03) osservazioni.push({ tipo: 'problema', chi: s.abitante.id, testo: `Le mie mani le avete usate in ${s.n} tavole su ${tot}. ${s.abitante.strumenti!.join(', ')}: quasi mai.`, nucleo: `${s.abitante.nome} lavora quasi mai`, argomento: 'digiuno:' + s.abitante.id, tema: Object.fromEntries(s.abitante.strumenti!.map(x => ['m:' + x, 1])), nomi: [], peso: 1.1, dati: { azione: { tipo: 'solo', mestiere: s.abitante.id, strumenti: s.abitante.strumenti! }, cerca: s.abitante.strumenti!.slice(0, 2).join(' '), proposta: `Una tavola dove comincia ${s.abitante.nome} e gli altri seguono.`, domanda: `Cosa sanno fare ${s.abitante.strumenti!.slice(0, 3).join(', ')} che nessun altro fa?` } })
 
   // 3. il guizzo: emergente dal carattere (visionario, poco prudente) e da quanto ha visto di nuovo; al massimo uno al giorno
   const guizzi = C.abitanti.map(a => [a, R.guizzo * (1 + a.carattere.visionario * 4) * (1 - a.carattere.prudente * 0.5) * (1 + a.visti.length / 400)] as const).filter(([, p]) => r() < p).sort((x, y) => y[1] - x[1])
@@ -288,7 +294,8 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
       { t: `E se le tavole scartate avessero un quartiere loro, una specie di discarica bella?`, n: 'un quartiere degli scarti', p: 'Un quartiere per gli scarti.' },
     ].filter(Boolean) as { t: string; n: string; p: string }[]
     const g = uno(tutte.filter(x => !C.rete.some(n => n.testo === x.t)))
-    if (g) osservazioni.push({ tipo: 'guizzo', chi: a.id, testo: g.t, nucleo: g.n, argomento: 'guizzo:' + g.n, tema: vettoreDi(g.t), nomi: [], tavole: due.map(d => d.id), peso: 1.1, dati: { proposta: g.p, obiezione: `Bello, ma prima sistemiamo quello che c'è.`, battuta: `Va bene, ma stavolta lo finiamo.` } })
+    const azione = g?.n.startsWith('chiamare la città') && nomeProposto ? { tipo: 'nome', nome: nomeProposto } : { tipo: 'nota' }
+    if (g) osservazioni.push({ tipo: 'guizzo', chi: a.id, testo: g.t, nucleo: g.n, argomento: 'guizzo:' + g.n, tema: vettoreDi(g.t), nomi: [], tavole: due.map(d => d.id), peso: 1.1, dati: { azione, proposta: g.p, obiezione: `Bello, ma prima sistemiamo quello che c'è.`, battuta: `Va bene, ma stavolta lo finiamo.` } })
   }
 
   // una cosa già detta nei giorni scorsi non si ridice uguale: si dice «ancora» e si guarda il piano aperto, oppure si tace
@@ -320,6 +327,8 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     const arg = (d as any).argomento as string | undefined
     if (arg?.startsWith('frase:')) {
       const f = arg.slice(6), con = opere.filter(w => String(w.title ?? '').toLowerCase().includes(f))
+      const gia = C.rete.find(n => n.tipo === 'risposta' && n.testo.startsWith(`«${f}»`) && n.giorno < C.giorno)
+      if (gia) { d.stato = 'risposta'; d.risposta = gia.testo; verbale.push({ fase: 'biblioteca', chi: 'saggista', a: d.chi, tipo: 'risposta', testo: `Per ${di(d.chi)}: l'abbiamo già ricostruito il giorno ${gia.giorno} (${gia.testo.slice(0, 90)}).` }); continue }
       if (con.length) {
         const gemelle = C.domande.filter(x => x !== d && x.stato === 'aperta' && (x as any).argomento === arg); for (const x of gemelle) { x.stato = 'risposta'; x.risposta = 'vedi sopra' }
         const chiede = [d, ...gemelle].map(x => di(x.chi)).filter((x, i, a) => a.indexOf(x) === i)
@@ -399,10 +408,56 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     verbale.push({ fase: 'ritorno', chi: e.chi!, tipo: 'porta', testo: e.testo }); nota('porta', e.testo, e.chi, undefined, e.tema)
     coda.push(e); discuti('ritorno', C.abitanti)
   }
-  // 6. assemblea: richiama tutti; i piani proposti oggi diventano l'ordine del giorno (in questo strato si annotano e basta)
-  for (const a of C.abitanti) a.cella = TUTTI_IN.includes('assemblea') ? 'assemblea' : a.cella
-  const oggi = C.piani.filter(p => p.giorno === C.giorno)
-  if (oggi.length) verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'ordine', testo: `All'ordine del giorno: ${oggi.map(p => `${p.cosa} (${di(p.chi)})`).join('; ')}. Per ora lo annotiamo: decidere non è ancora nostro.` })
+  // 6. assemblea: richiama tutti, ovunque siano. Prima si guarda come vanno le decisioni in vigore, poi si vota.
+  for (const a of C.abitanti) a.cella = 'assemblea'
+  const oggiA = o.giornoAgente ?? Math.max(...opere.map(w => w.day))
+  C.decisioni ??= []; C.credito ??= {}
+  const credito = (id: string, tema: string) => C.credito![id]?.[tema] ?? 1
+  const accredita = (id: string, tema: string, d: number) => { (C.credito![id] ??= {})[tema] = Math.max(0.3, Math.min(3, credito(id, tema) + d)) }
+  const temaDi = (az?: Azione) => az?.tipo === 'sospendi' ? 'parole' : az?.tipo === 'solo' ? 'mani' : az?.tipo === 'nome' ? 'città' : 'idee'
+  // verifica: le decisioni producono quello che promettevano?
+  for (const d of C.decisioni.filter(x => x.stato === 'in vigore')) {
+    if (d.tipo === 'sospendi') {
+      const f = String(d.param.frase), dopo = opere.filter(w => w.day > d.giornoAgente && String(w.title ?? '').toLowerCase().includes(f)).length
+      const nuove = opere.filter(w => w.day > d.giornoAgente).length
+      if (nuove >= 6 && !d.esito) { d.esito = dopo === 0 ? 'funziona' : 'non basta'; verbale.push({ fase: 'assemblea', chi: 'archivio', tipo: 'verifica', testo: dopo === 0 ? `Da quando abbiamo sospeso «${f}» sono uscite ${nuove} tavole e non è più tornata.` : `Abbiamo sospeso «${f}» ma è tornata ${dopo} volte in ${nuove} tavole: da qualche altra parte nasce ancora.` }); for (const x of d.favorevoli) accredita(x, 'parole', dopo === 0 ? 0.15 : -0.1); accredita(d.chi, 'parole', dopo === 0 ? 0.3 : -0.2) }
+    }
+    if (d.tipo === 'solo') {
+      const sts = (d.param.strumenti as string[]), con = opere.filter(w => w.day > d.giornoAgente && (w.gestures ?? []).some(g => g.kept !== false && sts.some(t => g.tool.includes(t))))
+      const tutte = opere.filter(w => w.day > d.giornoAgente)
+      if (tutte.length >= 6 && !d.esito) { const m = (l: Opera[]) => l.reduce((t, w) => t + (w.interest ?? 0.5), 0) / (l.length || 1); const pm = m(con), pt = m(opere.filter(w => w.day <= d.giornoAgente).slice(-200)); d.esito = `${con.length} tavole con quelle mani, interesse ${Math.round(pm * 100)}% contro ${Math.round(pt * 100)}% di prima`; verbale.push({ fase: 'assemblea', chi: String(d.param.mestiere), tipo: 'verifica', testo: con.length ? `Mi avete fatto cominciare io: ${d.esito}.` : `Avevamo deciso che cominciassi io, ma in ${tutte.length} tavole non mi ha chiamato nessuno.` }); accredita(d.chi, 'mani', con.length && pm >= pt ? 0.3 : -0.15) }
+    }
+    if (d.fino < oggiA) { d.stato = 'scaduta'; verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'scade', testo: `Scade la decisione «${d.cosa.slice(0, 90)}»${d.esito ? ` (${d.esito})` : ''}. Si può riproporre.` }) }
+  }
+  // il voto: chi ha preso posizione oggi vota così; gli altri secondo carattere e fiducia in chi propone. Ogni voto pesa il credito sul tema.
+  const odg = C.piani.filter(p => p.stato === 'proposto' && p.giorno >= C.giorno - 3).slice(-4)
+  for (const p of odg) {
+    const tema = temaDi(p.azione), pos = p.argomento ? posizioni.get(p.argomento) : undefined
+    let pro = 0, contro = 0; const fav: string[] = []
+    for (const a of C.abitanti) {
+      let v = pos?.get(a.id)
+      if (v === undefined) {
+        if (a.id === p.chi) v = 1
+        else { const c = a.carattere, x = (a.peso[p.chi] ?? 0) * 0.8 + (c.credulone - c.testardo) * 0.6 + (p.azione?.tipo === 'nota' || p.azione?.tipo === 'nome' ? (c.visionario - c.prudente) * 0.8 : 0) + (r() - 0.5) * 0.6; v = x > 0.15 ? 1 : x < -0.15 ? -1 : 0 }
+      }
+      const w = credito(a.id, tema)
+      if (v > 0) { pro += w; fav.push(a.id) } else if (v < 0) contro += w
+    }
+    p.voti = { pro: +pro.toFixed(1), contro: +contro.toFixed(1) }
+    const passa = pro > contro * 1.2 && fav.length >= 3
+    const gia = C.decisioni.some(d => d.stato === 'in vigore' && JSON.stringify(d.param) === JSON.stringify(p.azione))
+    if (passa && !gia && p.azione && p.azione.tipo !== 'nota') {
+      p.stato = 'approvato'
+      const { tipo, ...param } = p.azione as Azione & Record<string, unknown>
+      const d: Decisione = { id: `d${C.giorno}.${C.decisioni.length}`, giorno: C.giorno, giornoAgente: oggiA, chi: p.chi, cosa: p.cosa, tipo, param, fino: oggiA + (o.durata ?? 40), stato: 'in vigore', favorevoli: fav }
+      if (tipo === 'nome') { const vecchio = C.nome; C.nome = String(param.nome); verbale.push({ fase: 'assemblea', chi: p.chi, tipo: 'nome', testo: vecchio ? `La città non si chiama più ${vecchio}: da oggi è ${C.nome}.` : `Da oggi la città si chiama ${C.nome}.` }) }
+      C.decisioni.push(d)
+      verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'approvato', testo: `Approvato (${p.voti.pro} a ${p.voti.contro}): ${p.cosa}${tipo === 'nome' ? '' : ` Vale fino al giorno ${d.fino}, poi si vede com'è andata.`}` })
+      nota('decisione', p.cosa, p.chi)
+    } else if (passa && p.azione?.tipo === 'nota') { p.stato = 'in lista'; verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'lista', testo: `Piace (${p.voti.pro} a ${p.voti.contro}), ma non sappiamo ancora farlo: «${p.cosa}» va nella lista dei mancanti.` }) }
+    else if (!passa && pro + contro > 0) { if (p.giorno < C.giorno - 1) p.stato = 'respinto'; verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'respinto', testo: `Non passa (${p.voti.pro} a ${p.voti.contro}): ${p.cosa}` }) }
+  }
+  const oggi = odg
   // 7. archivio: tutto resta nella rete
   for (const a of C.abitanti) a.cella = 'casa'
   nota('giornata', `Giorno ${C.giorno} della città: ${verbale.length} battute, ${oggi.length} proposte, ${C.domande.filter(d => d.giorno === C.giorno).length} domande.`)
