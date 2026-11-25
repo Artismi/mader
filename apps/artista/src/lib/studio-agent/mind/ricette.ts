@@ -26,8 +26,9 @@ const num = (v: unknown) => typeof v === 'number' ? (Math.abs(v) < 10 ? +v.toFix
 /** il programma come testo: strumento(regolazioni) › strumento(…) */
 export function testoProgramma(p: Programma) {
   return p.passi.map(s => {
-    const kv = Object.entries(s.p).filter(([k, v]) => !k.startsWith('__') && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') && String(v).length < 18).slice(0, 4).map(([k, v]) => `${k}=${num(v)}`)
+    const kv = Object.entries(s.p).filter(([k, v]) => !k.startsWith('__') && !/^(seed|seme|layer|recipe)$/i.test(k) && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') && String(v).length < 18).slice(0, 4).map(([k, v]) => `${k}=${num(v)}`)
     const d = s.dove.modo === 'tutta' ? '' : s.dove.modo === 'livello' ? ` @livello${s.dove.i}` : ` @${s.dove.forma}`
+    if (s.p.recipe) kv.unshift(String(s.p.recipe))
     return `${s.tool}(${kv.join(', ')})${d}`
   }).join(' › ')
 }

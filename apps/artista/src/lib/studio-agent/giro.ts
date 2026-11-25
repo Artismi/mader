@@ -441,3 +441,26 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   o.log(`la città: giorno ${S.citta.giorno}, ${v.length} battute, ${Tt.quartieri.length} quartieri`)
   return v
 }
+
+/** la città per il sito: il territorio, gli abitanti, le ultime giornate, le decisioni, la mostra, le annotazioni */
+export async function perLaCitta() {
+  const st = await loadOrCreate()
+  const S = st as AgentState & { citta?: import('./mind/citta').Citta; diarioCitta?: { giorno: number; quando: string; cittaGiorno: number; verbale: { fase: string; chi: string; tipo: string; testo: string }[] }[]; territorio?: { quartieri: { id: number; nome: string; x: number; y: number; n: number; concetti: string[] }[]; piazza: { x: number; y: number }; insiemi: { id: string; nome: string; tipo: string; casa: { x: number; y: number }; raggio: number; n: number }[]; punti: [string, number, number, number][] } }
+  const C = S.citta, Tt = S.territorio
+  if (!C || !Tt) return null
+  const works = new Map((await T.listWorks()).map(w => [w.id, w]))
+  const lab = (st as unknown as { citta?: { laboratorio?: { programmi: { nome: string; autore: string; stato: string; punteggio?: number; nota?: string; passi: unknown[] }[] } } }).citta?.laboratorio
+  const { testoProgramma } = await import('./mind/ricette')
+  return {
+    nome: C.nome, giorno: C.giorno, giornoAgente: st.day, artista: st.name,
+    piazza: Tt.piazza, quartieri: Tt.quartieri.map(q => ({ id: q.id, nome: q.nome, x: q.x, y: q.y, n: q.n })),
+    punti: Tt.punti.map(([id, x, y, q]) => { const w = works.get(id); return { id, x, y, q, t: (w?.title ?? '').slice(0, 90), g: w?.day ?? 0, i: +(w?.interest ?? 0.5).toFixed(2), k: w?.kept ? 1 : 0 } }),
+    abitanti: C.abitanti.map(a => { const ins = Tt.insiemi.find(i => i.id === a.id); return { id: a.id, nome: a.nome, tipo: a.tipo, carica: a.carica, casa: ins?.casa ?? a.casa, raggio: ins?.raggio ?? a.raggio, n: ins?.n ?? 0, visti: a.visti.slice(-12) } }),
+    giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
+    decisioni: (C.decisioni ?? []).slice(-12).reverse().map(d => ({ cosa: d.cosa, stato: d.stato, fino: d.fino, esito: d.esito ?? null, chi: d.chi })),
+    mostre: (C.mostre ?? []).slice(-3).reverse(),
+    cantieri: (C.cantieri ?? []).slice(-6).reverse(),
+    annotazioni: C.rete.filter(n => n.dove?.length && n.chi && ['battuta', 'problema', 'ricordo', 'prova', 'guizzo', 'porta'].includes(n.tipo)).slice(-60).map(n => ({ chi: n.chi, testo: n.testo.slice(0, 160), tavola: n.dove![0], giorno: n.giorno, tipo: n.tipo })),
+    officina: (lab?.programmi ?? []).filter(p => p.stato === 'tenuto').slice(-10).map(p => ({ nome: p.nome, autore: p.autore, punteggio: p.punteggio, testo: testoProgramma(p as never) })),
+  }
+}
