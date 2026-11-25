@@ -20,7 +20,8 @@ export default function Inventario() {
         const box = (cv: HTMLCanvasElement, bg: string) => { const w = document.createElement('canvas'); w.width = 120; w.height = 120; const g = w.getContext('2d')!; g.fillStyle = bg; g.fillRect(0, 0, 120, 120); g.drawImage(cv, 0, 0, 120, 120); riga.appendChild(w) }
         for (const modo of ['schizzo', 'sagoma', 'volumi']) for (let v = 0; v < 3; v++) {
           const r = rng(i * 100 + v * 7 + modo.length), [ink, bg] = pal[(i + v) % 4], pz = Dg.immagina(c, r, 0.35 + v * 0.3)
-          box(modo === 'schizzo' ? Dg.schizzo(pz, S, ink, r, 0.3 + v * 0.3) : modo === 'sagoma' ? Dg.sagoma(pz, S, ink, 0.3 + v * 0.3) : Dg.volumi(pz, S, bg === '#efe9dd' ? '#d8cbb0' : bg, { luce: -2.3 + v * 0.4 }), modo === 'volumi' ? '#cfc9bd' : bg)
+          const cod = Dg.codifica(pz, 0.5 + v * 0.2)
+          box(modo === 'schizzo' ? Dg.disegnaCodifica(cod, S, ink, 'linea', 0.018) : modo === 'sagoma' ? Dg.disegnaCodifica(cod, S, ink, 'pieno', 0.03) : Dg.disegnaCodifica(cod, S, ink, 'costruzione', 0.014, '#b0452a'), bg)
         }
       }
       ;(window as unknown as { __fatto: boolean }).__fatto = true; return

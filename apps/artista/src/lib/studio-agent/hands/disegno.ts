@@ -138,3 +138,90 @@ export function volumi(pz: PezzoImmaginato[], S: number, colore: string, o: { lu
   g.putImageData(id, 0, 0)
   return out
 }
+
+/**
+ * La codifica: dalla cosa immaginata a un segno pulito, intenzionale (come un pittogramma, una costruzione geometrica).
+ * Ogni parte si riduce alla sua primitiva: le chiuse a ellisse o a poligono di pochi lati, le aperte a segmento o a curva
+ * con pochi punti; gli angoli vicini a 0/45/90 gradi si raddrizzano; centri e misure si posano su una griglia;
+ * se la cosa è quasi simmetrica, diventa simmetrica. Poi si disegna con un tratto solo, o pieno.
+ */
+export type Primitiva = { tipo: 'ellisse'; cx: number; cy: number; rx: number; ry: number; a: number } | { tipo: 'poligono'; pts: Pt[] } | { tipo: 'linea'; pts: Pt[] } | { tipo: 'curva'; pts: Pt[]; chiusa: boolean }
+
+function dp(pts: Pt[], eps: number): Pt[] {
+  if (pts.length < 3) return pts
+  const [a, b] = [pts[0], pts[pts.length - 1]]; let dmax = 0, k = 0
+  for (let i = 1; i < pts.length - 1; i++) { const p = pts[i], d = Math.abs((b[1] - a[1]) * p[0] - (b[0] - a[0]) * p[1] + b[0] * a[1] - b[1] * a[0]) / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-9); if (d > dmax) { dmax = d; k = i } }
+  return dmax > eps ? [...dp(pts.slice(0, k + 1), eps).slice(0, -1), ...dp(pts.slice(k), eps)] : [a, b]
+}
+const snapA = (p: Pt[], tol = 0.17): Pt[] => {
+  // raddrizza i lati vicini a 0/45/90°: sposta il secondo estremo di ogni lato sull'angolo giusto, conservando la lunghezza
+  const out: Pt[] = [p[0]]
+  for (let i = 1; i < p.length; i++) {
+    const a = out[i - 1], b = p[i], ang = Math.atan2(b[1] - a[1], b[0] - a[0]), L = Math.hypot(b[0] - a[0], b[1] - a[1]), q = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4)
+    out.push(Math.abs(ang - q) < tol ? [a[0] + Math.cos(q) * L, a[1] + Math.sin(q) * L] : b)
+  }
+  return out
+}
+const griglia = (v: number, g = 1 / 24) => Math.round(v / g) * g
+
+export function codifica(pz: PezzoImmaginato[], rigore = 0.6): Primitiva[] {
+  const out: Primitiva[] = []
+  for (const p of pz) {
+    const P = p.pts
+    if (P.length < 2) continue
+    const xs = P.map(q => q[0]), ys = P.map(q => q[1]), w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys), dim = Math.max(w, h)
+    const L = P.reduce((s, q, i) => s + (i ? Math.hypot(q[0] - P[i - 1][0], q[1] - P[i - 1][1]) : 0), 0)
+    const chiusa = p.chiuso || Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) < dim * 0.25
+    if (chiusa) {
+      const s = dp(P, dim * (0.06 + rigore * 0.06))
+      // tondeggiante (molti punti dopo la semplificazione, area simile a un'ellisse) → ellisse; altrimenti poligono
+      let ar = 0; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; ar += a[0] * b[1] - b[0] * a[1] } ar = Math.abs(ar) / 2
+      const ell = Math.PI * (w / 2) * (h / 2)
+      if (s.length > 6 || Math.abs(ar / Math.max(1e-6, ell) - 1) < 0.18) {
+        const cx = griglia((Math.max(...xs) + Math.min(...xs)) / 2), cy = griglia((Math.max(...ys) + Math.min(...ys)) / 2)
+        let rx = griglia(w / 2, 1 / 48), ry = griglia(h / 2, 1 / 48); if (Math.abs(rx - ry) / Math.max(rx, ry) < 0.15 * rigore + 0.05) rx = ry = (rx + ry) / 2
+        out.push({ tipo: 'ellisse', cx, cy, rx: Math.max(0.01, rx), ry: Math.max(0.01, ry), a: 0 })
+      } else out.push({ tipo: 'poligono', pts: snapA(s.slice(0, s.length > 2 && Math.hypot(s[0][0] - s[s.length - 1][0], s[0][1] - s[s.length - 1][1]) < dim * 0.2 ? -1 : undefined)).map(([x, y]) => [griglia(x, 1 / 48), griglia(y, 1 / 48)] as Pt) })
+    } else {
+      const drit = Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) / Math.max(1e-6, L)
+      if (drit > 0.9 - rigore * 0.1) out.push({ tipo: 'linea', pts: snapA([P[0], P[P.length - 1]]).map(([x, y]) => [griglia(x, 1 / 48), griglia(y, 1 / 48)] as Pt) })
+      else { const s = dp(P, dim * (0.05 + rigore * 0.05)); out.push(s.length <= 3 ? { tipo: 'linea', pts: snapA(s) } : { tipo: 'curva', pts: s, chiusa: false }) }
+    }
+  }
+  // simmetria: se le primitive sono quasi simmetriche rispetto all'asse verticale centrale, lo diventano (si specchia la metà sinistra)
+  const cxAll = out.flatMap(q => q.tipo === 'ellisse' ? [q.cx] : q.pts.map(p => p[0]))
+  const mx = (Math.min(...cxAll) + Math.max(...cxAll)) / 2
+  const sbil = cxAll.reduce((a, x) => a + (x - mx), 0) / Math.max(1, cxAll.length)
+  if (Math.abs(sbil) < 0.02 && rigore > 0.5) for (const q of out) { if (q.tipo === 'ellisse' && Math.abs(q.cx - mx) < 0.04) q.cx = mx }
+  return out
+}
+
+/** disegna la codifica: 'linea' (un tratto solo, uniforme), 'pieno' (le chiuse piene, le aperte a tratto spesso), 'costruzione' (linee di costruzione sottili + forme) */
+export function disegnaCodifica(pr: Primitiva[], S: number, colore: string, modo: 'linea' | 'pieno' | 'costruzione' = 'linea', spessore = 0.022, accento?: string): HTMLCanvasElement {
+  const cv = newCanvas(S, S), g = cv.getContext('2d')!, M = S * 0.1, K = S - 2 * M, X = (v: number) => M + v * K
+  g.lineCap = 'round'; g.lineJoin = 'round'
+  const tracciato = (q: Primitiva) => {
+    g.beginPath()
+    if (q.tipo === 'ellisse') g.ellipse(X(q.cx), X(q.cy), q.rx * K, q.ry * K, q.a, 0, Math.PI * 2)
+    else if (q.tipo === 'poligono') { q.pts.forEach(([x, y], i) => (i ? g.lineTo(X(x), X(y)) : g.moveTo(X(x), X(y)))); g.closePath() }
+    else if (q.tipo === 'linea') { g.moveTo(X(q.pts[0][0]), X(q.pts[0][1])); g.lineTo(X(q.pts[q.pts.length - 1][0]), X(q.pts[q.pts.length - 1][1])) }
+    else { const p = q.pts; g.moveTo(X(p[0][0]), X(p[0][1])); for (let i = 1; i < p.length - 1; i++) { const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2; g.quadraticCurveTo(X(p[i][0]), X(p[i][1]), X(mx), X(my)) } g.lineTo(X(p[p.length - 1][0]), X(p[p.length - 1][1])) }
+  }
+  if (modo === 'costruzione') {
+    g.strokeStyle = accento ?? colore; g.globalAlpha = 0.35; g.lineWidth = S * 0.0025
+    for (const q of pr) { if (q.tipo === 'ellisse') { g.beginPath(); g.moveTo(X(q.cx) - q.rx * K * 1.3, X(q.cy)); g.lineTo(X(q.cx) + q.rx * K * 1.3, X(q.cy)); g.moveTo(X(q.cx), X(q.cy) - q.ry * K * 1.3); g.lineTo(X(q.cx), X(q.cy) + q.ry * K * 1.3); g.stroke() } else { const p = q.pts; for (const [x, y] of p) { g.beginPath(); g.arc(X(x), X(y), S * 0.006, 0, 7); g.stroke() } } }
+    g.globalAlpha = 1
+  }
+  // prima le forme piene (dietro), poi i tratti
+  for (const q of pr) {
+    tracciato(q)
+    const chiusa = q.tipo === 'ellisse' || q.tipo === 'poligono'
+    if (modo === 'pieno' && chiusa) { g.fillStyle = colore; g.fill() }
+  }
+  for (const q of pr) {
+    const chiusa = q.tipo === 'ellisse' || q.tipo === 'poligono'
+    if (modo === 'pieno' && chiusa) continue
+    tracciato(q); g.strokeStyle = colore; g.lineWidth = S * spessore * (modo === 'pieno' ? 1.3 : 1); g.stroke()
+  }
+  return cv
+}
