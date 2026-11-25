@@ -9,6 +9,20 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('luce')) {
+      const { luceDiScena } = await import('@/lib/studio-agent/hands/luce3d')
+      const { TOOLS } = await import('@/lib/studio-agent/hands/tools'); const { emptySheet, flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng } = await import('@/lib/studio-agent/core/rng')
+      const { TONES } = await import('@/components/studio/genera/recipes')
+      const root = ref.current!
+      for (const k of [1, 2, 3, 4, 5, 6]) {
+        const tone = TONES[k % TONES.length], c = { r: rng(k * 71), tone, intention: { word: 'linea', register: 'neutro', targets: {}, why: '' }, mood: 'curioso', say: () => 'la linea tiene il posto', shaders: [], quality: 0.5, noText: false, tipoOk: true } as never
+        let s0 = emptySheet(540, 675, (tone as { bg: string }).bg)
+        for (const id of ['semina', 'geometria', 'cristallo', 'scrivi']) { const t = TOOLS.find(x => x.id === id)!; try { if (t.available(s0, c)) s0 = await t.apply(s0, t.propose(s0, c), c) } catch { /* */ } }
+        const s1 = luceDiScena(s0, { angolo: -2.2, quota: 0.016, morbidezza: 0.01, rilievo: 0.8, nebbia: 0.2 })
+        for (const [nome, sh] of [['piatta', s0], ['luce di scena', s1]] as const) { const d = document.createElement('div'); d.style.cssText = 'width:270px;margin:4px;font:11px monospace'; const cv = flatten(sh, 0.5); cv.style.width = '270px'; d.appendChild(cv); const l = document.createElement('div'); l.textContent = `${k} ${nome}`; d.appendChild(l); root.appendChild(d) }
+      }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     if (new URLSearchParams(location.search).has('filtri')) {
       const { FILTRI, filtra } = await import('@/lib/studio-agent/hands/filtri')
       const im = new Image(); im.src = '/img/b.jpg'; await im.decode(); const b = document.createElement('canvas'); b.width = 432; b.height = 540; b.getContext('2d')!.drawImage(im, 0, 0, 432, 540)
