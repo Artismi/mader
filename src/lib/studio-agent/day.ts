@@ -51,6 +51,7 @@ import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione, imparaScalaMuffa } from './mind/episodio'
 import { raccoltaACaso } from './hands/raccolta'
+import { scegliRegistro, esitoRegistro } from './mind/direzione'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -398,10 +399,14 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   for (const sc of plan.schede) if (nF < 3 && sc.a && r() < pF) { sc.follia = pick(r, r() < 0.7 ? L.follie : ['scala', 'ossessione', 'scambio', 'assenza', 'istruzione', 'grafico', 'inversione', 'caleido']); nF++ }
   log(`Sequenza ${nEp} in forma «${plan.forma}», linguaggio «${L.nome}», tono ${tone.label} (${armonia}). ${perL}`)
   log(`«${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ` Niente da dedurre oggi: leggo${plan.lettura ? ` «${plan.lettura}»` : ''}.`}${nF ? ` Salti: ${plan.schede.filter(x => x.follia).map(x => x.follia).join(', ')}.` : ''}`)
-  const passi = Math.round(({ curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]) * (hooks.fast ? 0.45 : 0.7))
+  // la direzione della sequenza: un registro solo per tutte le sue tavole (una serie coerente), con la sua economia
+  const dirS = scegliRegistro(st, r)
+  log(`Direzione della sequenza: ${dirS.nome} (${dirS.passi[0]}-${dirS.passi[1]} gesti per tavola dopo la scena, ${dirS.figure} figure, vuoto almeno ${Math.round(dirS.vuoto * 100)}%${dirS.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
+  ;(st as AgentState & { ultimaDirezione?: string }).ultimaDirezione = dirS.id
   const studio = async (s0: Sheet) => {
     const it: Intention = { ...intention, targets: {}, tools: [...L.strumenti, 'materia', 'luce', 'shader', 'traccia', 'taglia'] }
-    const res = await runStudio(st, r, s0, it, { ...tctx }, passi)
+    const passi = dirS.passi[0] + Math.floor(r() * (dirS.passi[1] - dirS.passi[0] + 1))
+    const res = await runStudio(st, r, s0, it, { ...tctx }, passi, undefined, dirS)
     learnTools(st, res.effects)
     return res.sheet
   }
@@ -443,6 +448,7 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
     works.push(saved); riuscite.push(i)
     if (sc.b && ultimaImpaginazione()) esitoVisivo(st, sc.rel ?? 'accanto', ultimaImpaginazione()!, saved.interest)
     if (hooks.reel) { fogli.push(sheet); infoReel.push({ rel: sc.rel, interesse: saved.interest }) }
+    esitoRegistro(st, dirS.id, saved.interest)
     hooks.onWork?.(saved)
     hooks.preview?.(flatten(sheet, 0.5))
     log(`${i + 1}/${plan.schede.length} ${sc.ruolo}${sc.titolo ? `: ${sc.titolo}` : ''}`)
@@ -547,7 +553,10 @@ async function tavola(
   const vctx: VoiceCtx = { r, register: intention.register, word: intention.word, near, readings: readings.length ? readings : st.readings.slice(-4), ownTexts, day: st.day, beliefs: st.beliefs.slice(-400) }
   const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5, noText: !!(scena || en || pag) }
   const base = { curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]
-  const steps = Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : en ? 0.8 : 1))
+  // la direzione: che tavola è, e la sua economia (le sferzate e le pagine del cantiere no)
+  const dir = rottura || pag ? undefined : scegliRegistro(st, r)
+  const steps = dir ? dir.passi[0] + Math.floor(r() * (dir.passi[1] - dir.passi[0] + 1)) : Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : en ? 0.8 : 1))
+  if (dir) log(`Direzione: ${dir.nome} (fino a ${steps} gesti dopo la scena, ${dir.figure} figure, vuoto almeno ${Math.round(dir.vuoto * 100)}%${dir.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
   log(`— Tavola ${n} (${ragione}), tono ${tone.label}.`)
   let start = emptySheet(800, 1000, tone.bg)
   let pre: { gestures: Gesture[]; genome: { tool: string; params: Record<string, unknown> }[] } = { gestures: [], genome: [] }
@@ -576,10 +585,10 @@ async function tavola(
     start = rp.sheet; pre = rp
     log(`Rifatti ${rp.gestures.length} gesti dal genoma (variazione ${Math.round(amount * 100)}%).`)
   }
-  const res0 = pag ? { sheet: start, gestures: [] as Gesture[], last: look(st, start, intention), effects: [], genome: [] } : await runStudio(st, r, start, intention, tctx, parent && !scena && !en ? Math.ceil(steps * 0.5) : steps, (s, g) => {
+  const res0 = pag ? { sheet: start, gestures: [] as Gesture[], last: look(st, start, intention), effects: [], genome: [] } : await runStudio(st, r, start, intention, tctx, parent && !scena && !en && !dir ? Math.ceil(steps * 0.5) : steps, (s, g) => {
     log(`${g.kept ? '✓' : '✗'} ${g.tool} (${g.delta >= 0 ? '+' : ''}${g.delta})`)
     if (!fast) hooks.preview?.(flatten(s, 0.5))
-  })
+  }, dir)
   const res = { ...res0, gestures: [...pre.gestures, ...res0.gestures], genome: [...pre.genome, ...res0.genome] }
   // il testo per ultimo: dentro la composizione, dove c'è spazio, leggibile su ciò che c'è sotto
   let ttl0 = pag ? `${pag.cantiere.titolo} — ${pag.capitolo.titolo}` : ''
@@ -612,6 +621,7 @@ async function tavola(
   const nov = noveltyOf(st, f, histogram(st.codebook, ps))
   const progress = Math.min(1, learn(st.codebook, st.codebookCounts, ps) * 5)
   const intr = interestOf(st, nov, progress)
+  if (dir) esitoRegistro(st, dir.id, intr)
   const vis = { features: f, words: histogram(st.codebook, ps), palette: palette(R) }
   vctx.features = f
   const ttl = ttl0 || makeTitle(vctx)

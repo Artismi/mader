@@ -11,7 +11,8 @@ import { weighted, type Rnd } from '../core/rng'
 import { flatten, rettangoloVuoto, type Sheet } from '../hands/sheet'
 import { TOOLS, type Tool, type ToolCtx } from '../hands/tools'
 import { applica } from '../hands/tools'
-import { scegli, applicaDove, annota, visibile, affinita, conoscenza, quadernoDi } from './quaderno'
+import { tradisce, type Registro } from './direzione'
+import { scegli, applicaDove, annota, visibile, affinita, quadernoDi } from './quaderno'
 import { measure, rasterize } from '../eyes/measure'
 import { patches } from '../eyes/visual-words'
 import { flaws as flawsOf, readability } from '../eyes/judgement'
@@ -111,7 +112,7 @@ export interface StudioResult { sheet: Sheet; gestures: Gesture[]; last: Look; e
 
 export async function runStudio(
   st: AgentState, r: Rnd, start: Sheet, intention: Intention, ctx: ToolCtx, steps: number,
-  onStep?: (s: Sheet, g: Gesture, l: Look) => void,
+  onStep?: (s: Sheet, g: Gesture, l: Look) => void, dir?: Registro,
 ): Promise<StudioResult> {
   let sheet = start
   let cur = look(st, sheet, intention)
@@ -127,7 +128,7 @@ export async function runStudio(
     // la scelta dello strumento: urgenza, più quello che ha imparato dal quaderno (com'è andato con questa parola),
     // più la curiosità per ciò che conosce poco; uno strumento che sa essere troppo lento per ora lo lascia
     const parola = intention.word ?? ''
-    const tool = weighted(r, avail.filter(t => (quadernoDi(st).schede[t.id]?.costo ?? 0) < 25000), t => urgency(t, sheet, st, intention, sheet.layers.length ? cur.f : null, st.mood) * (ctx.noText && SPERIMENTA.has(t.id) ? 1.8 : 1) * (ctx.preferiti?.includes(t.id) ? 2.5 : 1) * Math.exp(affinita(st, t.id, parola) * 6) * (1 + 0.8 * (1 - conoscenza(st, t.id))), T)
+    const tool = weighted(r, avail.filter(t => (quadernoDi(st).schede[t.id]?.costo ?? 0) < 25000), t => urgency(t, sheet, st, intention, sheet.layers.length ? cur.f : null, st.mood) * (ctx.noText && SPERIMENTA.has(t.id) ? 1.8 : 1) * (ctx.preferiti?.includes(t.id) ? 2.5 : 1) * Math.exp(affinita(st, t.id, parola) * 6), T)
     if (!tool) break
     let next: Sheet
     // le regolazioni e il dove: le sceglie lui, dal quaderno (con la tavola vuota usa la proposta dello strumento)
@@ -138,9 +139,12 @@ export async function runStudio(
     const ms = performance.now() - t0
     const nl = look(st, next, intention)
     const delta = nl.score - cur.score
-    const keep = delta >= 0 || r() < Math.exp(delta / (0.04 * T))
+    let keep = delta >= 0 || r() < Math.exp(delta / (0.04 * T))
+    // la direzione: un gesto che la tradisce non si tiene, anche se allo sguardo piace
+    const tradito = keep && dir ? tradisce(dir, sheet, next, genome.map(x => x.tool), tool.id, nl.f.vuoto ?? 0.5) : null
+    if (tradito) keep = false
     if (sc.x.length) annota(st, tool.id, { x: sc.x, w: parola, vis: visibile(sheet, next), cambio: Object.keys(nl.f).reduce((a, k) => a + Math.abs((nl.f[k] ?? 0) - (cur.f[k] ?? 0)), 0) / Math.max(1, Object.keys(nl.f).length), delta, tenuto: keep, ms, quando: Date.now() }, ms)
-    const g: Gesture = { tool: tool.id, params: summarize(params), kept: keep, delta: Math.round(delta * 1000) / 1000 }
+    const g: Gesture = { tool: tradito ? `${tool.id} (no: ${tradito})` : tool.id, params: summarize(params), kept: keep, delta: Math.round(delta * 1000) / 1000 }
     gestures.push(g)
     effects.push({ tool: tool.id, before: cur.f, after: nl.f, delta })
     if (keep) { genome.push({ tool: tool.id, params: encode(params, sheet) }); sheet = next; cur = nl }
