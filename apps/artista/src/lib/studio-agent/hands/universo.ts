@@ -6,7 +6,8 @@
  */
 import { newCanvas, fullLayer, type Sheet } from './sheet'
 import type { Tool } from './tools'
-import { crescitaCamera, cercaCamere, type Caleido } from './camera'
+import { crescitaCamera, cercaCamere, indirizzoCosmico, type Caleido } from './camera'
+import { indirizziCosmici } from '../mind/sospese'
 
 const CALEIDI: (Caleido | '')[] = ['', '', 'sei', 'quattro', 'specchio', 'giro', 'affiancata']
 const cache = new Map<string, (f: number) => HTMLCanvasElement>()
@@ -32,7 +33,10 @@ export const universoTool: Tool = {
   available: () => true,
   propose: (s, c) => {
     const r = c.r, cand = cercaCamere(String(Math.floor(r() * 1e9)), 4, 500)
-    const scelto = cand.length ? cand[Math.floor(r() * Math.min(3, cand.length))].indirizzo : String(Math.floor(r() * 1e8))
+    // un luogo vero trovato dall'osservatorio, quando c'è (la biblioteca madre), oppure uno della biblioteca leggera
+    const cosmici = indirizziCosmici()
+    const scelto = cosmici.length && r() < 0.45 ? indirizzoCosmico(cosmici[Math.floor(r() * cosmici.length)].n, ['una', 'esagoni', 'quadrati', 'specchio'][Math.floor(r() * 4)], Math.round(r() * 60))
+      : cand.length ? cand[Math.floor(r() * Math.min(3, cand.length))].indirizzo : String(Math.floor(r() * 1e8))
     return { indirizzo: scelto, colore: r() < 0.6 ? c.tone.ink : c.tone.acc, caleido: CALEIDI[Math.floor(r() * CALEIDI.length)], fino: 0.5 + r() * 0.5, zoom: 0.25 + r() * 1.1, rot: r() < 0.6 ? 0 : (r() - 0.5) * 1.2, alpha: 0.35 + r() * 0.65 }
   },
   apply: async (s: Sheet, p, c) => {

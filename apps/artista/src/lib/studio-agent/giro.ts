@@ -403,6 +403,23 @@ export async function bottegaGiro(o: { prove: number; secondi: number; log: (m: 
   return n
 }
 
+/** il simulatore di stateyour: l'osservatorio lo usa per misurare mondi, la camera dei pattern per disegnare luoghi veri */
+let cosmoPronto: Promise<import('./mind/osservatorio').CosmoAPI | null> | null = null
+export function preparaCosmo() {
+  return (cosmoPronto ??= (async () => {
+    try {
+      // moduli ES serviti così come sono (public/stateyour): il bundler non li tocca
+      const base = '/stateyour/camera/'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const C: any = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ base + 'cosmo.js'), M: any = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ base + 'mondo.js')
+      const { usaCosmo } = await import('./hands/camera')
+      usaCosmo((n: number) => { try { return M.simulaMondo(C.regione(C.indirizzoDi(n)).cella) } catch { return null } })
+      return { indirizzoDi: C.indirizzoDi, sistema: C.sistema, pianeta: C.pianeta, galassia: C.galassia, descriviIndirizzo: C.descriviIndirizzo }
+    } catch (e) { console.log('cosmo non disponibile:', e instanceof Error ? e.message : e); return null }
+  })())
+}
+if (typeof window !== 'undefined') void preparaCosmo()
+
 /** la città interna (strati 1-2): il territorio delle tavole e una giornata degli abitanti. Osserva e basta: scrive il verbale. */
 export async function cittaGiro(o: { log: (m: string) => void }) {
   const { territorio } = await import('./mind/territorio')
@@ -413,7 +430,8 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   const S = st as AgentState & { citta?: import('./mind/citta').Citta; diarioCitta?: unknown[]; territorio?: unknown }
   S.citta ??= fondaCitta(opere, Tt, st.seed ?? 11)
   const cerca = async (f: string, q: string, n: number) => (await T.read(`mode=fonte&f=${encodeURIComponent(f)}&q=${encodeURIComponent(q)}&n=${n}`)) as unknown as import('./mind/citta').Lettura[]
-  const v = await giornata(S.citta, opere, Tt, { seme: st.day, cerca, ricerche: 8, giornoAgente: st.day, strumenti: (await import('./hands/tools')).TOOLS.map(t => t.id) })
+  const cosmo = await preparaCosmo()
+  const v = await giornata(S.citta, opere, Tt, { cosmo: cosmo ?? undefined, seme: st.day, cerca, ricerche: 8, giornoAgente: st.day, strumenti: (await import('./hands/tools')).TOOLS.map(t => t.id) })
   if ((globalThis as { __officina?: boolean }).__officina && !S.citta.officina?.richieste.length) { // per le prove: un giro d'officina forzato
     const m = S.citta.abitanti.filter(a => a.tipo === 'mestiere'), a = m[Math.floor(Math.random() * m.length)]
     S.citta.officina ??= { richieste: [], esiti: [], tenuti: [] }

@@ -34,3 +34,9 @@ export function prossimaCommissione(st: AgentState): Commissione | null {
 export function commissioneFatta(st: AgentState, c: Commissione, ids: string[]) {
   c.stato = 'fatta'; c.fatte = ids; c.giornoAgente = st.day
 }
+
+// ── i luoghi trovati dall'osservatorio: indirizzi del cosmo da cui il pattern dell'universo può nascere ──────────
+type ConOss = AgentState & { citta?: { osservatorio?: { indirizzi?: { n: number; perche: string }[] } } }
+let COSMICI: { n: number; perche: string }[] = []
+export function aggiornaCosmici(st: AgentState) { COSMICI = ((st as ConOss).citta?.osservatorio?.indirizzi ?? []).slice(-30); return COSMICI }
+export const indirizziCosmici = () => COSMICI

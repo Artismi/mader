@@ -37,10 +37,17 @@ export function leggiIndirizzo(s: string): Indirizzo {
 
 // ---------- gli universi simulati, tenuti un poco (la ricerca e la crescita li riusano)
 const cache = new Map<number, { tracce: Traccia[]; tMax: number }>()
+// la madre: i numeri da COSMO in su sono luoghi veri del cosmo di stateyour (trovati dall'osservatorio della città);
+// le loro tracce le calcola il simulatore completo, iniettato dall'app (usaCosmo). Gli altri numeri restano la biblioteca leggera.
+export const COSMO = 1e9
+let cosmoTracce: ((n: number) => Traccia[] | null) | null = null
+export function usaCosmo(f: ((n: number) => Traccia[] | null) | null) { cosmoTracce = f; cache.clear() }
+export const indirizzoCosmico = (n: number, gruppo = 'una', angolo = 0) => `cam/${COSMO + n}/500,500,400/0,0,1/1,1/${gruppo},${angolo}`
 function simulato(numero: number) {
   let v = cache.get(numero)
   if (v) return v
-  const tracce = simulaMondo(universo(numero).cella, { maxParticelle: 700, maxPassi: 1500 })
+  const vere = numero >= COSMO && cosmoTracce ? cosmoTracce(numero - COSMO) : null
+  const tracce = vere && vere.length ? vere : simulaMondo(universo(numero % COSMO).cella, { maxParticelle: 700, maxPassi: 1500 })
   let tMax = 1; for (const t of tracce) tMax = Math.max(tMax, t.punti[t.punti.length - 1][3])
   v = { tracce, tMax }; cache.set(numero, v)
   if (cache.size > 24) cache.delete(cache.keys().next().value as number)

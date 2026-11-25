@@ -54,7 +54,7 @@ import { raccoltaACaso } from './hands/raccolta'
 import { impaginaMotore, sceltePer } from './hands/motore'
 import { scegliRegistro, esitoRegistro, direzioneDi, strumentiDi } from './mind/direzione'
 import { aggiornaRicette } from './mind/ricette'
-import { aggiornaSospese, spinta, prossimaCommissione, commissioneFatta } from './mind/sospese'
+import { aggiornaCosmici, aggiornaSospese, spinta, prossimaCommissione, commissioneFatta } from './mind/sospese'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -747,7 +747,7 @@ async function tavola(
 export async function loadOrCreate(): Promise<AgentState> {
   const st = await T.getState()
   if (st) {
-    aggiornaSospese(st); aggiornaRicette(st)
+    aggiornaSospese(st); aggiornaRicette(st); aggiornaCosmici(st)
     // campi aggiunti dopo la prima versione
     st.history ??= []
     st.sites ??= DEFAULT_SITES.slice()

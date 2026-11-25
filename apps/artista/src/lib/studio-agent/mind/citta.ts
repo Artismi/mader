@@ -6,6 +6,7 @@
 // In questo strato non decidono niente: scrivono il verbale.
 
 import { territorio, radice, type Opera, type Territorio, type Insieme } from './territorio'
+import { campagna, SCIENZIATI, type CosmoAPI, type Osservatorio } from './osservatorio'
 
 // ── le regole: visibili a tutti, scritte come dati ──────────────────────────────────────────────────────────
 export const REGOLE_INIZIALI = {
@@ -21,13 +22,13 @@ export const REGOLE_INIZIALI = {
 }
 export type Regole = typeof REGOLE_INIZIALI
 
-export const CELLE = ['casa', 'cammino', 'piazza', 'biblioteca', 'ritorno', 'bottega', 'assemblea', 'archivio'] as const
+export const CELLE = ['casa', 'cammino', 'piazza', 'osservatorio', 'biblioteca', 'ritorno', 'bottega', 'assemblea', 'archivio'] as const
 export type Cella = typeof CELLE[number]
 const TUTTI_IN: Cella[] = ['assemblea'] // fasi che richiamano tutti
 
 export type Carattere = { credulone: number; testardo: number; contrario: number; prudente: number; trascinatore: number; ironico: number; malinconico: number; visionario: number }
 export type Abitante = {
-  id: string; nome: string; tipo: 'mestiere' | 'testa' | 'figura'; carica: string // la carica: ruolo nella città
+  id: string; nome: string; tipo: 'mestiere' | 'testa' | 'figura' | 'scienziato'; carica: string // la carica: ruolo nella città
   carattere: Carattere; interessi: Record<string, number>; casa: { x: number; y: number }; raggio: number
   cella: Cella; tensione: number; peso: Record<string, number>; storia: string[]; visti: string[]
   fonti?: Record<string, number> // la sua tavolozza di siti: si allarga e si restringe con l'uso
@@ -49,7 +50,7 @@ export type Mostra = { giorno: number; curatore: string; opere: { id: string; ti
 export type RichiestaOfficina = { autore: string; scopo: string; strumenti: string[]; modo: 'zero' | 'ramo' | 'innesto'; base?: string; giorno: number }
 export type EsitoOfficina = { autore: string; nome: string; testo: string; tenuto: boolean; perche: string; scopo: string; giorno: number; discusso?: boolean }
 export type Cantiere = { id: string; giorno: number; chi: string; cosa: string; passi: { testo: string; dove: 'biblioteca' | 'bottega' | 'officina' | 'sito'; stato: 'da fare' | 'fatto' | 'aspetta' }[] }
-export type Citta = { officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
+export type Citta = { osservatorio?: Osservatorio; officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
@@ -116,7 +117,7 @@ function frasiRipetute(titoli: string[], min: number) {
 }
 
 // ── la giornata ────────────────────────────────────────────────────────────────────────────────────────────
-export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: Lettura[]; cerca?: Cerca; ricerche?: number; giornoAgente?: number; durata?: number; strumenti?: string[] } = {}) {
+export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: Lettura[]; cerca?: Cerca; ricerche?: number; giornoAgente?: number; durata?: number; strumenti?: string[]; cosmo?: CosmoAPI } = {}) {
   const r = caso((o.seme ?? 1) ^ (C.giorno * 2654435761))
   const R = C.regole, idx = new Map(opere.map((w, i) => [w.id, i]))
   C.giorno++
@@ -128,6 +129,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   }
   if (!C.abitanti.some(a => a.id === 'saggista')) C.abitanti.push({ id: 'saggista', nome: 'la saggista', tipo: 'figura', carica: 'saggista', carattere: { ...carattereDi(r), prudente: 0.7 }, interessi: {}, casa: T.piazza, raggio: 200, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] })
   if (!C.abitanti.some(a => a.id === 'curatore')) C.abitanti.push({ id: 'curatore', nome: 'il curatore', tipo: 'figura', carica: 'curatore', carattere: { ...carattereDi(r), prudente: 0.6 }, interessi: { mostr: 1, tavol: 0.6 }, casa: T.piazza, raggio: 300, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] })
+  for (const sc of SCIENZIATI) if (!C.abitanti.some(a => a.id === sc.id)) C.abitanti.push({ id: sc.id, nome: sc.nome, tipo: 'scienziato', carica: sc.id === 'filosofa' ? 'filosofa della scienza' : 'osservatorio', carattere: { ...carattereDi(r), prudente: sc.id === 'filosofa' ? 0.4 : 0.65 }, interessi: { ...sc.interessi }, casa: T.piazza, raggio: 260, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [], fonti: sc.id === 'filosofa' ? { 'wiki-it': 1, 'wiki-en': 0.7, wikisource: 0.6, 'rivista:Doppiozero': 0.5 } : { 'wiki-en': 1, arxiv: 1, 'rivista:Le Scienze': 0.7, 'rivista:Scienza in Rete': 0.5, 'wiki-it': 0.5 } })
   for (const a of C.abitanti) tavolozza(a, r)
   const verbale: Battuta[] = []
   const coda: Evento[] = []
@@ -289,6 +291,16 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   for (const e of (C.officina?.esiti ?? []).filter(x => !x.discusso).slice(-3)) {
     e.discusso = true
     osservazioni.push({ tipo: 'officina', chi: e.autore, testo: e.tenuto ? `In officina ho scritto «${e.nome}»: ${e.perche}. Ora è uno strumento di tutti: ${e.testo.slice(0, 140)}` : `Ho provato «${e.nome}» in officina e l'ho buttato: ${e.perche}. Lo scrivo così non lo rifacciamo.`, nucleo: `il programma «${e.nome}»`, argomento: 'officina:' + e.nome, tema: vettoreDi(`${e.scopo} ${e.testo}`), nomi: [], peso: 1, dati: e.tenuto ? { domanda: `Su quali tavole lo usiamo, «${e.nome}»?`, rovescio: 'Funziona perché è prudente: il prossimo ramo lo spingerei.' } : { battuta: 'Anche i rami secchi fanno legna.', proposta: undefined } })
+  }
+  // l'osservatorio: gli scienziati sfogliano la biblioteca degli universi (il simulatore di stateyour) e portano in piazza
+  // scoperte, ipotesi messe alla prova e domande di metodo
+  if (o.cosmo) {
+    C.osservatorio ??= { campioni: 0, misure: [], scoperte: [], ipotesi: [], indirizzi: [], conteggi: {} }
+    try {
+      const { eventi, nuove } = campagna(C.osservatorio, o.cosmo, r, C.giorno, { campioni: 36 })
+      verbale.push({ fase: 'osservatorio' as Cella, chi: 'astronoma', tipo: 'misura', testo: `Oggi abbiamo misurato ${nuove.length} mondi (in tutto ${C.osservatorio.campioni}).` })
+      for (const e of eventi) osservazioni.push({ ...e, nomi: [], dati: e.dati as Evento['dati'] })
+    } catch (e) { verbale.push({ fase: 'osservatorio' as Cella, chi: 'astronoma', tipo: 'guasto', testo: `Il telescopio si è inceppato: ${e instanceof Error ? e.message : e}` }) }
   }
   // 3. il guizzo: emergente dal carattere (visionario, poco prudente) e da quanto ha visto di nuovo; al massimo uno al giorno
   const guizzi = C.abitanti.map(a => [a, R.guizzo * (1 + a.carattere.visionario * 4) * (1 - a.carattere.prudente * 0.5) * (1 + a.visti.length / 400)] as const).filter(([, p]) => r() < p).sort((x, y) => y[1] - x[1])
@@ -462,7 +474,8 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
       else if (fattibile) { parola = /albero/i.test(fattibile.cosa) ? 'albero' : 'città'; perche = fattibile.cosa }
       else if (lettaOggi) { parola = lettaOggi.testo.match(/su «([^»]+)»/)?.[1] ?? ''; perche = `dopo quello che ho letto oggi` }
       if (!parola) { const k = temaPrimo(chi.tipo === 'testa' ? chi : con ?? chi); parola = k ? formaDi(k)! : ''; perche = chi.tipo === 'mestiere' ? 'voglio vedere cosa sanno fare le mie mani da sole su un tema vero' : 'voglio vedere questa parola con mani che non uso mai' }
-      const sts = [...new Set([...strumentiDi(chi), ...(con ? strumentiDi(con) : [])])]
+      let sts = [...new Set([...strumentiDi(chi), ...(con ? strumentiDi(con) : [])])]
+      if (chi.tipo === 'scienziato') { const sc = C.osservatorio?.scoperte.at(-1); sts = ['universo', 'cristallo', 'acqua', 'luce', 'grana'].filter(t => !noti.size || noti.has(t)); if (sc) { parola = /acqua/.test(sc.testo) ? 'acqua' : 'pianeta'; perche = `dal mondo ${sc.n} della biblioteca: ${sc.testo}` } }
       if (parola && sts.length) {
         const c: Commissione = { id: `c${C.giorno}.${C.bottega.length}`, giorno: C.giorno, autore: chi.id, nome: chi.nome, con: con?.nome, parola, strumenti: sts.slice(0, 6), perche, stato: 'in attesa' }
         C.bottega.push(c)
