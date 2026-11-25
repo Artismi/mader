@@ -402,3 +402,21 @@ export async function bottegaGiro(o: { prove: number; secondi: number; log: (m: 
   await T.putState(st)
   return n
 }
+
+/** la città interna (strati 1-2): il territorio delle tavole e una giornata degli abitanti. Osserva e basta: scrive il verbale. */
+export async function cittaGiro(o: { log: (m: string) => void }) {
+  const { territorio } = await import('./mind/territorio')
+  const { fondaCitta, giornata, compatta } = await import('./mind/citta')
+  const st = await loadOrCreate(), works = await T.listWorks()
+  const opere = works as unknown as import('./mind/territorio').Opera[]
+  const Tt = territorio(opere, { seme: st.day })
+  const S = st as AgentState & { citta?: import('./mind/citta').Citta; diarioCitta?: unknown[]; territorio?: unknown }
+  S.citta ??= fondaCitta(opere, Tt, st.seed ?? 11)
+  const v = giornata(S.citta, opere, Tt, { seme: st.day, letture: (st as unknown as { readings?: { title?: string; source?: string; text?: string }[] }).readings })
+  compatta(S.citta)
+  S.diarioCitta = [...(S.diarioCitta ?? []), { giorno: st.day, quando: new Date().toISOString(), cittaGiorno: S.citta.giorno, verbale: v }].slice(-60)
+  S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]) }
+  await T.putState(st)
+  o.log(`la città: giorno ${S.citta.giorno}, ${v.length} battute, ${Tt.quartieri.length} quartieri`)
+  return v
+}

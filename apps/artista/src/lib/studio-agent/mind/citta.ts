@@ -1,0 +1,334 @@
+// La città interna, strato 2: il paese osserva.
+// Gli abitanti nascono dal territorio (mestieri dalle mani, teste dai temi), hanno un carattere e una storia,
+// camminano tra le tavole vecchie, accumulano tensioni e parlano solo quando superano la loro soglia.
+// Tutto quello che succede finisce nella rete di memoria (nodi con un vettore di significato).
+// Le regole che li definiscono sono dati (REGOLE): le possono leggere, e negli strati successivi proporre di cambiarle.
+// In questo strato non decidono niente: scrivono il verbale.
+
+import { territorio, radice, type Opera, type Territorio, type Insieme } from './territorio'
+
+// ── le regole: visibili a tutti, scritte come dati ──────────────────────────────────────────────────────────
+export const REGOLE_INIZIALI = {
+  soglia: 1.0,              // carica oltre la quale si parla
+  calo: 0.85,               // quanto si sgonfia la carica a ogni fase senza parlare
+  passiCammino: 9,          // quante tavole si incontrano per strada
+  deviazione: 0.35,         // quanto il cammino preferisce le strade interessanti alla più breve
+  salto: 1.6,               // urgenza oltre la quale si salta in un'altra cella del ciclo
+  pesoTema: 0.6,            // pertinenza: quanto conta il tema rispetto al nome
+  ripetizione: 4,           // quante volte una stessa frase in un quartiere prima che sembri un ciclo chiuso
+  troppoGrande: 0.12,       // quota di tavole oltre cui un quartiere pare troppo pieno
+  guizzo: 0.04,             // probabilità di base del guizzo (si moltiplica per il carattere)
+}
+export type Regole = typeof REGOLE_INIZIALI
+
+export const CELLE = ['casa', 'cammino', 'piazza', 'biblioteca', 'ritorno', 'bottega', 'assemblea', 'archivio'] as const
+export type Cella = typeof CELLE[number]
+const TUTTI_IN: Cella[] = ['assemblea'] // fasi che richiamano tutti
+
+export type Carattere = { credulone: number; testardo: number; contrario: number; prudente: number; trascinatore: number; ironico: number; malinconico: number; visionario: number }
+export type Abitante = {
+  id: string; nome: string; tipo: 'mestiere' | 'testa' | 'figura'; carica: string // la carica: ruolo nella città
+  carattere: Carattere; interessi: Record<string, number>; casa: { x: number; y: number }; raggio: number
+  cella: Cella; tensione: number; peso: Record<string, number>; storia: string[]; visti: string[]
+}
+export type Nodo = { id: string; giorno: number; tipo: string; testo: string; chi?: string; vettore: Record<string, number>; legami: string[]; dove?: string[] }
+export type Evento = { tipo: string; testo: string; nucleo?: string; argomento?: string; chi?: string; tema: Record<string, number>; nomi: string[]; tavole?: string[]; peso: number; dati?: any }
+export type Battuta = { fase: Cella; chi: string; a?: string; tipo: string; testo: string }
+export type Citta = { nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: { giorno: number; chi: string; cosa: string; stato: string }[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[] }
+
+function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
+const vettoreDi = (t: string) => { const v: Record<string, number> = {}; for (const w of String(t).toLowerCase().split(/[^a-zàèéìòù]+/)) if (w.length >= 5) { const k = radice(w); if (k) v[k] = (v[k] ?? 0) + 1 } return v }
+
+// ── nascita: dagli insiemi del territorio, con un carattere che viene dal suo modo di stare al mondo ─────────
+function carattereDi(r: () => number, ins?: Insieme): Carattere {
+  const t = () => { const x = r(); return x < 0.08 ? 0.85 + r() * 0.15 : 0.15 + r() * 0.5 } // quasi sempre moderato, a volte estremo
+  const c: Carattere = { credulone: t(), testardo: t(), contrario: t(), prudente: t(), trascinatore: t(), ironico: t(), malinconico: t(), visionario: t() }
+  if (ins) { // chi ha un insieme largo e sparso è più visionario, chi l'ha stretto più testardo
+    const largo = Math.min(1, ins.raggio / 400)
+    c.visionario = Math.min(1, c.visionario * 0.6 + largo * 0.5); c.testardo = Math.min(1, c.testardo * 0.6 + (1 - largo) * 0.4)
+  }
+  return c
+}
+
+export function fondaCitta(opere: Opera[], T: Territorio, seme = 11): Citta {
+  const r = caso(seme)
+  const abitanti: Abitante[] = T.insiemi.map(ins => {
+    const ab = ins.abitante
+    const interessi: Record<string, number> = {}
+    if (ab.tipo === 'testa') ab.parole!.forEach((k, i) => interessi[k] = i ? 0.5 : 1)
+    else { for (const s of ab.strumenti!) interessi['m:' + s] = 1; for (const q of ins.quartieri) for (const c of T.quartieri.find(x => x.id === q)?.concetti ?? []) { const k = radice(c); if (k) interessi[k] = (interessi[k] ?? 0) + 0.3 } }
+    return { id: ab.id, nome: ab.nome, tipo: ab.tipo, carica: ab.tipo === 'mestiere' ? 'artigiano' : 'pensatore', carattere: carattereDi(r, ins), interessi, casa: ins.casa, raggio: ins.raggio, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
+  })
+  // le figure: chi guarda il tutto (il critico e il curatore ci sono già nel giro; qui chi guarda la città)
+  const urb: Abitante = { id: 'urbanista', nome: "l'urbanista", tipo: 'figura', carica: 'urbanista', carattere: carattereDi(r), interessi: { citt: 1, spazi: 0.6, quartier: 0.6, strad: 0.5 }, casa: T.piazza, raggio: 300, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
+  const arch: Abitante = { id: 'archivio', nome: "l'archivio", tipo: 'figura', carica: 'memoria', carattere: { ...carattereDi(r), malinconico: 0.8, testardo: 0.7 }, interessi: { memori: 1, ripet: 1, tempo: 0.5 }, casa: T.piazza, raggio: 500, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
+  return { nome: null, giorno: 0, regole: { ...REGOLE_INIZIALI }, abitanti: [...abitanti, urb, arch], rete: [], piani: [], domande: [] }
+}
+
+// ── osservazioni sui dati: cose vere che si possono notare camminando ───────────────────────────────────────
+const FUNZ = new Set('il lo la i gli le un uno una di a da in con su per tra fra e o ma che non è più come se'.split(' '))
+function frasiRipetute(titoli: string[], min: number) {
+  const c = new Map<string, number>()
+  for (const t of titoli) {
+    const w = String(t).toLowerCase().replace(/[«»"“”:·—–\-,.!?;()]/g, ' ').split(/\s+/).filter(Boolean)
+    const visti = new Set<string>()
+    for (let n = 3; n <= 5; n++) for (let i = 0; i + n <= w.length; i++) { const g = w.slice(i, i + n); if (g.filter(x => !FUNZ.has(x)).length < 1 || FUNZ.has(g[0]) && FUNZ.has(g[n - 1])) continue; const k = g.join(' '); if (!visti.has(k)) { visti.add(k); c.set(k, (c.get(k) ?? 0) + 1) } }
+  }
+  // tieni le più lunghe che non sono contenute in un'altra con lo stesso conto
+  const tutte = [...c].filter(([, n]) => n >= min).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+  const tenute: [string, number][] = []
+  for (const [k, n] of tutte) if (!tenute.some(([t, m]) => t.includes(k) && m >= n * 0.8)) tenute.push([k, n])
+  return tenute.slice(0, 5)
+}
+
+// ── la giornata ────────────────────────────────────────────────────────────────────────────────────────────
+export function giornata(C: Citta, opere: Opera[], T: Territorio, o: { seme?: number; letture?: { title?: string; source?: string; text?: string }[] } = {}) {
+  const r = caso((o.seme ?? 1) ^ (C.giorno * 2654435761))
+  const R = C.regole, idx = new Map(opere.map((w, i) => [w.id, i]))
+  C.giorno++
+  // il territorio si muove con le tavole nuove: le case e i cerchi si aggiornano; chi è nato oggi si aggiunge
+  for (const ins of T.insiemi) {
+    const a = C.abitanti.find(x => x.id === ins.abitante.id)
+    if (a) { a.casa = ins.casa; a.raggio = ins.raggio }
+    else C.abitanti.push({ ...fondaCitta(opere, { ...T, insiemi: [ins] }, C.giorno).abitanti[0], storia: [`nato il giorno ${C.giorno}`] })
+  }
+  const verbale: Battuta[] = []
+  const coda: Evento[] = []
+  const nota = (tipo: string, testo: string, chi?: string, dove?: string[], vettore?: Record<string, number>) => {
+    const v = vettore ?? vettoreDi(testo)
+    const vicini = C.rete.map(n => [n.id, cos(v, n.vettore)] as [string, number]).filter(e => e[1] > 0.25).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0])
+    const n: Nodo = { id: `n${C.giorno}.${C.rete.length}`, giorno: C.giorno, tipo, testo, chi, vettore: v, legami: vicini, dove }
+    C.rete.push(n); return n
+  }
+  const ab = (id: string) => C.abitanti.find(a => a.id === id)!
+  const quart = (id: string) => T.quartieri.find(q => q.id === T.punti[idx.get(id)!]?.q)
+
+  // pertinenza di un evento per un abitante: il tema, il suo nome, le sue tavole, il suo carattere
+  const pertinenza = (a: Abitante, e: Evento) => {
+    let p = R.pesoTema * cos(a.interessi, e.tema)
+    if (e.nomi.includes(a.id)) p += 1.2
+    if (e.chi === a.id) p = 0
+    const ins = T.insiemi.find(s => s.abitante.id === a.id)
+    if (ins && e.tavole) p += e.tavole.reduce((s, t) => s + (ins.membri[t] ?? 0), 0) / Math.max(1, e.tavole.length)
+    if (e.chi && a.peso[e.chi] !== undefined) p += Math.abs(a.peso[e.chi]) * 0.4 // chi ti ha contraddetto o dato ragione ti tocca di più
+    return p * e.peso
+  }
+  // il carattere decide come si reagisce
+  const reazione = (a: Abitante, e: Evento) => {
+    const c = a.carattere
+    const pesi: [string, number][] = [
+      ['concorda', c.credulone + 0.3], ['obietta', c.testardo * 0.8 + 0.2], ['rovescia', c.contrario], ['chiede', c.prudente * 0.8 + 0.2],
+      ['scherza', c.ironico * 0.6], ['ricorda', c.malinconico * 0.7], ['propone', c.trascinatore * 0.6 + (e.tipo === 'problema' ? 0.6 : 0)],
+    ]
+    if (e.chi && (a.peso[e.chi] ?? 0) < -0.3) pesi.push(['obietta', 0.8])
+    let x = r() * pesi.reduce((s, p) => s + p[1], 0); for (const [k, w] of pesi) if ((x -= w) <= 0) return k; return 'concorda'
+  }
+  const di = (id?: string) => id ? ab(id)?.nome ?? id : 'qualcuno'
+  const del_ = (nome: string) => nome.replace(/^il /, 'del ').replace(/^lo /, 'dello ').replace(/^la /, 'della ').replace(/^l'/, "dell'").replace(/^chi /, 'di chi ')
+  const detti = new Set(C.rete.filter(n => n.giorno >= C.giorno - 3 && n.tipo === 'battuta').map(n => n.testo))
+  const giaSu = new Map<string, Set<string>>() // argomento → chi ha già parlato oggi
+  const uno = <T,>(a: T[]) => a[Math.floor(r() * a.length)]
+  // dal suo punto di vista: un dato suo sulle tavole dell'evento
+  const mio = (a: Abitante, e: Evento) => {
+    const ins = T.insiemi.find(s => s.abitante.id === a.id)
+    const t = e.tavole ?? []
+    if (!ins || !t.length) return null
+    const k = t.filter(x => (ins.membri[x] ?? 0) > 0.15).length
+    return { k, n: t.length }
+  }
+  const voce = (a: Abitante) => a.tipo === 'mestiere' ? `Le mie mani (${(T.insiemi.find(s => s.abitante.id === a.id)?.abitante.strumenti ?? []).slice(0, 2).join(', ')}) non lo vedono così` : a.tipo === 'testa' ? `Chi pensa come me non la vede così` : `Dalla mappa non sembra così`
+  const frasi = (a: Abitante, e: Evento, tipo: string): string[] => {
+    const nu = e.nucleo ?? e.testo, m = mio(a, e), d = e.dati ?? {}
+    const parte = m ? (m.k === 0 ? `nessuna di quelle ${m.n} è mia` : m.k === m.n ? `sono tutte mie, tutte ${m.n}` : `${m.k} su ${m.n} sono mie`) : null
+    switch (tipo) {
+      case 'concorda': return [
+        parte ? `Ha ragione ${di(e.chi)}, e ${parte}.` : `Ha ragione ${di(e.chi)}.`,
+        parte ? `${parte.charAt(0).toUpperCase() + parte.slice(1)}: lo sento anch'io.` : `Lo sento anch'io, ${nu}.`,
+        `Sì. ${a.tipo === 'mestiere' ? 'Si vede anche dalle mani: fanno sempre gli stessi gesti.' : a.tipo === 'testa' ? 'Anche i miei pensieri finiscono lì.' : 'Si vede dalla mappa.'}`,
+      ]
+      case 'obietta': return [
+        d.obiezione, parte && m!.k === 0 ? `Non mi riguarda: ${parte}. Guardate altrove prima di cambiare tutto.` : null,
+        `Calma. ${voce(a)}.`,
+        d.controprova,
+      ].filter(Boolean) as string[]
+      case 'rovescia': return [d.rovescio, `E se il punto fosse proprio questo, e fosse da spingere invece che da correggere?`].filter(Boolean) as string[]
+      case 'chiede': { const so = d.soggetto ?? nu; return [d.domanda, `Da quando ${so}?`, `Chi ha cominciato, con ${so}?`].filter(Boolean) as string[] }
+      case 'scherza': return [d.battuta, `Mettiamoci una targa e non se ne parla più.`, `Prima o poi diventa un'opera concettuale.`].filter(Boolean) as string[]
+      case 'ricorda': {
+        const vecchia = C.rete.filter(n => n.giorno < C.giorno && n.chi && n.chi !== a.id && n.tipo !== 'cammino').map(n => [n, cos(e.tema, n.vettore)] as const).filter(x => x[1] > 0.2).sort((x, y) => y[1] - x[1])[0]
+        return vecchia ? [`Il giorno ${vecchia[0].giorno} ${di(vecchia[0].chi)} diceva: «${vecchia[0].testo.slice(0, 110)}». Siamo ancora lì.`] : []
+      }
+      case 'propone': return [d.proposta].filter(Boolean) as string[]
+    }
+    return []
+  }
+  const parla = (a: Abitante, e: Evento, fase: Cella): Evento | null => {
+    const arg = e.argomento ?? e.testo
+    const gia = giaSu.get(arg) ?? new Set(); giaSu.set(arg, gia)
+    if (gia.has(a.id) && !e.nomi.includes(a.id)) { a.tensione *= 0.5; return null } // ha già detto la sua su questo
+    let tipo = reazione(a, e), testo = ''
+    for (let t = 0; t < 4 && !testo; t++) {
+      const cand = frasi(a, e, tipo).filter(f => f && !detti.has(f))
+      if (cand.length) testo = uno(cand); else tipo = reazione(a, e)
+    }
+    if (!testo) { a.tensione *= 0.5; return null } // non ha niente di nuovo da dire: sta zitto
+    detti.add(testo); gia.add(a.id)
+    verbale.push({ fase, chi: a.id, a: e.chi, tipo, testo })
+    a.tensione = 0; a.storia.push(`${C.giorno}:${tipo}`)
+    if (e.chi) a.peso[e.chi] = Math.max(-1, Math.min(1, (a.peso[e.chi] ?? 0) + (tipo === 'concorda' ? 0.2 : tipo === 'obietta' || tipo === 'rovescia' ? -0.2 : 0)))
+    nota('battuta', testo, a.id, e.tavole, { ...e.tema, ...vettoreDi(testo) })
+    if (tipo === 'chiede') C.domande.push({ giorno: C.giorno, chi: a.id, testo, stato: 'aperta', argomento: e.argomento } as any)
+    if (tipo === 'propone' && !C.piani.some(p => p.cosa === testo && p.stato !== 'chiuso')) C.piani.push({ giorno: C.giorno, chi: a.id, cosa: testo, stato: 'proposto' })
+    return { ...e, tipo: 'battuta', testo, chi: a.id, nomi: e.chi ? [e.chi] : [], peso: e.peso * 0.7 }
+  }
+  // un giro di discussione: ognuno accumula, parla chi supera la soglia; si ferma quando nessuno la supera più
+  const discuti = (fase: Cella, presenti: Abitante[], max = 18) => {
+    let giri = 0
+    while (coda.length && giri++ < max) {
+      const e = coda.shift()!
+      for (const a of presenti) a.tensione += pertinenza(a, e) * (0.6 + a.carattere.trascinatore * 0.6)
+      const pronti = presenti.filter(a => a.tensione > R.soglia * (0.7 + a.carattere.prudente * 0.6)).sort((x, y) => y.tensione - x.tensione).slice(0, 2)
+      for (const a of pronti) { const nuovo = parla(a, e, fase); if (nuovo) coda.push(nuovo) }
+      for (const a of presenti) a.tensione *= R.calo
+    }
+    coda.length = 0
+  }
+
+  // 1. casa → cammino: ognuno va in piazza per una strada diversa, passando da tavole che hanno qualcosa da dirgli
+  const P = T.punti, adj: number[][] = P.map(() => [])
+  for (const [a, b] of T.fili) { adj[a].push(b); adj[b].push(a) }
+  const vicinoA = (x: number, y: number) => { let bi = 0, bd = 1e18; P.forEach((p, i) => { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd) { bd = d; bi = i } }); return bi }
+  const fine = vicinoA(T.piazza.x, T.piazza.y)
+  const osservazioni: Evento[] = []
+  for (const a of C.abitanti) {
+    a.cella = 'cammino'
+    let i = vicinoA(a.casa.x + (r() - 0.5) * 60, a.casa.y + (r() - 0.5) * 60)
+    const strada: number[] = [i]
+    for (let passo = 0; passo < R.passiCammino && i !== fine; passo++) {
+      const dFine = (j: number) => Math.hypot(P[j].x - P[fine].x, P[j].y - P[fine].y)
+      const op = adj[i].filter(j => !strada.includes(j))
+      if (!op.length) break
+      // la strada interessante: avvicina alla piazza, ma vale di più una tavola non vista, del suo insieme, piaciuta
+      const ins = T.insiemi.find(s => s.abitante.id === a.id)
+      const voto = (j: number) => -dFine(j) / 100 + R.deviazione * ((a.visti.includes(P[j].id) ? -1 : 1) + (ins?.membri[P[j].id] ?? 0) * 2 + P[j].peso) + r() * 0.5
+      i = op.sort((x, y) => voto(y) - voto(x))[0]; strada.push(i)
+    }
+    a.visti = [...a.visti, ...strada.map(j => P[j].id)].slice(-200)
+    // cosa nota per strada: una tavola del suo insieme vista dopo tanto tempo, una tavola molto piaciuta, una brutta nel suo quartiere
+    for (const j of strada) {
+      const w = opere[idx.get(P[j].id)!]
+      if (!w) continue
+      const ins = T.insiemi.find(s => s.abitante.id === a.id)
+      if ((ins?.membri[w.id] ?? 0) > 0.5 && (w.interest ?? 0) > 0.85 && r() < 0.5) osservazioni.push({ tipo: 'ricordo', chi: a.id, testo: `Passando ho rivisto «${w.title}» (giorno ${w.day}): era tra le migliori delle mie, e non l'abbiamo più ripresa.`, nucleo: `«${w.title}» era buona e l'abbiamo lasciata`, argomento: 'ricordo:' + w.id, tema: vettoreDi(`${w.title} ${w.intention?.word ?? ''}`), nomi: [], tavole: [w.id], peso: 0.8, dati: { domanda: `Perché «${w.title}» funzionava e non l'abbiamo più ripresa?`, proposta: `Ripartire da «${w.title}» in bottega, con le mani di oggi.` } })
+    }
+    nota('cammino', `${a.nome} è passato da ${strada.length} tavole: ${strada.slice(0, 4).map(j => `«${P[j].titolo.slice(0, 40)}»`).join(', ')}…`, a.id, strada.map(j => P[j].id))
+  }
+
+  // 2. piazza: le cose vere della città, viste da chi le può vedere
+  const tot = P.length
+  // cicli chiusi: frasi che tornano nei titoli recenti
+  const recenti = opere.slice(-160)
+  const giaVisti = new Set<string>()
+  for (const [frase, n] of frasiRipetute(recenti.map(w => w.title ?? ''), R.ripetizione)) {
+    if ([...giaVisti].some(g => g.includes(frase) || frase.includes(g))) continue
+    giaVisti.add(frase)
+    const tav = recenti.filter(w => String(w.title).toLowerCase().includes(frase)).map(w => w.id)
+    osservazioni.push({ tipo: 'problema', chi: 'archivio', testo: `Nelle ultime ${recenti.length} tavole «${frase}» torna ${n} volte. Stiamo girando in tondo.`, nucleo: `«${frase}» torna troppo`, argomento: 'frase:' + frase, tema: vettoreDi(frase), nomi: ['tipografo', 'redattore'], tavole: tav, peso: 1.2, dati: { soggetto: `torna «${frase}»`, domanda: `Cosa ci porta a ridire «${frase}»?`, proposta: `Per un po' «${frase}» non si scrive: chi la sente tornare la sostituisce con quello che ha visto davvero.`, rovescio: `Forse ripetere «${frase}» non è il male: il male è ripeterla uguale.`, battuta: `«${frase}» ormai ha una via col suo nome.`, obiezione: `Una frase che torna è anche una firma. Toglierla tutta ci rende anonimi.` } })
+  }
+  // quartieri troppo pieni
+  for (const q of T.quartieri) if (q.n / tot > R.troppoGrande) osservazioni.push({ tipo: 'problema', chi: 'urbanista', testo: `Il quartiere «${q.nome}» ha ${q.n} tavole su ${tot}: è diventato una periferia senza centro.`, nucleo: `«${q.nome}» è troppo pieno`, argomento: 'quartiere:' + q.id, tema: Object.fromEntries(q.concetti.map(c => [radice(c) ?? c, 1])), nomi: [], peso: 1, dati: { proposta: `Dividere «${q.nome}» in due rioni seguendo le sue due parole: ${q.concetti.slice(0, 2).join(' / ')}.`, domanda: `Perché finiamo sempre in «${q.nome}»?` } })
+  // case sovrapposte
+  const mest = T.insiemi.filter(s => s.abitante.tipo === 'mestiere')
+  const ammucchiati = mest.filter(s => mest.filter(t => Math.hypot(t.casa.x - s.casa.x, t.casa.y - s.casa.y) < 60).length >= 4)
+  if (ammucchiati.length >= 4) osservazioni.push({ tipo: 'problema', chi: 'urbanista', testo: `${ammucchiati.length} mestieri abitano nello stesso isolato: ${ammucchiati.map(s => s.abitante.nome).join(', ')}. Le mani lavorano sempre insieme, non c'è una zona di nessuno.`, nucleo: 'i mestieri stanno tutti nello stesso isolato', argomento: 'case', tema: { mani: 1, cas: 1 }, nomi: ammucchiati.map(s => s.abitante.id), peso: 1, dati: { proposta: `Ogni mestiere prova una tavola da solo, senza gli altri, per vedere che terreno è suo.`, rovescio: `O forse è bello così: una bottega comune.` } })
+  // mestieri a digiuno
+  for (const s of mest) if (s.n < tot * 0.03) osservazioni.push({ tipo: 'problema', chi: s.abitante.id, testo: `Le mie mani le avete usate in ${s.n} tavole su ${tot}. ${s.abitante.strumenti!.join(', ')}: quasi mai.`, nucleo: `${s.abitante.nome} lavora quasi mai`, argomento: 'digiuno:' + s.abitante.id, tema: Object.fromEntries(s.abitante.strumenti!.map(x => ['m:' + x, 1])), nomi: [], peso: 1.1, dati: { proposta: `Una tavola dove comincia ${s.abitante.nome} e gli altri seguono.`, domanda: `Cosa sanno fare ${s.abitante.strumenti!.slice(0, 3).join(', ')} che nessun altro fa?` } })
+
+  // 3. il guizzo: emergente dal carattere (visionario, poco prudente) e da quanto ha visto di nuovo; al massimo uno al giorno
+  const guizzi = C.abitanti.map(a => [a, R.guizzo * (1 + a.carattere.visionario * 4) * (1 - a.carattere.prudente * 0.5) * (1 + a.visti.length / 400)] as const).filter(([, p]) => r() < p).sort((x, y) => y[1] - x[1])
+  if (guizzi.length) {
+    const a = guizzi[0][0]
+    const due = [P[Math.floor(r() * tot)], P[Math.floor(r() * tot)]]
+    const qa = quart(due[0].id)?.nome, qb = quart(due[1].id)?.nome
+    const forti = T.quartieri.slice().sort((x, y) => y.n - x.n).slice(0, 6).flatMap(q => q.concetti.slice(0, 1))
+    const nomeProposto = forti.length >= 2 ? `${forti[Math.floor(r() * forti.length)]}${uno(['ia', 'opoli', 'ana', ' Nuova', ' di Sopra'])}`.replace(/^./, c => c.toUpperCase()) : null
+    const tutte = [
+      { t: `E se costruissimo un ponte tra «${qa}» e «${qb}», due quartieri che non si parlano mai? Una tavola in mezzo, fatta con le mani di entrambi.`, n: `un ponte tra «${qa}» e «${qb}»`, p: `Un ponte tra «${qa}» e «${qb}».` },
+      C.nome ? null : nomeProposto && { t: `Questa città non ha un nome. Io la chiamerei ${nomeProposto}.`, n: `chiamare la città ${nomeProposto}`, p: `Chiamare la città ${nomeProposto}.` },
+      { t: `Facciamo crescere un albero vero in piazza: le radici nelle tavole più vecchie, i rami verso quelle di oggi.`, n: 'un albero in piazza', p: 'Un albero 3D in piazza, radici nelle tavole vecchie.' },
+      { t: `Una tavola che sia la mappa di questa città, vista da sopra, con le nostre case.`, n: 'una tavola-mappa della città', p: 'Una tavola che disegna la città.' },
+      { t: `Per un giorno lavoriamo al contrario: si parte dalla tavola più brutta del quartiere «${qa}» e la si porta a essere la migliore.`, n: `rifare la peggiore di «${qa}»`, p: `Riprendere la tavola più debole di «${qa}».` },
+      { t: `E se le tavole scartate avessero un quartiere loro, una specie di discarica bella?`, n: 'un quartiere degli scarti', p: 'Un quartiere per gli scarti.' },
+    ].filter(Boolean) as { t: string; n: string; p: string }[]
+    const g = uno(tutte.filter(x => !C.rete.some(n => n.testo === x.t)))
+    if (g) osservazioni.push({ tipo: 'guizzo', chi: a.id, testo: g.t, nucleo: g.n, argomento: 'guizzo:' + g.n, tema: vettoreDi(g.t), nomi: [], tavole: due.map(d => d.id), peso: 1.1, dati: { proposta: g.p, obiezione: `Bello, ma prima sistemiamo quello che c'è.`, battuta: `Va bene, ma stavolta lo finiamo.` } })
+  }
+
+  // una cosa già detta nei giorni scorsi non si ridice uguale: si dice «ancora» e si guarda il piano aperto, oppure si tace
+  for (const e of osservazioni) {
+    const prima = C.rete.find(n => n.giorno < C.giorno && n.tipo === e.tipo && n.testo === e.testo)
+    if (prima) { const piano = C.piani.find(p => p.stato !== 'chiuso' && cos(vettoreDi(p.cosa), e.tema) > 0.3); e.testo = piano ? `Ancora: ${e.nucleo ?? e.testo}. C'è già un piano («${piano.cosa.slice(0, 80)}»), ma è fermo.` : `Lo ripeto dal giorno ${prima.giorno}: ${e.nucleo ?? e.testo}.`; e.peso *= 0.6; (e as any).vecchia = true }
+  }
+  // in piazza: ognuno dice prima la sua se ce l'ha (chi l'ha notata), poi gli altri reagiscono secondo soglia
+  for (const a of C.abitanti) a.cella = 'piazza'
+  osservazioni.sort((x, y) => ((y as any).vecchia ? 0 : 1) - ((x as any).vecchia ? 0 : 1) + (r() - 0.5) * 0.8)
+  let vecchie = 0
+  for (const e of osservazioni.filter(x => !(x as any).vecchia || vecchie++ < 2).slice(0, 5)) {
+    if (e.chi) { verbale.push({ fase: 'piazza', chi: e.chi, tipo: e.tipo, testo: e.testo }); nota(e.tipo, e.testo, e.chi, e.tavole, e.tema) }
+    coda.push(e); discuti('piazza', C.abitanti.filter(a => a.cella === 'piazza'))
+  }
+
+  // 4. salti: chi ha un'urgenza (una domanda sua aperta) va direttamente in biblioteca o in bottega
+  for (const a of C.abitanti) {
+    const mie = C.domande.filter(d => d.chi === a.id && d.stato === 'aperta').length
+    const urge = mie * (0.6 + a.carattere.prudente) + (a.carattere.trascinatore > 0.7 ? 0.8 : 0)
+    if (urge > R.salto) { a.cella = mie ? 'biblioteca' : 'bottega'; verbale.push({ fase: 'piazza', chi: a.id, tipo: 'salto', testo: `Vado subito in ${a.cella}.` }) }
+  }
+  // 5. biblioteca: le domande aperte cercano risposta nella rete (prima quello che sappiamo già) e nelle letture
+  for (const d of C.domande.filter(x => x.stato === 'aperta').slice(0, 6)) {
+    if (d.stato !== 'aperta') continue
+    const v = vettoreDi(d.testo)
+    // prima: cosa è successo davvero, nell'archivio
+    const arg = (d as any).argomento as string | undefined
+    if (arg?.startsWith('frase:')) {
+      const f = arg.slice(6), con = opere.filter(w => String(w.title ?? '').toLowerCase().includes(f))
+      if (con.length) {
+        const gemelle = C.domande.filter(x => x !== d && x.stato === 'aperta' && (x as any).argomento === arg); for (const x of gemelle) { x.stato = 'risposta'; x.risposta = 'vedi sopra' }
+        const chiede = [d, ...gemelle].map(x => di(x.chi)).filter((x, i, a) => a.indexOf(x) === i)
+        const primo = con[0], mani = new Map<string, number>()
+        for (const w of con) for (const s of T.insiemi) if ((s.membri[w.id] ?? 0) > 0.3) mani.set(s.abitante.nome, (mani.get(s.abitante.nome) ?? 0) + 1)
+        const chi = [...mani].sort((x, y) => y[1] - x[1]).slice(0, 2).map(x => x[0])
+        const parole = new Map<string, number>(); for (const w of con) if (w.intention?.word) parole.set(w.intention.word, (parole.get(w.intention.word) ?? 0) + 1)
+        const temi = [...parole].sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0])
+        d.stato = 'risposta'; d.risposta = `dal giorno ${primo.day}, ${con.length} tavole`
+        verbale.push({ fase: 'biblioteca', chi: 'saggista', a: d.chi, tipo: 'risposta', testo: `Per ${chiede.join(' e ')}: «${f}» compare la prima volta il giorno ${primo.day} («${primo.title}»), poi in ${con.length} tavole. Torna soprattutto con ${temi.join(', ')}${chi.length ? `, e passa di più dalle mani ${chi.map(del_).join(' e ')}` : ''}.` })
+        nota('risposta', `«${f}»: dal giorno ${primo.day}, ${con.length} tavole, con ${temi.join(', ')}`, 'saggista', con.map(w => w.id))
+        continue
+      }
+    }
+    const dalla = C.rete.filter(n => n.tipo !== 'battuta' && n.tipo !== 'cammino').map(n => [n, cos(v, n.vettore)] as const).sort((x, y) => y[1] - x[1])[0]
+    const lett = (o.letture ?? []).map(l => [l, cos(v, vettoreDi(`${l.title} ${l.text?.slice(0, 2000) ?? ''}`))] as const).sort((x, y) => y[1] - x[1])[0]
+    if (lett && lett[1] > 0.12) { d.stato = 'risposta'; d.risposta = `in «${lett[0].title}» (${lett[0].source}) c'è un appiglio`; verbale.push({ fase: 'biblioteca', chi: 'saggista', a: d.chi, tipo: 'risposta', testo: `Per ${di(d.chi)}: su «${d.testo}» ho trovato «${lett[0].title}» (${lett[0].source}). Ve lo porto in piazza.` }) }
+    else if (dalla && dalla[1] > 0.3 && dalla[0].giorno < C.giorno) { d.stato = 'risposta'; d.risposta = dalla[0].testo; verbale.push({ fase: 'biblioteca', chi: 'saggista', a: d.chi, tipo: 'risposta', testo: `Per ${di(d.chi)}: ne avevamo già parlato il giorno ${dalla[0].giorno}: «${dalla[0].testo.slice(0, 140)}».` }) }
+    else verbale.push({ fase: 'biblioteca', chi: 'saggista', a: d.chi, tipo: 'cerca', testo: `Su «${d.testo}» per ora niente: la porto fuori, in rete (strato 3).` })
+  }
+  // 6. assemblea: richiama tutti; i piani proposti oggi diventano l'ordine del giorno (in questo strato si annotano e basta)
+  for (const a of C.abitanti) a.cella = TUTTI_IN.includes('assemblea') ? 'assemblea' : a.cella
+  const oggi = C.piani.filter(p => p.giorno === C.giorno)
+  if (oggi.length) verbale.push({ fase: 'assemblea', chi: 'urbanista', tipo: 'ordine', testo: `All'ordine del giorno: ${oggi.map(p => `${p.cosa} (${di(p.chi)})`).join('; ')}. Per ora lo annotiamo: decidere non è ancora nostro.` })
+  // 7. archivio: tutto resta nella rete
+  for (const a of C.abitanti) a.cella = 'casa'
+  nota('giornata', `Giorno ${C.giorno} della città: ${verbale.length} battute, ${oggi.length} proposte, ${C.domande.filter(d => d.giorno === C.giorno).length} domande.`)
+  return verbale
+}
+
+export { territorio }
+
+/** la città si porta dietro solo quello che le serve: la rete resta lunga ma leggera */
+export function compatta(C: Citta, max = 1500) {
+  C.rete = C.rete.slice(-max).map(n => ({ ...n, vettore: Object.fromEntries(Object.entries(n.vettore).sort((a, b) => b[1] - a[1]).slice(0, 12)) }))
+  C.domande = C.domande.slice(-200); C.piani = C.piani.slice(-200)
+  for (const a of C.abitanti) { a.storia = a.storia.slice(-60); a.visti = a.visti.slice(-200) }
+  return C
+}
