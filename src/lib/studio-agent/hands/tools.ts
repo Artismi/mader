@@ -4,6 +4,7 @@
  * applicarlo al foglio. Lo stesso strumento, usato da intenzioni diverse,
  * fa gesti diversi: il "senso" di uno strumento lo impara usandolo.
  */
+import { RIPOSO } from '@/components/studio/genera/recipes'
 import { RECIPES, TONES, runRecipe, shuffle as shuffleParams, defaults, type Tone } from '@/components/studio/genera/recipes'
 import { renderFx } from '@/components/studio/fx/render'
 import { FX_DEFS, LOOKS, newFx, type FxId } from '@/components/studio/fx/catalog'
@@ -69,7 +70,7 @@ const semina: Tool = {
   pushes: { densita: 0.3, complessita: 0.2, elementi: 0.2 },
   available: () => true,
   propose: (s, c) => {
-    const rc = pick(c.r, c.noText ? RECIPES.filter(x => !x.params.some(p => p.type === 'text')) : RECIPES)
+    const rc = pick(c.r, (c.noText ? RECIPES.filter(x => !x.params.some(p => p.type === 'text')) : RECIPES).filter(x => !RIPOSO.has(x.id)))
     const seed = Math.floor(c.r() * 1e9)
     return {
       recipe: rc.id, seed, values: shuffleParams(rc, defaults(rc), seed),

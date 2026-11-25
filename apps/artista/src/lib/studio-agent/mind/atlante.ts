@@ -20,6 +20,8 @@
  * proseguirlo (B diventa il nuovo A). Così il senso si costruisce nel tempo.
  */
 import { fattiDi, fraseDi } from '../voice/scrittura'
+import { disegnaAlbero } from '../hands/albero'
+import { RIPOSO } from '@/components/studio/genera/recipes'
 import { armoniaSu, rampa, hexToLch, type Armonia } from '../hands/colore'
 import type { AgentState, Reading } from '../core/types'
 import { pick, range, weighted, type Rnd } from '../core/rng'
@@ -46,7 +48,7 @@ import { disegnaCamera } from '../hands/camera'
 import { indirizzoPer } from '../hands/tools3'
 
 export type Rel = 'contro' | 'causa' | 'dentro' | 'identita' | 'diventa' | 'accanto'
-export interface Motivo { forma: Sogg | 'ricetta' | 'codice' | 'macchia' | 'cristallo' | 'camera'; macchia?: Macchia; indirizzo?: string; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
+export interface Motivo { forma: Sogg | 'ricetta' | 'codice' | 'macchia' | 'cristallo' | 'camera' | 'albero'; macchia?: Macchia; indirizzo?: string; gen?: string; trama: 'pieno' | 'righe' | 'punti' | 'tratteggio' | 'contorno'; colore: 'ink' | 'acc'; recipe?: string; seed: number; forza: number; nato: number }
 export interface Concetto { word: string; motivo?: Motivo; frasi: number; usi: number; ultima: number }
 export interface Frase { t: string; fonte: string; nomi: string[]; day: number; usata?: number; rel?: Rel }
 export interface Tesi { day: number; a: string; b: string; rel: Rel; frase: string; fonte: string; postura: 'legge' | 'conferma' | 'rovescia' | 'prosegue' | 'dubita' | 'deduce'; riuscita?: number }
@@ -225,7 +227,7 @@ const shapeOf = (w: string): Sogg | null => {
   for (const [r0, s] of SHAPE_ROOTS) if (w.startsWith(r0) && r0.length > len && w.length - r0.length <= (r0.length <= 3 ? 3 : 5)) { best = s; len = r0.length }
   return best
 }
-const TEXTLESS = () => RECIPES.filter(rc => !rc.params.some(p => p.type === 'text'))
+const TEXTLESS = () => RECIPES.filter(rc => !rc.params.some(p => p.type === 'text') && !RIPOSO.has(rc.id))
 
 /** la ricetta che meno concetti hanno già come segno: concetti diversi, segni diversi */
 function menoUsata(A: Atlante, r: Rnd, ids: string[]): string {
@@ -259,8 +261,9 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
   // niente forma nota: un mondo suo. La muffa, il cristallo, la camera (i mondi fisici: un indirizzo dà sempre lo stesso segno)
   if (!sh && r() < 0.7) {
     const q = r(), giorno = String(st.day)
-    c.motivo = q < 0.4 ? { forma: 'macchia', macchia: macchiaDa(Math.floor(r() * 1e9)), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
-      : { forma: q < 0.7 ? 'camera' : 'cristallo', indirizzo: indirizzoPer(q < 0.7 ? 'camera' : 'cristallo', r, giorno), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+    c.motivo = q < 0.3 ? { forma: 'macchia', macchia: macchiaDa(Math.floor(r() * 1e9)), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+      : q < 0.55 ? { forma: 'albero', trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
+      : { forma: q < 0.8 ? 'camera' : 'cristallo', indirizzo: indirizzoPer(q < 0.8 ? 'camera' : 'cristallo', r, giorno), trama, colore: r() < 0.35 ? 'acc' : 'ink', seed: Math.floor(r() * 1e9), forza: 0.4, nato: st.day }
     return c.motivo
   }
   if (!sh && r() < 0.6) {
@@ -279,6 +282,9 @@ export function motivoDi(st: AgentState, r: Rnd, w: string): Motivo {
 let ST: AgentState | null = null
 async function disegnaMotivo(m: Motivo, t: Tone, q: number, override?: string): Promise<HTMLCanvasElement> {
   const color = override ?? (m.colore === 'acc' ? t.acc : t.ink)
+  // le icone a riposo e i codici deboli rinascono come crescite naturali; e una muffa su tre diventa albero, radice, corallo o rizoma
+  if ((m.forma === 'ricetta' && RIPOSO.has(m.recipe ?? '')) || m.forma === 'codice' || !['macchia', 'cristallo', 'camera', 'albero', 'ricetta'].includes(m.forma) || (m.forma === 'macchia' && (m.seed >>> 0) % 3 === 0)) Object.assign(m, { forma: 'albero' })
+  if (m.forma === 'albero') return disegnaAlbero(m.seed, color, 900)
   if (m.forma === 'macchia') return disegnaMacchia(m.macchia ?? macchiaDa(m.seed), color)
   if (m.forma === 'cristallo') return disegnaCristallo(m.indirizzo ?? String(m.seed), { S: 900, colore: color, fondo: null })
   if (m.forma === 'camera') return disegnaCamera(m.indirizzo ?? String(m.seed), { S: 900, colore: color, fondo: null })
@@ -444,7 +450,7 @@ async function segnoGiudicato(m: Motivo, t: Tone, q: number, override?: string):
   // i simboli da repertorio (pugnali, emblemi) non sono segni suoi: diventano macchia
   if (m.forma === 'ricetta' && m.recipe === 'simbolo') Object.assign(m, { forma: 'macchia', macchia: macchiaDa(m.seed) })
   const cv = await disegnaMotivo(m, t, q, override)
-  if (m.forma === 'macchia' || m.forma === 'cristallo' || m.forma === 'camera') return cv
+  if (m.forma === 'macchia' || m.forma === 'cristallo' || m.forma === 'camera' || m.forma === 'albero') return cv
   // se ripete, se è un anello vuoto, se non ha massa (o il suo generatore non c'è più), il segno rinasce in un mondo suo
   // (muffa, camera, cristallo) e resta così
   const no = segnoBocciato(cv)

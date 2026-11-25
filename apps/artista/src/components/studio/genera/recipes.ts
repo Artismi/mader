@@ -792,6 +792,8 @@ const simbolo: Recipe = {
 
 // ─── catalogo ────────────────────────────────────────────────────────────────
 
+/** a riposo: icone da repertorio (artificiose, fatte a stampo) che l'agente non usa più; restano nel software per chi le vuole a mano */
+export const RIPOSO = new Set(['corona', 'sigillo', 'fascia', 'ghirigoro', 'falce', 'membrana', 'alieno', 'cromo', 'rametto', 'costellazione', 'fregio', 'simbolo'])
 export const RECIPES: Recipe[] = [
   membrana, rete, falce, corona, fascia, ghirigoro, alieno, cromo, goccia, macchia,
   colata, fette, fotocopia, vortice, bit,

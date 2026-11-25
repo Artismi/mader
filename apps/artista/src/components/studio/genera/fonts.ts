@@ -14,6 +14,15 @@ export const FACES = {
   bodoni: { family: 'Bodoni Moda', weight: 900, italic: true, track: -0.03 },
   grotesk: { family: 'Inter Tight', weight: 800, upper: true, track: -0.03 },
   mono: { family: 'Geist Mono', weight: 500, upper: true, track: 0.14 },
+  // da rivista: grotesk larghi e nervosi, serif ad alto contrasto, mono da display
+  syne: { family: 'Syne', weight: 800, upper: true, track: -0.03 },
+  spazio: { family: 'Space Grotesk', weight: 700, track: -0.03 },
+  fraunces: { family: 'Fraunces', weight: 900, track: -0.03 },
+  fraunces_corsivo: { family: 'Fraunces', weight: 400, italic: true, track: -0.01 },
+  giovane: { family: 'Young Serif', weight: 400, track: -0.01 },
+  spalle: { family: 'Big Shoulders Display', weight: 900, upper: true, track: 0 },
+  maggiore: { family: 'Major Mono Display', weight: 400, track: 0.04 },
+  bricolage: { family: 'Bricolage Grotesque', weight: 800, track: -0.04 },
 } satisfies Record<string, Face>
 
 export type FaceId = keyof typeof FACES
@@ -36,6 +45,21 @@ export function loadLabFonts(): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve()
   if (ready) return ready
   ready = (async () => {
+    // prima i file del progetto (/fonts): si caricano sempre, anche senza rete verso Google
+    const LOCALI: [string, string, number, string][] = [
+      ['UnifrakturMaguntia', 'unifrakturmaguntia-latin-400-normal', 400, 'normal'], ['Pirata One', 'pirata-one-latin-400-normal', 400, 'normal'],
+      ['Grenze Gotisch', 'grenze-gotisch-latin-900-normal', 900, 'normal'], ['Anton', 'anton-latin-400-normal', 400, 'normal'],
+      ['Unbounded', 'unbounded-latin-900-normal', 900, 'normal'], ['Instrument Serif', 'instrument-serif-latin-400-normal', 400, 'normal'],
+      ['Instrument Serif', 'instrument-serif-latin-400-italic', 400, 'italic'], ['Bodoni Moda', 'bodoni-moda-latin-900-italic', 900, 'italic'],
+      ['Bodoni Moda', 'bodoni-moda-latin-400-italic', 400, 'italic'], ['Inter Tight', 'inter-tight-latin-800-normal', 800, 'normal'],
+      ['Inter Tight', 'inter-tight-latin-500-normal', 500, 'normal'], ['Geist Mono', 'geist-mono-latin-500-normal', 500, 'normal'],
+      ['Geist Mono', 'geist-mono-latin-400-normal', 400, 'normal'], ['Syne', 'syne-latin-800-normal', 800, 'normal'],
+      ['Space Grotesk', 'space-grotesk-latin-700-normal', 700, 'normal'], ['Fraunces', 'fraunces-latin-900-normal', 900, 'normal'],
+      ['Fraunces', 'fraunces-latin-400-italic', 400, 'italic'], ['Young Serif', 'young-serif-latin-400-normal', 400, 'normal'],
+      ['Big Shoulders Display', 'big-shoulders-display-latin-900-normal', 900, 'normal'], ['Major Mono Display', 'major-mono-display-latin-400-normal', 400, 'normal'],
+      ['Bricolage Grotesque', 'bricolage-grotesque-latin-800-normal', 800, 'normal'],
+    ]
+    await Promise.all(LOCALI.map(async ([fam, file, w, st]) => { try { const f = new FontFace(fam, `url(/fonts/${file}.woff2)`, { weight: String(w), style: st }); await f.load(); document.fonts.add(f) } catch { /* resta Google */ } }))
     if (!document.getElementById('genera-fonts')) {
       const l = document.createElement('link')
       l.id = 'genera-fonts'; l.rel = 'stylesheet'; l.href = HREF
