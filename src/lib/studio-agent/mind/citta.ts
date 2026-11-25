@@ -50,7 +50,9 @@ export type Mostra = { giorno: number; curatore: string; opere: { id: string; ti
 export type RichiestaOfficina = { autore: string; scopo: string; strumenti: string[]; modo: 'zero' | 'ramo' | 'innesto'; base?: string; giorno: number }
 export type EsitoOfficina = { autore: string; nome: string; testo: string; tenuto: boolean; perche: string; scopo: string; giorno: number; discusso?: boolean }
 export type Cantiere = { id: string; giorno: number; chi: string; cosa: string; passi: { testo: string; dove: 'biblioteca' | 'bottega' | 'officina' | 'sito'; stato: 'da fare' | 'fatto' | 'aspetta' }[] }
-export type Citta = { osservatorio?: Osservatorio; officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
+// la sala di un quartiere, come la vuole il suo curatore: niente è obbligatorio, tutto è possibile
+export type Sala = { curatore: string; disposizione: 'parete' | 'griglia' | 'arco' | 'sospese' | 'colonna' | 'pavimento'; luce: 'calda' | 'fredda' | 'radente' | 'zenitale' | 'colore'; fondo: 'nero' | 'chiaro' | 'colore' | 'nessuno'; quante: number; perche: string; giorno: number }
+export type Citta = { sale?: Record<string, Sala>; osservatorio?: Osservatorio; officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
@@ -519,6 +521,23 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
       C.mostre.push(m); C.mostre = C.mostre.slice(-30)
       verbale.push({ fase: 'bottega', chi: 'curatore', tipo: 'mostra', testo: `Apro una sala nuova con ${scelte.length} tavole della bottega: ${scelte.map(x => `«${x.w!.title}» (${x.c.nome})`).join(', ')}.` })
     }
+  }
+
+  // 5c. le sale: chi abita di più un quartiere ne è il curatore e la allestisce come vuole; ogni tanto la cambia
+  C.sale ??= {}
+  const DISP: Sala['disposizione'][] = ['parete', 'griglia', 'arco', 'sospese', 'colonna', 'pavimento'], LUCI: Sala['luce'][] = ['calda', 'fredda', 'radente', 'zenitale', 'colore'], FONDI: Sala['fondo'][] = ['nero', 'chiaro', 'colore', 'nessuno']
+  for (const q of T.quartieri) {
+    const chi = T.insiemi.filter(s => s.quartieri[0] === q.id).sort((x, y) => y.n - x.n)[0] ?? T.insiemi.filter(s => s.quartieri.includes(q.id)).sort((x, y) => y.n - x.n)[0]
+    if (!chi) continue
+    const a = ab(chi.abitante.id); if (!a) continue
+    const vecchia = C.sale[q.id], k = String(q.id)
+    const cambia = !vecchia || (r() < 0.06 + a.carattere.visionario * 0.12 && C.giorno - vecchia.giorno >= 3)
+    if (!cambia) continue
+    const scegliDa = <X,>(l: X[], prima?: X) => { const altri = l.filter(x => x !== prima); return altri[Math.floor(r() * altri.length)] }
+    const s: Sala = { curatore: a.id, disposizione: scegliDa(DISP, vecchia?.disposizione), luce: a.carattere.malinconico > 0.6 ? 'radente' : scegliDa(LUCI, vecchia?.luce), fondo: scegliDa(FONDI, vecchia?.fondo), quante: Math.round(4 + r() * 6 + (a.carattere.trascinatore > 0.6 ? 3 : 0)), perche: '', giorno: C.giorno }
+    s.perche = `${s.disposizione === 'arco' ? 'un arco che abbraccia chi entra' : s.disposizione === 'colonna' ? 'una colonna da guardare dal basso' : s.disposizione === 'pavimento' ? 'le tavole a terra, da guardare camminando' : s.disposizione === 'sospese' ? 'sospese a diverse altezze, come pensieri' : s.disposizione === 'griglia' ? 'in ordine, per confrontarle' : 'su una parete, come in museo'}, luce ${s.luce}`
+    C.sale[k] = s
+    if (vecchia) verbale.push({ fase: 'archivio', chi: a.id, tipo: 'sala', testo: `Ho rifatto la sala «${q.nome}»: ${s.perche}${s.fondo !== 'nessuno' ? `, fondo ${s.fondo}` : ', senza fondo'}.` })
   }
 
   // 6. assemblea: richiama tutti, ovunque siano. Prima si guarda come vanno le decisioni in vigore, poi si vota.

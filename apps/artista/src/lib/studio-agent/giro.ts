@@ -471,7 +471,8 @@ export async function perLaCitta() {
   const { testoProgramma } = await import('./mind/ricette')
   return {
     nome: C.nome, giorno: C.giorno, giornoAgente: st.day, artista: st.name,
-    piazza: Tt.piazza, quartieri: Tt.quartieri.map(q => ({ id: q.id, nome: q.nome, x: q.x, y: q.y, n: q.n })),
+    piazza: Tt.piazza, quartieri: Tt.quartieri.map(q => ({ id: q.id, nome: q.nome, x: q.x, y: q.y, n: q.n, concetti: q.concetti, sala: C.sale?.[String(q.id)] ?? null })),
+    osservatorio: C.osservatorio ? { campioni: C.osservatorio.campioni, scoperte: C.osservatorio.scoperte.slice(-8).reverse(), ipotesi: C.osservatorio.ipotesi.filter(h => h.stato !== 'aperta').slice(-6).reverse().map(h => ({ testo: h.testo, stato: h.stato, fiducia: h.fiducia, chi: h.chi })) } : null,
     punti: Tt.punti.map(([id, x, y, q]) => { const w = works.get(id); return { id, x, y, q, t: (w?.title ?? '').slice(0, 90), g: w?.day ?? 0, i: +(w?.interest ?? 0.5).toFixed(2), k: w?.kept ? 1 : 0 } }),
     abitanti: C.abitanti.map(a => { const ins = Tt.insiemi.find(i => i.id === a.id); return { id: a.id, nome: a.nome, tipo: a.tipo, carica: a.carica, casa: ins?.casa ?? a.casa, raggio: ins?.raggio ?? a.raggio, n: ins?.n ?? 0, visti: a.visti.slice(-12) } }),
     giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
@@ -479,6 +480,7 @@ export async function perLaCitta() {
     mostre: (C.mostre ?? []).slice(-3).reverse(),
     cantieri: (C.cantieri ?? []).slice(-6).reverse(),
     annotazioni: C.rete.filter(n => n.dove?.length && n.chi && ['battuta', 'problema', 'ricordo', 'prova', 'guizzo', 'porta'].includes(n.tipo)).slice(-60).map(n => ({ chi: n.chi, testo: n.testo.slice(0, 160), tavola: n.dove![0], giorno: n.giorno, tipo: n.tipo })),
+    tavole: Object.fromEntries([...works.values()].filter(w => w.day >= st.day - 400).map(w => [w.id, { testo: (w.text ?? '').slice(0, 280) }])),
     officina: (lab?.programmi ?? []).filter(p => p.stato === 'tenuto').slice(-10).map(p => ({ nome: p.nome, autore: p.autore, punteggio: p.punteggio, testo: testoProgramma(p as never) })),
   }
 }
