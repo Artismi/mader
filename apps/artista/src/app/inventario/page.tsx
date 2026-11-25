@@ -23,11 +23,18 @@ export default function Inventario() {
           const s0 = await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json())
           const piatta = flatten(s0, 0.4)
           metti(piatta, `${i} piatta`)
-          metti(flatten(luceDiScena(s0, { angolo: -2.3, quota: 0.022, morbidezza: 0.012, rilievo: 0.8, nebbia: 0.2 }), 0.4), `${i} luce di scena`)
-          metti(vetro(piatta, { disegno: disegni[i % 6], canna: 0.06, curva: 1.1, ombra: 0.3, seme: i * 7 + 1 }), `${i} vetro ${disegni[i % 6]}`)
+          if (false) metti(flatten(luceDiScena(s0, { angolo: -2.3, quota: 0.022, morbidezza: 0.012, rilievo: 0.8, nebbia: 0.2 }), 0.4), `${i} luce di scena`)
+          if (false) metti(vetro(piatta, { disegno: disegni[i % 6], canna: 0.06, curva: 1.1, ombra: 0.3, seme: i * 7 + 1 }), `${i} vetro ${disegni[i % 6]}`)
           let a0 = i * 99 + 3; const rr = () => ((a0 = (a0 * 1664525 + 1013904223) >>> 0) / 4294967296)
           const { stira, tasselli } = await import('@/lib/studio-agent/hands/stiro')
-          metti(stira(flatten(s0, 0.4), rr, i % 2 === 0, 2), `${i} stiro`); metti(tasselli(flatten(s0, 0.4), rr, 3 + (i % 3), 4), `${i} tasselli`)
+          const { particelle, sciame } = await import('@/lib/studio-agent/hands/sciame')
+          const fig = s0.layers.filter(l => l.scale < 0.99 && !/testo|tipografia|etichette|firma/.test(l.kind)).sort((x, y) => y.scale - x.scale)[0]
+          if (fig) {
+            const sp = { ...s0, layers: s0.layers.map(l => l === fig ? { ...l, canvas: particelle(l.canvas, i + 1, 4, 0.6), blend: 'screen' as const } : l), bg: '#0b0b0c' }
+            metti(flatten(sp, 0.4), `${i} particelle`)
+            const sc = { ...s0, layers: s0.layers.map(l => l === fig ? { ...l, canvas: sciame(l.canvas, i + 1, 9, 0.6) } : l) }
+            metti(flatten(sc, 0.4), `${i} sciame`)
+          }
         } catch (e) { metti(document.createElement('canvas'), `${i} ERR ${String(e).slice(0, 40)}`) }
       }
       ;(window as unknown as { __fatto: boolean }).__fatto = true; return
