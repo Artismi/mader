@@ -27,6 +27,10 @@ export default function Inventario() {
     for (const [id, f] of Object.entries(FACES)) out.push({ gruppo: 'Caratteri', nome: id, testo: { fam: (f as { family: string }).family, peso: (f as { weight: number }).weight, it: !!(f as { italic?: boolean }).italic } as never })
     const SOLO = new URLSearchParams(location.search).has('breve')
     if (SOLO) {
+      const { acquaSu } = await import('@/lib/studio-agent/hands/acqua')
+      const tav = ['/img/a.jpg', '/img/b.jpg', '/img/c.jpg', '/img/d.jpg', '/img/e.jpg']
+      const modi = ['goccioloni', 'gocce', 'rugiada', 'brina', 'gelo'] as const
+      for (let i = 0; i < 5; i++) { try { const im = new Image(); im.src = tav[i]; await im.decode(); const b = document.createElement('canvas'); b.width = 540; b.height = 675; b.getContext('2d')!.drawImage(im, 0, 0, 540, 675); const w = acquaSu(b, modi[i], i * 991 + 7); b.getContext('2d')!.drawImage(w, 0, 0); const big = document.createElement('canvas'); big.width = 360; big.height = 450; big.getContext('2d')!.drawImage(b, 0, 0, 360, 450); out.push({ gruppo: 'Acqua (nuovo)', nome: modi[i], cv: big }) } catch (e) { out.push({ gruppo: 'Acqua (nuovo)', nome: `${modi[i]} ERR ${String(e).slice(0, 40)}` }) } }
       const { shuffle, defaults } = await import('@/components/studio/genera/recipes')
       for (const id of ['goccia', 'macchia']) { const rc = RECIPES.find(x => x.id === id)!; for (const k of [1, 2, 3, 4, 5, 6]) { try { out.push({ gruppo: 'Fumo e macchia (variati)', nome: `${id} ${k}`, cv: th(runRecipe(rc, shuffle(rc, defaults(rc), k * 313), k * 313, '4:5', 0.3) as unknown as HTMLCanvasElement) }) } catch (e) { out.push({ gruppo: 'Fumo e macchia (variati)', nome: `${id} ERR ${String(e).slice(0, 30)}` }) } } }
       for (const k of [1, 2, 3, 4, 5, 6]) out.push({ gruppo: 'Muffa (giunture nuove)', nome: `seme ${k}`, cv: th(disegnaMuffa(k * 7919, '#121212', 600)) })
@@ -60,7 +64,7 @@ export default function Inventario() {
     const root = ref.current!; let g0 = ''
     for (const v of out) {
       if (v.gruppo !== g0) { g0 = v.gruppo; const h = document.createElement('h2'); h.textContent = g0; h.style.cssText = 'width:100%;font:600 22px sans-serif;margin:24px 0 8px'; root.appendChild(h) }
-      const d = document.createElement('div'); d.style.cssText = 'width:180px;margin:4px;font:11px monospace;color:#222'
+      const d = document.createElement('div'); d.style.cssText = `width:${v.cv && v.cv.width > 200 ? 360 : 180}px;margin:4px;font:11px monospace;color:#222`
       if (v.cv) d.appendChild(v.cv)
       else if (v.testo) { const p = document.createElement('div'); p.style.cssText = `width:180px;height:225px;background:#fff;font-family:'${v.testo.fam}';font-weight:${v.testo.peso};font-style:${(v.testo as { it?: boolean }).it ? 'italic' : 'normal'};font-size:30px;line-height:1.05;overflow:hidden;padding:8px;box-sizing:border-box`; p.textContent = 'Il concetto costituisce la rivoluzione 0123'; d.appendChild(p) }
       else { const p = document.createElement('div'); p.style.cssText = 'width:180px;height:225px;background:#fdd'; d.appendChild(p) }

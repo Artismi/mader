@@ -39,7 +39,6 @@ export const FACES = {
   frammento: { family: 'Fragment Mono', weight: 400, track: 0.02 },
   marziano: { family: 'Martian Mono', weight: 400, upper: true, track: 0.06 },
   punti: { family: 'Handjet', weight: 600, upper: true, track: 0.02 },
-  telaio: { family: 'Jacquard 24', weight: 400, track: 0 },
 } satisfies Record<string, Face>
 
 export type FaceId = keyof typeof FACES

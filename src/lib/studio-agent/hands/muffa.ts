@@ -466,8 +466,12 @@ function rete(reg: Registro, S: number, colore: string, r: () => number) {
   reg.L = 'B'
   for (const [iF, f] of F.entries()) {
     // il corpo: più piccolo e diffuso (non una pallina incollata), grumi chiari che sfumano nella rete, e un ventaglio di filamenti
-    const R1 = S * (0.014 + 0.032 * f.m), base = 0.12 * iF / Math.max(1, F.length)
-    for (let i = 0; i < 60 + 120 * f.m; i++) { const a = r() * 6.283, d = Math.pow(r(), 0.7) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.05 + r() * 0.16) * (1 - 0.5 * d / R1); reg.t = base + 0.1 * d / R1; g.globalAlpha = 0.1 + r() * 0.22; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
+    // il corpo cambia da muffa a muffa: pallino denso (il plasmodio che mangia), diffuso, oppure niente (solo rete)
+    const corpo = (Math.floor(F[0].x * 7 + F[0].y * 13) % 3 + 3) % 3
+    if (corpo === 2 && iF > 0) continue
+    const R1 = S * (corpo === 0 ? 0.02 + 0.045 * f.m : 0.014 + 0.032 * f.m), base = 0.12 * iF / Math.max(1, F.length)
+    if (corpo === 0) for (let i = 0; i < 90 + 200 * f.m; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.08 + r() * 0.22); reg.t = base + 0.1 * d / R1; g.globalAlpha = 0.22 + r() * 0.3; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
+    else for (let i = 0; i < 60 + 120 * f.m; i++) { const a = r() * 6.283, d = Math.pow(r(), 0.7) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.05 + r() * 0.16) * (1 - 0.5 * d / R1); reg.t = base + 0.1 * d / R1; g.globalAlpha = 0.1 + r() * 0.22; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
     g.lineWidth = 0.5
     for (let i = 0; i < 24 + 40 * f.m; i++) { reg.t = base + 0.08; let x = f.x, y = f.y, an = r() * 6.283; const L0 = R1 * (1.2 + r() * 1.4); g.globalAlpha = 0.18 + r() * 0.2; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 10; k++) { an += (r() - 0.5) * 0.5; x += Math.cos(an) * L0 / 10; y += Math.sin(an) * L0 / 10; g.lineTo(x, y) } g.stroke() }
     // le pieghe: piccoli vuoti dentro il corpo
