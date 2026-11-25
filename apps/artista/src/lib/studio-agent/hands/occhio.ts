@@ -37,7 +37,8 @@ function scatola(s: Sheet, l: Layer, cache: Map<HTMLCanvasElement, Box>): Box {
 export function occhio(s: Sheet): { sheet: Sheet; note: string[] } {
   const cache = new Map<HTMLCanvasElement, Box>(), note: string[] = []
   const L = s.layers.map(l => ({ ...l, meta: l.meta ? { ...l.meta } : undefined }))
-  const S = s.W * s.H, m = Math.min(s.W, s.H) * 0.05
+  // il margine: proporzionato al lato corto (come nel mestiere editoriale), uguale per tutta la tavola
+  const S = s.W * s.H, m = Math.min(s.W, s.H) * 0.065
   const pieno = (l: Layer) => { const b = scatola(s, l, cache); return area(b) > S * 0.8 || b.x1 - b.x0 > s.W * 1.02 || b.y1 - b.y0 > s.H * 1.02 }
   const testi = L.filter(l => TXT.test(l.kind) && l.kind !== 'firma' && l.alpha > 0.2)
   const figure = L.filter(l => !TXT.test(l.kind) && l.alpha > 0.3 && !pieno(l) && area(scatola(s, l, cache)) > S * 0.004)
@@ -80,6 +81,35 @@ export function occhio(s: Sheet): { sheet: Sheet; note: string[] } {
     }
     if (best && bc < inter(b, box(altri[0]))) { sposta(l, b, best[0], best[1]); note.push(`sposto ${l.kind} dove c'è vuoto`) }
   }
+  // 5. la scala tipografica: le misure dei testi stanno su una scala modulare (corpo → sottotitolo → titolo, rapporto 1.5);
+  //    due misure troppo vicine (che si confondono) diventano la stessa; il titolo sta almeno due gradini sopra il corpo
+  {
+    const conMisura = testi.filter(t => t.meta?.size)
+    if (conMisura.length >= 2) {
+      const corpo = Math.min(...conMisura.map(t => t.meta!.size)), R = 1.5
+      for (const t of conMisura) {
+        const n = Math.max(0, Math.round(Math.log(t.meta!.size / corpo) / Math.log(R)))
+        const passo = t.meta!.ruolo === 'titolo' ? Math.max(2, n) : n, voluta = corpo * Math.pow(R, passo), k = voluta / t.meta!.size
+        if (Math.abs(k - 1) > 0.06 && k < 1.6) { t.scale *= k; t.meta!.size = voluta }
+      }
+      if (conMisura.length) note.push('i testi su una scala modulare')
+    }
+  }
+  // 6. la griglia: 12 colonne con canalini dentro i margini; i testi allineano il bordo sinistro alla colonna più vicina,
+  //    e quelli che stanno quasi sullo stesso asse ne prendono uno solo (un allineamento, non tanti)
+  {
+    const inW = s.W - 2 * m, col = inW / 12, assi: number[] = []
+    for (const t of [...testi].sort((a, b) => area(box(b)) - area(box(a)))) {
+      const b = box(t), w = b.x1 - b.x0
+      if (w > inW * 0.9) continue
+      let x0 = m + Math.round((b.x0 - m) / col) * col
+      const vicino = assi.find(a => Math.abs(a - x0) < col * 1.6)
+      if (vicino !== undefined) x0 = vicino; else assi.push(x0)
+      x0 = Math.max(m, Math.min(s.W - m - w, x0))
+      if (Math.abs(x0 - b.x0) > 1) t.x += (x0 - b.x0) / s.W
+    }
+    if (assi.length) note.push(`testi su ${assi.length} ${assi.length === 1 ? 'asse' : 'assi'} della griglia`)
+  }
   // 4a. un paragrafo lungo non si urla: torna a corpo da lettura (da qualunque strumento venga)
   for (const t of testi) {
     const n = t.meta?.text?.length ?? 0, sz = t.meta?.size ?? 0, tetto = n > 160 ? s.W * 0.028 : n > 90 ? s.W * 0.04 : Infinity
@@ -112,6 +142,27 @@ export function occhio(s: Sheet): { sheet: Sheet; note: string[] } {
       note.push(best.k < 1 ? 'un testo toccava altro: lo sposto e lo rimpicciolisco' : 'un testo toccava altro: lo sposto')
     }
     posati.push(t)
+  }
+  // 7. il contrasto: un testo che non si legge su ciò che ha sotto prende il colore che si legge (inchiostro o carta)
+  {
+    const sotto = newCanvas(Math.round(s.W / 4), Math.round(s.H / 4)), sg = sotto.getContext('2d', { willReadFrequently: true })!
+    sg.fillStyle = s.bg; sg.fillRect(0, 0, sotto.width, sotto.height)
+    for (const l of L) { if (TXT.test(l.kind)) continue; const side = Math.min(s.W, s.H) * l.scale / 4, k = side / Math.max(l.canvas.width, l.canvas.height); sg.save(); sg.globalAlpha = l.alpha; sg.globalCompositeOperation = l.blend; sg.translate(l.x * s.W / 4, l.y * s.H / 4); sg.rotate(l.rot); sg.scale(k, k); sg.drawImage(l.canvas, -l.canvas.width / 2, -l.canvas.height / 2); sg.restore() }
+    const lum = (r: number, g: number, b: number) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
+    const ctr = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+    for (const t of testi) {
+      const c = t.meta?.color; if (!c || c.length < 7) continue
+      const b = box(t), x0 = Math.max(0, Math.floor(b.x0 / 4)), y0 = Math.max(0, Math.floor(b.y0 / 4)), w = Math.max(1, Math.min(sotto.width - x0, Math.ceil((b.x1 - b.x0) / 4))), h = Math.max(1, Math.min(sotto.height - y0, Math.ceil((b.y1 - b.y0) / 4)))
+      if (w < 1 || h < 1) continue
+      const d = sg.getImageData(x0, y0, w, h).data; let lr = 0, n = 0
+      for (let i = 0; i < d.length; i += 16) { lr += lum(d[i], d[i + 1], d[i + 2]); n++ }
+      const fondo = lr / Math.max(1, n), lt = lum(parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16))
+      if (ctr(fondo, lt) >= 3) continue
+      const nuovo = fondo > 0.35 ? '#141312' : '#f3efe6', cv = newCanvas(t.canvas.width, t.canvas.height), g = cv.getContext('2d')!
+      g.drawImage(t.canvas, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = nuovo; g.fillRect(0, 0, cv.width, cv.height)
+      t.canvas = cv; t.meta!.color = nuovo
+      note.push('un testo non si leggeva: prende il colore che si legge')
+    }
   }
   return { sheet: { ...s, layers: L }, note }
 }
