@@ -423,7 +423,7 @@ export async function rendiScheda(st: AgentState, r: Rnd, sc0: Scheda, i: number
   // il testo: un'idea tipografica per tavola (mai la stessa di quella prima), con le due regole ferme
   const vietate: Impagina[] = ultimoTipo ? [ultimoTipo] : []
   if (sc.ruolo === 'parola') vietate.push('colonna', 'verticale')
-  const imp = await impaginaTesti(s, r, { titolo: sc.titolo, corpo: sc.corpo, fonte: sc.fonte ? `fonte: ${sc.fonte}` : undefined, numero: r() < 0.6 ? `${i}/${N}` : undefined }, {
+  const imp = await impaginaTesti(s, r, { titolo: sc.titolo, corpo: sc.corpo, fonte: sc.fonte ? `fonte: ${pulisciFonte(sc.fonte)}` : undefined, numero: r() < 0.6 ? `${i}/${N}` : undefined }, {
     face: big ? face : lettura, lettura, colori: [...colori, t.ink, t.acc], bg: t.bg, maiuscolo: !!L?.tipo.maiuscolo, barra: !!L?.tipo.barra,
     espressivo: !!L?.tipo.immagine || sc.ruolo === 'parola' || sc.ruolo === 'copertina' || !!sc.follia, zona,
   }, vietate)
@@ -504,4 +504,12 @@ export function imparaScalaMuffa(st: AgentState, sheet: { layers: { genera?: { t
     G.n++
   }
   G.media = media * 0.9 + voto * 0.1
+}
+
+/** il nome di una fonte come lo leggerebbe una persona: niente percorsi, trattini bassi, sigle di sistema; corto */
+export function pulisciFonte(f: string): string {
+  let t = f.split('/').pop() ?? f
+  t = t.replace(/\.(md|txt|json|html?)$/i, '').replace(/[_]+/g, ' ').replace(/\s*-\s*/g, ' – ').replace(/\b(per|for)\s+stateyour\b/gi, '').replace(/\bstateyour\b/gi, '').replace(/\s+/g, ' ').trim()
+  if (t.length > 48) t = t.slice(0, 48).replace(/\s+\S*$/, '') + '…'
+  return t.charAt(0).toUpperCase() + t.slice(1)
 }

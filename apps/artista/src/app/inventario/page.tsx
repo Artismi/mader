@@ -9,6 +9,25 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('forme')) {
+      const F = await import('@/lib/studio-agent/hands/forma'); const forme = await F.caricaForme(); const root = ref.current!
+      const cose = ['albero', 'mano', 'pesce', 'casa', 'uccello', 'farfalla', 'teschio', 'fungo', 'cavallo', 'faro']
+      const S = 300
+      for (const [i, c] of cose.entries()) {
+        const f = F.formaDi(forme, c); if (!f) continue
+        const riga = document.createElement('div'); riga.style.cssText = 'display:flex;gap:4px;margin:4px;font:11px monospace;align-items:center'; root.appendChild(riga)
+        const t = document.createElement('div'); t.textContent = c; t.style.width = '70px'; riga.appendChild(t)
+        const st = F.stampoDi(f, i % 3, S)
+        const box = (cv: HTMLCanvasElement, bg = '#efe9dd') => { const w = document.createElement('canvas'); w.width = 150; w.height = 150; const g = w.getContext('2d')!; g.fillStyle = bg; g.fillRect(0, 0, 150, 150); g.drawImage(cv, 0, 0, 150, 150); riga.appendChild(w) }
+        box(st.tratto)
+        const m = document.createElement('canvas'); m.width = st.W; m.height = st.H; const mg = m.getContext('2d')!, id = mg.createImageData(st.W, st.H); for (let k = 0; k < st.W * st.H; k++) { id.data[k * 4 + 3] = st.dentro[k] ? 200 : 0 } mg.putImageData(id, 0, 0); box(m)
+        box(F.crescitaNelloStampo(st, i * 101 + 7, '#1b1a17', S))
+        box(F.crescitaNelloStampo(st, i * 59 + 3, '#2b2f6b', S), '#d9e4dc')
+        const u = F.universoSimile(st, i * 997 + 11, '#7a1d12', S, 40); box(u.tela)
+        box(F.aMemoria(f, i % 3, i * 13 + 1, '#141414', S))
+      }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     if (new URLSearchParams(location.search).has('bottega')) {
       const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const { TOOLS } = await import('@/lib/studio-agent/hands/tools'); const { flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng, weighted } = await import('@/lib/studio-agent/core/rng')
       const Q = await import('@/lib/studio-agent/mind/quaderno'); const { look } = await import('@/lib/studio-agent/mind/studio'); const { loadOrCreate } = await import('@/lib/studio-agent/day')
