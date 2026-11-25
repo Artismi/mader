@@ -123,7 +123,7 @@ function gelo(base: HTMLCanvasElement, src: Uint8ClampedArray, M: Uint8ClampedAr
   const zA = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : zd[(Math.floor(y) * W + Math.floor(x)) * 4 + 3] / 255
   const segni: [number, number, number, number, number, number][] = []
   const piuma = (x: number, y: number, an: number, L: number, w: number, prof: number) => {
-    if (L < S * 0.003 || prof > 5) return
+    if (L < S * 0.003 || prof > 5 || segni.length > 60000) return
     let cx = x, cy = y, a0 = an
     const passi = 6
     for (let i = 0; i < passi; i++) {
@@ -144,10 +144,19 @@ function gelo(base: HTMLCanvasElement, src: Uint8ClampedArray, M: Uint8ClampedAr
     const an = Math.hypot(gx, gy) > 0.01 ? Math.atan2(-gy, -gx) + (r() - 0.5) * 0.9 : r() * 6.283
     piuma(x, y, an, S * (0.04 + r() * 0.1) * z, Math.max(0.4, S * 0.0011), 0)
   }
-  const disegnaSegni = (alpha: number, extra: number) => { g.lineCap = 'round'; for (const [x1, y1, x2, y2, w, al] of segni) { g.globalAlpha = al * alpha; g.lineWidth = w + extra; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke() } }
-  g.strokeStyle = 'rgb(235,245,255)'
-  g.filter = `blur(${Math.max(1, S * 0.003)}px)`; disegnaSegni(0.45, S * 0.002); g.filter = 'none'
-  g.strokeStyle = '#fff'; disegnaSegni(0.9, 0)
+  // i segni si disegnano a gruppi (per opacità e spessore), in pochi tracciati: prima l'alone su un foglio sfocato una volta sola
+  if (segni.length > 60000) segni.length = 60000
+  const disegnaSegni = (q: CanvasRenderingContext2D, alpha: number, extra: number) => {
+    q.lineCap = 'round'
+    const gruppi = new Map<string, number[]>()
+    for (let i = 0; i < segni.length; i++) { const [, , , , w, al] = segni[i]; const k = `${Math.round(al * 8)}|${Math.round(w * 4)}`; const a = gruppi.get(k); if (a) a.push(i); else gruppi.set(k, [i]) }
+    for (const [k, idx] of gruppi) { const [a8, w4] = k.split('|').map(Number); q.globalAlpha = (a8 / 8) * alpha; q.lineWidth = w4 / 4 + extra; q.beginPath(); for (const i of idx) { const [x1, y1, x2, y2] = segni[i]; q.moveTo(x1, y1); q.lineTo(x2, y2) } q.stroke() }
+    q.globalAlpha = 1
+  }
+  const alone = newCanvas(W, H), ag = alone.getContext('2d')!
+  ag.strokeStyle = 'rgb(235,245,255)'; disegnaSegni(ag, 0.45, S * 0.002)
+  g.filter = `blur(${Math.max(1, S * 0.003)}px)`; g.drawImage(alone, 0, 0); g.filter = 'none'
+  g.strokeStyle = '#fff'; disegnaSegni(g, 0.9, 0)
   // grana di vetro smerigliato: puntini fitti e minuscoli, più densi dove il gelo è forte
   g.fillStyle = '#fff'
   for (let i = 0; i < (modo === 'brina' ? 30000 : 16000); i++) { const x = r() * W, y = r() * H, z = zA(x, y); if (z < 0.2 || r() > z) continue; g.globalAlpha = 0.08 + r() * 0.25; g.fillRect(x, y, 1, 1) }

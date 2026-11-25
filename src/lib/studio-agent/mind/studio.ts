@@ -11,6 +11,7 @@ import { weighted, type Rnd } from '../core/rng'
 import { flatten, rettangoloVuoto, type Sheet } from '../hands/sheet'
 import { TOOLS, type Tool, type ToolCtx } from '../hands/tools'
 import { applica } from '../hands/tools'
+import { scegli, applicaDove, annota, visibile, affinita, conoscenza, quadernoDi } from './quaderno'
 import { measure, rasterize } from '../eyes/measure'
 import { patches } from '../eyes/visual-words'
 import { flaws as flawsOf, readability } from '../eyes/judgement'
@@ -123,13 +124,22 @@ export async function runStudio(
     // con la regia lo studio lavora la materia, non aggiunge cose a caso
     const avail = TOOLS.filter(t => t.available(sheet, ctx) && (!ctx.noText || !REGIA_NO.has(t.id)))
     if (!avail.length) break
-    const tool = weighted(r, avail, t => urgency(t, sheet, st, intention, sheet.layers.length ? cur.f : null, st.mood) * (ctx.noText && SPERIMENTA.has(t.id) ? 1.8 : 1) * (ctx.preferiti?.includes(t.id) ? 2.5 : 1), T)
+    // la scelta dello strumento: urgenza, più quello che ha imparato dal quaderno (com'è andato con questa parola),
+    // più la curiosità per ciò che conosce poco; uno strumento che sa essere troppo lento per ora lo lascia
+    const parola = intention.word ?? ''
+    const tool = weighted(r, avail.filter(t => (quadernoDi(st).schede[t.id]?.costo ?? 0) < 25000), t => urgency(t, sheet, st, intention, sheet.layers.length ? cur.f : null, st.mood) * (ctx.noText && SPERIMENTA.has(t.id) ? 1.8 : 1) * (ctx.preferiti?.includes(t.id) ? 2.5 : 1) * Math.exp(affinita(st, t.id, parola) * 6) * (1 + 0.8 * (1 - conoscenza(st, t.id))), T)
+    if (!tool) break
     let next: Sheet
-    const params = tool.propose(sheet, ctx)
-    try { next = await applica(tool, sheet, params, ctx) } catch (e) { console.warn('[studio-agent] gesto fallito', tool.id, e); continue }
+    // le regolazioni e il dove: le sceglie lui, dal quaderno (con la tavola vuota usa la proposta dello strumento)
+    const sc = sheet.layers.length ? scegli(st, tool, sheet, ctx, cur.f, r) : { p: tool.propose(sheet, ctx), dove: { modo: 'tutta' as const }, x: [] as number[] }
+    const params = sc.p
+    const t0 = performance.now()
+    try { next = await applicaDove(tool, sheet, params, ctx, sc.dove) } catch (e) { console.warn('[studio-agent] gesto fallito', tool.id, e); continue }
+    const ms = performance.now() - t0
     const nl = look(st, next, intention)
     const delta = nl.score - cur.score
     const keep = delta >= 0 || r() < Math.exp(delta / (0.04 * T))
+    if (sc.x.length) annota(st, tool.id, { x: sc.x, w: parola, vis: visibile(sheet, next), cambio: Object.keys(nl.f).reduce((a, k) => a + Math.abs((nl.f[k] ?? 0) - (cur.f[k] ?? 0)), 0) / Math.max(1, Object.keys(nl.f).length), delta, tenuto: keep, ms, quando: Date.now() }, ms)
     const g: Gesture = { tool: tool.id, params: summarize(params), kept: keep, delta: Math.round(delta * 1000) / 1000 }
     gestures.push(g)
     effects.push({ tool: tool.id, before: cur.f, after: nl.f, delta })

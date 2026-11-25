@@ -9,6 +9,76 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('bottega')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const { TOOLS } = await import('@/lib/studio-agent/hands/tools'); const { flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng, weighted } = await import('@/lib/studio-agent/core/rng')
+      const Q = await import('@/lib/studio-agent/mind/quaderno'); const { look } = await import('@/lib/studio-agent/mind/studio'); const { loadOrCreate } = await import('@/lib/studio-agent/day')
+      const st = await loadOrCreate(); const r = rng(7)
+      const ids: string[] = await (await fetch('/cassetto/indice.json')).json(); const root = ref.current!
+      const tav = [] as Awaited<ReturnType<typeof ricostruisci>>[]; for (const id of ids.slice(0, 6)) tav.push(await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json()))
+      const parole = ['tempo', 'città', 'memoria', 'frattura', 'territorio', 'acqua']
+      const fine = performance.now() + 420000
+      for (let i = 0; i < 400 && performance.now() < fine; i++) {
+        const k = Math.floor(r() * tav.length), s0 = tav[k], w = parole[k]
+        const c = { r, tone: { id: 'x', label: '', bg: s0.bg ?? '#ebe6dc', ink: '#121212', acc: '#e3361b', dark: false }, intention: { word: w, register: 'poetico', targets: {}, tools: [], why: '' }, mood: 'curioso', say: () => w, shaders: [], quality: 1 } as never
+        const av = TOOLS.filter(t => { try { return t.available(s0, c) && (Q.quadernoDi(st).schede[t.id]?.costo ?? 0) < 25000 } catch { return false } })
+        const t = weighted(r, av, x => 0.2 + (1 - Q.conoscenza(st, x.id)) ** 2, 1)
+        const L0 = look(st, s0, (c as { intention: never }).intention); const sc = Q.scegli(st, t, s0, c, L0.f, r)
+        const t0 = performance.now(); let s1
+        try { s1 = await Q.applicaDove(t, s0, sc.p, c, sc.dove) } catch (e) { console.log('ERR', t.id, String(e).slice(0, 80)); continue }
+        const ms = performance.now() - t0, L1 = look(st, s1, (c as { intention: never }).intention), vis = Q.visibile(s0, s1)
+        Q.annota(st, t.id, { x: sc.x, w, vis, cambio: 0, delta: L1.score - L0.score, tenuto: L1.score >= L0.score, ms, quando: Date.now() }, ms)
+        if (i < 96) { const box = document.createElement('div'); box.style.cssText = 'display:inline-block;margin:2px;font:9px monospace;width:96px;vertical-align:top'; const cv = flatten(s1, 0.13); cv.style.width = '96px'; box.appendChild(cv); box.appendChild(document.createTextNode(`${t.id} ${sc.dove.modo} ${(L1.score - L0.score).toFixed(2)} v${(vis * 100).toFixed(0)}`)); root.appendChild(box) }
+      }
+      for (const t of TOOLS) console.log('Q', Q.racconta(st, t.id), 'costo', Math.round(Q.quadernoDi(st).schede[t.id]?.costo ?? 0), 'regole', (Q.quadernoDi(st).schede[t.id]?.regole ?? []).map(g => g.k).join(','))
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
+    if (new URLSearchParams(location.search).has('tutti')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const { TOOLS } = await import('@/lib/studio-agent/hands/tools'); const { flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng } = await import('@/lib/studio-agent/core/rng')
+      const ids: string[] = await (await fetch('/cassetto/indice.json')).json(); const root = ref.current!
+      const basi = [] as Awaited<ReturnType<typeof ricostruisci>>[]; for (const id of ids.slice(0, 2)) basi.push(await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json()))
+      const riga0 = document.createElement('div'); riga0.style.cssText = 'display:inline-block;margin:3px;font:10px monospace;width:170px'; root.appendChild(riga0)
+      for (const b of basi) { const cv = flatten(b, 0.15); cv.style.width = '80px'; riga0.appendChild(cv) } riga0.appendChild(document.createTextNode('ORIGINALI'))
+      for (const t of TOOLS) {
+        const box = document.createElement('div'); box.style.cssText = 'display:inline-block;margin:3px;font:10px monospace;width:170px;vertical-align:top'; root.appendChild(box)
+        for (const [i, b] of basi.entries()) { const c = { r: rng(i * 11 + 3), tone: { id: 'x', label: '', bg: b.bg ?? '#ebe6dc', ink: '#121212', acc: ['#1630ff', '#e3361b'][i], dark: false }, intention: { word: 'tempo', register: 'poetico', targets: {}, tools: [], why: '' }, mood: 'calmo', say: () => 'tempo', shaders: [], quality: 1 } as never
+          const t0 = performance.now(); let ok = 'ok'
+          try { if (!t.available(b, c)) { ok = 'n/d'; const cv = flatten(b, 0.15); cv.style.cssText = 'width:80px;opacity:.25'; box.appendChild(cv) } else { const s1 = await Promise.race([t.apply(b, t.propose(b, c), c), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('lento')), 40000))]); const cv = flatten(s1, 0.15); cv.style.width = '80px'; box.appendChild(cv) } } catch (e) { ok = 'ERR ' + String(e).slice(0, 40); const d = document.createElement('div'); d.style.cssText = 'width:80px;height:100px;display:inline-block;background:#fcc'; box.appendChild(d) }
+          box.dataset['t' + i] = `${ok} ${Math.round(performance.now() - t0)}ms` }
+        box.appendChild(document.createTextNode(`${t.id} · ${box.dataset.t0} · ${box.dataset.t1}`)); console.log('TOOL', t.id, box.dataset.t0, box.dataset.t1)
+      }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
+    if (new URLSearchParams(location.search).has('raccolta')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const { raccolta, raccoltaACaso } = await import('@/lib/studio-agent/hands/raccolta'); const { flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng } = await import('@/lib/studio-agent/core/rng')
+      const ids: string[] = await (await fetch('/cassetto/indice.json')).json(); const root = ref.current!
+      const fot = async (id: string) => { const f = flatten(await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json()), 1); const c = document.createElement('canvas'); c.width = 540; c.height = 960; const g = c.getContext('2d')!; g.fillStyle = '#111'; g.fillRect(0, 0, 540, 960); const h = 540 * f.height / f.width; g.drawImage(f, 0, (960 - h) / 2, 540, h); return c }
+      for (const [k, [a, b]] of [[0, 1], [2, 3], [4, 5]].entries()) {
+        const A = await fot(ids[a % ids.length]), B = await fot(ids[b % ids.length]); const o = raccoltaACaso(rng(k * 17 + 3)); o.passo = 2; o.quota = 1
+        const fin = raccolta([{ tav: 0, t0: 0, t1: 2 }, { tav: 1, t0: 2, t1: 4 }], { beat: 0.5 } as never, o)
+        const riga = document.createElement('div'); riga.style.cssText = 'display:flex;gap:3px;margin:4px;font:10px monospace'; riga.textContent = `${o.viaggio} ${o.resa} scia ${o.scia.toFixed(1)} orbita ${o.orbita.toFixed(1)}`; root.appendChild(riga)
+        for (const t of [1.25, 1.55, 1.8, 1.95, 2.1, 2.35, 2.6, 2.8]) { const src = t < 2 ? A : B; const c = document.createElement('canvas'); c.width = 540; c.height = 960; c.getContext('2d')!.drawImage(src, 0, 0); const out = fin(c, t) ?? c; const v = document.createElement('canvas'); v.width = 180; v.height = 320; v.getContext('2d')!.drawImage(out, 0, 0, 180, 320); riga.appendChild(v) }
+      }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
+    if (new URLSearchParams(location.search).has('segnali')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const T = await import('@/lib/studio-agent/hands/segnali'); const { flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng } = await import('@/lib/studio-agent/core/rng')
+      const ids: string[] = (await (await fetch('/cassetto/indice.json')).json()).slice(0, 3); const root = ref.current!
+      for (const t of [T.ondineTool, T.mosaicoTool, T.colataTool, T.ditherTool, T.memoriaTool]) for (const [i, id] of ids.entries()) { const s0 = await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json()); const c = { r: rng(i * 13 + 5), tone: { bg: '#ebe6dc', ink: '#121212', acc: ['#1630ff', '#e3361b', '#d4ff2a'][i % 3] } } as never; const s1 = await t.apply(s0, t.propose(s0, c), c); const cv = flatten(s1, 0.3); cv.style.width = '160px'; cv.style.margin = '2px'; cv.title = t.id; root.appendChild(cv) }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
+    if (new URLSearchParams(location.search).has('fette')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const { affettatoreTool } = await import('@/lib/studio-agent/hands/affettatore'); const { flatten } = await import('@/lib/studio-agent/hands/sheet'); const { rng } = await import('@/lib/studio-agent/core/rng')
+      const ids: string[] = await (await fetch('/cassetto/indice.json')).json(); const root = ref.current!
+      for (const [i, id] of ids.entries()) { const s0 = await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json()); for (const k of [0, 1]) { const c = { r: rng(i * 31 + k * 7 + 2), tone: { bg: '#ebe6dc', ink: '#121212', acc: ['#16c25a', '#e3361b', '#1630ff', '#d4ff2a'][(i + k) % 4] } } as never; const p = affettatoreTool.propose(s0, c); const s1 = await affettatoreTool.apply(s0, p, c); const cv = flatten(s1, 0.45); const dv = document.createElement('div'); dv.style.cssText = 'width:240px;margin:3px;font:10px monospace'; cv.style.width = '240px'; dv.appendChild(cv); const l = document.createElement('div'); l.textContent = `${(p as { colonne: number }).colonne}x${(p as { righe: number }).righe} ${(p as { retino: string }).retino}`; dv.appendChild(l); root.appendChild(dv) } }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
+    if (new URLSearchParams(location.search).has('vetri')) {
+      const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto'); const { vetroTool } = await import('@/lib/studio-agent/hands/vetro'); const { flatten } = await import('@/lib/studio-agent/hands/sheet')
+      const ids: string[] = await (await fetch('/cassetto/indice.json')).json(); const root = ref.current!
+      const prove: [string, number, number][] = [['vetrata', 0.06, 1.0], ['verticale', 0.05, 1.2], ['martellato', 0.08, 0.9], ['tasselli', 0.04, 1.1], ['croce', 0.06, 1.3], ['vetrata', 0.05, 1.0]]
+      for (const [i, id] of ids.entries()) { const s0 = await ricostruisci(await (await fetch(`/cassetto/${id}.json`)).json()); for (const k of [0, 1]) { const [d, cn, cu] = prove[(i * 2 + k) % 6]; const s1 = await vetroTool.apply(s0, { disegno: d, canna: cn, curva: cu, ombra: 0.35, seme: i * 5 + k, aria: 0.4 + k * 0.5, indice: 0.7, sabbia: k ? 0.6 : 0.2, tinta: 0.25, bolle: k ? 0.5 : 0.15, luce: -2.2 + i * 0.5, lucido: 0.6, colori: ['#c8d6d2', '#e9d8a6', '#9fb8c9', '#d9a7a0'], layer: '' }, {} as never); const cv = flatten(s1, 0.45); const dv = document.createElement('div'); dv.style.cssText = 'width:240px;margin:3px;font:11px monospace'; cv.style.width = '240px'; dv.appendChild(cv); const l = document.createElement('div'); l.textContent = d; dv.appendChild(l); root.appendChild(dv) } }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     if (new URLSearchParams(location.search).has('vere')) {
       const { ricostruisci } = await import('@/lib/studio-agent/hands/cassetto')
       const { luceDiScena } = await import('@/lib/studio-agent/hands/luce3d')

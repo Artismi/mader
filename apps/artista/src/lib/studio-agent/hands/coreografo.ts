@@ -18,6 +18,7 @@
  *    insieme (attenzione), quanto i movimenti cadono sui colpi (sincronia), quanta quiete c'è (respiro), varietà
  *    dei gesti, novità rispetto a quelle già fatte. Vince la migliore; i suoi gesti si rafforzano nella memoria.
  */
+import { nuvolaDi, disegnaNuvola, type Nuvola, type OpzioniRaccolta } from './raccolta'
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import { rettangoloVuoto, flatten, sfuma, type Layer, type Sheet } from './sheet'
 import type { Brano } from '../suono/beat'
@@ -873,7 +874,7 @@ export function descriviCoreografia(c: Coreografia): string {
 }
 
 // ── il disegno ──
-export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreografia; riprese: Ripresa[]; testi?: { t0: number; t1: number; cv: HTMLCanvasElement }[]; finitura?: (cv: HTMLCanvasElement, t: number) => HTMLCanvasElement | null; copertina?: (ms: number) => void; leggibilita?: (x: { media: number; peggiore: number; salvati: number; campioni: number }) => void; provini?: number[]; suiProvini?: (cv: HTMLCanvasElement[]) => void }): Promise<Blob | null> {
+export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreografia; riprese: Ripresa[]; testi?: { t0: number; t1: number; cv: HTMLCanvasElement }[]; finitura?: (cv: HTMLCanvasElement, t: number) => HTMLCanvasElement | null; nuvola?: OpzioniRaccolta | null; copertina?: (ms: number) => void; leggibilita?: (x: { media: number; peggiore: number; salvati: number; campioni: number }) => void; provini?: number[]; suiProvini?: (cv: HTMLCanvasElement[]) => void }): Promise<Blob | null> {
   // i provini: solo alcuni fotogrammi, senza girare il video (per scegliere tra più versioni)
   const soloProvini = o.provini ? new Set(o.provini.map(t => Math.round(t * FPS))) : null, raccolti: HTMLCanvasElement[] = []
   if (!soloProvini && typeof VideoEncoder === 'undefined') return null
@@ -1093,6 +1094,32 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
     q.globalCompositeOperation = 'source-over'
     return c
   }
+  // la nuvola (da Gather): uno strato in più solo sugli oggetti che contano (il protagonista e le figure grandi di ogni tavola),
+  // resi in volume come fa il modello 3D del software di grafica; sui passaggi tra tavole si sciolgono e si ricompongono in punti
+  const NV = o.nuvola && !soloProvini ? o.nuvola : null, nuvole = new Map<number, Nuvola | null>(), contano = new Set<number>()
+  if (NV) {
+    const tavs = new Set(scena.nodi.map(n => n.tav))
+    for (const tv of tavs) {
+      const pr = scena.protagonista?.get(tv); if (pr !== undefined && !scena.nodi[pr].lettera && scena.nodi[pr].ruolo !== 'testo' && scena.nodi[pr].ruolo !== 'fondo') contano.add(scena.nodi[pr].id)
+      scena.nodi.filter(n => n.tav === tv && n.ruolo === 'figura' && !n.lettera && (n.sprite || n.vivo) && n.area > W * H * 0.05 && n.area < W * H * 0.7).sort((a, b) => b.area - a.area).slice(0, 2).forEach(n => contano.add(n.id))
+    }
+  }
+  const dNv = br.beat * 3
+  const nuvolaE = (n: Nodo, rp: { t0: number; t1: number }, t: number): [number, number] => {
+    if (!NV || !contano.has(n.id)) return [0, 0]
+    if (rp.t1 < br.durata - 1e-3 && t > rp.t1 - dNv) return [1 - (rp.t1 - t) / dNv, -1]
+    if (rp.t0 > 1e-3 && t < rp.t0 + dNv) return [1 - (t - rp.t0) / dNv, 1]
+    return [0, 0]
+  }
+  const conNuvola = (g: CanvasRenderingContext2D, n: Nodo, src: HTMLCanvasElement, e: number, lato: number, t: number, sc: number, chiaro = false) => {
+    if (!nuvole.has(n.id)) nuvole.set(n.id, nuvolaDi(src, n.id * 7919 + (NV!.seme | 0)))
+    const nv = nuvole.get(n.id); if (!nv) return false
+    const ee = e * e * (3 - 2 * e), a0 = g.globalAlpha
+    g.globalAlpha = a0 * (1 - Math.min(1, ee / 0.4)); g.drawImage(src, -n.w / 2, -n.h / 2, n.w, n.h)
+    g.save(); g.scale(n.w / nv.w, n.h / nv.h); g.globalAlpha = a0
+    disegnaNuvola(g, nv, sc * n.w / nv.w, ee, lato, t, chiaro && NV!.resa === 'nero' ? { ...NV!, resa: 'vero' } : !chiaro && NV!.resa === 'bianco' ? { ...NV!, resa: 'nero' } : NV!, (n.id * 2.399) % 6.283)
+    g.restore(); return true
+  }
   for (let f = 0; f < Math.round(br.durata * FPS); f++) {
     if (soloProvini && !soloProvini.has(f)) continue
     const tReale = f / FPS
@@ -1166,6 +1193,8 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
         if (P.cambio === 'muta' && n.vivo) s.fase = (s.fase ?? 0) + 0.5 * clamp(u / beat)
         if (P.cambio !== 'sboccia' && n.lettera) { const m = u < 0 ? 0 : molla(u, 14, 0.35); s.sc *= m }
       }
+      // sulla soglia tra due tavole le figure che contano non svaniscono: restano intere e diventano nuvola
+      if (NV && nuvolaE(n, rp, t)[0] > 0.02) { s.alpha = Math.max(s.alpha, n.alpha); s.sc = Math.max(s.sc, 1); s.sfalda = 0; s.rivela = 1; s.scrivi = 1; if (n.vivo) s.crescita = 1 }
       if (s.alpha <= 0.002 || s.sc <= 0.002) continue
       // indietro se passa sotto un testo
       if (n.ruolo !== 'fondo' && n.ruolo !== 'testo' && sotto.length) { const x0 = n.x + s.dx - n.w * s.sc / 2, y0 = n.y + s.dy - n.h * s.sc / 2, x1 = x0 + n.w * s.sc, y1 = y0 + n.h * s.sc; const ov = sotto.reduce((a, b) => a + Math.max(0, Math.min(x1, b.x1) - Math.max(x0, b.x0)) * Math.max(0, Math.min(y1, b.y1) - Math.max(y0, b.y0)), 0) / Math.max(1, (x1 - x0) * (y1 - y0)); if (ov > 0.05) s.alpha *= 1 - 0.65 * Math.min(1, ov * 2) }
@@ -1200,10 +1229,12 @@ export async function gira(o: { scena: Scena; brano: Brano; coreografia: Coreogr
         g.translate(s.dx, s.dy); g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 1; i <= m; i++) g.lineTo(P[i][0], P[i][1]); g.stroke()
       } else if (n.vivo) {
         const vc = await vivo(n, s.crescita ?? 1, s.fase ?? 0)
-        if (vc) { g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); g.drawImage(vc, -n.w / 2, -n.h / 2, n.w, n.h) }
+        if (vc) { g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc); const [ne, nl] = nuvolaE(n, rp, t); if (!(ne > 0.02 && conNuvola(g, n, vc, ne, nl, t, s.sc, lum(scena.bg[rp.tav]) > 0.45))) g.drawImage(vc, -n.w / 2, -n.h / 2, n.w, n.h) }
       } else if (n.sprite) {
         g.translate(n.x + s.dx, n.y + s.dy); g.rotate(n.rot + s.rot); g.scale(s.sc, s.sc)
-        if (s.sfalda > 0 && n.particelle?.length) {
+        const [ne, nl] = nuvolaE(n, rp, t)
+        if (ne > 0.02 && n.sprite && conNuvola(g, n, n.sprite, ne, nl, t, s.sc, lum(scena.bg[rp.tav]) > 0.45)) { /* la nuvola al posto della figura */ }
+        else if (s.sfalda > 0 && n.particelle?.length) {
           // si scioglie nelle sue particelle, che cadono e si spargono
           g.globalAlpha = clamp(s.alpha * (1 - s.sfalda * 0.2))
           const passo = Math.max(1, Math.floor(n.particelle.length / 400))

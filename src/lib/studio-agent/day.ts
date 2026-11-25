@@ -50,6 +50,7 @@ import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione, imparaScalaMuffa } from './mind/episodio'
+import { raccoltaACaso } from './hands/raccolta'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -908,7 +909,12 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   void conImg
   let copertinaMs = 0
   let legg = { media: 0, peggiore: 0, salvati: 0, campioni: 0 }
-  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, copertina: ms => { copertinaMs = ms }, leggibilita: x => { legg = x } })
+  // la raccolta: in parte dei reel i passaggi tra tavole avvengono attraverso una nuvola di punti (da Gather)
+  const semeR = Math.floor(brano.bpm * 1000 + ev.riprese.length * 7 + Date.now() % 997)
+  const rR = (() => { let x = semeR >>> 0; return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 4294967296) })()
+  const opR = (typeof window !== 'undefined' && (window as unknown as { __nuvola?: boolean }).__nuvola) || rR() < 0.45 ? raccoltaACaso(rR) : null
+  if (opR) log(`Reel: le figure che contano passano tra le tavole in nuvola di punti (${opR.viaggio}, ${opR.resa}${opR.scia ? ', scia' : ''}${opR.segni ? `, ${opR.segni} mirini` : ''}).`)
+  const video = await giraCoreografia({ scena, brano, coreografia: ev.coreografia, riprese: ev.riprese, testi, nuvola: opR, copertina: ms => { copertinaMs = ms }, leggibilita: x => { legg = x } })
   log(`Reel: leggibilità dei testi — pixel senza contrasto sotto le parole ${(legg.media * 100).toFixed(1)}% in media, ${(legg.peggiore * 100).toFixed(1)}% nel fotogramma peggiore; scritti in contrappunto ${legg.salvati} volte su ${legg.campioni}.`)
   if (!video) { log('Il reel non si può fare in questo browser (manca la codifica video).'); return null }
   // memoria del movimento: la coreografia scelta, e gli accoppiamenti che hanno funzionato si rafforzano

@@ -67,10 +67,18 @@ const duotono: Tool = {
   apply: async (s, p) => {
     const { img, resto } = piatto(s)
     const g = img.getContext('2d')!, im = g.getImageData(0, 0, img.width, img.height), d = im.data
-    const A = hexRgb(p.a as string), B = hexRgb(p.b as string)
+    const A = hexRgb(p.a as string)
+    let B = hexRgb(p.b as string)
+    // due colori che non si distinguono fanno una campitura: il secondo diventa il più lontano dal primo, tra nero e carta
+    const lumC = (c: number[]) => (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11) / 255
+    if (Math.abs(lumC(A) - lumC(B)) < 0.3) B = lumC(A) > 0.5 ? [18, 17, 16] : [238, 233, 222]
+    // la luce dell'immagine si stira sul suo campo vero (dal più scuro al più chiaro), e la soglia sta sulla sua mediana
+    const hist = new Array(256).fill(0); for (let i = 0; i < d.length; i += 16) hist[Math.round(d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11)]++
+    const tot = hist.reduce((a, b) => a + b, 0), q = (f: number) => { let c = 0; for (let v = 0; v < 256; v++) { c += hist[v]; if (c >= tot * f) return v } return 255 }
+    const lo = q(0.02), hi = Math.max(lo + 1, q(0.98)), med = (q(0.5) - lo) / (hi - lo)
     for (let i = 0; i < d.length; i += 4) {
-      let t = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255
-      if (p.soglia) t = t > 0.5 ? 1 : 0
+      let t = Math.max(0, Math.min(1, ((d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) - lo) / (hi - lo)))
+      if (p.soglia) t = t > med ? 1 : 0
       d[i] = A[0] * t + B[0] * (1 - t); d[i + 1] = A[1] * t + B[1] * (1 - t); d[i + 2] = A[2] * t + B[2] * (1 - t); d[i + 3] = 255
     }
     g.putImageData(im, 0, 0)

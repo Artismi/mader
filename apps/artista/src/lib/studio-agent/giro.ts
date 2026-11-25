@@ -388,3 +388,17 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
   const migliore = A.pubblicati.filter(p => p.voto !== undefined).sort((a, b) => b.voto! - a.voto!)[0]
   return { ascoltati: dati.media.length, commentiNuovi: nuove.length, migliore: migliore ? `${migliore.forma} del ${migliore.quando.slice(0, 10)} (${migliore.voto!.toFixed(3)})` : null, errori: dati.errori, note }
 }
+
+/** la bottega: prove di strumenti sulle tavole del cassetto, per conoscerli (niente si pubblica) */
+export async function bottegaGiro(o: { prove: number; secondi: number; log: (m: string) => void }) {
+  const { bottega } = await import('./mind/bottega')
+  const { ricostruisci } = await import('./hands/cassetto')
+  const st = await loadOrCreate(), r = rng(Date.now() % 1e9)
+  const nel = await T.nelCassetto(), works = new Map((await T.listWorks()).map(w => [w.id, w]))
+  const scelte = nel.sort(() => r() - 0.5).slice(0, 6), tavole: { sheet: Awaited<ReturnType<typeof ricostruisci>>; parola: string }[] = []
+  for (const id of scelte) { try { const j = await T.prendiFoglio(id); if (j) tavole.push({ sheet: await ricostruisci(JSON.parse(j)), parola: (works.get(id) as unknown as { intention?: { word?: string } })?.intention?.word ?? '' }) } catch { /* pazienza */ } }
+  const ctxDi = (parola: string) => ({ r, tone: { id: 'x', label: '', bg: '#ebe6dc', ink: '#121212', acc: '#e3361b', dark: false }, intention: { word: parola, register: 'poetico', targets: {}, tools: [], why: '' }, mood: st.mood, say: () => parola, shaders: [], quality: 1 }) as unknown as import('./hands/tools').ToolCtx
+  const n = await bottega(st, r, tavole, ctxDi, { prove: o.prove, secondi: o.secondi, log: o.log })
+  await T.putState(st)
+  return n
+}
