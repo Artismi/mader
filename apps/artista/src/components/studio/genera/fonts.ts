@@ -23,6 +23,23 @@ export const FACES = {
   spalle: { family: 'Big Shoulders Display', weight: 900, upper: true, track: 0 },
   maggiore: { family: 'Major Mono Display', weight: 400, track: 0.04 },
   bricolage: { family: 'Bricolage Grotesque', weight: 800, track: -0.04 },
+  // libere ma di ricerca: serif da rivista, grotesk estremi (larghissimo, strettissimo), mono e pixel
+  bagnard: { family: 'Bagnard', weight: 400, track: -0.01 },
+  redaction: { family: 'Redaction', weight: 400, track: -0.01 },
+  redaction_corsivo: { family: 'Redaction', weight: 400, italic: true, track: -0.01 },
+  gloock: { family: 'Gloock', weight: 400, track: -0.02 },
+  newsreader: { family: 'Newsreader', weight: 400, italic: true, track: -0.01 },
+  dmserif: { family: 'DM Serif Display', weight: 400, track: -0.02 },
+  kalnia: { family: 'Kalnia', weight: 700, track: -0.02 },
+  familjen: { family: 'Familjen Grotesk', weight: 700, track: -0.03 },
+  schibsted: { family: 'Schibsted Grotesk', weight: 900, upper: true, track: -0.04 },
+  largo: { family: 'Anybody', weight: 900, upper: true, track: -0.02 },
+  stretto: { family: 'Six Caps', weight: 400, upper: true, track: 0.02 },
+  bluu: { family: 'BluuNext', weight: 700, track: -0.02 },
+  frammento: { family: 'Fragment Mono', weight: 400, track: 0.02 },
+  marziano: { family: 'Martian Mono', weight: 400, upper: true, track: 0.06 },
+  punti: { family: 'Handjet', weight: 600, upper: true, track: 0.02 },
+  telaio: { family: 'Jacquard 24', weight: 400, track: 0 },
 } satisfies Record<string, Face>
 
 export type FaceId = keyof typeof FACES
@@ -58,6 +75,12 @@ export function loadLabFonts(): Promise<void> {
       ['Fraunces', 'fraunces-latin-400-italic', 400, 'italic'], ['Young Serif', 'young-serif-latin-400-normal', 400, 'normal'],
       ['Big Shoulders Display', 'big-shoulders-display-latin-900-normal', 900, 'normal'], ['Major Mono Display', 'major-mono-display-latin-400-normal', 400, 'normal'],
       ['Bricolage Grotesque', 'bricolage-grotesque-latin-800-normal', 800, 'normal'],
+      ['Bagnard', 'bagnard-latin-400-normal', 400, 'normal'], ['Redaction', 'redaction-latin-400-normal', 400, 'normal'], ['Redaction', 'redaction-latin-400-italic', 400, 'italic'],
+      ['Gloock', 'gloock-latin-400-normal', 400, 'normal'], ['Newsreader', 'newsreader-latin-400-italic', 400, 'italic'], ['DM Serif Display', 'dm-serif-display-latin-400-normal', 400, 'normal'],
+      ['Kalnia', 'kalnia-latin-700-normal', 700, 'normal'], ['Familjen Grotesk', 'familjen-grotesk-latin-700-normal', 700, 'normal'], ['Schibsted Grotesk', 'schibsted-grotesk-latin-900-normal', 900, 'normal'],
+      ['Anybody', 'anybody-latin-900-normal', 900, 'normal'], ['Six Caps', 'six-caps-latin-400-normal', 400, 'normal'], ['BluuNext', 'bluu-next-latin-700-normal', 700, 'normal'],
+      ['Fragment Mono', 'fragment-mono-latin-400-normal', 400, 'normal'], ['Martian Mono', 'martian-mono-latin-400-normal', 400, 'normal'], ['Handjet', 'handjet-latin-600-normal', 600, 'normal'],
+      ['Jacquard 24', 'jacquard-24-latin-400-normal', 400, 'normal'],
     ]
     await Promise.all(LOCALI.map(async ([fam, file, w, st]) => { try { const f = new FontFace(fam, `url(/fonts/${file}.woff2)`, { weight: String(w), style: st }); await f.load(); document.fonts.add(f) } catch { /* resta Google */ } }))
     if (!document.getElementById('genera-fonts')) {

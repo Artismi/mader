@@ -437,9 +437,21 @@ function rete(reg: Registro, S: number, colore: string, r: () => number) {
       const N0 = P[i]
       reg.t = tN(i)
       if (es.length === 1) { const M = mezzo(es[0]), w = larg(es[0]) * k; g.globalAlpha = alpha(w); g.lineWidth = w; g.beginPath(); g.moveTo(N0.x, N0.y); g.lineTo(M.x, M.y); g.stroke(); continue }
-      for (let a2 = 0; a2 < es.length; a2++) for (let b2 = a2 + 1; b2 < es.length; b2++) {
-        const A = mezzo(es[a2]), B = mezzo(es[b2]), w = Math.min(larg(es[a2]), larg(es[b2])) * k
-        g.globalAlpha = alpha(w); g.lineWidth = w; g.beginPath(); g.moveTo(A.x, A.y); g.quadraticCurveTo(N0.x, N0.y, B.x, B.y); g.stroke()
+      // ogni vena prosegue nella sua continuazione più diritta (come un tubo che si biforca), non con tutte: niente groppi sul nodo
+      const dir = (e: number) => { const M = mezzo(e); const l = Math.hypot(M.x - N0.x, M.y - N0.y) || 1; return [(M.x - N0.x) / l, (M.y - N0.y) / l] }
+      const fatte = new Set<string>()
+      for (let a2 = 0; a2 < es.length; a2++) {
+        const da = dir(es[a2]); let b2 = -1, best = 2
+        for (let c2 = 0; c2 < es.length; c2++) if (c2 !== a2) { const dc = dir(es[c2]), cos = da[0] * dc[0] + da[1] * dc[1]; if (cos < best) { best = cos; b2 = c2 } }
+        const key = a2 < b2 ? `${a2},${b2}` : `${b2},${a2}`
+        if (b2 < 0 || fatte.has(key)) continue
+        fatte.add(key)
+        const A = mezzo(es[a2]), B = mezzo(es[b2]), wa = larg(es[a2]) * k, wb = larg(es[b2]) * k
+        // lo spessore passa da una vena all'altra in tre tratti, senza scalino
+        const Q1 = { x: (A.x + N0.x) / 2, y: (A.y + N0.y) / 2 }, Q2 = { x: (B.x + N0.x) / 2, y: (B.y + N0.y) / 2 }
+        g.globalAlpha = alpha(wa); g.lineWidth = wa; g.beginPath(); g.moveTo(A.x, A.y); g.quadraticCurveTo(Q1.x, Q1.y, (Q1.x + Q2.x) / 2 * 0.5 + N0.x * 0.5, (Q1.y + Q2.y) / 2 * 0.5 + N0.y * 0.5); g.stroke()
+        const Mx = (Q1.x + Q2.x) / 2 * 0.5 + N0.x * 0.5, My = (Q1.y + Q2.y) / 2 * 0.5 + N0.y * 0.5
+        g.globalAlpha = alpha(wb); g.lineWidth = (wa + wb) / 2; g.beginPath(); g.moveTo(Mx, My); g.quadraticCurveTo(Q2.x, Q2.y, B.x, B.y); g.stroke()
       }
     }
   }
@@ -453,8 +465,11 @@ function rete(reg: Registro, S: number, colore: string, r: () => number) {
   // i corpi sui fulcri: masse rugose di grumi (il plasmodio che mangia), il principale più grande
   reg.L = 'B'
   for (const [iF, f] of F.entries()) {
-    const R1 = S * (0.02 + 0.05 * f.m), base = 0.12 * iF / Math.max(1, F.length)
-    for (let i = 0; i < 90 + 200 * f.m; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.08 + r() * 0.22); reg.t = base + 0.1 * d / R1; g.globalAlpha = 0.25 + r() * 0.35; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
+    // il corpo: più piccolo e diffuso (non una pallina incollata), grumi chiari che sfumano nella rete, e un ventaglio di filamenti
+    const R1 = S * (0.014 + 0.032 * f.m), base = 0.12 * iF / Math.max(1, F.length)
+    for (let i = 0; i < 60 + 120 * f.m; i++) { const a = r() * 6.283, d = Math.pow(r(), 0.7) * R1 * (0.85 + 0.3 * lb(a)), rr0 = R1 * (0.05 + r() * 0.16) * (1 - 0.5 * d / R1); reg.t = base + 0.1 * d / R1; g.globalAlpha = 0.1 + r() * 0.22; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rr0, 0, 6.283); g.fill() }
+    g.lineWidth = 0.5
+    for (let i = 0; i < 24 + 40 * f.m; i++) { reg.t = base + 0.08; let x = f.x, y = f.y, an = r() * 6.283; const L0 = R1 * (1.2 + r() * 1.4); g.globalAlpha = 0.18 + r() * 0.2; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 10; k++) { an += (r() - 0.5) * 0.5; x += Math.cos(an) * L0 / 10; y += Math.sin(an) * L0 / 10; g.lineTo(x, y) } g.stroke() }
     // le pieghe: piccoli vuoti dentro il corpo
     reg.t = base + 0.11
     g.save(); g.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 12 * f.m + 3; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * R1 * 0.85; g.globalAlpha = 0.3; g.beginPath(); g.arc(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, R1 * (0.02 + r() * 0.05), 0, 6.283); g.fill() } g.restore()

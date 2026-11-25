@@ -382,7 +382,7 @@ const cromo: Recipe = {
 
 const goccia: Recipe = {
   id: 'goccia', label: "Goccia d'inchiostro", cat: 'Inchiostro', hint: "inchiostro che cade in acqua: getto, fungo, veli",
-  params: [P.tone(1), P.sel('inks', 'Inchiostri', ['Uno', 'Due']), P.range('turb', 'Turbolenza', 0, 100, 55), P.range('spread', 'Apertura', 10, 100, 55), P.range('density', 'Densità', 20, 100, 60), P.caps(), P.grain(15)],
+  params: [P.tone(1), P.sel('inks', 'Inchiostri', ['Uno', 'Due']), P.range('turb', 'Turbolenza', 0, 100, 55), P.range('spread', 'Apertura', 10, 100, 55), P.range('density', 'Densità', 20, 100, 60), P.sel('verso', 'Verso', ['Giù', 'Su', 'Lato', 'Diagonale', 'Vortice']), P.range('fonti', 'Sorgenti', 1, 3, 1), P.caps(), P.grain(15)],
   render: o => {
     const t = tone(o), S = SS(o), r = rng(o.seed)
     const { c, ctx } = stage(o, t)
@@ -402,8 +402,15 @@ const goccia: Recipe = {
     }
     const blend: GlobalCompositeOperation = o.transparent ? 'source-over' : t.dark ? 'screen' : 'multiply'
     ctx.globalCompositeOperation = blend
-    ctx.drawImage(layer(o.seed, t.ink, o.W / 2, 1), 0, 0)
-    if (num(o, 'inks') === 1) ctx.drawImage(layer(o.seed + 50, t.acc, o.W / 2 + range(r, -0.06, 0.06) * S, 0.55), 0, 0)
+    // il getto non cade sempre dall'alto: verso, numero di sorgenti e scala cambiano (il fumo si apre in ogni direzione)
+    const verso = num(o, 'verso'), nF = Math.max(1, Math.round(num(o, 'fonti') || 1))
+    const metti = (cv: HTMLCanvasElement, i: number) => {
+      const base = verso === 1 ? Math.PI : verso === 2 ? Math.PI / 2 * (r() < 0.5 ? 1 : -1) : verso === 3 ? Math.PI / 4 * (r() < 0.5 ? 1 : -1) : verso === 4 ? (i / nF) * Math.PI * 2 : 0
+      const k = nF > 1 ? 0.75 + r() * 0.3 : 1, dx = nF > 1 && verso !== 4 ? (i - (nF - 1) / 2) * S * 0.28 : 0
+      ctx.save(); ctx.translate(o.W / 2 + dx, o.H / 2); ctx.rotate(base + (r() - 0.5) * 0.3); ctx.scale(k, k); ctx.drawImage(cv, -o.W / 2, -o.H / 2); ctx.restore()
+    }
+    for (let i = 0; i < nF; i++) metti(layer(o.seed + i * 97, t.ink, o.W / 2, nF > 1 ? 0.7 : 1), i)
+    if (num(o, 'inks') === 1) metti(layer(o.seed + 50, t.acc, o.W / 2 + range(r, -0.06, 0.06) * S, 0.55), 0)
     ctx.globalCompositeOperation = 'source-over'
     return finish(c, o, t, 'goccia', ['INK IN WATER', code(o, 'ink'), ROMAN_YEAR, '0.5 ML'])
   },
@@ -411,19 +418,23 @@ const goccia: Recipe = {
 
 const macchia: Recipe = {
   id: 'macchia', label: 'Macchia simmetrica', cat: 'Inchiostro', hint: 'macchia di Rorschach con schizzi e sbavature',
-  params: [P.tone(1), P.range('spread', 'Espansione', 20, 100, 60), P.range('splat', 'Schizzi', 0, 100, 50), P.range('bleed', 'Sbavatura', 0, 100, 40), P.tog('riso', 'Secondo inchiostro', false), P.caps(), P.grain(30)],
+  params: [P.tone(1), P.range('spread', 'Espansione', 20, 100, 60), P.range('splat', 'Schizzi', 0, 100, 50), P.range('bleed', 'Sbavatura', 0, 100, 40), P.tog('riso', 'Secondo inchiostro', false), P.sel('simmetria', 'Simmetria', ['Specchio', 'Quadrupla', 'Libera']), P.range('allungo', 'Allungo', 50, 200, 100), P.range('frastaglio', 'Frastaglio', 30, 100, 50), P.caps(), P.grain(30)],
   render: o => {
     const t = tone(o), S = SS(o), r = rng(o.seed), n = noise2(o.seed), n2 = noise2(o.seed + 1)
     const cx = o.W / 2, cy = o.H / 2, R = S * 0.46 * (0.65 + num(o, 'spread') / 250)
     const blot = (sd: number) => {
       const nn = noise2(sd), m = newMask(o.W, o.H)
-      for (let y = 0; y < o.H; y++) for (let x = 0; x <= cx; x++) {
-        const s = 2.6 / S
-        const wx = x + (fbm(n2, x * s, y * s, 3) - 0.5) * S * 0.25, wy = y + (fbm(nn, x * s + 3, y * s, 3) - 0.5) * S * 0.25
-        const d = Math.hypot((wx - cx) * 1.25, (wy - cy) * 0.9) / R
+      const sim = num(o, 'simmetria'), al = (num(o, 'allungo') || 100) / 100, fr = (num(o, 'frastaglio') || 50) / 50
+      const s = (1.6 + 1.2 * fr) / S, ax = 1.25 / Math.sqrt(al), ay = 0.9 * Math.sqrt(al)
+      const X1 = sim === 2 ? o.W - 1 : cx, Y1 = sim === 1 ? cy : o.H - 1
+      for (let y = 0; y <= Y1; y++) for (let x = 0; x <= X1; x++) {
+        const wx = x + (fbm(n2, x * s, y * s, 3) - 0.5) * S * 0.25 * fr, wy = y + (fbm(nn, x * s + 3, y * s, 3) - 0.5) * S * 0.25 * fr
+        const d = Math.hypot((wx - cx) * ax, (wy - cy) * ay) / R
         const v = fbm(nn, wx * s * 1.6, wy * s * 1.6, 5) - d * 0.75
         const a = smoothstep(0.02, 0.05, v) * 255
-        m.a[y * o.W + x] = a; m.a[y * o.W + (o.W - 1 - x)] = a
+        m.a[y * o.W + x] = a
+        if (sim !== 2) m.a[y * o.W + (o.W - 1 - x)] = a
+        if (sim === 1) { m.a[(o.H - 1 - y) * o.W + x] = a; m.a[(o.H - 1 - y) * o.W + (o.W - 1 - x)] = a }
       }
       return m
     }

@@ -26,6 +26,11 @@ export default function Inventario() {
     for (const n of NATURE) for (const k of [1, 2, 3]) out.push({ gruppo: 'Crescite (nuovo)', nome: `${n} ${k}`, cv: th(disegnaAlbero(k * 4049 + n.length, k === 2 ? '#e3361b' : '#121212', 700, n)) })
     for (const [id, f] of Object.entries(FACES)) out.push({ gruppo: 'Caratteri', nome: id, testo: { fam: (f as { family: string }).family, peso: (f as { weight: number }).weight, it: !!(f as { italic?: boolean }).italic } as never })
     const SOLO = new URLSearchParams(location.search).has('breve')
+    if (SOLO) {
+      const { shuffle, defaults } = await import('@/components/studio/genera/recipes')
+      for (const id of ['goccia', 'macchia']) { const rc = RECIPES.find(x => x.id === id)!; for (const k of [1, 2, 3, 4, 5, 6]) { try { out.push({ gruppo: 'Fumo e macchia (variati)', nome: `${id} ${k}`, cv: th(runRecipe(rc, shuffle(rc, defaults(rc), k * 313), k * 313, '4:5', 0.3) as unknown as HTMLCanvasElement) }) } catch (e) { out.push({ gruppo: 'Fumo e macchia (variati)', nome: `${id} ERR ${String(e).slice(0, 30)}` }) } } }
+      for (const k of [1, 2, 3, 4, 5, 6]) out.push({ gruppo: 'Muffa (giunture nuove)', nome: `seme ${k}`, cv: th(disegnaMuffa(k * 7919, '#121212', 600)) })
+    }
     if (!SOLO) {
     // 1. strumenti: ognuno su un foglio vuoto e su uno già seminato, con semi diversi
     for (const t of TOOLS) for (const k of [1, 2, 3]) {

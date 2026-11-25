@@ -283,7 +283,7 @@ let ST: AgentState | null = null
 async function disegnaMotivo(m: Motivo, t: Tone, q: number, override?: string): Promise<HTMLCanvasElement> {
   const color = override ?? (m.colore === 'acc' ? t.acc : t.ink)
   // le icone a riposo e i codici deboli rinascono come crescite naturali; e una muffa su tre diventa albero, radice, corallo o rizoma
-  if ((m.forma === 'ricetta' && RIPOSO.has(m.recipe ?? '')) || m.forma === 'codice' || !['macchia', 'cristallo', 'camera', 'albero', 'ricetta'].includes(m.forma) || (m.forma === 'macchia' && (m.seed >>> 0) % 3 === 0)) Object.assign(m, { forma: 'albero' })
+  if ((m.forma === 'ricetta' && RIPOSO.has(m.recipe ?? '')) || m.forma === 'codice' || (m.forma === 'macchia' && (m.seed >>> 0) % 3 === 0)) Object.assign(m, { forma: 'albero' })
   if (m.forma === 'albero') return disegnaAlbero(m.seed, color, 900)
   if (m.forma === 'macchia') return disegnaMacchia(m.macchia ?? macchiaDa(m.seed), color)
   if (m.forma === 'cristallo') return disegnaCristallo(m.indirizzo ?? String(m.seed), { S: 900, colore: color, fondo: null })
