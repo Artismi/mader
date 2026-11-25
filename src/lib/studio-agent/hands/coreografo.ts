@@ -165,6 +165,9 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
     const tit = s.layers.find(l => l.meta?.ruolo === 'titolo'), corpo = s.layers.find(l => l.meta?.ruolo === 'corpo')
     parole[ti] = 0
     const dopo: Nodo[] = [] // le parole della griglia: si disegnano sopra a tutto quello della tavola
+    // le due cose insieme: il titolo lo anima il reel (le sue lettere, la sua griglia); la tipografia della tavola
+    // (frase, didascalie mono, folio, firma) resta dove e come l'ha impaginata, ed entra per gerarchia
+    const editoriale = true
     if (tit) {
       const sotto = corpo?.meta?.text.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim() ?? '' // le parentesi (fonti, rimandi) nel reel non servono
       const nParole = sotto.split(' ').filter(Boolean).length
@@ -174,7 +177,7 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       const titoloCorto = (t1: string) => { const t0 = t1.replace(/\s*\([^)]*$/, '').replace(/\s*\([^)]*\)/g, '').trim() || t1; const w = t0.split(/\s+/); if (w.length <= 8) return t0; const pz = t0.split(/[:;(—–]|,\s/)[0].trim(); return pz.split(/\s+/).length <= 8 && pz.length > 3 ? pz : w.slice(0, 7).join(' ') + '…' }
       const blocchi: { testo: string; font: NonNullable<NonNullable<Layer['meta']>['font']>; px: number; colore: string }[] = [{ testo: perCarattere(titoloCorto(tit.meta!.text), tit.meta!.font?.family ?? ''), font: tit.meta!.font ?? { family: 'serif', weight: 400 }, px: 0, colore: tit.meta!.color }]
       const fCorpo = corpo?.meta?.font ?? blocchi[0].font
-      if (sotto && r() < 0.5) blocchi.push({ testo: paragrafo ? sotto : frase, font: fCorpo, px: paragrafo ? 26 : 30, colore: corpo!.meta!.color })
+      if (false && sotto && r() < 0.5) blocchi.push({ testo: paragrafo ? sotto : frase, font: fCorpo, px: paragrafo ? 26 : 30, colore: corpo!.meta!.color })
       // il colore della tavola, se si stacca dal fondo; se no il chiaro o lo scuro
       // dove va il testo e di che colore: si guarda quello che c'è davvero sotto (la tavola com'è, nella fascia alta e in quella bassa);
       // vince la fascia più calma, e il colore è quello che si stacca da lì
@@ -292,7 +295,9 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       }
     }
     const metti = (l: Layer, li: number) => {
-      if (tit && TESTO.has(l.kind)) return // le parole di questa tavola le ha già messe la griglia
+      const nn = (x?: string) => (x ?? '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim()
+      if (tit && TESTO.has(l.kind) && l !== tit) { const a1 = nn(l.meta?.text), t1 = nn(tit.meta?.text); if (a1.length >= 3 && (t1.includes(a1) || a1.includes(t1))) return } // ripete il titolo: lo dice già il reel
+      if (tit && l === tit) return // il titolo lo scrive il reel con le sue lettere animate; tutto il resto della tipografia della tavola resta // le parole di questa tavola le ha già messe la griglia
       const side = M * l.scale * k, kk = side / Math.max(l.canvas.width, l.canvas.height)
       const cx = l.x * s.W * k, cy = oy + l.y * s.H * k
       const ruolo: Ruolo = TESTO.has(l.kind) ? 'testo' : ATMO.has(l.kind) ? 'fondo' : TRAMA.has(l.kind) || (l.scale >= 1.15 && l.blend !== 'source-over') ? 'trama' : 'figura'
@@ -300,7 +305,7 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       const kc = pieno ? Math.max(W / l.canvas.width, H / l.canvas.height) : kk
       const intero = (): Nodo => ({ id: id++, ruolo, tav: ti, gruppo: (li % 2) as 0 | 1, sprite: l.canvas, x: pieno ? W / 2 : cx, y: pieno ? H / 2 : cy, w: l.canvas.width * kc, h: l.canvas.height * kc, rot: l.rot, alpha: l.alpha, blend: l.blend, padre: radice.id, indice: li, area: l.canvas.width * kk * l.canvas.height * kk })
       // le parole: solo le lettere (il colore del testo), senza aloni né piastre che la tavola aveva messo per leggerle
-      if (ruolo === 'testo' && (/^\s*fonte\s*:|wikipedia|campione/i.test(l.meta?.text ?? '') || (l.meta?.size ?? 99) * kk < 24)) return // illeggibile su un telefono: nel reel non entra
+      if (ruolo === 'testo' && (/^\s*fonte\s*:|wikipedia|campione/i.test(l.meta?.text ?? '') || (l.meta?.size ?? 99) * kk < (editoriale ? 11 : 24))) return // illeggibile su un telefono: nel reel non entra
       if (ruolo === 'testo' && l.meta?.color) {
         const c = document.createElement('canvas'); c.width = l.canvas.width; c.height = l.canvas.height; const q = c.getContext('2d')!; q.drawImage(l.canvas, 0, 0)
         const d = q.getImageData(0, 0, c.width, c.height), m = l.meta.color.replace('#', ''), R = parseInt(m.slice(0, 2), 16), G = parseInt(m.slice(2, 4), 16), B = parseInt(m.slice(4, 6), 16)
@@ -358,6 +363,11 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       nodi.push(intero())
     }
     // ogni livello è uno strato: entra nel suo ordine e nel suo modo (il retino a punti, il campo a tendina, la figura a strappo)
+    // la gerarchia tipografica entra in ordine: prima la microtipografia (folio, mono, firma), poi la frase, per ultimo il titolo
+    if (editoriale) {
+      const tx = strati.filter(l => TESTO.has(l.kind)).sort((a, b) => (a.meta?.ruolo === 'titolo' ? 1 : 0) - (b.meta?.ruolo === 'titolo' ? 1 : 0) || (a.meta?.size ?? 0) - (b.meta?.size ?? 0))
+      const resto = strati.filter(l => !TESTO.has(l.kind)); strati.length = 0; strati.push(...resto, ...tx)
+    }
     strati.forEach((l: Layer, li) => { const k0 = nodi.length; metti(l, li); for (let q = k0; q < nodi.length; q++) { nodi[q].strato = li; nodi[q].rivela ??= rivelaDi(l, nodi[q], P0) } })
     // ── il generatore vivo e le lettere-forma: il movimento nasce da qui, non da filtri sull'immagine ──
     {
@@ -389,7 +399,9 @@ export function smonta(fogli: Sheet[], r: () => number, part?: Partitura): Scena
       }
       // le lettere-forma: la parola chiave della tavola, nel suo carattere, usata come materia (enorme, tagliata dal bordo, sparsa…)
       const parolaChiave = (tit?.meta?.text ?? '').split(/[^\p{L}]+/u).filter(w => w.length >= 4 && !/^(della|delle|dello|nella|sulla|come|sono|essere|anche|quando|perché|questo|questa|quello|quella|tutto|ogni)$/i.test(w)).sort((a2, b2) => b2.length - a2.length)[0]
-      if (parolaChiave && tit?.meta && P0.lettere !== 'niente' && ti === tavolaLettere) {
+      // se il titolo è quella parola sola, le lettere-forma lo direbbero due volte: in quel caso niente colonna
+      const titoloSolo = (tit?.meta?.text ?? '').trim().split(/\s+/).length <= 1
+      if (parolaChiave && !titoloSolo && tit?.meta && P0.lettere !== 'niente' && ti === tavolaLettere) {
         const font = tit.meta.font ?? { family: 'serif', weight: 700 }
         const lettere = [...(font.upper ? parolaChiave.toUpperCase() : parolaChiave)]
         const n = lettere.length, mis = document.createElement('canvas').getContext('2d')!
