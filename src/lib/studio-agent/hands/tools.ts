@@ -12,6 +12,7 @@ import { vetroTool } from './vetro'
 import { stiroTool } from './stiro'
 import { particelleTool, sciameTool } from './sciame'
 import { affettatoreTool } from './affettatore'
+import { universoTool } from './universo'
 import { ondineTool, mosaicoTool, colataTool, ditherTool, memoriaTool } from './segnali'
 import { RECIPES, TONES, runRecipe, shuffle as shuffleParams, defaults, type Tone } from '@/components/studio/genera/recipes'
 import { renderFx } from '@/components/studio/fx/render'
@@ -512,7 +513,7 @@ export async function applica(tool: Tool, s: Sheet, p: Params, c: ToolCtx): Prom
   return { ...out, layers: out.layers.map(l => (prima.has(l.id) ? l : { ...l, genera: { tool: tool.id, p, fonte } })) }
 }
 /** gli strumenti che sanno crescere e vivere */
-export const ANIMABILI = new Set(['pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico', 'cristallo', 'camera'])
+export const ANIMABILI = new Set(['universo', 'pattern', 'traccia', 'geometria', 'flusso', 'ornato', 'retino', 'caleido', 'grafico', 'cristallo', 'camera'])
 
-export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI, ...MONDI, acqua, filtro, luce3d, vetroTool, stiroTool, particelleTool, sciameTool, affettatoreTool, ondineTool, mosaicoTool, colataTool, ditherTool, memoriaTool]
+export const TOOLS: Tool[] = [semina, materia, luce, geometria, pattern, traccia, scrivi, grana, taglia, ripeti, disponi, togli, fondo, shader, schiaccia, ...NUOVI, ...MONDI, acqua, filtro, luce3d, vetroTool, stiroTool, particelleTool, sciameTool, affettatoreTool, ondineTool, mosaicoTool, colataTool, ditherTool, memoriaTool, universoTool]
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)

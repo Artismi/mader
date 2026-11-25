@@ -97,7 +97,7 @@ function urgency(t: Tool, s: Sheet, st: AgentState, intention: Intention, f: Fea
     const eff = sense && sense.uses > 2 ? sense.effect : t.pushes
     for (const [k, target] of Object.entries(intention.targets)) u += Math.max(0, (eff[k] ?? 0) * (target - (f[k] ?? 0))) * 6
   }
-  if (!s.layers.length) u *= ['semina', 'geometria', 'pattern', 'traccia', 'shader', 'scrivi', 'cristallo', 'camera'].includes(t.id) ? 2 : 0.05
+  if (!s.layers.length) u *= ['semina', 'geometria', 'pattern', 'traccia', 'shader', 'scrivi', 'cristallo', 'camera', 'universo'].includes(t.id) ? 2 : 0.05
   if (t.id === 'schiaccia') u *= 0.3
   // troppi fogli sovrapposti: meno aggiungere, più togliere e unire
   if (s.layers.length > 7) u *= ['togli', 'schiaccia', 'disponi', 'taglia'].includes(t.id) ? 2.5 : 0.35

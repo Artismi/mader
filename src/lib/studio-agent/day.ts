@@ -739,6 +739,12 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   // le tavole del cassetto già passate in un reel recente non tornano (gli ultimi 40 usi)
   const GR = st0 as AgentState & { giaNeiReel?: string[] }
   const usa = (id: string) => { GR.giaNeiReel = [...(GR.giaNeiReel ?? []).filter(x => x !== id), id].slice(-40) }
+  // la memoria dei reel recenti: i motivi (generatori e forme) e le frasi già passate negli ultimi reel non tornano subito
+  const RR = st0 as AgentState & { reelRecenti?: { motivi: string[][]; frasi: string[] } }
+  const rec = (RR.reelRecenti ??= { motivi: [], frasi: [] })
+  const motiviDi = (f: Sheet) => [...new Set(f.layers.filter(l => !l.meta?.text && !/fondo|colore|grana|campo|ombra/.test(l.kind)).map(l => l.genera?.tool ?? l.kind))]
+  const recenti = new Set(rec.motivi.slice(-3).flat())
+  const giaVisti = (f: Sheet) => { const m = motiviDi(f); return m.length ? m.filter(x => recenti.has(x)).length / m.length : 0 }
   if (fogli.length < 4) {
     try {
       const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set([...(t.esclusi ?? []), ...((st0 as AgentState & { giaNeiReel?: string[] }).giaNeiReel ?? [])])
@@ -762,7 +768,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       let astratta: Sheet | null = null, come = ''
       const qa = r()
       // spesso un suo mondo composto (fondale, principale, controcanto, intarsio, dettaglio) che cresce strato su strato
-      if (qa < 0.55) { try { astratta = fogliMondi(st0, r, vicina, 1)[0]; come = 'un mio mondo composto, a strati' } catch { astratta = null } }
+      if (qa < 0.55) { try { const cands = [0, 1, 2, 3].map(() => fogliMondi(st0, r, vicina, 1)[0]).filter(Boolean); astratta = cands.sort((a, b) => giaVisti(a) - giaVisti(b))[0] ?? null; come = 'un mio mondo composto, a strati' } catch { astratta = null } }
       if (!astratta && qa < 0.8) {
         try {
           const tutte = await T.listWorks(), nel = new Set(await T.nelCassetto()), via = new Set([...(t.esclusi ?? []), ...((st0 as AgentState & { giaNeiReel?: string[] }).giaNeiReel ?? [])])
@@ -790,7 +796,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       if (astratta) { fogli = [...fogli.slice(0, mezzo), astratta, ...fogli.slice(mezzo)]; info = [...info.slice(0, mezzo), { interesse: 0.5 }, ...info.slice(mezzo)]; log(`Reel: in mezzo una tavola astratta (${come}).`) }
       // e a volte un secondo mondo in chiusura: il reel non finisce sulle parole
       const RM = (st0 as AgentState & { reelMondi?: { p: number } }).reelMondi?.p ?? 0.3
-      if (fogli.length >= 3 && r() < RM) { try { const m = fogliMondi(st0, r, fogli[fogli.length - 1], 1)[0]; fogli = [...fogli, m]; info = [...info, { interesse: 0.5 }]; log('Reel: chiudo su un mio mondo.') } catch { /* niente */ } }
+      if (fogli.length >= 3 && r() < RM) { try { const m = [0, 1, 2, 3].map(() => fogliMondi(st0, r, fogli[fogli.length - 1], 1)[0]).filter(Boolean).sort((a, b) => giaVisti(a) - giaVisti(b))[0]; fogli = [...fogli, m]; info = [...info, { interesse: 0.5 }]; log('Reel: chiudo su un mio mondo.') } catch { /* niente */ } }
 
       void MM
     }
@@ -809,19 +815,23 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     if (tenute.length < fogli.length) log(`Reel: tolgo ${fogli.length - tenute.length} tavole che erano già nel reel.`)
     fogli = tenute.map(i => fogli[i]); info = tenute.map(i => info[i])
     const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
-    const dette: string[] = []
+    const dette: string[] = [], giaDette = rec.frasi.slice(-80)
     let tolte = 0
     fogli = fogli.map(f => {
       const layers = f.layers.filter(l => {
         if (!TXT(l)) return true
         const n = norm(l.meta!.text)
         if (n.length < 3) return true
-        if (dette.some(d => d.includes(n) || n.includes(d))) { tolte++; return false }
+        if (dette.some(d => d.includes(n) || n.includes(d)) || giaDette.some(d => d === n || (n.length > 12 && (d.includes(n) || n.includes(d))))) { tolte++; return false }
         dette.push(n); return true
       })
       return layers.length === f.layers.length ? f : { ...f, layers }
     })
-    if (tolte) log(`Reel: ${tolte} scritte già dette in un'altra tavola, le tolgo.`)
+    if (tolte) log(`Reel: ${tolte} scritte già dette in un'altra tavola o in un reel recente, le tolgo.`)
+    rec.frasi = [...rec.frasi, ...dette].slice(-120)
+    rec.motivi = [...rec.motivi, [...new Set(fogli.flatMap(motiviDi))]].slice(-6)
+    const ripetuti = fogli.flatMap(motiviDi).filter(m => recenti.has(m))
+    if (ripetuti.length) log(`Reel: motivi già visti nei reel recenti: ${[...new Set(ripetuti)].join(', ')}.`)
   }
   const gusto = st.beat ?? (st.beat = { stili: [], pattern: [] })
   const M = st.movimento ?? (st.movimento = { memoria: [], rel: {}, diario: [] })
@@ -849,6 +859,23 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
   const { audio, brano, stile, orecchio } = migliore!
   ;(st as ConMovimento & { ultimoReelStile?: string }).ultimoReelStile = stile.id
   gusto.pattern = [...gusto.pattern, brano.pattern].slice(-24)
+  // il reel di tavole animate: le tavole restano intere (come nel post) e prendono vita al loro posto, a tempo di musica.
+  // Quanto spesso lo sceglie rispetto al coreografo (che smonta le tavole) è un suo tratto, che si sposta con gli esiti.
+  {
+    const RT = st0 as AgentState & { reelTavole?: { p: number } }
+    const pT = (RT.reelTavole ??= { p: 0.6 }).p
+    if ((typeof window !== 'undefined' && (window as unknown as { __tavole?: boolean }).__tavole) || r() < pT) {
+      const { giraTavole, animazioneACaso } = await import('./hands/animata')
+      const opN = r() < 0.5 ? raccoltaACaso(r) : undefined
+      const anim = fogli.map(() => animazioneACaso(r, opN))
+      // la tavola più forte apre (aggancio), le altre seguono nell'ordine della sequenza
+      log(`Reel: tavole animate, intere (${fogli.length} tavole; ${anim.map(a => `${a.ordine}${a.costruzione ? '' : ' ferma'}/${a.passaggio}`).join(', ')}).`)
+      ;(st0 as AgentState & { ultimoReelModo?: string }).ultimoReelModo = 'tavole'
+      const video = await giraTavole({ fogli, anim, brano }).catch(e => { log(`Reel di tavole: ${e instanceof Error ? e.message : e}`); return null })
+      if (video instanceof Blob) return { video, audio: wav(audio) }
+    }
+    ;(st0 as AgentState & { ultimoReelModo?: string }).ultimoReelModo = 'coreografo'
+  }
   const forte = forte0
   // la domanda si legge sulla prima ripresa, la conclusione sulla penultima: le loro tavole devono restare abbastanza
   const lett2 = lettura.slice()
