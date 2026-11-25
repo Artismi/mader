@@ -4,6 +4,7 @@
  * (per ogni tavola scelta: l'immagine e il suo pezzo di musica; il video lo monta ffmpeg fuori dal browser).
  */
 import * as T from './transport'
+import { addestra, esito as esitoReel, type Giudice, type Tratti } from './mind/giudice'
 import { loadOrCreate, runDay } from './day'
 import { getEpisodi } from './mind/episodio'
 import { propostaDi, type Forma } from './mind/curatore'
@@ -241,7 +242,7 @@ export async function reelSequenza(epId: string) {
 // Un reel almeno ogni 5 ore, un carosello almeno ogni 4 (sfalsato dal reel), una storia almeno ogni 8;
 // ogni 2 ore una finestra libera: se ha qualcosa da aggiungere, lo mette nella forma che vuole.
 type Forma3 = 'reel' | 'carosello' | 'storia'
-interface Pub { ig: string; forma: Forma3; quando: string; ep?: string; works: string[]; tipo?: string; modello?: string; stile?: string; tools: string[]; voto?: number; premiato?: boolean; visti?: string[] }
+interface Pub { ig: string; forma: Forma3; quando: string; tratti?: Tratti; durata?: number; esito?: number; ep?: string; works: string[]; tipo?: string; modello?: string; stile?: string; tools: string[]; voto?: number; premiato?: boolean; visti?: string[] }
 interface Agenda { ultimo: Partial<Record<Forma3, string>>; qualsiasi?: string; pubblicati: Pub[]; pesiForma?: Partial<Record<Forma3, number>> }
 // reel obbligato ogni 2 ore; e ogni 45 minuti deve uscire qualcosa (la forma che arriva di più tra carosello e storia)
 const ORE: Record<Forma3, number> = { reel: 2, carosello: Infinity, storia: Infinity }
@@ -266,11 +267,11 @@ export async function agenda() {
   const ritardo = Object.fromEntries((Object.keys(ORE) as Forma3[]).map(f => [f, ore(A.ultimo[f]) / (f === 'reel' ? ORE[f] : ORE[f] / peso(f))])) as Record<Forma3, number>
   const dovute = (Object.keys(ORE) as Forma3[]).filter(f => ritardo[f] >= 1).sort((a, b) => ritardo[b] - ritardo[a])
   // ogni 45 minuti esce qualcosa: il reel è favorito, ma sceglie lui (estrazione pesata su quanto ogni forma arriva)
-  if (!dovute.length && ore(A.qualsiasi) >= 0.75) {
+  if (!dovute.length && ore(A.qualsiasi) >= 0.58) {
     const w = { reel: peso('reel') * 2.5, carosello: peso('carosello'), storia: peso('storia') }, tot = w.reel + w.carosello + w.storia
     let q = Math.random() * tot; dovute.push((Object.keys(w) as Forma3[]).find(f => (q -= w[f]) <= 0) ?? 'reel')
   }
-  return { dovute, ritardo, libera: ore(A.qualsiasi) >= 0.75, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
+  return { dovute, ritardo, libera: ore(A.qualsiasi) >= 0.58, daUltima: ore(A.qualsiasi), pesiForma: A.pesiForma ?? {} }
 }
 
 /** annota una pubblicazione nell'agenda, con quello che serve poi per capire cosa ha funzionato */
@@ -284,7 +285,7 @@ export async function annotaPubblicazione(forma: Forma3, epId: string | null, wo
   const works = (await T.listWorks()).filter(w => ids.includes(w.id))
   const ora = new Date().toISOString()
   A.ultimo[forma] = ora; A.qualsiasi = ora
-  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, astratta: forma === 'reel' ? (st as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta : undefined, mondi: forma === 'reel' ? (st as AgentState & { ultimoReelMondi?: boolean }).ultimoReelMondi : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
+  A.pubblicati = [...A.pubblicati, { ig: r.id, forma, quando: ora, ep: epId ?? undefined, works: ids, tipo: ep?.tipo, modello: ep?.modello, stile: forma === 'reel' ? (st as AgentState & { ultimoReelStile?: string }).ultimoReelStile : undefined, tratti: forma === 'reel' ? (st as AgentState & { ultimoReelTratti?: Tratti }).ultimoReelTratti : undefined, durata: forma === 'reel' ? (st as AgentState & { ultimoReelDurata?: number }).ultimoReelDurata : undefined, astratta: forma === 'reel' ? (st as AgentState & { ultimoReelAstratta?: boolean }).ultimoReelAstratta : undefined, mondi: forma === 'reel' ? (st as AgentState & { ultimoReelMondi?: boolean }).ultimoReelMondi : undefined, tools: [...new Set(works.flatMap(w => w.intention?.tools ?? []))] }].slice(-80)
   await T.putState(st)
 }
 
@@ -309,6 +310,12 @@ export async function ascolta(dati: { media: { ig: string; like?: number; commen
   const per = new Map(dati.media.map(m => [m.ig, m]))
   const voto = (m: (typeof dati.media)[number]) => { const I = m.insights, portata = Math.max(20, I.reach ?? 0); return ((m.like ?? 0) + 2 * (m.commenti ?? 0) + 3 * (I.saved ?? 0) + 3 * (I.shares ?? 0) + 0.02 * (I.views ?? 0)) / portata }
   for (const p of A.pubblicati) { const m = per.get(p.ig); if (m) p.voto = voto(m) }
+  // il giudice: si riaddestra sui reel misurati (dopo 6 ore, quando i numeri si sono mossi), con l'oblio settimanale
+  {
+    for (const p of A.pubblicati) { const m = per.get(p.ig); if (m && p.forma === 'reel' && ore(p.quando) >= 6) { const e = esitoReel(m.insights, p.durata ?? 30); if (e !== null) p.esito = e } }
+    const dati = A.pubblicati.filter(p => p.forma === 'reel' && p.tratti && p.esito !== undefined).map(p => ({ tratti: p.tratti!, y: p.esito!, giorni: ore(p.quando) / 24 }))
+    if (dati.length) { const S2 = st as AgentState & { giudice?: Giudice }; S2.giudice = addestra(dati) }
+  }
   const note: string[] = []
   // la portata assoluta: quante persone ha raggiunto (copertura o visualizzazioni se il token le dà; se no like e commenti).
   // Serve a confrontare le forme tra loro: un carosello lo vedono solo i follower, un reel anche gli altri

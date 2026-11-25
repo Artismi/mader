@@ -26,6 +26,7 @@ import { buone, tavoleAdHoc } from './mind/adhoc'
 import { TONES } from '@/components/studio/genera/recipes'
 import { emptySheet, flatten, newCanvas, type Sheet } from './hands/sheet'
 import { occhio } from './hands/occhio'
+import { fiducia, ipotesi, stima, type Giudice, type Tratti } from './mind/giudice'
 import { disegnaMuffa } from './hands/muffa'
 const lum0 = (h: string) => { const m = h.replace('#', ''); if (m.length < 6) return 0.5; return [0, 2, 4].reduce((a, i, k) => a + [0.2126, 0.7152, 0.0722][k] * parseInt(m.slice(i, i + 2), 16) / 255, 0) }
 import type { ToolCtx } from './hands/tools'
@@ -858,7 +859,7 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
     const giudica = async (sc: typeof scena, e: typeof ev) => {
       let pv: HTMLCanvasElement[] = []
       await giraCoreografia({ scena: sc, brano, coreografia: e.coreografia, riprese: e.riprese, provini: tempi, suiProvini: x => { pv = x } })
-      if (!pv.length) return { v: -9, materia: 0, varia: 0 }
+      if (!pv.length) return { v: -9, materia: 0, varia: 0, tratti: null as Tratti | null }
       const fs = pv.map(c => measure(rasterize(c, 64)))
       const materia = fs.reduce((a, f) => a + gustoVisivo(st0, f), 0) / fs.length
       const dati = pv.map(c => { const q = document.createElement('canvas'); q.width = 18; q.height = 32; const g0 = q.getContext('2d')!; g0.drawImage(c, 0, 0, 18, 32); return g0.getImageData(0, 0, 18, 32).data })
@@ -868,15 +869,31 @@ async function faiReel(st0: AgentState, r: () => number, fogli: Sheet[], info: {
       const ripete = [...volte.values()].reduce((a, n) => a + Math.max(0, n - 1), 0) / Math.max(1, e.riprese.length)
       // piena ma leggera: il troppo fitto (complessità alta, niente vuoto) pesa quanto il vuoto
       const fitto = fs.reduce((a, f) => a + Math.max(0, (f.complessita ?? 0) - 0.5) * 2 + Math.max(0, 0.08 - (f.vuoto ?? 0)) * 4, 0) / fs.length
-      return { v: materia + 0.6 * varia - 0.5 * ripete + 0.08 * volte.size - fitto, materia, varia }
+      // i tratti per il giudice: cosa si vede e come si muove, soprattutto all'inizio (il gancio)
+      const d01 = (() => { let d = 0; for (let j = 0; j < dati[0].length; j += 4) d += Math.abs(dati[1][j] - dati[0][j]) + Math.abs(dati[1][j + 1] - dati[0][j + 1]) + Math.abs(dati[1][j + 2] - dati[0][j + 2]); return d / (dati[0].length / 4) / 255 })()
+      const parole = (sc.parole ?? []).reduce((a: number, w: unknown) => a + (typeof w === 'number' ? w : 0), 0)
+      const tratti: Tratti = { materia, cambiamento: varia, ripete, tavole: volte.size / 6, durata: brano.durata / 30, aggancio: d01, apertura: gustoVisivo(st0, fs[0]), testo: Math.min(2, parole / Math.max(1, brano.durata) / 1.5), bpm: ((brano as { bpm?: number }).bpm ?? 120) / 120 }
+      return { v: materia + 0.6 * varia - 0.5 * ripete + 0.08 * volte.size - fitto, materia, varia, tratti }
     }
-    let meglio = { scena, ev, ...(await giudica(scena, ev)) }
+    const versioni = [{ scena, ev, ...(await giudica(scena, ev)) }]
     for (let k = 1; k < 3; k++) {
       const sc = smonta(fogli, r)
       const e = evolviCoreografia(sc, brano, forte, info.map(x => x.rel), Math.floor(r() * 1e9), M.memoria, M.rel, sc.parole.map(legge))
-      const g0 = await giudica(sc, e)
-      if (g0.v > meglio.v) meglio = { scena: sc, ev: e, ...g0 }
+      versioni.push({ scena: sc, ev: e, ...(await giudica(sc, e)) })
     }
+    // l'occhio di Copibolo dà il voto; il giudice (se sa qualcosa, e non in un reel su cinque) aggiunge la sua voce, pesata per quanto sa
+    const G = (st0 as AgentState & { giudice?: Giudice }).giudice, c = fiducia(G), libero = r() < 0.2
+    const vv = versioni.map(x => x.v), mv = vv.reduce((a, b) => a + b, 0) / vv.length, sv = Math.sqrt(vv.reduce((a, b) => a + (b - mv) ** 2, 0) / vv.length) || 1
+    let voti = versioni.map(x => (x.v - mv) / sv)
+    if (G && c > 0 && !libero) {
+      const th = ipotesi(G, r), pr = versioni.map(x => (x.tratti ? stima(th, x.tratti) : 0)), mp = pr.reduce((a, b) => a + b, 0) / pr.length, sp = Math.sqrt(pr.reduce((a, b) => a + (b - mp) ** 2, 0) / pr.length) || 1
+      voti = voti.map((v, i) => (1 - c) * v + c * ((pr[i] - mp) / sp))
+    }
+    const occhio0 = vv.indexOf(Math.max(...vv)), scelta = voti.indexOf(Math.max(...voti))
+    log(G ? `Giudice: ${G.n.toFixed(0)} reel misurati, fiducia ${(c * 100).toFixed(0)}%${libero ? ', questa volta sto fuori (esplorazione)' : scelta !== occhio0 ? ', ha spostato la scelta' : ', d\'accordo con l\'occhio'}.` : 'Giudice: non ha ancora dati, sceglie l\'occhio.')
+    const meglio = versioni[scelta]
+    ;(st0 as AgentState & { ultimoReelTratti?: Tratti; ultimoReelDurata?: number }).ultimoReelTratti = meglio.tratti ?? undefined
+    ;(st0 as AgentState & { ultimoReelDurata?: number }).ultimoReelDurata = brano.durata
     scena = meglio.scena; ev = meglio.ev
     log(`Reel: tre versioni provate, giro quella con più materia e movimento (materia ${meglio.materia.toFixed(2)}, cambiamento ${meglio.varia.toFixed(2)}).`)
   }
