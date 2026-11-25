@@ -412,7 +412,8 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   const Tt = territorio(opere, { seme: st.day })
   const S = st as AgentState & { citta?: import('./mind/citta').Citta; diarioCitta?: unknown[]; territorio?: unknown }
   S.citta ??= fondaCitta(opere, Tt, st.seed ?? 11)
-  const v = giornata(S.citta, opere, Tt, { seme: st.day, letture: (st as unknown as { readings?: { title?: string; source?: string; text?: string }[] }).readings })
+  const cerca = async (f: string, q: string, n: number) => (await T.read(`mode=fonte&f=${encodeURIComponent(f)}&q=${encodeURIComponent(q)}&n=${n}`)) as unknown as import('./mind/citta').Lettura[]
+  const v = await giornata(S.citta, opere, Tt, { seme: st.day, cerca, ricerche: 8 })
   compatta(S.citta)
   S.diarioCitta = [...(S.diarioCitta ?? []), { giorno: st.day, quando: new Date().toISOString(), cittaGiorno: S.citta.giorno, verbale: v }].slice(-60)
   S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]) }

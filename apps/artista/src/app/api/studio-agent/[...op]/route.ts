@@ -32,6 +32,7 @@ export async function GET(req: Request, { params }: Ctx) {
       if (mode === 'vetrina') return NextResponse.json([await wikiFeatured()].filter(Boolean))
       if (mode === 'cerca') return NextResponse.json(await wikiSearch(q.get('q') ?? '', Number(q.get('n') ?? 2)))
       if (mode === 'rss') return NextResponse.json(await rss(q.get('url') ?? '', Number(q.get('n') ?? 2)))
+      if (mode === 'fonte') { const { cercaIn } = await import('@/lib/studio-agent/server/fonti'); return NextResponse.json(await cercaIn(q.get('f') ?? '', q.get('q') ?? '', Number(q.get('n') ?? 2))) }
       if (mode === 'voce') return NextResponse.json([await wikiVoce(q.get('t') ?? '')].filter(Boolean))
         if (mode === 'pagina') return NextResponse.json([await page(q.get('url') ?? '')].filter(Boolean))
       return bad('modo sconosciuto')
