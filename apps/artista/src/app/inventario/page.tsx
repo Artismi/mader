@@ -9,6 +9,14 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('filtri')) {
+      const { FILTRI, filtra } = await import('@/lib/studio-agent/hands/filtri')
+      const im = new Image(); im.src = '/img/b.jpg'; await im.decode(); const b = document.createElement('canvas'); b.width = 432; b.height = 540; b.getContext('2d')!.drawImage(im, 0, 0, 432, 540)
+      out.push({ gruppo: 'Filtri', nome: 'originale', cv: th(b) })
+      for (const n of FILTRI) { try { const r0 = filtra(b, n, {}); out.push({ gruppo: 'Filtri', nome: n, cv: r0 ? th(r0) : undefined }) } catch (e) { out.push({ gruppo: 'Filtri', nome: `${n} ERR ${String(e).slice(0, 50)}` }) } }
+      const root = ref.current!; for (const v of out) { const d = document.createElement('div'); d.style.cssText = 'width:180px;margin:4px;font:11px monospace'; if (v.cv) d.appendChild(v.cv); const l = document.createElement('div'); l.textContent = v.nome; d.appendChild(l); root.appendChild(d) }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     const { TOOLS } = await import('@/lib/studio-agent/hands/tools')
     const { emptySheet, flatten } = await import('@/lib/studio-agent/hands/sheet')
     const { rng } = await import('@/lib/studio-agent/core/rng')

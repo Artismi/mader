@@ -43,32 +43,57 @@ export function acquaSu(base: HTMLCanvasElement, modo: ModoAcqua, seme: number, 
       if (v > h[k]) { h[k] = v; cid[k] = id }
     }
   }
-  // 2. ombra sulla carta (sotto e a destra, morbida): lo strato è trasparente fuori dalle gocce
+  // la superficie liscia: si ammorbidisce la mappa d'altezza (normali pulite, niente grana)
+  {
+    const t = new Float32Array(W * H), rr = Math.max(1, Math.round(S * 0.0015))
+    for (let pass = 0; pass < 2; pass++) {
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { let sm = 0, c = 0; for (let k = -rr; k <= rr; k++) { const xx = x + k; if (xx >= 0 && xx < W) { sm += h[y * W + xx]; c++ } } t[y * W + x] = sm / c }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { let sm = 0, c = 0; for (let k = -rr; k <= rr; k++) { const yy = y + k; if (yy >= 0 && yy < H) { sm += t[yy * W + x]; c++ } } h[y * W + x] = sm / c }
+    }
+  }
+  // 2. l'ombra: solo dal lato opposto alla luce, stretta e morbida; dentro l'ombra la luce che la goccia concentra (caustica)
+  const Lx = -0.6, Ly = -0.7
   const ombra = newCanvas(W, H), og = ombra.getContext('2d')!
-  og.filter = `blur(${Math.max(1, S * 0.004)}px)`; og.fillStyle = 'rgba(0,0,0,0.22)'
-  for (const d of gocce) { og.beginPath(); og.ellipse(d.x + d.R * 0.12, d.y + d.R * 0.18, d.R * 0.95, d.R * 0.9, 0, 0, 6.283); og.fill() }
+  og.filter = `blur(${Math.max(1, S * 0.003)}px)`
+  for (const d of gocce) { og.fillStyle = 'rgba(0,0,0,0.42)'; og.beginPath(); og.ellipse(d.x - Lx * d.R * 0.22, d.y - Ly * d.R * 0.22, d.R * 1.0, d.R * 0.97, 0, 0, 6.283); og.fill() }
   const od = og.getImageData(0, 0, W, H).data
-  for (let k = 0; k < W * H; k++) { if (h[k] > 0) continue; const al = od[k * 4 + 3] / 255; if (al > 0) { o[k * 4 + 3] = al * 255 } }
-  // 3. dentro la goccia: rifrazione (la lente), bordo scuro, caustica, riflesso
-  const Lx = -0.55, Ly = -0.65, Lz = 0.52
+  const caus = newCanvas(W, H), cg = caus.getContext('2d')!
+  cg.filter = `blur(${Math.max(1, S * 0.004)}px)`
+  for (const d of gocce) { cg.fillStyle = 'rgba(255,255,235,0.75)'; cg.beginPath(); cg.ellipse(d.x - Lx * d.R * 0.78, d.y - Ly * d.R * 0.78, d.R * 0.42, d.R * 0.24, Math.atan2(-Ly, -Lx) + Math.PI / 2, 0, 6.283); cg.fill() }
+  const cd = cg.getImageData(0, 0, W, H).data
+  // fuori dalla goccia: la carta in ombra, e la luce che la goccia ha raccolto e posa accanto, dal lato opposto alla luce
+  for (let k = 0; k < W * H; k++) { if (h[k] > 0.02) continue; const sh = od[k * 4 + 3] / 255, ca = cd[k * 4 + 3] / 255; if (sh <= 0.01 && ca <= 0.01) continue; for (let c = 0; c < 3; c++) { let v = src[k * 4 + c] * (1 - sh * 0.75); v = v + (255 - v) * ca * 0.8; o[k * 4 + c] = v } o[k * 4 + 3] = 255 }
+  // 3. dentro: quello che c'è sotto, spostato poco (di più verso il bordo), un velo di aberrazione sul bordo,
+  //    il bordo scuro dal lato in ombra, la caustica chiara dal lato opposto alla luce, un riflesso piccolo e netto
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-    const k = y * W + x; if (h[k] <= 0) continue
-    const d = gocce[cid[k]], hx = (h[k + 1] - h[k - 1]) / 2, hy = (h[k + W] - h[k - W]) / 2
+    const k = y * W + x; if (h[k] <= 0.02) continue
+    const d = gocce[cid[k]] ?? gocce[0], hx = (h[k + 1] - h[k - 1]) / 2, hy = (h[k + W] - h[k - W]) / 2
     const l = Math.hypot(hx, hy, 1), nx = -hx / l, ny = -hy / l, nz = 1 / l
-    // la lente: le gocce grandi ingrandiscono e capovolgono il centro; il bordo piega forte verso l'interno
-    const t = h[k] / d.R, inv = d.R > S * 0.05 ? -0.35 : 0.75
-    let sx = d.x + (x - d.x) * inv * t + (x - d.x) * (1 - t) + nx * d.R * 0.5, sy = d.y + (y - d.y) * inv * t + (y - d.y) * (1 - t) + ny * d.R * 0.5
-    sx = Math.max(0, Math.min(W - 1, sx)); sy = Math.max(0, Math.min(H - 1, sy))
-    const s4 = (Math.floor(sy) * W + Math.floor(sx)) * 4
-    const bordo = Math.pow(1 - nz, 1.6) * 0.75, luce = Math.max(0, nx * Lx + ny * Ly + nz * Lz)
-    const spec = Math.pow(Math.max(0, nx * -0.35 + ny * -0.45 + nz * 0.82), 60) * 1.2
-    const caust = Math.max(0, -(nx * Lx + ny * Ly)) * (1 - nz) * 0.5
+    const pend = 1 - nz, grande = d.R > S * 0.06
+    const sp = (grande ? 1.1 : 0.9) * h[k] * 0.9
+    const ox = nx * sp + (grande ? (d.x - x) * 0.06 * (h[k] / d.R) : 0), oy = ny * sp + (grande ? (d.y - y) * 0.06 * (h[k] / d.R) : 0)
+    const camp = (dx: number, dy: number, c: number) => { const sx = Math.max(0, Math.min(W - 1, Math.round(x - dx))), sy = Math.max(0, Math.min(H - 1, Math.round(y - dy))); return src[(sy * W + sx) * 4 + c] }
+    const ab = 1 + Math.pow(pend, 3) * 0.12
+    const rgb = [camp(ox * ab, oy * ab, 0), camp(ox, oy, 1), camp(ox / ab, oy / ab, 2)]
+    const lato = nx * Lx + ny * Ly // > 0 verso la luce
+    // come nelle foto: la goccia è trasparente, quindi il lato SCURO è quello verso la luce (la luce entra e se ne va dall'altra parte),
+    // la caustica CHIARA è dal lato opposto, vicino al bordo; il riflesso netto resta sul lato della luce; una linea di contatto scura tutt'intorno
+    const pos = ((x - d.x) * Lx + (y - d.y) * Ly) / d.R // > 0: metà verso la luce
+    const contatto = h[k] < d.R * 0.06 ? 0.35 * (1 - h[k] / (d.R * 0.06)) : 0
+    const scuro = Math.min(0.85, Math.pow(Math.min(1, pend * 1.5), 1.8) * (0.2 + 0.45 * Math.max(0, lato)) + 0.28 * Math.max(0, pos) + contatto)
+    const chiaro = Math.max(0, -pos) * Math.pow(Math.min(1, pend * 2.2), 1.2) * 0.55 + Math.max(0, -pos) * 0.12 + (cd[k * 4 + 3] / 255) * 0.2
+    const hl = Math.pow(Math.max(0, nx * -0.42 + ny * -0.5 + nz * 0.76), 140), hl2 = Math.pow(Math.max(0, nx * 0.5 + ny * 0.55 + nz * 0.67), 220) * 0.4
+    const spec = Math.min(1, (hl > 0.5 ? 1 : hl * 2) + hl2)
     for (let c = 0; c < 3; c++) {
-      let v = src[s4 + c] * (1.06 - bordo) * (0.92 + 0.12 * luce) + caust * 120
-      v = v + (255 - v) * Math.min(1, spec)
+      // bagnato: quello che sta sotto è più scuro e più saturo; il corpo dell'acqua ha volume (più scuro dal lato in ombra)
+      const mm = (rgb[0] + rgb[1] + rgb[2]) / 3
+      let v = (mm + (rgb[c] - mm) * 1.18) * 0.9 * (1 - scuro) * (1 - 0.1 * Math.max(0, -lato) * (1 - nz * 0.5))
+      v = v + (255 - v) * chiaro
+      v = v + (255 - v) * spec
       o[k * 4 + c] = Math.max(0, Math.min(255, v))
     }
-    o[k * 4 + 3] = 255
+    // il bordo sfuma di un pixel nella carta (niente scalino)
+    o[k * 4 + 3] = Math.min(255, 255 * Math.min(1, h[k] / Math.max(0.5, S * 0.0012)))
   }
   g.putImageData(img, 0, 0)
   // l'orlo: una linea sottile più chiara dove l'acqua tocca la carta
@@ -92,26 +117,41 @@ function gelo(base: HTMLCanvasElement, src: Uint8ClampedArray, M: Uint8ClampedAr
   sg.fillStyle = modo === 'gelo' ? 'rgba(225,235,245,0.38)' : 'rgba(240,245,250,0.22)'; sg.fillRect(0, 0, W, H)
   sg.globalCompositeOperation = 'destination-in'; sg.drawImage(zona, 0, 0)
   g.drawImage(smer, 0, 0)
-  // i cristalli: felci a 60°, sottili, che crescono dentro la zona
+  // i cristalli: piume di ghiaccio che crescono dove il gelo è più forte verso dove è più debole (dal bordo verso dentro),
+  // ramificate a ~60° con un poco di disordine, più fitte e sottili; prima un alone (bloom), poi il tratto netto
   const zd = zg.getImageData(0, 0, W, H).data
-  g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineCap = 'round'
-  const felce = (x: number, y: number, an: number, L: number, w: number, prof: number) => {
-    if (L < S * 0.004 || prof > 4) return
-    const x2 = x + Math.cos(an) * L, y2 = y + Math.sin(an) * L
-    g.lineWidth = w; g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke()
-    const nR = 3 + Math.floor(r() * 5)
-    for (let i = 1; i <= nR; i++) { const t = i / (nR + 1), px = x + (x2 - x) * t, py = y + (y2 - y) * t, l2 = L * (0.45 - 0.3 * t) * (0.7 + r() * 0.4); felce(px, py, an + Math.PI / 3, l2, w * 0.6, prof + 1); felce(px, py, an - Math.PI / 3, l2, w * 0.6, prof + 1) }
+  const zA = (x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : zd[(Math.floor(y) * W + Math.floor(x)) * 4 + 3] / 255
+  const segni: [number, number, number, number, number, number][] = []
+  const piuma = (x: number, y: number, an: number, L: number, w: number, prof: number) => {
+    if (L < S * 0.003 || prof > 5) return
+    let cx = x, cy = y, a0 = an
+    const passi = 6
+    for (let i = 0; i < passi; i++) {
+      const nx2 = cx + Math.cos(a0) * L / passi, ny2 = cy + Math.sin(a0) * L / passi
+      if (zA(nx2, ny2) < 0.15) return
+      segni.push([cx, cy, nx2, ny2, w * (1 - i / passi * 0.5), 0.35 + 0.55 * zA(cx, cy)])
+      // rami laterali alternati, più corti verso la punta
+      if (r() < 0.7) { const lato = i % 2 ? 1 : -1, l2 = L * (0.5 - 0.06 * i) * (0.6 + r() * 0.5); piuma(nx2, ny2, a0 + lato * (Math.PI / 3 + (r() - 0.5) * 0.25), l2, w * 0.6, prof + 1) }
+      cx = nx2; cy = ny2; a0 += (r() - 0.5) * 0.12
+    }
   }
-  const nC = modo === 'brina' ? 140 + Math.floor(r() * 120) : 50 + Math.floor(r() * 60)
+  const nC = modo === 'brina' ? 380 + Math.floor(r() * 200) : 160 + Math.floor(r() * 100)
   for (let i = 0; i < nC; i++) {
-    const x = r() * W, y = r() * H, z = zd[(Math.floor(y) * W + Math.floor(x)) * 4 + 3] / 255
-    if (z < 0.35) continue
-    g.globalAlpha = 0.25 + 0.6 * z
-    felce(x, y, r() * 6.283, S * (0.015 + r() * 0.05) * z, Math.max(0.5, S * 0.0012), 0)
+    const x = r() * W, y = r() * H, z = zA(x, y)
+    if (z < 0.45) continue
+    // verso dove il gelo cala (gradiente della zona)
+    const e = S * 0.02, gx = zA(x + e, y) - zA(x - e, y), gy = zA(x, y + e) - zA(x, y - e)
+    const an = Math.hypot(gx, gy) > 0.01 ? Math.atan2(-gy, -gx) + (r() - 0.5) * 0.9 : r() * 6.283
+    piuma(x, y, an, S * (0.04 + r() * 0.1) * z, Math.max(0.4, S * 0.0011), 0)
   }
-  // granelli di ghiaccio che brillano
+  const disegnaSegni = (alpha: number, extra: number) => { g.lineCap = 'round'; for (const [x1, y1, x2, y2, w, al] of segni) { g.globalAlpha = al * alpha; g.lineWidth = w + extra; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke() } }
+  g.strokeStyle = 'rgb(235,245,255)'
+  g.filter = `blur(${Math.max(1, S * 0.003)}px)`; disegnaSegni(0.45, S * 0.002); g.filter = 'none'
+  g.strokeStyle = '#fff'; disegnaSegni(0.9, 0)
+  // grana di vetro smerigliato: puntini fitti e minuscoli, più densi dove il gelo è forte
   g.fillStyle = '#fff'
-  for (let i = 0; i < (modo === 'brina' ? 2500 : 900); i++) { const x = r() * W, y = r() * H, z = zd[(Math.floor(y) * W + Math.floor(x)) * 4 + 3] / 255; if (z < 0.3) continue; g.globalAlpha = 0.3 + r() * 0.5 * z; g.fillRect(x, y, 1 + r() * 1.4, 1 + r() * 1.4) }
+  for (let i = 0; i < (modo === 'brina' ? 30000 : 16000); i++) { const x = r() * W, y = r() * H, z = zA(x, y); if (z < 0.2 || r() > z) continue; g.globalAlpha = 0.08 + r() * 0.25; g.fillRect(x, y, 1, 1) }
+  for (let i = 0; i < 400; i++) { const x = r() * W, y = r() * H, z = zA(x, y); if (z < 0.5) continue; g.globalAlpha = 0.7; g.fillRect(x, y, 1.5, 1.5) }
   g.globalAlpha = 1
   return out
 }

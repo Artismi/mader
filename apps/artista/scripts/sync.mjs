@@ -18,3 +18,14 @@ copy('components/studio/genera', 'src/components/studio/genera')
 for (const f of ['catalog.ts', 'gl.ts', 'render.ts', 'shaders.ts']) copy(`components/studio/fx/${f}`, `src/components/studio/fx/${f}`)
 if (!existsSync(join(app, 'src/lib/studio-agent/transport.ts'))) console.warn('manca src/lib/studio-agent/transport.ts (versione browser)')
 console.log('sincronizzato')
+// i filtri WebGL del software (scritti per Fabric): girano col nostro esecutore, Fabric lo sostituisce una base minima
+{
+  const { readFileSync, writeFileSync, mkdirSync } = await import('node:fs')
+  const dove = new URL('../src/components/studio/extensions/filters/', import.meta.url)
+  mkdirSync(dove, { recursive: true })
+  for (const f of ['shared-utils.ts', 'optical-filters.ts', 'motion-filters.ts', 'style-filters.ts', 'texture-filters.ts']) {
+    const t = readFileSync(new URL(`../../../src/components/studio/extensions/filters/${f}`, import.meta.url), 'utf8').replace("import * as fabric from 'fabric'", "import * as fabric from './fabric-base'")
+    writeFileSync(new URL(f, dove), t)
+  }
+  writeFileSync(new URL('fabric-base.ts', dove), "/* eslint-disable */\n/* base minima al posto di Fabric: i filtri qui servono solo come shader */\n// eslint-disable-next-line @typescript-eslint/no-explicit-any\nexport const filters = { BaseFilter: class<T = any> { declare _t?: T; [k: string]: any; applyTo(..._a: any[]): any {} } }\nexport const classRegistry = { setClass: (..._a: unknown[]) => {} }\n")
+}
