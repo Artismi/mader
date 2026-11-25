@@ -107,3 +107,48 @@ export function aMemoria(f: Forma, k: number, seme: number, colore: string, S: n
   }
   return out
 }
+
+/**
+ * Scolpito: la sagoma gonfiata in un volume (la distanza dal bordo diventa altezza, a cuscino), fatto di una sua materia
+ * (un universo, una crescita, una texture): la materia si deforma sul volume (rifrazione dalle normali), la luce lo modella
+ * (diffusa, speculare, bordo), e poggia con un'ombra morbida. Non un contorno: un oggetto.
+ */
+export function scolpisci(st: Stampo, materia: HTMLCanvasElement, S: number, o: { luce?: number; lucido?: number; ombra?: number; colore?: string } = {}): HTMLCanvasElement {
+  const G = st.W, N = S
+  // altezza a griglia S: distanza dal bordo (due passate), profilo a cuscino, poi un poco morbida
+  const m = new Float32Array(N * N)
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) m[y * N + x] = st.dentro[Math.floor((y / N) * G) * G + Math.floor((x / N) * G)] ? 1e6 : 0
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const i = y * N + x; if (!m[i]) continue; let v = m[i]; if (x) v = Math.min(v, m[i - 1] + 1); if (y) v = Math.min(v, m[i - N] + 1); if (x && y) v = Math.min(v, m[i - N - 1] + 1.41); if (x < N - 1 && y) v = Math.min(v, m[i - N + 1] + 1.41); if (!x || !y) v = Math.min(v, 1); m[i] = v }
+  for (let y = N - 1; y >= 0; y--) for (let x = N - 1; x >= 0; x--) { const i = y * N + x; if (!m[i]) continue; let v = m[i]; if (x < N - 1) v = Math.min(v, m[i + 1] + 1); if (y < N - 1) v = Math.min(v, m[i + N] + 1); if (x < N - 1 && y < N - 1) v = Math.min(v, m[i + N + 1] + 1.41); if (x && y < N - 1) v = Math.min(v, m[i + N - 1] + 1.41); if (x === N - 1 || y === N - 1) v = Math.min(v, 1); m[i] = v }
+  let dmax = 1; for (let i = 0; i < N * N; i++) dmax = Math.max(dmax, m[i])
+  const h = new Float32Array(N * N); for (let i = 0; i < N * N; i++) { const t = m[i] / dmax; h[i] = m[i] ? Math.sqrt(Math.max(0, t * (2 - t))) * dmax * 0.6 : 0 }
+  const ang = o.luce ?? -2.3, Lx = Math.cos(ang), Ly = Math.sin(ang), Lz = 0.75, ln = Math.hypot(Lx, Ly, Lz)
+  const md = materia.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, materia.width, materia.height).data, MW = materia.width, MH = materia.height
+  const out = newCanvas(S, S), g = out.getContext('2d')!
+  // l'ombra portata: la sagoma spostata in basso, sfocata
+  const om = newCanvas(S, S), omg = om.getContext('2d')!, oid = omg.createImageData(S, S)
+  for (let i = 0; i < N * N; i++) oid.data[i * 4 + 3] = m[i] ? 255 : 0
+  omg.putImageData(oid, 0, 0)
+  g.save(); g.globalAlpha = o.ombra ?? 0.35; g.filter = `blur(${S * 0.025}px)`; g.drawImage(om, -Lx * S * 0.03, -Ly * S * 0.03 + S * 0.02); g.restore()
+  g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgba(30,24,18,1)'; g.fillRect(0, 0, S, S); g.globalCompositeOperation = 'source-over'
+  const id = g.createImageData(S, S), D = id.data, lucido = o.lucido ?? 0.5
+  const prima = g.getImageData(0, 0, S, S).data
+  for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) {
+    const i = y * N + x; if (!m[i]) { D[i * 4] = prima[i * 4]; D[i * 4 + 1] = prima[i * 4 + 1]; D[i * 4 + 2] = prima[i * 4 + 2]; D[i * 4 + 3] = prima[i * 4 + 3]; continue }
+    const nx = -(h[i + 1] - h[i - 1]) * 0.5, ny = -(h[i + N] - h[i - N]) * 0.5, nz = 1, nl = Math.hypot(nx, ny, nz)
+    const dif = Math.max(0, (nx * Lx + ny * Ly + nz * Lz) / (nl * ln))
+    const rz = 2 * (nz / nl) * (dif) - Lz / ln, spec = Math.pow(Math.max(0, rz), 18) * lucido
+    const bordo = Math.pow(1 - nz / nl, 2)
+    // la materia letta spostata dalle normali (si avvolge sul volume)
+    const sx = Math.min(MW - 1, Math.max(0, Math.round(((x + nx * 6) / S) * MW))), sy = Math.min(MH - 1, Math.max(0, Math.round(((y + ny * 6) / S) * MH))), k = (sy * MW + sx) * 4
+    const a = md[k + 3] / 255, base = o.colore ? [parseInt(o.colore.slice(1, 3), 16), parseInt(o.colore.slice(3, 5), 16), parseInt(o.colore.slice(5, 7), 16)] : [236, 230, 218]
+    for (let c = 0; c < 3; c++) {
+      let v = base[c] * (1 - a) + md[k + c] * a
+      v = v * (0.35 + 0.75 * dif) + 255 * spec + 40 * bordo
+      D[i * 4 + c] = Math.min(255, v)
+    }
+    D[i * 4 + 3] = 255
+  }
+  g.putImageData(id, 0, 0)
+  return out
+}

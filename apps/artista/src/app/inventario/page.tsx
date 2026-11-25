@@ -9,6 +9,22 @@ export default function Inventario() {
   useEffect(() => { (async () => {
     const out: Voce[] = []
     const W = 540, H = 675, th = (cv: HTMLCanvasElement) => { const c = document.createElement('canvas'); c.width = 180; c.height = 225; const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, 180, 225); const k = Math.min(180 / cv.width, 225 / cv.height); g.drawImage(cv, (180 - cv.width * k) / 2, (225 - cv.height * k) / 2, cv.width * k, cv.height * k); return c }
+    if (new URLSearchParams(location.search).has('disegno')) {
+      const Dg = await import('@/lib/studio-agent/hands/disegno'); const { rng } = await import('@/lib/studio-agent/core/rng'); const cose = await Dg.caricaCose(); const root = ref.current!
+      const lista = ['albero', 'mano', 'pesce', 'casa', 'uccello', 'farfalla', 'teschio', 'fungo', 'cavallo', 'faro']
+      const S = 240, pal = [['#1b1a17', '#efe9dd'], ['#7a1d12', '#f1e4d0'], ['#1c2b4a', '#e4e8ee'], ['#173d2c', '#e3ebde']]
+      for (const [i, n] of lista.entries()) {
+        const c = cose[n]; if (!c) continue
+        const riga = document.createElement('div'); riga.style.cssText = 'display:flex;gap:3px;margin:3px;font:10px monospace;align-items:center'; root.appendChild(riga)
+        const t = document.createElement('div'); t.textContent = n; t.style.width = '56px'; riga.appendChild(t)
+        const box = (cv: HTMLCanvasElement, bg: string) => { const w = document.createElement('canvas'); w.width = 120; w.height = 120; const g = w.getContext('2d')!; g.fillStyle = bg; g.fillRect(0, 0, 120, 120); g.drawImage(cv, 0, 0, 120, 120); riga.appendChild(w) }
+        for (const modo of ['schizzo', 'sagoma', 'volumi']) for (let v = 0; v < 3; v++) {
+          const r = rng(i * 100 + v * 7 + modo.length), [ink, bg] = pal[(i + v) % 4], pz = Dg.immagina(c, r, 0.35 + v * 0.3)
+          box(modo === 'schizzo' ? Dg.schizzo(pz, S, ink, r, 0.3 + v * 0.3) : modo === 'sagoma' ? Dg.sagoma(pz, S, ink, 0.3 + v * 0.3) : Dg.volumi(pz, S, bg === '#efe9dd' ? '#d8cbb0' : bg, { luce: -2.3 + v * 0.4 }), modo === 'volumi' ? '#cfc9bd' : bg)
+        }
+      }
+      ;(window as unknown as { __fatto: boolean }).__fatto = true; return
+    }
     if (new URLSearchParams(location.search).has('forme')) {
       const F = await import('@/lib/studio-agent/hands/forma'); const forme = await F.caricaForme(); const root = ref.current!
       const cose = ['albero', 'mano', 'pesce', 'casa', 'uccello', 'farfalla', 'teschio', 'fungo', 'cavallo', 'faro']
@@ -21,10 +37,13 @@ export default function Inventario() {
         const box = (cv: HTMLCanvasElement, bg = '#efe9dd') => { const w = document.createElement('canvas'); w.width = 150; w.height = 150; const g = w.getContext('2d')!; g.fillStyle = bg; g.fillRect(0, 0, 150, 150); g.drawImage(cv, 0, 0, 150, 150); riga.appendChild(w) }
         box(st.tratto)
         const m = document.createElement('canvas'); m.width = st.W; m.height = st.H; const mg = m.getContext('2d')!, id = mg.createImageData(st.W, st.H); for (let k = 0; k < st.W * st.H; k++) { id.data[k * 4 + 3] = st.dentro[k] ? 200 : 0 } mg.putImageData(id, 0, 0); box(m)
-        box(F.crescitaNelloStampo(st, i * 101 + 7, '#1b1a17', S))
-        box(F.crescitaNelloStampo(st, i * 59 + 3, '#2b2f6b', S), '#d9e4dc')
-        const u = F.universoSimile(st, i * 997 + 11, '#7a1d12', S, 40); box(u.tela)
-        box(F.aMemoria(f, i % 3, i * 13 + 1, '#141414', S))
+        const { stendiUniverso } = await import('@/lib/studio-agent/hands/universo'); const { cercaCamere } = await import('@/lib/studio-agent/hands/camera')
+        const pal = [['#1c2b4a', '#e8dcc0'], ['#7a1d12', '#efe3cf'], ['#173d2c', '#dfe8d5'], ['#2a1f3d', '#f0d9c4']][i % 4]
+        const ind = cercaCamere(String(i * 31 + 5), 3, 600)[0]?.indirizzo ?? String(i)
+        const mat = stendiUniverso(S, S, { indirizzo: ind, colore: pal[0], caleido: ['sei', 'quattro', '', 'specchio'][i % 4], fino: 1, zoom: 0.5, rot: 0, alpha: 1 })
+        box(F.scolpisci(st, mat, S, { colore: pal[1], luce: -2.3 }), '#d8d2c6')
+        const cr = F.crescitaNelloStampo(st, i * 101 + 7, pal[0], S)
+        box(F.scolpisci(st, cr, S, { colore: pal[1], luce: -2.0, lucido: 0.3 }), '#cfd6cf')
       }
       ;(window as unknown as { __fatto: boolean }).__fatto = true; return
     }
