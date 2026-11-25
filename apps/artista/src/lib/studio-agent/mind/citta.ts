@@ -7,6 +7,7 @@
 
 import { territorio, radice, type Opera, type Territorio, type Insieme } from './territorio'
 import { campagna, SCIENZIATI, type CosmoAPI, type Osservatorio } from './osservatorio'
+import { costruisci, type Cantiere as CantiereCitta } from './cantiere_citta'
 
 // ── le regole: visibili a tutti, scritte come dati ──────────────────────────────────────────────────────────
 export const REGOLE_INIZIALI = {
@@ -32,6 +33,7 @@ export type Abitante = {
   carattere: Carattere; interessi: Record<string, number>; casa: { x: number; y: number }; raggio: number
   cella: Cella; tensione: number; peso: Record<string, number>; storia: string[]; visti: string[]
   fonti?: Record<string, number> // la sua tavolozza di siti: si allarga e si restringe con l'uso
+  vesti?: { id: string; col: string }[]; fem?: boolean // quello che ha addosso (i capi del guardaroba di Porto Vecchio)
 }
 export type Lettura = { url?: string; source?: string; title?: string; text?: string }
 export type Cerca = (fonte: string, q: string, n: number) => Promise<Lettura[]>
@@ -52,7 +54,7 @@ export type EsitoOfficina = { autore: string; nome: string; testo: string; tenut
 export type Cantiere = { id: string; giorno: number; chi: string; cosa: string; passi: { testo: string; dove: 'biblioteca' | 'bottega' | 'officina' | 'sito'; stato: 'da fare' | 'fatto' | 'aspetta' }[] }
 // la sala di un quartiere, come la vuole il suo curatore: niente è obbligatorio, tutto è possibile
 export type Sala = { curatore: string; disposizione: 'parete' | 'griglia' | 'arco' | 'sospese' | 'colonna' | 'pavimento'; luce: 'calda' | 'fredda' | 'radente' | 'zenitale' | 'colore'; fondo: 'nero' | 'chiaro' | 'colore' | 'nessuno'; quante: number; perche: string; giorno: number }
-export type Citta = { sale?: Record<string, Sala>; osservatorio?: Osservatorio; officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
+export type Citta = { costruito?: CantiereCitta; sale?: Record<string, Sala>; osservatorio?: Osservatorio; officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const cos = (a: Record<string, number>, b: Record<string, number>) => { let s = 0, na = 0, nb = 0; for (const k in a) { na += a[k] ** 2; if (b[k]) s += a[k] * b[k] } for (const k in b) nb += b[k] ** 2; return s / (Math.sqrt(na * nb) || 1) }
@@ -523,6 +525,22 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
     }
   }
 
+  // 5b'. il guardaroba: ognuno si veste secondo chi è; ogni tanto qualcuno ci va e si cambia
+  for (const a of C.abitanti) if (!a.vesti) { const v = vestitoDi(a, r); a.vesti = v.vesti; a.fem = v.fem }
+  for (const a of C.abitanti) {
+    const voglia = 0.03 + (a.carattere.ironico ?? 0) * 0.06 + (a.carattere.visionario ?? 0) * 0.05
+    if (r() > voglia) continue
+    const prima = a.vesti!.map(v => v.id), nuovo = vestitoDi(a, r, true)
+    const via = prima.find(id => !nuovo.vesti.some(v => v.id === id)), dentro = nuovo.vesti.find(v => !prima.includes(v.id))
+    a.vesti = nuovo.vesti
+    if (dentro) verbale.push({ fase: 'bottega', chi: a.id, tipo: 'guardaroba', testo: `Sono passato dal guardaroba: ${via ? `via ${via.replace(/_/g, ' ')}, ` : ''}${dentro.id.replace(/_/g, ' ')}.` })
+  }
+  // 5b''. il cantiere della città: costruire, espandere, correggere, catalogare, curare, coprire (accumulo senza piano)
+  C.costruito ??= { costruzioni: [], nomiVie: {} }
+  for (const x of costruisci(C.costruito, T, opere, C.abitanti, C.giorno, r, { scoperte: C.osservatorio?.scoperte.filter(s => /somiglia|potrebbe/.test(s.perche) || /acqua liquida/.test(s.testo)).map(s => ({ n: s.n, testo: s.testo })), cantieri: (C.cantieri ?? []).map(c => ({ cosa: c.cosa, chi: c.chi })), letture: C.rete.filter(n => n.tipo === 'lettura' || n.tipo === 'risposta').length, sale: C.sale }))
+    verbale.push({ fase: 'archivio', chi: x.chi, tipo: x.tipo, testo: x.testo })
+  if (!C.costruito.costruzioni.some(c => c.tipo === 'monumento' && c.nome === 'il guardaroba')) C.costruito.costruzioni.push({ id: 'guardaroba', tipo: 'monumento', chi: 'urbanista', giorno: C.giorno, nome: 'il guardaroba', dati: { guardaroba: true }, stato: 'in piedi', storia: [{ giorno: C.giorno, chi: 'urbanista', cosa: 'ha aperto il guardaroba' }] })
+
   // 5c. le sale: chi abita di più un quartiere ne è il curatore e la allestisce come vuole; ogni tanto la cambia
   C.sale ??= {}
   const DISP: Sala['disposizione'][] = ['parete', 'griglia', 'arco', 'sospese', 'colonna', 'pavimento'], LUCI: Sala['luce'][] = ['calda', 'fredda', 'radente', 'zenitale', 'colore'], FONDI: Sala['fondo'][] = ['nero', 'chiaro', 'colore', 'nessuno']
@@ -629,4 +647,27 @@ export function riportaOfficina(C: Citta, esiti: { richiesta: { autore: string; 
   }
   C.officina.richieste = []
   C.officina.esiti = C.officina.esiti.slice(-40)
+}
+
+// ── i vestiti: capi del guardaroba di Porto Vecchio, scelti secondo il mestiere e il carattere ────────────────
+const COL = { scuri: ['#2a2c32', '#3a3530', '#1e2a3a', '#3e463a', '#4a3a30'], chiari: ['#e8e2d4', '#d8d2c4', '#c8ccd0', '#efe9dc'], vivi: ['#b4281e', '#e0a020', '#2a6ab0', '#3a8a5a', '#c84a8a', '#e86a2a', '#6a4ac8'] }
+const pick = <T,>(r: () => number, l: T[]) => l[Math.floor(r() * l.length)]
+const PER: Record<string, { sopra: string[]; sotto: string[]; piedi: string[]; extra: string[] }> = {
+  mestiere: { sopra: ['salopette', 'giacca_lavoro', 'grembiule', 'maglietta', 'felpa', 'camicia_jeans', 'tuta_nylon', 'gilet_toppe'], sotto: ['pantaloni_lavoro', 'cargo', 'jeans_carpenter', 'jeans'], piedi: ['anfibi', 'stivali', 'scarpe_tela', 'scarpe_trail'], extra: ['cappellino', 'bandana', 'guanti', 'zaino', 'berretto', 'marsupio'] },
+  testa: { sopra: ['maglione', 'maglione_collo_alto', 'camicia', 'cardigan', 'dolcevita', 'cappotto', 'impermeabile', 'giacca'], sotto: ['velluto', 'pantaloni', 'pantaloni_grigi', 'gonna', 'jeans'], piedi: ['mocassini', 'scarpe', 'stivali_pelle', 'scarpe_eleganti'], extra: ['occhiali_ovali', 'sciarpa', 'basco', 'borsello', 'foulard', 'cappello'] },
+  figura: { sopra: ['giacca_completo', 'cappotto', 'camicia', 'gilet'], sotto: ['pantaloni_completo', 'pantaloni', 'gonna'], piedi: ['scarpe_eleganti', 'mocassini', 'tacchi'], extra: ['cravatta', 'papillon', 'orologio_polso', 'occhiali_ovali', 'collana_perle'] },
+  scienziato: { sopra: ['camicia_righe', 'cardigan', 'maglione_v', 'pile', 'parka', 'anorak'], sotto: ['pantaloni', 'velluto', 'pantaloni_arrampicata', 'jeans'], piedi: ['scarpe_trail', 'scarpe', 'scarpe_corsa'], extra: ['occhiali_ovali', 'zaino', 'orologio_polso', 'berretto_corto'] },
+}
+export function vestitoDi(a: { id: string; nome?: string; tipo: string; carattere: Record<string, number>; fem?: boolean }, r: () => number, cambio = false) {
+  const fem = a.fem ?? (/^la |^l'(astronoma|alchimista)/.test(a.nome ?? '') || (/^chi pensa/.test(a.nome ?? '') && r() < 0.5))
+  const P = PER[a.tipo] ?? PER.testa, vivace = (a.carattere.ironico ?? 0) + (a.carattere.visionario ?? 0) > 1 || cambio && r() < 0.4
+  const col = () => pick(r, vivace ? [...COL.vivi, ...COL.scuri] : [...COL.scuri, ...COL.chiari])
+  // un tocco di ribellione: chi ha il carattere contrario porta qualcosa da strada (il passamontagna, la felpa col cappuccio)
+  const ribelle = (a.carattere.contrario ?? 0) > 0.7
+  const sopra = ribelle && r() < 0.6 ? pick(r, ['felpa_cappuccio_zip', 'felpa_skate', 'chiodo_spille', 'coach_jacket']) : pick(r, P.sopra.filter(x => fem || !/gonna|vestito/.test(x)))
+  const sotto = /salopette|tuta/.test(sopra) ? null : pick(r, P.sotto.filter(x => fem || x !== 'gonna'))
+  const vesti = [{ id: sopra, col: col() }, ...(sotto ? [{ id: sotto, col: pick(r, COL.scuri) }] : []), { id: pick(r, P.piedi.filter(x => fem || x !== 'tacchi')), col: pick(r, COL.scuri) }]
+  for (const x of P.extra) if (r() < 0.25) vesti.push({ id: x, col: col() })
+  if (ribelle && r() < 0.3) vesti.push({ id: pick(r, ['passamontagna_riccio', 'bandana', 'cappellino_dritto']), col: col() })
+  return { vesti, fem }
 }
