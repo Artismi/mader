@@ -51,7 +51,7 @@ import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma
 import { loadGeneri } from './voice/lingua'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione, imparaScalaMuffa } from './mind/episodio'
 import { raccoltaACaso } from './hands/raccolta'
-import { scegliRegistro, esitoRegistro } from './mind/direzione'
+import { scegliRegistro, esitoRegistro, direzioneDi, strumentiDi } from './mind/direzione'
 import { smonta, evolviCoreografia, partitura, gira as giraCoreografia, descriviCoreografia, type Coreografia, type Accoppiamento } from './hands/coreografo'
 import { suonaBeat, scegliStile, premiaStile, type Gusto } from './suono/beat'
 import { ascoltaBeat } from './suono/ascolto'
@@ -400,11 +400,11 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   log(`Sequenza ${nEp} in forma «${plan.forma}», linguaggio «${L.nome}», tono ${tone.label} (${armonia}). ${perL}`)
   log(`«${plan.titolo}», ${plan.schede.length} tavole.${plan.d ? ` Il ragionamento: ${plan.d.passi} passaggi, ci credo al ${Math.round(plan.d.conf * 100)}%.` : ` Niente da dedurre oggi: leggo${plan.lettura ? ` «${plan.lettura}»` : ''}.`}${nF ? ` Salti: ${plan.schede.filter(x => x.follia).map(x => x.follia).join(', ')}.` : ''}`)
   // la direzione della sequenza: un registro solo per tutte le sue tavole (una serie coerente), con la sua economia
-  const dirS = scegliRegistro(st, r)
-  log(`Direzione della sequenza: ${dirS.nome} (${dirS.passi[0]}-${dirS.passi[1]} gesti per tavola dopo la scena, ${dirS.figure} figure, vuoto almeno ${Math.round(dirS.vuoto * 100)}%${dirS.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
+  const dirS = direzioneDi(L)
+  log(`Direzione della sequenza, dal linguaggio: ${dirS.nome} (${dirS.passi[0]}-${dirS.passi[1]} gesti per tavola dopo la scena, ${dirS.figure} figure, vuoto almeno ${Math.round(dirS.vuoto * 100)}%${dirS.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
   ;(st as AgentState & { ultimaDirezione?: string }).ultimaDirezione = dirS.id
   const studio = async (s0: Sheet) => {
-    const it: Intention = { ...intention, targets: {}, tools: [...L.strumenti, 'materia', 'luce', 'shader', 'traccia', 'taglia'] }
+    const it: Intention = { ...intention, targets: {}, tools: [...strumentiDi(L), 'materia', 'luce', 'shader', 'traccia', 'taglia'] }
     const passi = dirS.passi[0] + Math.floor(r() * (dirS.passi[1] - dirS.passi[0] + 1))
     const res = await runStudio(st, r, s0, it, { ...tctx }, passi, undefined, dirS)
     learnTools(st, res.effects)
@@ -554,9 +554,11 @@ async function tavola(
   const tctx: ToolCtx = { r, tone, intention, mood: st.mood, say: () => inscription(vctx), shaders: st.shaders, quality: fast ? 0.35 : 0.5, noText: !!(scena || en || pag) }
   const base = { curioso: 22, annoiato: 26, inquieto: 30, giocoso: 24, cupo: 16, calmo: 18 }[st.mood]
   // la direzione: che tavola è, e la sua economia (le sferzate e le pagine del cantiere no)
-  const dir = rottura || pag ? undefined : scegliRegistro(st, r)
+  const Lt = rottura || pag ? null : scegliLinguaggio(st, r, [intention.word]).L
+  const dir = Lt ? direzioneDi(Lt) : undefined
+  if (Lt) intention.tools = [...new Set([...intention.tools, ...strumentiDi(Lt)])]
   const steps = dir ? dir.passi[0] + Math.floor(r() * (dir.passi[1] - dir.passi[0] + 1)) : Math.round(base * (fast ? 0.6 : 1) * (scena ? 0.45 : en ? 0.8 : 1))
-  if (dir) log(`Direzione: ${dir.nome} (fino a ${steps} gesti dopo la scena, ${dir.figure} figure, vuoto almeno ${Math.round(dir.vuoto * 100)}%${dir.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
+  if (dir) log(`Direzione, dal linguaggio: ${dir.nome} (fino a ${steps} gesti dopo la scena, ${dir.figure} figure, vuoto almeno ${Math.round(dir.vuoto * 100)}%${dir.trattamento ? ', un trattamento al massimo' : ', nessun trattamento'}).`)
   log(`— Tavola ${n} (${ragione}), tono ${tone.label}.`)
   let start = emptySheet(800, 1000, tone.bg)
   let pre: { gestures: Gesture[]; genome: { tool: string; params: Record<string, unknown> }[] } = { gestures: [], genome: [] }

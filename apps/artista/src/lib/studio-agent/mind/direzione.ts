@@ -8,6 +8,7 @@
 import type { AgentState } from '../core/types'
 import type { Rnd } from '../core/rng'
 import type { Sheet } from '../hands/sheet'
+import type { Linguaggio } from './linguaggi'
 
 export interface Registro { id: string; nome: string; passi: [number, number]; figure: number; vuoto: number; trattamento: boolean }
 export const REGISTRI: Registro[] = [
@@ -52,4 +53,29 @@ export function tradisce(g: Registro, prima: Sheet, dopo: Sheet, tenuti: string[
   if (figure(dopo) > Math.max(g.figure, figure(prima))) return 'una figura di troppo'
   if (vuotoDopo < g.vuoto && vuotoDopo < 0.9) return 'il vuoto che sparisce'
   return null
+}
+
+/**
+ * La direzione dal linguaggio: i linguaggi (svizzero, costruttivismo, risografia, glitch, organico, collage, concettuale,
+ * poesia dei dati, acido, brutalismo, ornamento, minimalismo, e tutti i suoi incroci) portano già la loro idea di tavola.
+ * L'economia si legge dai loro modi e impaginazioni: il vuoto, l'intero, il contorno chiedono pochi gesti e molto spazio;
+ * la materia, il frammento, il sovrapposto ne chiedono di più. Così la direzione è sua, non un elenco a parte.
+ */
+const RADI = new Set(['vuoto', 'intero', 'contorno', 'solo', 'coppia', 'griglia']), FITTI = new Set(['materia', 'frammento', 'spezzato', 'sovrapposti', 'zoom', 'ripetuto', 'pennello', 'orbita', 'diviso'])
+export function direzioneDi(L: Linguaggio): Registro {
+  const segni = [...L.modi, ...L.lay]
+  const d = Math.max(0, Math.min(1, 0.45 + 0.12 * (segni.filter(x => FITTI.has(x)).length - segni.filter(x => RADI.has(x)).length)))
+  return { id: L.id, nome: L.nome, passi: [Math.round(d * 3), Math.round(1 + d * 6)], figure: 1 + Math.round(d * 3), vuoto: Math.max(0.1, 0.45 - d * 0.35), trattamento: d > 0.4 || L.strumenti.some(t => TRATTAMENTI.has(t)) }
+}
+
+/** gli strumenti nuovi entrano nei linguaggi a cui appartengono (anche negli incroci, per discendenza) */
+const NUOVI: Record<string, string[]> = {
+  riso: ['dither', 'mosaico'], glitch: ['colata', 'affettatore', 'sciame', 'stiro', 'memoria'], organico: ['acqua', 'universo', 'particelle'],
+  ornamento: ['universo', 'vetro'], acido: ['ondine', 'vetro'], minimo: ['luce3d'], datapoesia: ['universo', 'particelle', 'mosaico'],
+  collage: ['affettatore', 'memoria'], svizzero: ['ondine', 'universo'], costruttivista: ['luce3d', 'affettatore'], brutalista: ['mosaico', 'memoria', 'dither'], concettuale: [],
+}
+export function strumentiDi(L: Linguaggio): string[] {
+  const out = new Set(L.strumenti)
+  for (const [base, xs] of Object.entries(NUOVI)) if (L.id.split('×').includes(base)) xs.forEach(x => out.add(x))
+  return [...out]
 }
