@@ -472,6 +472,23 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
     S.citta.costruito ??= { costruzioni: [], nomiVie: {} }
     ;(S.citta.costruito as unknown as { geologia?: unknown }).geologia = { giorno: st.day, lato: N, alt: fin(G.alt, 1), cont: fin(G.cont, 1), spinta: fin(G.spinta, 100), fosse: fin(G.fosse, 100) }
   } catch (e) { o.log(`la geologia non è venuta: ${e instanceof Error ? e.message : e}`) }
+  // il meta-generatore di shader: i suoli rifatti oggi (o mai evoluti) si evolvono da alberi di nodi, a partire dal motivo che
+  // il curatore ha scelto e dall'albero che c'era; il migliore, reso e misurato davvero, diventa il suolo dell'area
+  try {
+    const { evolvi } = await import('./hands/metashader')
+    const r = rng(st.day * 977 + S.citta.giorno), archivio: NonNullable<ReturnType<typeof evolvi>['misura']>[] = []
+    const SPINTA: Record<string, string> = { retino: 'retino', onde: 'onde', griglia: 'griglia', campo: 'rumore', strisce: 'onde', macchie: 'celle' }
+    const daFare = Object.entries(S.citta.sale ?? {}).filter(([, s]) => s.suolo && ((s.suolo as { v?: number }).v !== 3 || s.suolo.giorno === S.citta!.giorno)).slice(0, 4)
+    for (const [q, sala] of daFare) {
+      const F = sala.suolo! as typeof sala.suolo & { albero?: import('./hands/metashader').Albero; v?: number }
+      const spinte = { [SPINTA[F.motivo] ?? 'rumore']: 1, ...(F.secondo ? { [SPINTA[F.secondo] ?? 'celle']: 0.6 } : {}) }
+      const e = evolvi(r, F.colori as [string, string, string], { semi: F.albero ? [F.albero] : [], spinte, archivio })
+      if (e.misura) archivio.push(e.misura)
+      Object.assign(F, { codice: e.codice, albero: e.albero, v: 3, perche: `${F.perche.split(' — ')[0]} — evoluto in ${e.generazioni} generazioni (${e.nodi} nodi, voto ${e.voto})` })
+      const nome = Tt.quartieri.find(x => String(x.id) === q)?.nome ?? q
+      v.push({ fase: 'bottega', chi: sala.curatore, tipo: 'shader', testo: `Il suolo di «${nome}» l'ho fatto crescere: ${e.generazioni} generazioni di mutazioni e incroci, è rimasto un albero di ${e.nodi} nodi.` })
+    }
+  } catch (e) { o.log(`meta-generatore saltato: ${e instanceof Error ? e.message : e}`) }
   // i tessuti: i fondali che i curatori hanno chiesto si tessono con i generatori veri (dell'officina, o un gesto che crea),
   // nei colori dell'area; l'immagine va nel sito (tessuti/) e il piano la porta
   try {

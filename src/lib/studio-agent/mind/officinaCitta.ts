@@ -70,7 +70,17 @@ const CREANO = ['semina', 'pattern', 'geometria', 'traccia', 'universo', 'muffa'
 
 /** tessere un pezzo di città: un generatore vero (uno di quelli tenuti in officina, o un gesto che crea seguito da uno che
  *  trasforma) sul foglio vuoto con i colori dell'area. Ne esce l'immagine che riveste un piano o un suolo. */
+/** quanto varia un'immagine (un fondale tutto uguale non è un tessuto) */
+function varieta(cv: HTMLCanvasElement) { const n = 48, t = document.createElement('canvas'); t.width = t.height = n; const g = t.getContext('2d')!; g.drawImage(cv, 0, 0, n, n); const d = g.getImageData(0, 0, n, n).data; let m = 0, m2 = 0; for (let i = 0; i < d.length; i += 4) { const l = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11; m += l; m2 += l * l } const k = d.length / 4; return Math.sqrt(Math.max(0, m2 / k - (m / k) ** 2)) }
+
 export async function tessi(st: AgentState, r: Rnd, ctx: ToolCtx, tenuti: Programma[], lato = 512): Promise<{ canvas: HTMLCanvasElement; come: string }> {
+  // si riprova finché esce qualcosa che si vede (al massimo 4 volte): un foglio rimasto vuoto non si appende
+  let meglio: { canvas: HTMLCanvasElement; come: string } | null = null, vm = -1
+  for (let k = 0; k < 4; k++) { const t = await tessiUna(st, r, ctx, tenuti, lato), v = varieta(t.canvas); if (v > vm) { vm = v; meglio = t } if (v > 18) break }
+  return meglio!
+}
+
+async function tessiUna(st: AgentState, r: Rnd, ctx: ToolCtx, tenuti: Programma[], lato = 512): Promise<{ canvas: HTMLCanvasElement; come: string }> {
   let s0 = emptySheet(lato, lato, ctx.tone.bg), passi: Passo[] = [], come = ''
   const p = tenuti.length && r() < 0.6 ? tenuti[Math.floor(r() * tenuti.length)] : null
   if (p) { passi = p.passi; come = `il generatore «${p.nome}» dell'officina` }
