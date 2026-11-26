@@ -10,13 +10,13 @@
 type Rnd = () => number
 export type Nodo =
   | { k: 'onde'; f: number; ang: number } | { k: 'rumore'; s: number; o: number } | { k: 'celle'; s: number } | { k: 'anelli'; f: number }
-  | { k: 'griglia'; f: number; w: number } | { k: 'retino'; f: number; ang: number } | { k: 'gabor'; f: number; ang: number; n: number }
+  | { k: 'griglia'; f: number; w: number } | { k: 'retino'; f: number; ang: number } | { k: 'gabor'; f: number; ang: number; n: number } | { k: 'bordi'; s: number; w: number }
   | { k: 'somma' | 'prodotto' | 'max' | 'min'; a: Nodo; b: Nodo } | { k: 'liscio'; a: Nodo; b: Nodo; r: number } | { k: 'miscela'; a: Nodo; b: Nodo; m: Nodo }
   | { k: 'soglia'; a: Nodo; t: number; w: number } | { k: 'piega'; a: Nodo }
   | { k: 'spazio'; m: 'ruota' | 'scala' | 'ripeti' | 'simmetria' | 'torci' | 'disturba' | 'polare'; v: number; a: Nodo }
 export type Albero = { radice: Nodo; dither: number; tinte: number }
 
-const SORGENTI = ['onde', 'rumore', 'celle', 'anelli', 'griglia', 'retino', 'gabor'] as const
+const SORGENTI = ['onde', 'rumore', 'celle', 'anelli', 'griglia', 'retino', 'gabor', 'bordi'] as const
 const OPERATORI = ['somma', 'prodotto', 'max', 'min', 'liscio', 'miscela', 'soglia', 'piega'] as const
 const MODI = ['ruota', 'scala', 'ripeti', 'simmetria', 'torci', 'disturba', 'polare'] as const
 const pk = <T,>(r: Rnd, l: readonly T[], pesi?: number[]) => { if (!pesi) return l[Math.floor(r() * l.length)]; let x = r() * pesi.reduce((a, b) => a + b, 0); for (let i = 0; i < l.length; i++) if ((x -= pesi[i]) <= 0) return l[i]; return l[0] }
@@ -34,6 +34,7 @@ export function genera(r: Rnd, spinte: Partial<Record<typeof SORGENTI[number], n
       case 'anelli': return { k, f: n2(4 + r() * 30) }
       case 'griglia': return { k, f: n2(4 + r() * 30), w: n2(0.03 + r() * 0.2) }
       case 'retino': return { k, f: n2(20 + r() * 80), ang: n2(r() * 1.57) }
+      case 'bordi': return { k, s: n2(3 + r() * 12), w: n2(0.02 + r() * 0.12) }
       default: return { k: 'gabor', f: n2(6 + r() * 30), ang: n2(r() * 3.14), n: 2 + Math.floor(r() * 5) }
     }
   }
@@ -82,7 +83,20 @@ float bayer4(vec2 q){ vec2 i=mod(floor(q),4.); float b=0.; int x=int(i.x), y=int
 `
 const vec = (h: string) => { const v = parseInt(h.replace('#', ''), 16); return `vec3(${((v >> 16 & 255) / 255).toFixed(3)},${((v >> 8 & 255) / 255).toFixed(3)},${((v & 255) / 255).toFixed(3)})` }
 
+/** semplifica l'albero senza cambiarne l'immagine (o quasi): piega di piega, soglie in fila, spazi identici, rami uguali */
+export function semplifica(n: Nodo): Nodo {
+  const m = n as unknown as Record<string, unknown>
+  for (const x of ['a', 'b', 'm']) if (typeof m[x] === 'object') m[x] = semplifica(m[x] as Nodo)
+  if (n.k === 'piega' && n.a.k === 'piega') return n.a.a // |2|2x-1|-1| ripiegato due volte: si tiene una piega
+  if (n.k === 'soglia' && n.a.k === 'soglia') return { ...n, a: n.a.a, w: Math.min(n.w, n.a.w) }
+  if (n.k === 'spazio' && n.m === 'scala' && Math.abs(n.v - 1) < 0.05) return n.a
+  if ((n.k === 'max' || n.k === 'min' || n.k === 'liscio') && JSON.stringify(n.a) === JSON.stringify(n.b)) return n.a
+  if (n.k === 'miscela' && JSON.stringify(n.a) === JSON.stringify(n.b)) return n.a
+  return n
+}
+
 export function inGLSL(A: Albero, colori: [string, string, string]): string {
+  A = { ...A, radice: semplifica(JSON.parse(JSON.stringify(A.radice))) }
   let id = 0; const fn: string[] = []
   const scrivi = (n: Nodo): string => {
     const nome = `f${id++}`, P = 'p', T = 't'
@@ -91,6 +105,7 @@ export function inGLSL(A: Albero, colori: [string, string, string]): string {
       case 'onde': corpo = `return .5+.5*sin(dot(${P}, vec2(cos(${n.ang.toFixed(3)}),sin(${n.ang.toFixed(3)})))*${n.f.toFixed(3)} + ${T}*.4);`; break
       case 'rumore': corpo = `float v=0., a=.5; vec2 q=${P}*${n.s.toFixed(3)}+${T}*.05; for(int i=0;i<${n.o};i++){ v+=a*vn(q); q=q*2.03+3.1; a*=.5; } return v/(1.-pow(.5,${n.o.toFixed(1)}));`; break
       case 'celle': corpo = `vec2 q=${P}*${n.s.toFixed(3)}, i=floor(q), f=fract(q); float d=9.; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 o=vec2(x,y); vec2 c=o+.5+.4*sin(${T}*.2+6.28*h2(i+o))-f; d=min(d,length(c)); } return clamp(d,0.,1.);`; break
+      case 'bordi': corpo = `vec2 q=${P}*${n.s.toFixed(3)}, i=floor(q), f=fract(q); float d1=9., d2=9.; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 o=vec2(x,y); float d=length(o+h2(i+o)-f); if(d<d1){ d2=d1; d1=d; } else if(d<d2) d2=d; } return 1.-smoothstep(0., ${n.w.toFixed(3)}, d2-d1);`; break // i confini delle celle (Voronoi F2-F1)
       case 'anelli': corpo = `return .5+.5*sin(length(${P}-.5)*${n.f.toFixed(3)}-${T}*.5);`; break
       case 'griglia': corpo = `vec2 g=abs(fract(${P}*${n.f.toFixed(3)})-.5); return 1.-smoothstep(${n.w.toFixed(3)}*.5, ${n.w.toFixed(3)}, min(g.x,g.y));`; break
       case 'retino': corpo = `vec2 q=rot(${n.ang.toFixed(3)})*${P}*${n.f.toFixed(3)}; vec2 g=fract(q)-.5; float s=.25+.2*sin(${P}.x*3.+${P}.y*2.); return 1.-smoothstep(s-.05,s+.05,length(g));`; break

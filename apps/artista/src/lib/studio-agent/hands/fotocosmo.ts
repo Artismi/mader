@@ -8,7 +8,7 @@
 import { fullLayer, newCanvas, withLayer, type Sheet } from './sheet'
 import type { Tool } from './tools'
 
-export type Foto = { n: number; nome: string; mappa: HTMLCanvasElement; disco: HTMLCanvasElement; mare: boolean; T: number }
+export type Foto = { n: number; nome: string; mappa: HTMLCanvasElement; disco: HTMLCanvasElement; sistema?: HTMLCanvasElement; mare: boolean; T: number }
 const rullino: Foto[] = []
 export const fotoDelGiorno = () => rullino
 
@@ -43,7 +43,15 @@ export async function fotografa(n: number, attesa = 45000): Promise<Foto | null>
       im.data[o] = px[s] * ill; im.data[o + 1] = px[s + 1] * ill; im.data[o + 2] = px[s + 2] * ill; im.data[o + 3] = 255
     }
     g.putImageData(im, 0, 0)
-    const foto: Foto = { n, nome: C.descriviIndirizzo ? String(C.descriviIndirizzo(a)).slice(0, 80) : `mondo ${n}`, mappa, disco, mare: !!r.mare?.esiste, T: P.clima?.T ?? 0 }
+    // la scala del sistema: lo stesso viewer (mappa.js) allontanato dal pianeta finché si vedono la stella e le orbite
+    let sistema: HTMLCanvasElement | undefined
+    try {
+      const Mp = await importa('mappa.js'), L = 640, cam = Mp.camSuRegione(a, L, L)
+      for (let k = 0; k < 6 && cam.livello > 2; k++) Mp.zoomMappa(cam, L / 2, L / 2, 0.4, L, L)
+      Mp.zoomMappa(cam, L / 2, L / 2, 0.5, L, L)
+      sistema = newCanvas(L, L); Mp.disegnaMappa(sistema.getContext('2d')!, L, L, cam, { nudo: true })
+    } catch { sistema = undefined }
+    const foto: Foto = { n, nome: C.descriviIndirizzo ? String(C.descriviIndirizzo(a)).slice(0, 80) : `mondo ${n}`, mappa, disco, sistema, mare: !!r.mare?.esiste, T: P.clima?.T ?? 0 }
     rullino.push(foto); if (rullino.length > 6) rullino.shift()
     return foto
   } catch { return null }
@@ -55,7 +63,7 @@ export const fotoCosmo: Tool = {
   pushes: { superfici: 0.3, complessita: 0.15, rumore: 0.1 },
   available: () => rullino.length > 0,
   propose: (_s, c) => {
-    const f = rullino[Math.floor(c.r() * rullino.length)], intero = c.r() < 0.3
+    const f = rullino[Math.floor(c.r() * rullino.length)], x0 = c.r(), intero = x0 < 0.3, sistema = !!f.sistema && x0 >= 0.3 && x0 < 0.45
     // il dettaglio: una finestra dove c'è più varietà (si prova qualche posto e si tiene quello col contrasto maggiore)
     const W = f.mappa.width, H = f.mappa.height, g = f.mappa.getContext('2d')!, lato = Math.round(Math.min(W, H) * (0.25 + c.r() * 0.35))
     let meglio = [0, 0], vmax = -1
@@ -64,12 +72,13 @@ export const fotoCosmo: Tool = {
       let m = 0, m2 = 0, n = 0; for (let i = 0; i < d.length; i += 16) { const l = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11; m += l; m2 += l * l; n++ }
       const v = m2 / n - (m / n) ** 2; if (v > vmax) { vmax = v; meglio = [x, Math.max(0, y)] }
     }
-    return { foto: f.n, intero, x: meglio[0], y: meglio[1], lato, alpha: 0.7 + c.r() * 0.3 }
+    return { foto: f.n, intero, sistema, x: meglio[0], y: meglio[1], lato, alpha: 0.7 + c.r() * 0.3 }
   },
   apply: async (s: Sheet, p) => {
     const f = rullino.find(x => x.n === p.foto); if (!f) return s
     const cv = newCanvas(s.W, s.H), g = cv.getContext('2d')!
-    if (p.intero) { const d = Math.min(s.W, s.H) * 0.62; g.drawImage(f.disco, (s.W - d) / 2, (s.H - d) / 2, d, d) }
+    if (p.sistema && f.sistema) g.drawImage(f.sistema, 0, 0, s.W, s.H) // la scala del sistema: la stella, le orbite, i pianeti
+    else if (p.intero) { const d = Math.min(s.W, s.H) * 0.62; g.drawImage(f.disco, (s.W - d) / 2, (s.H - d) / 2, d, d) }
     else { g.imageSmoothingQuality = 'high'; const L = p.lato as number; g.drawImage(f.mappa, p.x as number, p.y as number, L, L, 0, 0, s.W, s.H) }
     return withLayer(s, fullLayer(s, `cosmo${f.n}`, 'cosmo', cv, 'source-over', p.alpha as number))
   },
