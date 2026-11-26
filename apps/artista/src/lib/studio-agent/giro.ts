@@ -472,6 +472,21 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
     S.citta.costruito ??= { costruzioni: [], nomiVie: {} }
     ;(S.citta.costruito as unknown as { geologia?: unknown }).geologia = { giorno: st.day, lato: N, alt: fin(G.alt, 1), cont: fin(G.cont, 1), spinta: fin(G.spinta, 100), fosse: fin(G.fosse, 100) }
   } catch (e) { o.log(`la geologia non è venuta: ${e instanceof Error ? e.message : e}`) }
+  // i tessuti: i fondali che i curatori hanno chiesto si tessono con i generatori veri (dell'officina, o un gesto che crea),
+  // nei colori dell'area; l'immagine va nel sito (tessuti/) e il piano la porta
+  try {
+    const { tessi } = await import('./mind/officinaCitta'), { ricetteTenute } = await import('./mind/ricette')
+    const r = rng(Date.now() % 1e9), K = S.citta.costruito
+    const da = (K?.costruzioni ?? []).filter(c => c.tipo === 'piano' && c.stato !== 'tolto' && (c.dati as { contenuto?: string })?.contenuto === 'motivo' && !(c.dati as { tessuto?: string })?.tessuto).slice(0, 3)
+    for (const c of da) {
+      const col = (S.citta.sale?.[String(c.q)]?.suolo?.colori ?? ['#ebe6dc', '#121212', '#e3361b']) as string[], parola = Tt.quartieri.find(x => x.id === c.q)?.concetti?.[0] ?? 'città'
+      const ctx = { r, tone: { id: 't', label: '', bg: col[0], ink: col[1], acc: col[2], dark: false }, intention: { word: parola, register: 'poetico', targets: {}, tools: [], why: '' }, mood: st.mood, say: () => parola, shaders: st.shaders, quality: 0.5 } as unknown as import('./hands/tools').ToolCtx
+      const t = await tessi(st, r, ctx, ricetteTenute()), id = `t${c.id.replace(/[^\w]/g, '')}`
+      tessutiDaSalvare.push({ id, url: t.canvas.toDataURL('image/jpeg', 0.82) })
+      Object.assign(c.dati as object, { tessuto: id, come: t.come })
+      v.push({ fase: 'bottega', chi: c.chi, tipo: 'tessuto', testo: `Il fondale di «${Tt.quartieri.find(x => x.id === c.q)?.nome ?? ''}» l'ho tessuto con ${t.come}, nei colori dell'area.` })
+    }
+  } catch (e) { o.log(`tessuti saltati: ${e instanceof Error ? e.message : e}`) }
   compatta(S.citta)
   S.diarioCitta = [...(S.diarioCitta ?? []), { giorno: st.day, quando: new Date().toISOString(), cittaGiorno: S.citta.giorno, verbale: v }].slice(-60)
   S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]), fili: (() => { const per = new Map<number, [number, number, number][]>(); for (const f of Tt.fili) { for (const k of [f[0], f[1]]) { const l = per.get(k) ?? []; l.push(f); per.set(k, l) } } const tieni = new Set<string>(); for (const l of per.values()) for (const f of l.sort((x, y) => y[2] - x[2]).slice(0, 4)) tieni.add(f[0] + '|' + f[1]); return Tt.fili.filter(f => tieni.has(f[0] + '|' + f[1])).map(f => [f[0], f[1], +f[2].toFixed(3)]) })() }
@@ -479,6 +494,10 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   o.log(`la città: giorno ${S.citta.giorno}, ${v.length} battute, ${Tt.quartieri.length} quartieri`)
   return v
 }
+
+/** i tessuti fatti in questo giro, da scrivere nel sito (tessuti/<id>.jpg) */
+const tessutiDaSalvare: { id: string; url: string }[] = []
+export function tessutiNuovi() { return tessutiDaSalvare.splice(0) }
 
 /** la città per il sito: il territorio, gli abitanti, le ultime giornate, le decisioni, la mostra, le annotazioni */
 export async function perLaCitta() {

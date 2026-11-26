@@ -6,7 +6,7 @@
 import type { AgentState } from '../core/types'
 import type { Rnd } from '../core/rng'
 import { TOOLS, type ToolCtx } from '../hands/tools'
-import { emptySheet, type Sheet } from '../hands/sheet'
+import { emptySheet, flatten, type Sheet } from '../hands/sheet'
 import { look } from './studio'
 import { scegli, applicaDove, visibile } from './quaderno'
 import { officinaDi, testoProgramma, aggiornaRicette, type Programma, type Passo } from './ricette'
@@ -66,6 +66,25 @@ async function valuta(st: AgentState, passi: Passo[], fogli: { sheet: Sheet; par
   return { punteggio: tot / Math.max(1, n), ms: ms / Math.max(1, n) }
 }
 
+const CREANO = ['semina', 'pattern', 'geometria', 'traccia', 'universo', 'muffa', 'cristallo', 'acqua', 'flusso', 'scrivi', 'ripeti', 'sciame', 'particelle', 'colata', 'ondine', 'fotocosmo']
+
+/** tessere un pezzo di città: un generatore vero (uno di quelli tenuti in officina, o un gesto che crea seguito da uno che
+ *  trasforma) sul foglio vuoto con i colori dell'area. Ne esce l'immagine che riveste un piano o un suolo. */
+export async function tessi(st: AgentState, r: Rnd, ctx: ToolCtx, tenuti: Programma[], lato = 512): Promise<{ canvas: HTMLCanvasElement; come: string }> {
+  let s0 = emptySheet(lato, lato, ctx.tone.bg), passi: Passo[] = [], come = ''
+  const p = tenuti.length && r() < 0.6 ? tenuti[Math.floor(r() * tenuti.length)] : null
+  if (p) { passi = p.passi; come = `il generatore «${p.nome}» dell'officina` }
+  else {
+    for (const t of [...CREANO].sort(() => r() - 0.5)) { const ps = passoNuovo(st, r, t, s0, ctx); if (ps) { try { s0 = (await esegui([ps], s0, ctx)).sheet; passi.push(ps); break } catch { /* il prossimo */ } } }
+    const altri = ['grana', 'filtro', 'dither', 'luce', 'ripeti', 'sfasa'].sort(() => r() - 0.5)
+    for (const t of altri) { const ps = passoNuovo(st, r, t, s0, ctx); if (ps) { try { s0 = (await esegui([ps], s0, ctx)).sheet; passi.push(ps); break } catch { /* il prossimo */ } } }
+    come = passi.map(x => x.tool).join(' › ') || 'niente'
+    return { canvas: flatten(s0), come }
+  }
+  const { sheet } = await esegui(passi, s0, ctx)
+  return { canvas: flatten(sheet), come }
+}
+
 export async function officinaGiro(st: AgentState, r: Rnd, richieste: Richiesta[], fogli: { sheet: Sheet; parola: string }[], ctxDi: (w: string) => ToolCtx, log?: (m: string) => void): Promise<Esito[]> {
   const O = officinaDi(st), out: Esito[] = []
   const vuoto = (w: string) => ({ sheet: emptySheet(800, 1000, ctxDi(w).tone.bg), parola: w })
@@ -80,7 +99,6 @@ export async function officinaGiro(st: AgentState, r: Rnd, richieste: Richiesta[
       // da zero: un generatore deve poter partire dal foglio vuoto, quindi il primo passo è uno che crea (se le sue mani
       // sanno solo trasformare, prende in prestito un gesto che fa nascere qualcosa); poi i suoi strumenti, provati sul risultato
       modo = 'zero'
-      const CREANO = ['semina', 'pattern', 'geometria', 'traccia', 'universo', 'muffa', 'cristallo', 'acqua', 'flusso', 'scrivi', 'ripeti', 'sciame', 'particelle', 'colata', 'ondine']
       const n = 2 + Math.floor(r() * 3)
       let s0 = prova[0].sheet
       const primi = [...q.strumenti.filter(t => CREANO.includes(t)), ...CREANO.sort(() => r() - 0.5)]
