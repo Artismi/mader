@@ -472,6 +472,12 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
     S.citta.costruito ??= { costruzioni: [], nomiVie: {} }
     ;(S.citta.costruito as unknown as { geologia?: unknown }).geologia = { giorno: st.day, lato: N, alt: fin(G.alt, 1), cont: fin(G.cont, 1), spinta: fin(G.spinta, 100), fosse: fin(G.fosse, 100) }
   } catch (e) { o.log(`la geologia non è venuta: ${e instanceof Error ? e.message : e}`) }
+  // la redazione: la città decide cosa dire fuori (il prossimo carosello o reel nasce da qui)
+  try {
+    const { redigi } = await import('./mind/redazione')
+    const P = redigi(S.citta as never, Tt, v as never, rng(st.day * 131 + S.citta.giorno))
+    if (P) { (S.citta as unknown as { palinsesto?: unknown }).palinsesto = P; v.push({ fase: 'archivio', chi: P.narratore.id, tipo: 'redazione', testo: `In redazione: fuori diremo «${P.argomento}», un giro da «${P.tappe[0].nome}» a «${P.tappe[P.tappe.length - 1].nome}». Racconto io.` }) }
+  } catch (e) { o.log(`redazione saltata: ${e instanceof Error ? e.message : e}`) }
   // il meta-generatore di shader: i suoli rifatti oggi (o mai evoluti) si evolvono da alberi di nodi, a partire dal motivo che
   // il curatore ha scelto e dall'albero che c'era; il migliore, reso e misurato davvero, diventa il suolo dell'area
   try {

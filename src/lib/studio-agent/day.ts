@@ -49,6 +49,7 @@ import { inscription, reflection, title as makeTitle, workText, type VoiceCtx } 
 import { ensureVetrina, predict, publish } from './mind/vetrina'
 import { applicaEsercizio, autocritica, ensureScuola, esitoSferzata, evolviFirma, getScuola, redazione, registraStudio, sferzata } from './mind/scuola'
 import { loadGeneri } from './voice/lingua'
+import { schedeDaPalinsesto, type Palinsesto } from './mind/redazione'
 import { chiudiEpisodio, getEpisodi, getVisione, pianifica, rendiScheda, ultimaImpaginazione, imparaScalaMuffa } from './mind/episodio'
 import { raccoltaACaso } from './hands/raccolta'
 import { impaginaMotore, sceltePer } from './hands/motore'
@@ -392,6 +393,10 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   const cambiati = diversifica(st, r)
   if (cambiati.length) log(`Alcuni segni si somigliavano troppo: ${cambiati.join(', ')} ne hanno uno nuovo.`)
   const plan = pianifica(st, r, N, thread ?? intention.word, fraseDi, readings)
+  // la redazione della città: se gli abitanti hanno deciso cosa dire fuori, la sequenza prende la forma del loro percorso
+  // (una tappa per territorio, le strade tra l'uno e l'altro, la decisione dell'assemblea in fondo), con le loro voci
+  { const P = (st as AgentState & { citta?: { palinsesto?: Palinsesto } }).citta?.palinsesto
+    if (P && !P.usato && P.tappe.length) { const X = schedeDaPalinsesto(P); plan.titolo = X.titolo; (plan as { schede: unknown[] }).schede = X.schede; P.usato = true; log(`La città ha deciso cosa dire: «${P.argomento}» (${P.perche}); racconta ${P.narratore.nome}, ${P.tappe.length} territori.`) } }
   const nEp = ((st as AgentState & { episodi?: unknown[] }).episodi?.length ?? 0) + 1
   // il linguaggio: lo sceglie (o lo inventa) per quello che sta dicendo
   const parole = [...new Set(plan.schede.flatMap(x => [x.a, x.b]).filter(Boolean) as string[])]
