@@ -10,9 +10,9 @@ import type { Territorio, Opera } from './territorio'
 
 export type Pos = { livello: number; angolo: number; raggio: number; x?: number; y?: number }
 export type Costruzione = {
-  id: string; tipo: 'capsula' | 'ponte' | 'scala' | 'giardino' | 'galleria' | 'torre' | 'gru' | 'graffito' | 'rovina' | 'monumento' | 'nucleo' | 'strada'
+  id: string; tipo: 'capsula' | 'ponte' | 'scala' | 'giardino' | 'galleria' | 'torre' | 'gru' | 'graffito' | 'rovina' | 'monumento' | 'nucleo' | 'strada' | 'intervento'
   chi: string; giorno: number; nome?: string; pos?: Pos; a?: string; b?: string; q?: number; moduli?: number; dati?: Record<string, unknown>
-  stato: 'in piedi' | 'in costruzione' | 'rovina' | 'coperta'; storia: { giorno: number; chi: string; cosa: string }[]
+  stato: 'in piedi' | 'in costruzione' | 'rovina' | 'coperta' | 'tolto'; storia: { giorno: number; chi: string; cosa: string }[]
 }
 export type Cantiere = { costruzioni: Costruzione[]; nomiVie: Record<string, string>; coltivato?: number[] }
 export const GRIGLIA = 48 // il terreno coltivato: una griglia sopra il territorio (0..1000)
@@ -152,6 +152,29 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   }
   // 10. il monumento: la tavola più amata di sempre, se ancora non ce l'ha
   if (!di('monumento').length) { const best = [...T.punti].sort((a, b) => b.peso - a.peso)[0]; if (best) { nuova({ tipo: 'monumento', chi: 'curatore', giorno, nome: best.titolo, dati: { tavola: best.id } }, 'l\'ha eretto'); az.push({ chi: 'curatore', tipo: 'costruisce', testo: `In piazza c'è ora un monumento: «${best.titolo.slice(0, 70)}».` }) } }
+  // 12. gli interventi: i cittadini lavorano sui piani delle tavole (i muri invisibili su cui poggiano) e li trasformano,
+  // un pezzo alla volta, in un'architettura-collage. Ognuno a modo suo: il curatore solleva in rilievo la tavola d'onore,
+  // l'archivio scrive una parola sul piano, chi ha il carattere contrario incolla un ritaglio da un'altra area, il visionario
+  // proietta un ologramma sopra una tavola stesa. Armonia: al massimo 4 per sala; oltre, il più vecchio si toglie (resta nella storia).
+  const sale = di('capsula').filter(c => c.stato === 'in piedi')
+  for (let k = 0; k < 2 && sale.length; k++) { // hanno un loro tempo: non tolgono posto alle costruzioni
+    const S = pick(r, sale), tav = T.punti.filter(p => p.q === S.q).sort((a, b) => b.peso - a.peso)
+    if (tav.length < 2) continue
+    const qui = K.costruzioni.filter(c => c.tipo === 'intervento' && c.a === S.id && c.stato !== 'tolto')
+    const a = chi(x => x.tipo !== 'scienziato', x => 0.5 + (x.carattere.visionario ?? 0) + (x.carattere.contrario ?? 0) * 0.5)
+    if (!a) continue
+    const car = a.carattere, Q = T.quartieri.find(x => x.id === S.q)
+    let tipo: string, dati: Record<string, unknown>, testo: string
+    if (a.id === 'curatore' || (car.prudente ?? 0) > 0.6) { tipo = 'rilievo'; dati = { tavola: tav[0].id }; testo = `Ho sollevato in rilievo «${tav[0].titolo.slice(0, 50)}», la tavola d'onore di «${S.nome}»: la sua luce diventa altezza.` }
+    else if (a.id === 'archivio' || a.tipo === 'testa') { const w = pick(r, Q?.concetti ?? ['memoria']); tipo = 'parola'; dati = { parola: w, su: pick(r, tav.slice(0, 6)).id }; testo = `Sul piano di una tavola di «${S.nome}» ho scritto «${w}».` }
+    else if ((car.contrario ?? 0) > 0.6) { const altro = pick(r, T.punti.filter(p => p.q !== S.q && p.peso > 0.5)); if (!altro) continue; tipo = 'ritaglio'; dati = { tavola: altro.id, su: pick(r, tav.slice(0, 6)).id, taglio: [r() * 0.5, r() * 0.5, 0.3 + r() * 0.4, 0.3 + r() * 0.4] }; testo = `Ho ritagliato un pezzo di «${altro.titolo.slice(0, 40)}» e l'ho incollato in «${S.nome}», che non c'entra niente: vediamo cosa si dicono.` }
+    else { const t = pick(r, tav.slice(0, 6)); tipo = 'ologramma'; dati = { tavola: t.id }; testo = `Sopra «${t.titolo.slice(0, 50)}» ho proiettato il suo ologramma, in piedi.` }
+    if (qui.length >= 4) { const v = qui[0]; v.stato = 'tolto'; v.storia.push({ giorno, chi: a.id, cosa: 'l\'ha tolto per far posto' }) }
+    nuova({ tipo: 'intervento', chi: a.id, giorno, a: S.id, q: S.q, nome: tipo, dati: { ...dati, tipo } }, testo)
+    S.storia.push({ giorno, chi: a.id, cosa: testo.charAt(0).toLowerCase() + testo.slice(1, 90) })
+    az.push({ chi: a.id, tipo: 'interviene', testo })
+  }
+
   // 11. catalogare: l'archivio dà un nome alle strade, come in una città vera
   for (const st of di('strada')) if (!K.nomiVie[st.id] && r() < 0.4) {
     const A = K.costruzioni.find(c => c.id === st.a), B = K.costruzioni.find(c => c.id === st.b)
@@ -161,6 +184,6 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
     az.push({ chi: 'archivio', tipo: 'cataloga', testo: `La strada tra «${A?.nome ?? 'la piazza'}» e «${B?.nome ?? 'la piazza'}» ora si chiama ${K.nomiVie[st.id]}.` })
     break
   }
-  K.costruzioni = K.costruzioni.slice(-400)
+  K.costruzioni = K.costruzioni.filter((c, i, l) => c.tipo !== 'intervento' || c.stato !== 'tolto' || i >= l.length - 200).slice(-600)
   return az.map(a => ({ ...a, chi: a.chi }))
 }

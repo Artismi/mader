@@ -5,6 +5,7 @@
 // Le regole che li definiscono sono dati (REGOLE): le possono leggere, e negli strati successivi proporre di cambiarle.
 // In questo strato non decidono niente: scrivono il verbale.
 
+import { componiFondo } from './fondi'
 import { territorio, radice, type Opera, type Territorio, type Insieme } from './territorio'
 import { campagna, SCIENZIATI, type CosmoAPI, type Osservatorio } from './osservatorio'
 import { costruisci, type Cantiere as CantiereCitta } from './cantiere_citta'
@@ -53,7 +54,7 @@ export type RichiestaOfficina = { autore: string; scopo: string; strumenti: stri
 export type EsitoOfficina = { autore: string; nome: string; testo: string; tenuto: boolean; perche: string; scopo: string; giorno: number; discusso?: boolean }
 export type Cantiere = { id: string; giorno: number; chi: string; cosa: string; passi: { testo: string; dove: 'biblioteca' | 'bottega' | 'officina' | 'sito'; stato: 'da fare' | 'fatto' | 'aspetta' }[] }
 // la sala di un quartiere, come la vuole il suo curatore: niente è obbligatorio, tutto è possibile
-export type Sala = { curatore: string; disposizione: 'parete' | 'griglia' | 'arco' | 'sospese' | 'colonna' | 'pavimento'; luce: 'calda' | 'fredda' | 'radente' | 'zenitale' | 'colore'; fondo: 'nero' | 'chiaro' | 'colore' | 'nessuno'; quante: number; perche: string; giorno: number }
+export type Sala = { curatore: string; disposizione: 'parete' | 'griglia' | 'arco' | 'sospese' | 'colonna' | 'pavimento'; luce: 'calda' | 'fredda' | 'radente' | 'zenitale' | 'colore'; fondo: 'nero' | 'chiaro' | 'colore' | 'nessuno'; quante: number; perche: string; giorno: number; suolo?: import('./fondi').Fondo }
 export type Citta = { costruito?: CantiereCitta; sale?: Record<string, Sala>; osservatorio?: Osservatorio; officina?: { richieste: RichiestaOfficina[]; esiti: EsitoOfficina[]; tenuti: { id: string; nome: string; autore: string; punteggio: number }[] }; cantieri?: Cantiere[]; bottega?: Commissione[]; mostre?: Mostra[]; mancanti?: { giorno: number; chi: string; cosa: string }[]; nome: string | null; giorno: number; regole: Regole; abitanti: Abitante[]; rete: Nodo[]; piani: Piano[]; domande: { giorno: number; chi: string; testo: string; stato: string; risposta?: string }[]; decisioni?: Decisione[]; credito?: Record<string, Record<string, number>> }
 
 function caso(seme: number) { let z = seme >>> 0; return () => { z = (z + 0x6d2b79f5) >>> 0; let t = z; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
@@ -543,17 +544,24 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
 
   // 5c. le sale: chi abita di più un quartiere ne è il curatore e la allestisce come vuole; ogni tanto la cambia
   C.sale ??= {}
+  const tavoleDi = (q: number) => T.punti.filter(p => p.q === q).sort((x, y) => y.peso - x.peso).slice(0, 30).map(p => (opere.find(w => w.id === p.id) as unknown as { visual?: { features?: Record<string, number>; palette?: string[] } })?.visual ?? {})
   const DISP: Sala['disposizione'][] = ['parete', 'griglia', 'arco', 'sospese', 'colonna', 'pavimento'], LUCI: Sala['luce'][] = ['calda', 'fredda', 'radente', 'zenitale', 'colore'], FONDI: Sala['fondo'][] = ['nero', 'chiaro', 'colore', 'nessuno']
+  const tutteV = T.quartieri.flatMap(q => tavoleDi(q.id).slice(0, 10))
   for (const q of T.quartieri) {
     const chi = T.insiemi.filter(s => s.quartieri[0] === q.id).sort((x, y) => y.n - x.n)[0] ?? T.insiemi.filter(s => s.quartieri.includes(q.id)).sort((x, y) => y.n - x.n)[0]
     if (!chi) continue
     const a = ab(chi.abitante.id); if (!a) continue
     const vecchia = C.sale[q.id], k = String(q.id)
     const cambia = !vecchia || (r() < 0.06 + a.carattere.visionario * 0.12 && C.giorno - vecchia.giorno >= 3)
-    if (!cambia) continue
+    if (!cambia) {
+      // anche senza rifare la sala, il curatore ogni tanto rifà il suolo dell'area (o lo fa la prima volta)
+      if (vecchia && (!vecchia.suolo || vecchia.suolo.v !== 2 || (r() < 0.05 + a.carattere.visionario * 0.08 && C.giorno - vecchia.suolo.giorno >= 2))) { vecchia.suolo = componiFondo(tavoleDi(q.id), a.carattere, r, C.giorno, vecchia.suolo, tutteV); verbale.push({ fase: 'archivio', chi: a.id, tipo: 'sala', testo: `Ho rifatto il suolo di «${q.nome}»: ${vecchia.suolo.perche}.` }) }
+      continue
+    }
     const scegliDa = <X,>(l: X[], prima?: X) => { const altri = l.filter(x => x !== prima); return altri[Math.floor(r() * altri.length)] }
     const s: Sala = { curatore: a.id, disposizione: scegliDa(DISP, vecchia?.disposizione), luce: a.carattere.malinconico > 0.6 ? 'radente' : scegliDa(LUCI, vecchia?.luce), fondo: scegliDa(FONDI, vecchia?.fondo), quante: Math.round(4 + r() * 6 + (a.carattere.trascinatore > 0.6 ? 3 : 0)), perche: '', giorno: C.giorno }
     s.perche = `${s.disposizione === 'arco' ? 'un arco che abbraccia chi entra' : s.disposizione === 'colonna' ? 'una colonna da guardare dal basso' : s.disposizione === 'pavimento' ? 'le tavole a terra, da guardare camminando' : s.disposizione === 'sospese' ? 'sospese a diverse altezze, come pensieri' : s.disposizione === 'griglia' ? 'in ordine, per confrontarle' : 'su una parete, come in museo'}, luce ${s.luce}`
+    s.suolo = componiFondo(tavoleDi(q.id), a.carattere, r, C.giorno, vecchia?.suolo, tutteV)
     C.sale[k] = s
     if (vecchia) verbale.push({ fase: 'archivio', chi: a.id, tipo: 'sala', testo: `Ho rifatto la sala «${q.nome}»: ${s.perche}${s.fondo !== 'nessuno' ? `, fondo ${s.fondo}` : ', senza fondo'}.` })
   }
