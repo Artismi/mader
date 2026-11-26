@@ -7,6 +7,7 @@
 // Puro: niente DOM.
 
 import type { Territorio, Opera } from './territorio'
+import { allestisci, FORMA, type Allestimento } from './allestimento'
 
 export type Pos = { livello: number; angolo: number; raggio: number; x?: number; y?: number }
 export type Costruzione = {
@@ -14,7 +15,7 @@ export type Costruzione = {
   chi: string; giorno: number; nome?: string; pos?: Pos; a?: string; b?: string; q?: number; moduli?: number; dati?: Record<string, unknown>
   stato: 'in piedi' | 'in costruzione' | 'rovina' | 'coperta' | 'tolto'; storia: { giorno: number; chi: string; cosa: string }[]
 }
-export type Cantiere = { costruzioni: Costruzione[]; nomiVie: Record<string, string>; coltivato?: number[] }
+export type Cantiere = { costruzioni: Costruzione[]; nomiVie: Record<string, string>; coltivato?: number[]; allestimenti?: Record<string, Allestimento> }
 export const GRIGLIA = 48 // il terreno coltivato: una griglia sopra il territorio (0..1000)
 
 type Ab = { id: string; nome: string; tipo: string; carattere: Record<string, number> }
@@ -31,7 +32,7 @@ function posDi(T: Territorio, opere: Opera[], q: number): Pos {
   return { livello: 0, angolo: Math.atan2(Q.y - T.piazza.y, Q.x - T.piazza.x), raggio: Math.hypot(Q.x - T.piazza.x, Q.y - T.piazza.y), x: Q.x, y: Q.y, eta: medio / max } as Pos
 }
 
-export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti: Ab[], giorno: number, r: () => number, o: { scoperte?: { n: number; testo: string }[]; cantieri?: { cosa: string; chi: string }[]; letture?: number; sale?: Record<string, { curatore: string; suolo?: { colori: string[] } }> } = {}): Azione[] {
+export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti: Ab[], giorno: number, r: () => number, o: { scoperte?: { n: number; testo: string }[]; cantieri?: { cosa: string; chi: string }[]; letture?: number; sale?: Record<string, { curatore: string; disposizione?: string; quante?: number; suolo?: { colori: string[] } }> } = {}): Azione[] {
   const az: Azione[] = []
   const nomeDi = (id: string) => abitanti.find(a => a.id === id)?.nome ?? id
   const nuova = (c: Omit<Costruzione, 'id' | 'storia' | 'stato'> & { stato?: Costruzione['stato'] }, cosa: string) => {
@@ -214,6 +215,12 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
       piena.storia.push({ giorno, chi: rev.id, cosa: testo.charAt(0).toLowerCase() + testo.slice(1, 90) }); az.push({ chi: rev.id, tipo: 'corregge', testo })
     }
   }
+
+  // 15. allestire: i curatori decidono dove sta ogni tavola nelle loro sale (posto, altezza, grandezza, quanto è girata);
+  // le sale nuove o che cambiano forma si appendono da capo, poi ogni giorno in tre sale qualcuno cambia qualcosa
+  K.allestimenti ??= {}
+  for (const S of sale) { const info = o.sale?.[String(S.q)], X = K.allestimenti[S.id]; if (!X || X.forma !== (FORMA[info?.disposizione ?? 'griglia'] ?? 'abside')) az.push(...allestisci(K.allestimenti, S, info, T, abitanti, giorno, r)) }
+  for (let k = 0; k < 3 && sale.length; k++) { const S = pick(r, sale); az.push(...allestisci(K.allestimenti, S, o.sale?.[String(S.q)], T, abitanti, giorno, r)) }
 
   // 11. catalogare: l'archivio dà un nome alle strade, come in una città vera
   for (const st of di('strada')) if (!K.nomiVie[st.id] && r() < 0.4) {
