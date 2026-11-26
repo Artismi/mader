@@ -10,7 +10,7 @@ import type { Territorio, Opera } from './territorio'
 
 export type Pos = { livello: number; angolo: number; raggio: number; x?: number; y?: number }
 export type Costruzione = {
-  id: string; tipo: 'capsula' | 'ponte' | 'scala' | 'giardino' | 'galleria' | 'torre' | 'gru' | 'graffito' | 'rovina' | 'monumento' | 'nucleo' | 'strada' | 'intervento'
+  id: string; tipo: 'capsula' | 'ponte' | 'scala' | 'giardino' | 'galleria' | 'torre' | 'gru' | 'graffito' | 'rovina' | 'monumento' | 'nucleo' | 'strada' | 'intervento' | 'piano'
   chi: string; giorno: number; nome?: string; pos?: Pos; a?: string; b?: string; q?: number; moduli?: number; dati?: Record<string, unknown>
   stato: 'in piedi' | 'in costruzione' | 'rovina' | 'coperta' | 'tolto'; storia: { giorno: number; chi: string; cosa: string }[]
 }
@@ -31,7 +31,7 @@ function posDi(T: Territorio, opere: Opera[], q: number): Pos {
   return { livello: 0, angolo: Math.atan2(Q.y - T.piazza.y, Q.x - T.piazza.x), raggio: Math.hypot(Q.x - T.piazza.x, Q.y - T.piazza.y), x: Q.x, y: Q.y, eta: medio / max } as Pos
 }
 
-export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti: Ab[], giorno: number, r: () => number, o: { scoperte?: { n: number; testo: string }[]; cantieri?: { cosa: string; chi: string }[]; letture?: number; sale?: Record<string, { curatore: string }> } = {}): Azione[] {
+export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti: Ab[], giorno: number, r: () => number, o: { scoperte?: { n: number; testo: string }[]; cantieri?: { cosa: string; chi: string }[]; letture?: number; sale?: Record<string, { curatore: string; suolo?: { colori: string[] } }> } = {}): Azione[] {
   const az: Azione[] = []
   const nomeDi = (id: string) => abitanti.find(a => a.id === id)?.nome ?? id
   const nuova = (c: Omit<Costruzione, 'id' | 'storia' | 'stato'> & { stato?: Costruzione['stato'] }, cosa: string) => {
@@ -175,6 +175,31 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
     az.push({ chi: a.id, tipo: 'interviene', testo })
   }
 
+  // 13. i piani: livelli trasparenti che gli abitanti aggiungono nello spazio per metterci quello che vogliono, e il colore
+  // che danno alle tavole. Ognuno con una ragione che migliora il luogo o la sua logica: il giardiniere tende un velario
+  // colorato sopra una sala, l'urbanista alza una soglia tra due sale legate con la parola che hanno in comune, il curatore
+  // stende il motivo del suolo su un piano verticale dietro le tavole, chi è contrario mette una tavola di un'altra area
+  // su un piano sospeso, l'archivio colora le cornici delle tavole della stessa giornata. Massimo 3 piani per sala.
+  const tinta = (q?: number) => { const c = q != null ? o.sale?.[String(q)]?.suolo?.colori : undefined; return c?.length ? pick(r, c) : pick(r, ['#e3361b', '#ebe6dc', '#7fa7c9', '#c9b27f']) }
+  for (let k = 0; k < 2 && sale.length; k++) {
+    const S = pick(r, sale), a = chi(x => x.tipo !== 'scienziato', x => 0.4 + (x.carattere.visionario ?? 0) + (x.carattere.trascinatore ?? 0) * 0.5); if (!a) continue
+    const Q = T.quartieri.find(x => x.id === S.q), tav = T.punti.filter(p => p.q === S.q).sort((x, y) => y.peso - x.peso)
+    const qui = K.costruzioni.filter(c => c.tipo === 'piano' && c.a === S.id && c.stato !== 'tolto')
+    let dati: Record<string, unknown>, testo: string
+    if (a.id === 'giardiniere' || r() < 0.2) { dati = { verso: 'orizzontale', quota: 60 + r() * 30, largo: 70 + r() * 40, alto: 50 + r() * 30, contenuto: 'colore', colore: tinta(S.q), opacita: 0.12 + r() * 0.1 }; testo = `Sopra «${S.nome}» ho teso un velario colorato: la sala ora ha un cielo suo.` }
+    else if (a.id === 'urbanista' || (a.carattere.prudente ?? 0) > 0.65) {
+      const vicina = K.costruzioni.filter(c => c.tipo === 'ponte' && (c.a === String(S.q) || c.b === String(S.q)))[0], altra = vicina ? T.quartieri.find(x => String(x.id) === (vicina.a === String(S.q) ? vicina.b : vicina.a)) : null
+      const comune = altra ? (Q?.concetti ?? []).find(w => altra.concetti.includes(w)) ?? altra.concetti[0] : pick(r, Q?.concetti ?? ['soglia'])
+      dati = { verso: 'verticale', avanti: 1, quota: 20, largo: 50, alto: 34, contenuto: 'parola', parola: comune, colore: tinta(S.q), opacita: 0.1, verso_q: altra?.id }; testo = `All'ingresso di «${S.nome}» ho alzato una soglia trasparente con scritto «${comune}»${altra ? `, la parola che la lega a «${altra.nome}»` : ''}.`
+    } else if (a.id === 'curatore' || a.tipo === 'mestiere') { dati = { verso: 'verticale', avanti: -1, quota: 30, largo: 90, alto: 60, contenuto: 'motivo', opacita: 0.4 }; testo = `Dietro le tavole di «${S.nome}» ho steso il motivo del suolo su un piano: le tavole ci si staccano sopra.` }
+    else if ((a.carattere.contrario ?? 0) > 0.55) { const altro = pick(r, T.punti.filter(p => p.q !== S.q && p.peso > 0.5)); if (!altro) continue; dati = { verso: pick(r, ['verticale', 'orizzontale']), avanti: 0, quota: 45 + r() * 40, largo: 30, alto: 38, contenuto: 'tavola', tavola: altro.id, opacita: 0.6 }; testo = `In mezzo a «${S.nome}» ho sospeso su un piano «${altro.titolo.slice(0, 40)}», che viene da altrove.` }
+    else { const g = tav[0]?.giorno, stesse = tav.filter(p => Math.abs(p.giorno - (g ?? 0)) <= 3).slice(0, 6).map(p => p.id); dati = { contenuto: 'cornici', tavole: stesse, colore: tinta(S.q) }; testo = `Ho colorato le cornici delle tavole di «${S.nome}» nate negli stessi giorni: si riconoscono tra loro.` }
+    if (qui.length >= 3) { const v = qui[0]; v.stato = 'tolto'; v.storia.push({ giorno, chi: a.id, cosa: 'l\'ha tolto per far posto' }) }
+    nuova({ tipo: 'piano', chi: a.id, giorno, a: S.id, q: S.q, nome: String(dati.contenuto), dati }, testo)
+    S.storia.push({ giorno, chi: a.id, cosa: testo.charAt(0).toLowerCase() + testo.slice(1, 90) })
+    az.push({ chi: a.id, tipo: 'interviene', testo })
+  }
+
   // 11. catalogare: l'archivio dà un nome alle strade, come in una città vera
   for (const st of di('strada')) if (!K.nomiVie[st.id] && r() < 0.4) {
     const A = K.costruzioni.find(c => c.id === st.a), B = K.costruzioni.find(c => c.id === st.b)
@@ -184,6 +209,6 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
     az.push({ chi: 'archivio', tipo: 'cataloga', testo: `La strada tra «${A?.nome ?? 'la piazza'}» e «${B?.nome ?? 'la piazza'}» ora si chiama ${K.nomiVie[st.id]}.` })
     break
   }
-  K.costruzioni = K.costruzioni.filter((c, i, l) => c.tipo !== 'intervento' || c.stato !== 'tolto' || i >= l.length - 200).slice(-600)
+  K.costruzioni = K.costruzioni.filter((c, i, l) => !['intervento', 'piano'].includes(c.tipo) || c.stato !== 'tolto' || i >= l.length - 200).slice(-600)
   return az.map(a => ({ ...a, chi: a.chi }))
 }
