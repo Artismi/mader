@@ -17,7 +17,7 @@ const BASE = '/stateyour/camera/'
 const importa = (f: string): Promise<any> => import(/* webpackIgnore: true */ /* turbopackIgnore: true */ BASE + f)
 
 /** fotografa il pianeta all'indirizzo n (se è solido): la mappa intera e il disco visto dallo spazio */
-export async function fotografa(n: number, attesa = 90000): Promise<Foto | null> {
+export async function fotografa(n: number, attesa = 45000): Promise<Foto | null> {
   try {
     const C = await importa('cosmo.js'), G = await importa('geologia.js')
     const a = C.indirizzoDi(n), v = { cosmo: a.cosmo, galassia: a.galassia, stella: a.stella, pianeta: a.pianeta }
