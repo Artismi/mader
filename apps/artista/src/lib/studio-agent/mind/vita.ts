@@ -53,7 +53,7 @@ export const OGG: Record<string, Ogg> = {
 
 export type Luogo = { id: string; tipo: string; nome: string; x: number; y: number; q?: number; nato?: number; chi?: string }
 export type Ricordo = { g: number; testo: string; peso: number; tag: string; chi?: string; dove?: string }
-export type Passo = { k: 'go' | 'meet'; luogo: string; h: number; ogg?: string; chi?: string; label: string; fatto?: boolean }
+export type Passo = { k: 'go' | 'meet'; luogo: string; h: number; ogg?: string; chi?: string; label: string; fatto?: boolean; oggi?: number }
 export type Progetto = { id: string; tipo: string; label: string; passi: Passo[]; dal: number; con?: string; stato: 'in corso' | 'riuscito' | 'fallito' | 'scaduto'; int?: Interesse }
 export type Blocco = { h0: number; h1: number; luogo: string; ogg?: string; perche: string; con?: string; progetto?: boolean }
 export type Rel = { aff: number; stima: number; ore: number; ultimo: number; litigi: number }
@@ -63,6 +63,8 @@ export type VitaAb = {
   oggi?: { h: number; luogo: string; x: number; y: number; fa: string; con?: string[] }[]
   saperi: Record<string, number> // cosa sa, e quanto (cresce usandolo)
   argomenti: Record<string, number> // gli argomenti che gli stanno a cuore: dalle letture, dalla piazza, da chi incontra
+  letti?: string[] // i motivi di cui ha letto e che non ha ancora provato a fare
+  costruiti?: string[] // i motivi che ha in mano (costruiti in officina)
   fatte: Partial<Record<string, number>> // quante volte ha usato ogni oggetto: la ripetizione fa il mestiere
 }
 export type TracciaSpazio = { id: string; tipo: Traccia; luogo: string; x: number; y: number; chi: string[]; dal: number; ultimo: number; volte: number; int?: Interesse; colore?: string; parola?: string; nome?: string }
@@ -153,6 +155,10 @@ export const SAPERI: Record<string, { int: Interesse[]; str: string[]; verbi: st
   'matematica e fisica': { int: ['misura', 'cosmo'], str: ['geometria', 'cristallo', 'acqua'], verbi: ['solleva', 'raddrizza'], fonti: ['arxiv', 'rivista:Scienza in Rete'] },
   letteratura: { int: ['parola', 'memoria'], str: ['scrivi'], verbi: ['scrive'], fonti: ['gutenberg', 'wikisource'] },
   lotta: { int: ['rito', 'parola'], str: ['taglia', 'scrivi'], verbi: ['copre', 'scrive'], fonti: ['rivista:Internazionale', 'rivista:minima&moralia'] },
+  incisione: { int: ['stampa', 'carta'], str: ['traccia', 'grana', 'togli'], verbi: ['scrive', 'stende'], fonti: ['commons', 'wiki-it'] },
+  'plastica ornamentale': { int: ['misura', 'terra'], str: ['geometria', 'ripeti', 'schiaccia'], verbi: ['solleva', 'stende'], fonti: ['commons', 'wiki-it'] },
+  decorazione: { int: ['colore', 'tessuto'], str: ['pattern', 'ripeti', 'geometria'], verbi: ['stende', 'incornicia', 'dipinge'], fonti: ['commons', 'archive'] },
+  "storia dell'arte": { int: ['memoria', 'colore'], str: ['grana', 'ripeti'], verbi: ['solleva', 'accosta', 'scrive'], fonti: ['wiki-it', 'commons', 'rivista:Artribune'] },
   controculture: { int: ['carta', 'rito', 'colore'], str: ['taglia', 'schiaccia', 'grana'], verbi: ['incolla', 'copre'], fonti: ['rivista:minima&moralia', 'archive'] },
 }
 function saperiDi(a: Abitante, r: () => number): Record<string, number> {
@@ -160,21 +166,48 @@ function saperiDi(a: Abitante, r: () => number): Record<string, number> {
   const id = a.id, add = (k: string, x: number) => { w[k] = (w[k] ?? 0) + x }
   if (/ritagli/.test(id)) { add('controculture', 2); add('illustrazione e stampa', 1) } if (/tipograf|stampat/.test(id)) { add('illustrazione e stampa', 2); add('editoria', 1.5); add('grafica', 1) }
   if (/redattor/.test(id)) { add('editoria', 2); add('scrittura', 1.5) } if (/ottic/.test(id)) { add('illuminotecnica', 2.5); add('matematica e fisica', 1) } if (/giardin/.test(id)) { add('generatori', 2); add('architettura', 0.5) }
-  if (/geometr/.test(id)) { add('architettura', 2); add('matematica e fisica', 1.5) } if (/alchimi|chimic/.test(id)) { add('matematica e fisica', 1.5); add('pittura', 1) } if (/astron|astrofis/.test(id)) { add('astronomia', 3); add('astrologia', 0.4) }
-  if (/filosof/.test(id)) { add('filosofia', 3); add('storia', 0.8) } if (id === 'urbanista') { add('architettura', 2.5); add('politica', 1) } if (id === 'curatore') { add('curatela', 3); add('design', 1) } if (id === 'archivio') { add('storia', 2.5); add('letteratura', 1.5) } if (id === 'saggista') { add('scrittura', 2); add('filosofia', 1) }
+  if (/geometr/.test(id)) { add('plastica ornamentale', 1); add('architettura', 2); add('matematica e fisica', 1.5) } if (/alchimi|chimic/.test(id)) { add('matematica e fisica', 1.5); add('pittura', 1) } if (/astron|astrofis/.test(id)) { add('astronomia', 3); add('astrologia', 0.4) }
+  if (/filosof/.test(id)) { add('filosofia', 3); add('storia', 0.8) } if (id === 'urbanista') { add('architettura', 2.5); add('politica', 1) } if (id === 'curatore') { add('curatela', 3); add('design', 1); add("storia dell'arte", 1.5) } if (id === 'archivio') { add('storia', 2.5); add('letteratura', 1.5) } if (id === 'saggista') { add('scrittura', 2); add('filosofia', 1) }
   for (const k of Object.keys(a.interessi)) { if (/govern|polit|lavor|lott/.test(k)) { add('politica', 1); add('lotta', 0.8); add('attivismo', 0.6) } if (/stori|tempo|memor/.test(k)) add('storia', 1); if (/citt|spaz/.test(k)) add('architettura', 1); if (/simbol|segn/.test(k)) { add('grafica', 0.8); add('astrologia', 0.4) } }
-  const c = a.carattere; add('controculture', c.contrario); add('lotta', c.contrario * 0.6 + c.trascinatore * 0.4); add('musica e sound design', c.trascinatore * 0.8); add('letteratura', c.malinconico); add('codice e script', c.visionario * 0.6); add('generatori', c.visionario * 0.6)
+  const c = a.carattere; add('decorazione', 0.4 + c.malinconico * 0.5); add('controculture', c.contrario); add('lotta', c.contrario * 0.6 + c.trascinatore * 0.4); add('musica e sound design', c.trascinatore * 0.8); add('letteratura', c.malinconico); add('codice e script', c.visionario * 0.6); add('generatori', c.visionario * 0.6)
   const out: Record<string, number> = {}, keys = Object.keys(w), n = 3 + Math.floor(r() * 3)
   while (Object.keys(out).length < n) { const tot = keys.reduce((t, k) => t + (out[k] ? 0 : w[k]), 0); let x = r() * tot; for (const k of keys) { if (out[k]) continue; x -= w[k]; if (x <= 0) { out[k] = +(0.3 + r() * 0.6).toFixed(2); break } } }
   return out
 }
+
+
+// ── volere proprio quella cosa: i motivi che si possono leggere, e come si fanno (la ricetta coi nostri generatori) ──
+// Chi legge di un motivo e ha il sapere per desiderarlo vuole farlo davvero: cerca come si fa, ragiona sul generatore con
+// chi sa di codice, chiede all'officina di costruirlo, poi lo usa su una superficie e lo porta in bottega.
+export const MOTIVI: Record<string, { str: string[]; famiglia: string; parole: RegExp }> = {
+  'meandro greco': { str: ['geometria', 'ripeti'], famiglia: 'geometria', parole: /meandr|greca\b|greche/ },
+  "girali d'acanto": { str: ['albero', 'ripeti', 'traccia'], famiglia: 'albero', parole: /acanto|girali|tralci/ },
+  intreccio: { str: ['pattern', 'traccia', 'ripeti'], famiglia: 'pattern', parole: /intrecc|nodo celtico|celtic/ },
+  arabesco: { str: ['traccia', 'pattern', 'ripeti'], famiglia: 'traccia', parole: /arabesc|moresc/ },
+  guilloché: { str: ['geometria', 'pattern', 'metashader'], famiglia: 'geometria', parole: /guilloch|banconot/ },
+  rosone: { str: ['geometria', 'ripeti', 'luce'], famiglia: 'geometria', parole: /rosone|rosa dei venti|vetrat/ },
+  damasco: { str: ['pattern', 'ripeti', 'materia'], famiglia: 'pattern', parole: /damasc|broccat/ },
+  'pied-de-poule': { str: ['pattern', 'ripeti'], famiglia: 'pattern', parole: /pied|tartan|scozzes|tessut/ },
+  cosmatesco: { str: ['geometria', 'taglia', 'ripeti'], famiglia: 'geometria', parole: /cosmat|mosaic|tessere/ },
+  marmorizzato: { str: ['acqua', 'materia', 'shader'], famiglia: 'acqua', parole: /marmo|marmor|carta marmor/ },
+  'reazione-diffusione': { str: ['muffa', 'shader', 'metashader'], famiglia: 'muffa', parole: /turing|reazion|macchie|leopard|zebra/ },
+  voronoi: { str: ['cristallo', 'geometria', 'metashader'], famiglia: 'cristallo', parole: /voronoi|cellul|alveare|celle/ },
+  frattale: { str: ['metashader', 'albero', 'shader'], famiglia: 'shader', parole: /frattal|mandelbrot|autosimil/ },
+  moiré: { str: ['pattern', 'luce', 'shader'], famiglia: 'pattern', parole: /moir|interferen|onde/ },
+  labirinto: { str: ['geometria', 'traccia'], famiglia: 'geometria', parole: /labirint|dedalo/ },
+  spirale: { str: ['geometria', 'albero', 'shader'], famiglia: 'albero', parole: /spiral|chiocciol|vortic/ },
+  'xilografia a sgorbia': { str: ['traccia', 'togli', 'grana'], famiglia: 'traccia', parole: /xilograf|sgorbi|incision|acquafort/ },
+  stucco: { str: ['materia', 'schiaccia', 'geometria'], famiglia: 'materia', parole: /stucc|cornicion|bassoriliev/ },
+}
+const VUOLE_MOTIVI = ['decorazione', 'plastica ornamentale', 'incisione', "storia dell'arte", 'grafica', 'design', 'illustrazione e stampa', 'texture e digitale', 'pittura']
+function motivoIn(testo: string): string | null { const t = testo.toLowerCase(); for (const [k, M] of Object.entries(MOTIVI)) if (M.parole.test(t) || t.includes(k)) return k; return null }
 
 // ── i gesti: tutto il laboratorio, a tutti. Ognuno ha in mano gli stessi strumenti di Andrea (i generatori del software
 // di grafica, i simulatori di stateyour, i filtri) e può usarli su qualunque superficie, che diventa il piano d'appoggio:
 // una tavola, l'aria (un piano nuovo), un muro, il suolo, le cornici. Chiunque può anche sistemare quello che c'è:
 // spostare, girare, accostare, raddrizzare, ingrandire. Nessun ruolo fisso: decidono il carattere, le voglie, gli
 // argomenti e quello che trovano dove sono. Ogni gesto ha la sua frase (verbo, strumento, filtro, supporto, perché).
-export const STRUMENTI: Record<string, string> = { semina: 'semi di forme', materia: 'materia', luce: 'luce', geometria: 'geometrie', pattern: 'un motivo', traccia: 'tracce a mano', scrivi: 'parole', grana: 'grana', taglia: 'tagli netti', ripeti: 'ripetizioni', togli: 'sottrazioni', fondo: 'un fondo', shader: 'uno shader', schiaccia: 'compressioni', ricetta: 'una ricetta dello studio', muffa: 'la muffa', albero: "il simulatore dell'albero", cristallo: 'il cristallo', acqua: "l'acqua", universo: 'un universo di stateyour', fotocosmo: 'una foto del cosmo', metashader: 'un generatore di generatori', tettonica: 'le placche di stateyour' }
+export const STRUMENTI: Record<string, string> = { ...Object.fromEntries(Object.keys(MOTIVI).map(k => ['motivo:' + k, `il motivo «${k}» che abbiamo costruito`])), semina: 'semi di forme', materia: 'materia', luce: 'luce', geometria: 'geometrie', pattern: 'un motivo', traccia: 'tracce a mano', scrivi: 'parole', grana: 'grana', taglia: 'tagli netti', ripeti: 'ripetizioni', togli: 'sottrazioni', fondo: 'un fondo', shader: 'uno shader', schiaccia: 'compressioni', ricetta: 'una ricetta dello studio', muffa: 'la muffa', albero: "il simulatore dell'albero", cristallo: 'il cristallo', acqua: "l'acqua", universo: 'un universo di stateyour', fotocosmo: 'una foto del cosmo', metashader: 'un generatore di generatori', tettonica: 'le placche di stateyour' }
 export const FILTRI_V = ['Risograph', 'DuotoneFilter', 'HolographicFilter', 'EliteHalftone', 'DitheringFilter', 'FiberFilter', 'GrainFilter', 'PosterizeFilter', 'OilPaintFilter', 'OutlineFilter', 'PixelateFilter', 'PrismFilter', 'BloomFilter', 'WavyFilter', 'Glitch', 'VHSFilter', 'ASCIIFilter', 'NeonGlowFilter', 'ThermalFilter', 'LiquidMetalFilter']
 const filtroDetto = (f: string) => f.replace(/Filter$/, '').replace(/^Elite/, '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
 type Supporto = 'tavola' | 'aria' | 'muro' | 'suolo' | 'cornici' | 'sala'
@@ -208,7 +241,7 @@ function gesto(V: Vita, C: Citta, T: Territorio, a: Abitante, L: Luogo, h: numbe
   const VB = VERBI[verbo], sups = VB.su.filter(s => (s === 'sala' || s === 'tavola' || s === 'cornici') ? L.tipo === 'sala' : true), supporto = sups[Math.floor(r() * sups.length)] ?? 'suolo'
   let strumento: string | undefined
   if (VB.strumento) { const pref = [...(Object.keys(v.interessi) as Interesse[]).flatMap(i => INT_STR[i] ?? []), ...Object.keys(v.saperi ?? {}).flatMap(k => SAPERI[k]?.str ?? []), ...Object.keys(v.saperi ?? {}).flatMap(k => SAPERI[k]?.str ?? [])].filter(x => STRUMENTI[x]), mie = Object.keys(a.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)).filter(x => STRUMENTI[x])
-    const tutti = Object.keys(STRUMENTI); strumento = r() < 0.55 && pref.length ? pick(r, pref) : r() < 0.5 && mie.length ? pick(r, mie) : pick(r, tutti) } // a volte la cosa che non ha mai usato
+    const tutti = Object.keys(STRUMENTI); strumento = (v.costruiti?.length && r() < 0.3) ? 'motivo:' + pick(r, v.costruiti) : r() < 0.55 && pref.length ? pick(r, pref) : r() < 0.5 && mie.length ? pick(r, mie) : pick(r, tutti) } // a volte la cosa che non ha mai usato
   const filtro = VB.strumento && r() < 0.45 + ch.visionario * 0.2 ? pick(r, FILTRI_V) : undefined
   const arg = Object.entries(v.argomenti).sort((x, y) => y[1] - x[1])[Math.floor(r() * 2)]?.[0]
   const q = L.q ?? qDi(C, T, a, L.id), colore = PALETTE[Math.floor(r() * PALETTE.length)]
@@ -328,7 +361,7 @@ function pianifica(V: Vita, C: Citta, a: Abitante, r: () => number): Blocco[] {
     const recenti = V.tracce.filter(t => V.giorno - t.ultimo <= 1 && !t.luogo.startsWith('casa')), L = per ?? (recenti.length && r() < 0.5 ? luogoDi(V, pick(r, recenti).luogo) : pick(r, V.luoghi.filter(l => !['casa'].includes(l.tipo))))
     if (L) inserisci(B, { h0, h1: h0 + 1 + Math.floor(r() * 2), luogo: L.id, perche: per ? `segue «${arg}» fino ${a_(L.nome)}` : `segue un'idea fino ${a_(L.nome)}` }) }
   // i passi dei progetti: entrano al loro orario e spostano il resto
-  for (const p of v.progetti.filter(p => p.stato === 'in corso')) { const s = p.passi.find(x => !x.fatto); if (!s) continue; inserisci(B, { h0: s.h, h1: s.h + 2, luogo: s.luogo, ogg: s.ogg, perche: s.label, con: s.chi, progetto: true }) }
+  for (const p of v.progetti.filter(p => p.stato === 'in corso')) { const s = p.passi.find(x => !x.fatto); if (!s) continue; s.oggi = V.giorno; inserisci(B, { h0: s.h, h1: s.h + 2, luogo: s.luogo, ogg: s.ogg, perche: s.label, con: s.chi, progetto: true }) }
   return B
 }
 function inserisci(B: Blocco[], n: Blocco) {
@@ -372,6 +405,16 @@ const PROG: Record<string, DefProg> = {
   // un orto su un confine: dove due quartieri si toccano
   orto: { quando: v => (v.interessi.crescita ?? 0) > 0.4 && (v.voglia.crescita ?? 0) > 0.5,
     fa: (V, C, a, v, r) => { const L = V.luoghi.filter(l => l.tipo === 'confine'); return L.length ? (() => { const dove = pick(r, L); return { tipo: 'orto', int: 'crescita' as Interesse, label: `coltivare ${dove.nome}`, passi: [0, 1, 2, 3].map(i => ({ k: 'go' as const, luogo: dove.id, h: 7 + i % 2, ogg: 'orto', label: i ? 'torna a curare le piante' : 'vanga e semina' })) } })() : null } },
+  // volere proprio quel motivo: cercare come si fa, ragionarci con chi sa di codice, farlo costruire in officina, usarlo
+  ricreare: { quando: (v, a, V) => { if (!VUOLE_MOTIVI.some(k => (v.saperi?.[k] ?? 0) > 0.3)) return null; const m = v.letti?.find(x => !v.progetti.some(p => p.tipo === 'ricreare' && p.stato === 'in corso' && p.label.includes(x))); return m ?? null },
+    fa: (V, C, a, v, r, motivo: string) => {
+      const esperto = C.abitanti.filter(b => b.id !== a.id).map(b => [b, Math.max(V.ab[b.id]?.saperi?.['codice e script'] ?? 0, (V.ab[b.id]?.saperi?.generatori ?? 0) * 0.9)] as const).sort((x, y) => y[1] - x[1])[0]?.[0]
+      const sup = pick(r, V.luoghi.filter(l => ['sala', 'confine', 'strada', 'piazza'].includes(l.tipo)))
+      return { tipo: 'ricreare', int: 'colore', con: esperto?.id, label: `fare proprio il motivo «${motivo}»`, passi: [
+        { k: 'go', luogo: 'biblioteca', h: 10, ogg: 'leggio', label: `cerca come si fa il motivo «${motivo}»` },
+        ...(esperto ? [{ k: 'meet' as const, chi: esperto.id, luogo: 'officina', h: 15, ogg: 'banco', label: `ragiona sul generatore del motivo «${motivo}» con ${esperto.nome}` }] : []),
+        { k: 'go', luogo: 'officina', h: 11, ogg: 'banco', label: `costruisce il motivo «${motivo}» in officina` },
+        { k: 'go', luogo: sup.id, h: 16, ogg: 'cavalletto', label: `prova il motivo «${motivo}» ${a_(sup.nome)}` }] } } },
   // fare festa (il trascinatore, a fine settimana)
   festa: { quando: (v, a, V) => a.carattere.trascinatore > 0.6 && V.giorno % 7 >= 4 && v.bisogni.svago > 0.5,
     fa: () => ({ tipo: 'festa', int: 'rito', label: 'organizzare una festa', passi: [{ k: 'go', luogo: 'assemblea', h: 21, ogg: 'palco', label: 'monta il palco e chiama tutti' }] }) },
@@ -387,7 +430,7 @@ function rifletti(V: Vita, C: Citta, a: Abitante, r: () => number, verbale: Batt
   if (v.progetti.filter(p => p.stato === 'in corso').length >= 2) return
   const cand = Object.entries(PROG).map(([k, d]) => [k, d, d.quando(v, a, V)] as const).filter(([k, , arg]) => arg && !v.progetti.some(p => p.tipo === k && p.stato === 'in corso'))
   if (!cand.length) return
-  const [k, d, arg] = cand[Math.floor(r() * cand.length)], p = d.fa(V, C, a, v, r, arg); if (!p) return
+  const scelto = cand.find(([k]) => k === 'ricreare') ?? cand[Math.floor(r() * cand.length)], [k, d, arg] = scelto, p = d.fa(V, C, a, v, r, arg); if (!p) return
   v.progetti.push({ ...p, id: `${a.id}-${V.giorno}-${k}`, dal: V.giorno, stato: 'in corso' })
   v.pensiero = `Stanotte ho deciso: ${p.label}.`
   verbale.push({ fase: 'casa' as Cella, chi: a.id, tipo: 'progetto', testo: v.pensiero })
@@ -404,8 +447,10 @@ export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () =>
   const parla = (chi: string, testo: string, fase: Cella = 'piazza') => { verbale.push({ fase, chi, tipo: 'vita', testo }); detti.push(testo) }
   fasiOggi = new Map(); for (const b of verbale) { if (!b.chi || !(b.fase in ORA_FASE)) continue; const l = fasiOggi.get(b.chi) ?? []; if (!l.includes(b.fase)) l.push(b.fase); fasiOggi.set(b.chi, l) }
   // le notizie di fuori: quello che è stato letto oggi sulle riviste e nelle enciclopedie
-  for (const b of verbale) if (b.tipo === 'legge') { const m = b.testo.match(/«([^»]+)» \(([^)]+)\)/); if (m && !(V.fuori ??= []).some(f => f.t === m[1])) V.fuori.push({ t: m[1], s: m[2], g: C.giorno }) }
+  for (const b of verbale) if (b.tipo === 'legge') { const m = b.testo.match(/«([^»]+)» \(([^)]+)\)/); if (m && !/wiki|commons|gutenberg|archive|openlibrary|arxiv|source|zionario|quote/i.test(m[2]) && !(V.fuori ??= []).some(f => f.t === m[1])) V.fuori.push({ t: m[1], s: m[2], g: C.giorno }) }
   V.fuori = (V.fuori ?? []).slice(-24)
+  // chi legge (o sente in piazza) di un motivo se lo segna: potrebbe volerlo fare proprio così
+  for (const b of verbale) { const v = V.ab[b.chi]; const m = v && motivoIn(b.testo); if (m && !(v.letti ??= []).includes(m) && !(v.costruiti ?? []).includes(m)) v.letti.push(m) }
   // quello che ha letto, cercato e detto oggi diventa argomento suo (le parole tra «»)
   for (const b of verbale) { const v = V.ab[b.chi]; if (!v) continue; for (const m of b.testo.matchAll(/«([^»]{3,40})»/g)) { const w = m[1].toLowerCase().split(/\s+/).find(x => x.length > 4) ?? m[1].toLowerCase(); if (w.length > 24) continue; v.argomenti[w] = Math.min(3, (v.argomenti[w] ?? 0) + (b.tipo === 'legge' || b.tipo === 'risposta' ? 0.5 : 0.3)) } }
   const gestiQui = new Map<string, number>()
@@ -483,12 +528,13 @@ export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () =>
     }
     // i passi dei progetti: fatti se all'ora giusta erano nel posto giusto (e, per gli appuntamenti, se è venuto anche l'altro)
     for (const a of C.abitanti) for (const p of V.ab[a.id].progetti.filter(p => p.stato === 'in corso')) {
-      const s = p.passi.find(x => !x.fatto); if (!s || h !== s.h + 1) continue
+      const s = p.passi.find(x => !x.fatto); if (!s || h !== s.h + 1 || s.oggi !== V.giorno) continue
       const io = V.ab[a.id].oggi!.at(-1), cEra = io?.luogo === s.luogo
-      if (s.k === 'meet') { const lui = V.ab[s.chi!]?.oggi?.at(-1), venuto = lui?.luogo === s.luogo || r() < 0.55 + relDi(V.ab[s.chi!] ?? V.ab[a.id], a.id).aff * 0.4
+      if (s.k === 'meet') { const lui = V.ab[s.chi!]?.oggi?.at(-1), venuto = lui?.luogo === s.luogo || r() < (p.tipo === 'ricreare' ? 0.85 : 0.55) + relDi(V.ab[s.chi!] ?? V.ab[a.id], a.id).aff * 0.4
         if (cEra && venuto) { s.fatto = true; const ra = relDi(V.ab[a.id], s.chi!); ra.aff = clamp(ra.aff + 0.15, -1, 1); if (p.tipo === 'pace') { ra.litigi = 0; ra.aff = Math.max(ra.aff, 0.1) } }
         else { p.stato = 'fallito'; nota(V.ab[a.id], V.giorno, `${nomeDi(s.chi!)} mi ha dato buca`, 'bidone', -0.4, s.chi, s.luogo); const ra = relDi(V.ab[a.id], s.chi!); ra.aff = clamp(ra.aff - 0.15, -1, 1) } }
       else if (cEra) s.fatto = true
+      if (s.fatto && p.tipo === 'ricreare') passoRicreare(V, C, a, p, s, parla)
       if (p.stato === 'in corso' && p.passi.every(x => x.fatto)) { p.stato = 'riuscito'; compi(V, C, a, p, r, tavolozzaDi, parla) }
     }
   }
@@ -540,6 +586,16 @@ function lascia(V: Vita, tipo: Traccia, L: Luogo, chi: string[], int?: Interesse
   V.tracce.push(n); if (V.tracce.length > 600) V.tracce.splice(V.tracce.findIndex(x => x.volte < 2), 1)
   return n
 }
+// i passi del volere un motivo: domanda ai saggisti (che cercano davvero in rete), richiesta all'officina, uso
+function passoRicreare(V: Vita, C: Citta, a: Abitante, p: Progetto, s: Passo, parla: (chi: string, t: string, f?: Cella) => void) {
+  const motivo = p.label.match(/«(.+)»/)?.[1] ?? '', M = MOTIVI[motivo]; if (!M) return
+  const Cx = C as Citta & { domande: { giorno: number; chi: string; testo: string; stato: string; argomento?: string; cerca?: string }[]; officina?: { richieste: { autore: string; scopo: string; strumenti: string[]; modo: 'zero' | 'ramo' | 'innesto'; base?: string; giorno: number }[]; esiti: unknown[]; tenuti: unknown[] } }
+  if (s.ogg === 'leggio') { Cx.domande.push({ giorno: C.giorno, chi: a.id, testo: `Come si fa il motivo «${motivo}»? Con che regole si costruisce, passo per passo?`, stato: 'aperta', argomento: motivo, cerca: `${motivo} costruzione geometrica` }); parla(a.id, `Ho letto del motivo «${motivo}» e lo voglio fare proprio così. Ho chiesto alla biblioteca come si costruisce.`, 'biblioteca') }
+  else if (s.k === 'meet') parla(a.id, `Con ${C.abitanti.find(x => x.id === s.chi)?.nome} abbiamo smontato il motivo «${motivo}»: ci vogliono ${M.str.map(x => STRUMENTI[x] ?? x).join(', ')}. Sulla carta torna, adesso va fatto tornare davvero.`, 'bottega')
+  else if (s.ogg === 'banco') { (Cx.officina ??= { richieste: [], esiti: [], tenuti: [] }).richieste.push({ autore: a.nome, scopo: `il motivo «${motivo}»`, strumenti: M.str, modo: 'zero', giorno: C.giorno }); (V.ab[a.id].costruiti ??= []).push(motivo); parla(a.id, `In officina ho messo insieme il generatore del motivo «${motivo}», con ${M.str.map(x => STRUMENTI[x] ?? x).join(', ')}. Se regge, entra tra gli attrezzi di tutti.`, 'bottega') }
+  else { const L = luogoDi(V, s.luogo); if (L) { const G: Gesto = { chi: a.id, verbo: 'stende', strumento: 'motivo:' + motivo, supporto: L.tipo === 'sala' ? 'aria' : 'suolo', luogo: L.id, q: L.q, x: L.x, y: L.y, parola: motivo, colore: PALETTE[C.giorno % PALETTE.length], testo: `Ho steso il motivo «${motivo}» che abbiamo costruito ${L.tipo === 'sala' ? 'su un piano nuovo' : 'per terra'}, ${a_(L.nome)}. È venuto quasi come nel libro, e il quasi è la parte nostra.`, h: s.h }
+    ;(V.gesti ??= []).push(G); parla(a.id, G.testo, faseDi(L)); const v = V.ab[a.id]; v.letti = (v.letti ?? []).filter(x => x !== motivo) } }
+}
 // un progetto riuscito lascia la sua cosa
 function compi(V: Vita, C: Citta, a: Abitante, p: Progetto, r: () => number, tav: (id: string) => string[], parla: (chi: string, t: string, f?: Cella) => void) {
   const v = V.ab[a.id], ultimo = p.passi.at(-1)!, L = luogoDi(V, ultimo.luogo) ?? luogoDi(V, 'piazza')!
@@ -550,11 +606,11 @@ function compi(V: Vita, C: Citta, a: Abitante, p: Progetto, r: () => number, tav
   if (detto) parla(a.id, detto, faseDi(L))
   if (p.tipo === 'vestito') (a as Abitante & { capoNuovo?: number }).capoNuovo = V.giorno
   // la serie e l'opera a più mani diventano una tavola vera: una commissione in bottega, con le mani di chi l'ha fatta
-  if (p.tipo === 'serie' || p.tipo === 'insieme') {
+  if (p.tipo === 'serie' || p.tipo === 'insieme' || p.tipo === 'ricreare') {
     const B = C.abitanti.find(x => x.id === p.con), Cb = C as Citta & { bottega?: import('./sospese').Commissione[] }
     const fam: Record<string, string> = { vetri: 'luce', torchio: 'grana', forbici: 'taglia', cavalletto: 'materia', scavo: 'fondo', telescopio: 'shader', simulatore: 'shader', orto: 'semina', leggio: 'scrivi', muro: 'scrivi', banco: 'geometria', sentiero: 'traccia', telaio: 'pattern', scaffali: 'ripeti' }
-    const sts = [...new Set([...(p.passi.map(x => fam[x.ogg ?? '']).filter(Boolean) as string[]), ...[a, B].filter(Boolean).flatMap(x => Object.keys(x!.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)))])]
-    const arg = Object.entries(v.argomenti).filter(([w]) => !B || (V.ab[B.id]?.argomenti[w] ?? 0) > 0).sort((x, y) => y[1] - x[1])[0]?.[0] ?? Object.entries(v.argomenti).sort((x, y) => y[1] - x[1])[0]?.[0]
+    const sts = [...new Set([...(p.tipo === 'ricreare' ? MOTIVI[(p.label.match(/«(.+)»/)?.[1] ?? '')]?.str ?? [] : []), ...(p.passi.map(x => fam[x.ogg ?? '']).filter(Boolean) as string[]), ...[a, B].filter(Boolean).flatMap(x => Object.keys(x!.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)))])]
+    const arg = p.tipo === 'ricreare' ? (p.label.match(/«(.+)»/)?.[1] ?? '') : Object.entries(v.argomenti).filter(([w]) => !B || (V.ab[B.id]?.argomenti[w] ?? 0) > 0).sort((x, y) => y[1] - x[1])[0]?.[0] ?? Object.entries(v.argomenti).sort((x, y) => y[1] - x[1])[0]?.[0]
     if (sts.length && arg && !(Cb.bottega ??= []).some(c => c.stato === 'in attesa' && c.giorno === C.giorno)) {
       Cb.bottega.push({ id: `v${C.giorno}.${Cb.bottega.length}`, giorno: C.giorno, autore: a.id, nome: a.nome, con: B?.nome, parola: arg, strumenti: sts.slice(0, 6), perche: `nata ${a_(L.nome)}: ${p.label}`, stato: 'in attesa' })
       parla(a.id, L.id === 'bottega' ? `Quello che abbiamo fatto qui diventa una tavola su «${arg}».` : `Quello che abbiamo fatto ${a_(L.nome)} lo porto in bottega: una tavola su «${arg}».`, 'bottega')
