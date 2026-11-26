@@ -380,7 +380,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   // fuori: la saggista porta le domande aperte nelle sue fonti; ognuno legge per conto suo nelle proprie
   const trovate: Evento[] = []
   let budget = o.ricerche ?? 8
-  const scegliFonte = (a: Abitante) => { const e = Object.entries(a.fonti ?? { 'wiki-it': 1 }).filter(([, w]) => w > 0.05); if (r() < 0.12 * (1 + a.carattere.visionario)) { const nuove = CATALOGO.filter(x => !(a.fonti ?? {})[x]); if (nuove.length) return nuove[Math.floor(r() * nuove.length)] } let x = r() * e.reduce((t, [, w]) => t + w, 0); for (const [k, w] of e) if ((x -= w) <= 0) return k; return e[0][0] }
+  const scegliFonte = (a: Abitante) => { const e = Object.entries(a.fonti ?? { 'wiki-it': 1 }).filter(([, w]) => w > 0.05); if (r() < 0.12 * (1 + a.carattere.visionario)) { const nuove = CATALOGO.filter(x => !(a.fonti ?? {})[x]); if (nuove.length) return nuove[Math.floor(r() * nuove.length)] } let x = r() * e.reduce((t, [, w]) => t + w, 0); for (const [k, w] of e) if ((x -= w) <= 0) return k; return e[0]?.[0] ?? 'wiki-it' }
   const VIA = new Set('cominciato cominciare stanno porta ridire quando quanto succede nello nella perché cosa sanno fanno fare nessun nessuno altro altri sempre finiamo davvero parla nostre nostri prima'.split(' '))
   const chiave = (d: { testo: string; cerca?: string }) => { if (d.cerca) return d.cerca; const q = d.testo.match(/«([^»]+)»/)?.[1]; const w = (q ?? d.testo).toLowerCase().split(/[^a-zàèéìòù]+/).filter(x => x.length >= 4 && !VIA.has(x) && radice(x)); return w.slice(0, 3).join(' ') }
   const migliore = (l: Lettura[], v: Record<string, number>, q = '') => {
@@ -538,7 +538,7 @@ export async function giornata(C: Citta, opere: Opera[], T: Territorio, o: { sem
   }
   // 5b''. il cantiere della città: costruire, espandere, correggere, catalogare, curare, coprire (accumulo senza piano)
   C.costruito ??= { costruzioni: [], nomiVie: {} }
-  for (const x of costruisci(C.costruito, T, opere, C.abitanti, C.giorno, r, { atti: (C as Citta & { vita?: { atti?: { chi: string; ogg: string; luogo: string; q?: number }[] } }).vita?.atti, scoperte: C.osservatorio?.scoperte.filter(s => /somiglia|potrebbe/.test(s.perche) || /acqua liquida/.test(s.testo)).map(s => ({ n: s.n, testo: s.testo })), cantieri: (C.cantieri ?? []).map(c => ({ cosa: c.cosa, chi: c.chi })), letture: C.rete.filter(n => n.tipo === 'lettura' || n.tipo === 'risposta').length, sale: C.sale }))
+  for (const x of costruisci(C.costruito, T, opere, C.abitanti, C.giorno, r, { atti: (C as Citta & { vita?: { atti?: { chi: string; ogg: string; luogo: string; q?: number }[] } }).vita?.atti, gesti: (C as unknown as { vita?: { gesti?: never[] } }).vita?.gesti, scoperte: C.osservatorio?.scoperte.filter(s => /somiglia|potrebbe/.test(s.perche) || /acqua liquida/.test(s.testo)).map(s => ({ n: s.n, testo: s.testo })), cantieri: (C.cantieri ?? []).map(c => ({ cosa: c.cosa, chi: c.chi })), letture: C.rete.filter(n => n.tipo === 'lettura' || n.tipo === 'risposta').length, sale: C.sale }))
     verbale.push({ fase: 'archivio', chi: x.chi, tipo: x.tipo, testo: x.testo })
   if (!C.costruito.costruzioni.some(c => c.tipo === 'monumento' && c.nome === 'il guardaroba')) C.costruito.costruzioni.push({ id: 'guardaroba', tipo: 'monumento', chi: 'urbanista', giorno: C.giorno, nome: 'il guardaroba', dati: { guardaroba: true }, stato: 'in piedi', storia: [{ giorno: C.giorno, chi: 'urbanista', cosa: 'ha aperto il guardaroba' }] })
 

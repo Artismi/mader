@@ -61,11 +61,12 @@ export type VitaAb = {
   bisogni: Record<Bisogno, number>; interessi: Partial<Record<Interesse, number>>; voglia: Partial<Record<Interesse, number>>
   rel: Record<string, Rel>; diario: Ricordo[]; progetti: Progetto[]; evita: Record<string, number>; pensiero?: string
   oggi?: { h: number; luogo: string; x: number; y: number; fa: string; con?: string[] }[]
+  saperi: Record<string, number> // cosa sa, e quanto (cresce usandolo)
   argomenti: Record<string, number> // gli argomenti che gli stanno a cuore: dalle letture, dalla piazza, da chi incontra
   fatte: Partial<Record<string, number>> // quante volte ha usato ogni oggetto: la ripetizione fa il mestiere
 }
 export type TracciaSpazio = { id: string; tipo: Traccia; luogo: string; x: number; y: number; chi: string[]; dal: number; ultimo: number; volte: number; int?: Interesse; colore?: string; parola?: string; nome?: string }
-export type Vita = { atti?: { chi: string; ogg: string; luogo: string; q?: number; h: number }[]; fuori?: { t: string; s: string; g: number; detto?: number }[]; luoghi: Luogo[]; ab: Record<string, VitaAb>; tracce: TracciaSpazio[]; vie: Record<string, number>; giorno: number; cronaca: { g: number; testo: string }[] }
+export type Vita = { gesti?: Gesto[]; atti?: { chi: string; ogg: string; luogo: string; q?: number; h: number }[]; fuori?: { t: string; s: string; g: number; detto?: number }[]; luoghi: Luogo[]; ab: Record<string, VitaAb>; tracce: TracciaSpazio[]; vie: Record<string, number>; giorno: number; cronaca: { g: number; testo: string }[] }
 
 const su = (x: string) => x.replace(/^il /, 'sul ').replace(/^lo /, 'sullo ').replace(/^la /, 'sulla ').replace(/^l'/, "sull'").replace(/^i /, 'sui ').replace(/^gli /, 'sugli ').replace(/^le /, 'sulle ')
 const IN: Record<string, string> = { 'la piazza': 'in piazza', 'la biblioteca': 'in biblioteca', 'la bottega': 'in bottega', "l'officina": 'in officina', "l'archivio": 'in archivio', "l'assemblea": "all'assemblea", 'il guardaroba': 'in guardaroba' }
@@ -125,6 +126,99 @@ function dice(a: Abitante, sit: string, x: Record<string, string>, r: () => numb
   return l.length ? l[Math.floor(r() * l.length)](x) : ''
 }
 
+
+
+// ── i saperi: ognuno sa delle cose, a livelli diversi, e li fa crescere usandoli. Spostano quello che legge, gli strumenti
+// che prende in mano, i gesti che fa, di cosa parla. Nessuno sa tutto; nessuno è solo il suo mestiere.
+export const SAPERI: Record<string, { int: Interesse[]; str: string[]; verbi: string[]; fonti: string[] }> = {
+  architettura: { int: ['misura', 'terra'], str: ['geometria', 'tettonica'], verbi: ['sposta', 'accosta', 'solleva'], fonti: ['rivista:Artribune', 'wiki-en'] },
+  grafica: { int: ['stampa', 'colore', 'parola'], str: ['pattern', 'scrivi', 'grana'], verbi: ['stende', 'incornicia'], fonti: ['commons', 'rivista:Artribune'] },
+  design: { int: ['misura', 'tessuto'], str: ['geometria', 'ripeti'], verbi: ['raddrizza', 'accosta', 'incornicia'], fonti: ['rivista:Artribune', 'wiki-en'] },
+  pittura: { int: ['colore'], str: ['materia', 'fondo'], verbi: ['dipinge'], fonti: ['commons', 'wiki-it'] },
+  scrittura: { int: ['parola'], str: ['scrivi', 'traccia'], verbi: ['scrive'], fonti: ['rivista:Il Tascabile', 'wikiquote'] },
+  filosofia: { int: ['parola', 'cosmo'], str: ['scrivi'], verbi: ['scrive', 'proietta'], fonti: ['rivista:Doppiozero', 'wikisource'] },
+  storia: { int: ['memoria'], str: ['togli', 'grana'], verbi: ['solleva', 'scrive'], fonti: ['wikisource', 'archive'] },
+  politica: { int: ['chiacchiere', 'parola'], str: ['scrivi', 'taglia'], verbi: ['scrive', 'copre'], fonti: ['rivista:Il Post', 'rivista:Internazionale'] },
+  attivismo: { int: ['rito', 'parola'], str: ['scrivi', 'taglia'], verbi: ['copre', 'scrive', 'incolla'], fonti: ['rivista:cheFare', 'rivista:Internazionale'] },
+  editoria: { int: ['stampa', 'carta'], str: ['scrivi', 'ripeti'], verbi: ['incornicia', 'stende'], fonti: ['rivista:Il Tascabile', 'openlibrary'] },
+  curatela: { int: ['memoria', 'colore'], str: ['ripeti'], verbi: ['sposta', 'accosta', 'gira', 'ingrandisce'], fonti: ['rivista:Artribune', 'rivista:Doppiozero'] },
+  illuminotecnica: { int: ['luce'], str: ['luce', 'shader'], verbi: ['proietta'], fonti: ['wiki-en', 'arxiv'] },
+  'musica e sound design': { int: ['rito'], str: ['ripeti', 'pattern'], verbi: ['stende'], fonti: ['wiki-en', 'archive'] },
+  'illustrazione e stampa': { int: ['stampa', 'carta', 'colore'], str: ['traccia', 'grana', 'ricetta'], verbi: ['dipinge', 'stende'], fonti: ['commons', 'wiki-it'] },
+  'texture e digitale': { int: ['tessuto', 'luce'], str: ['grana', 'pattern', 'schiaccia'], verbi: ['stende', 'incornicia'], fonti: ['wiki-en', 'commons'] },
+  'codice e script': { int: ['misura', 'luce'], str: ['metashader', 'ricetta', 'shader'], verbi: ['stende', 'proietta'], fonti: ['wiki-en', 'arxiv'] },
+  generatori: { int: ['crescita', 'cosmo'], str: ['albero', 'muffa', 'cristallo', 'universo', 'metashader'], verbi: ['semina', 'coltiva', 'stende'], fonti: ['arxiv', 'wiki-en'] },
+  astrologia: { int: ['cosmo', 'rito'], str: ['fotocosmo', 'universo'], verbi: ['proietta', 'scrive'], fonti: ['wiki-it', 'wikisource'] },
+  astronomia: { int: ['cosmo'], str: ['universo', 'fotocosmo'], verbi: ['proietta', 'stende'], fonti: ['arxiv', 'rivista:Le Scienze'] },
+  'matematica e fisica': { int: ['misura', 'cosmo'], str: ['geometria', 'cristallo', 'acqua'], verbi: ['solleva', 'raddrizza'], fonti: ['arxiv', 'rivista:Scienza in Rete'] },
+  letteratura: { int: ['parola', 'memoria'], str: ['scrivi'], verbi: ['scrive'], fonti: ['gutenberg', 'wikisource'] },
+  lotta: { int: ['rito', 'parola'], str: ['taglia', 'scrivi'], verbi: ['copre', 'scrive'], fonti: ['rivista:Internazionale', 'rivista:minima&moralia'] },
+  controculture: { int: ['carta', 'rito', 'colore'], str: ['taglia', 'schiaccia', 'grana'], verbi: ['incolla', 'copre'], fonti: ['rivista:minima&moralia', 'archive'] },
+}
+function saperiDi(a: Abitante, r: () => number): Record<string, number> {
+  const w: Record<string, number> = Object.fromEntries(Object.keys(SAPERI).map(k => [k, 0.4]))
+  const id = a.id, add = (k: string, x: number) => { w[k] = (w[k] ?? 0) + x }
+  if (/ritagli/.test(id)) { add('controculture', 2); add('illustrazione e stampa', 1) } if (/tipograf|stampat/.test(id)) { add('illustrazione e stampa', 2); add('editoria', 1.5); add('grafica', 1) }
+  if (/redattor/.test(id)) { add('editoria', 2); add('scrittura', 1.5) } if (/ottic/.test(id)) { add('illuminotecnica', 2.5); add('matematica e fisica', 1) } if (/giardin/.test(id)) { add('generatori', 2); add('architettura', 0.5) }
+  if (/geometr/.test(id)) { add('architettura', 2); add('matematica e fisica', 1.5) } if (/alchimi|chimic/.test(id)) { add('matematica e fisica', 1.5); add('pittura', 1) } if (/astron|astrofis/.test(id)) { add('astronomia', 3); add('astrologia', 0.4) }
+  if (/filosof/.test(id)) { add('filosofia', 3); add('storia', 0.8) } if (id === 'urbanista') { add('architettura', 2.5); add('politica', 1) } if (id === 'curatore') { add('curatela', 3); add('design', 1) } if (id === 'archivio') { add('storia', 2.5); add('letteratura', 1.5) } if (id === 'saggista') { add('scrittura', 2); add('filosofia', 1) }
+  for (const k of Object.keys(a.interessi)) { if (/govern|polit|lavor|lott/.test(k)) { add('politica', 1); add('lotta', 0.8); add('attivismo', 0.6) } if (/stori|tempo|memor/.test(k)) add('storia', 1); if (/citt|spaz/.test(k)) add('architettura', 1); if (/simbol|segn/.test(k)) { add('grafica', 0.8); add('astrologia', 0.4) } }
+  const c = a.carattere; add('controculture', c.contrario); add('lotta', c.contrario * 0.6 + c.trascinatore * 0.4); add('musica e sound design', c.trascinatore * 0.8); add('letteratura', c.malinconico); add('codice e script', c.visionario * 0.6); add('generatori', c.visionario * 0.6)
+  const out: Record<string, number> = {}, keys = Object.keys(w), n = 3 + Math.floor(r() * 3)
+  while (Object.keys(out).length < n) { const tot = keys.reduce((t, k) => t + (out[k] ? 0 : w[k]), 0); let x = r() * tot; for (const k of keys) { if (out[k]) continue; x -= w[k]; if (x <= 0) { out[k] = +(0.3 + r() * 0.6).toFixed(2); break } } }
+  return out
+}
+
+// ── i gesti: tutto il laboratorio, a tutti. Ognuno ha in mano gli stessi strumenti di Andrea (i generatori del software
+// di grafica, i simulatori di stateyour, i filtri) e può usarli su qualunque superficie, che diventa il piano d'appoggio:
+// una tavola, l'aria (un piano nuovo), un muro, il suolo, le cornici. Chiunque può anche sistemare quello che c'è:
+// spostare, girare, accostare, raddrizzare, ingrandire. Nessun ruolo fisso: decidono il carattere, le voglie, gli
+// argomenti e quello che trovano dove sono. Ogni gesto ha la sua frase (verbo, strumento, filtro, supporto, perché).
+export const STRUMENTI: Record<string, string> = { semina: 'semi di forme', materia: 'materia', luce: 'luce', geometria: 'geometrie', pattern: 'un motivo', traccia: 'tracce a mano', scrivi: 'parole', grana: 'grana', taglia: 'tagli netti', ripeti: 'ripetizioni', togli: 'sottrazioni', fondo: 'un fondo', shader: 'uno shader', schiaccia: 'compressioni', ricetta: 'una ricetta dello studio', muffa: 'la muffa', albero: "il simulatore dell'albero", cristallo: 'il cristallo', acqua: "l'acqua", universo: 'un universo di stateyour', fotocosmo: 'una foto del cosmo', metashader: 'un generatore di generatori', tettonica: 'le placche di stateyour' }
+export const FILTRI_V = ['Risograph', 'DuotoneFilter', 'HolographicFilter', 'EliteHalftone', 'DitheringFilter', 'FiberFilter', 'GrainFilter', 'PosterizeFilter', 'OilPaintFilter', 'OutlineFilter', 'PixelateFilter', 'PrismFilter', 'BloomFilter', 'WavyFilter', 'Glitch', 'VHSFilter', 'ASCIIFilter', 'NeonGlowFilter', 'ThermalFilter', 'LiquidMetalFilter']
+const filtroDetto = (f: string) => f.replace(/Filter$/, '').replace(/^Elite/, '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+type Supporto = 'tavola' | 'aria' | 'muro' | 'suolo' | 'cornici' | 'sala'
+type Verbo = { passato: string; su: Supporto[]; strumento: boolean }
+export const VERBI: Record<string, Verbo> = {
+  dipinge: { passato: 'dipinto', su: ['suolo', 'aria', 'muro'], strumento: true }, stende: { passato: 'steso', su: ['suolo', 'aria'], strumento: true },
+  proietta: { passato: 'proiettato', su: ['tavola', 'aria'], strumento: true }, incolla: { passato: 'incollato', su: ['tavola', 'muro', 'aria'], strumento: false },
+  scrive: { passato: 'scritto', su: ['tavola', 'aria', 'muro', 'suolo'], strumento: false }, copre: { passato: 'coperto', su: ['muro'], strumento: true },
+  solleva: { passato: 'sollevato in rilievo', su: ['tavola'], strumento: false }, incornicia: { passato: 'colorato le cornici', su: ['cornici'], strumento: false },
+  semina: { passato: 'seminato', su: ['suolo'], strumento: true }, coltiva: { passato: 'fatto crescere', su: ['suolo'], strumento: true },
+  sposta: { passato: 'spostato', su: ['sala'], strumento: false }, gira: { passato: 'girato', su: ['sala'], strumento: false }, accosta: { passato: 'accostato', su: ['sala'], strumento: false },
+  raddrizza: { passato: 'raddrizzato', su: ['sala'], strumento: false }, ingrandisce: { passato: 'ingrandito', su: ['sala'], strumento: false },
+}
+export type Gesto = { chi: string; verbo: string; strumento?: string; filtro?: string; supporto: Supporto; luogo: string; q?: number; x: number; y: number; parola?: string; colore: string; testo: string; h: number }
+// cosa tira verso cosa: gli interessi verso strumenti e verbi (preferenze, non ruoli)
+const INT_STR: Partial<Record<Interesse, string[]>> = { carta: ['taglia', 'ripeti'], stampa: ['pattern', 'grana', 'ricetta'], colore: ['materia', 'fondo', 'shader'], luce: ['luce', 'shader', 'metashader'], crescita: ['albero', 'muffa', 'semina', 'cristallo'], terra: ['tettonica', 'materia', 'fondo'], cosmo: ['universo', 'fotocosmo', 'acqua'], parola: ['scrivi', 'traccia'], misura: ['geometria', 'disponi' as string, 'cristallo'], tessuto: ['pattern', 'ripeti'], memoria: ['togli', 'schiaccia', 'grana'], cammino: ['traccia', 'acqua'] }
+const INT_VERBO: Partial<Record<Interesse, string[]>> = { carta: ['incolla'], stampa: ['stende', 'incornicia'], colore: ['dipinge'], luce: ['proietta'], crescita: ['semina', 'coltiva'], terra: ['stende', 'solleva'], cosmo: ['proietta', 'stende'], parola: ['scrive'], misura: ['solleva', 'raddrizza', 'accosta'], tessuto: ['incornicia', 'stende'], memoria: ['scrive', 'solleva', 'raddrizza'], cammino: ['semina', 'scrive'] }
+const SUPP_DETTO = (s: Supporto, L: Luogo) => ({ tavola: `su una tavola, ${a_(L.nome)}`, aria: `su un piano nuovo, sospeso ${a_(L.nome)}`, muro: `sul muro, ${a_(L.nome)}`, suolo: `per terra, ${a_(L.nome)}`, cornici: `delle tavole, ${a_(L.nome)}`, sala: `le tavole, ${a_(L.nome)}` })[s]
+function gesto(V: Vita, C: Citta, T: Territorio, a: Abitante, L: Luogo, h: number, r: () => number, affollato: number): Gesto | null {
+  const v = V.ab[a.id], ch = a.carattere, w: Record<string, number> = {}
+  for (const k of Object.keys(VERBI)) w[k] = 0.3
+  for (const [i, x] of Object.entries(v.interessi) as [Interesse, number][]) for (const k of INT_VERBO[i] ?? []) w[k] += x * 1.2 + (v.voglia[i] ?? 0)
+  for (const [k, x] of Object.entries(v.saperi ?? {})) for (const vb of SAPERI[k]?.verbi ?? []) w[vb] = (w[vb] ?? 0.3) + x * 1.4
+  w.copre += ch.contrario * 1.5; w.incolla += ch.contrario + ch.ironico * 0.6; w.proietta += ch.visionario; w.stende += ch.visionario * 0.8; w.semina += ch.visionario * 0.4
+  w.scrive += ch.malinconico + ch.ironico * 0.5; w.solleva += ch.malinconico * 0.6; w.dipinge += ch.trascinatore
+  // il disordine chiama chi mette ordine (o chi ha voglia di cambiare la stanza)
+  for (const k of ['sposta', 'gira', 'accosta', 'raddrizza', 'ingrandisce']) w[k] += (affollato > 6 ? 1 : 0.15) * (0.4 + ch.prudente * 1.2 + ch.visionario * 0.3)
+  const possibili = Object.keys(VERBI).filter(k => VERBI[k].su.some(s => s !== 'sala' || L.tipo === 'sala') && !(L.tipo !== 'sala' && VERBI[k].su.every(s => s === 'tavola' || s === 'cornici' || s === 'sala')))
+  if (!possibili.length) return null
+  let roll = r() * possibili.reduce((t, k) => t + w[k], 0), verbo = possibili[0]; for (const k of possibili) { roll -= w[k]; if (roll <= 0) { verbo = k; break } }
+  const VB = VERBI[verbo], sups = VB.su.filter(s => (s === 'sala' || s === 'tavola' || s === 'cornici') ? L.tipo === 'sala' : true), supporto = sups[Math.floor(r() * sups.length)] ?? 'suolo'
+  let strumento: string | undefined
+  if (VB.strumento) { const pref = [...(Object.keys(v.interessi) as Interesse[]).flatMap(i => INT_STR[i] ?? []), ...Object.keys(v.saperi ?? {}).flatMap(k => SAPERI[k]?.str ?? []), ...Object.keys(v.saperi ?? {}).flatMap(k => SAPERI[k]?.str ?? [])].filter(x => STRUMENTI[x]), mie = Object.keys(a.interessi).filter(k => k.startsWith('m:')).map(k => k.slice(2)).filter(x => STRUMENTI[x])
+    const tutti = Object.keys(STRUMENTI); strumento = r() < 0.55 && pref.length ? pick(r, pref) : r() < 0.5 && mie.length ? pick(r, mie) : pick(r, tutti) } // a volte la cosa che non ha mai usato
+  const filtro = VB.strumento && r() < 0.45 + ch.visionario * 0.2 ? pick(r, FILTRI_V) : undefined
+  const arg = Object.entries(v.argomenti).sort((x, y) => y[1] - x[1])[Math.floor(r() * 2)]?.[0]
+  const q = L.q ?? qDi(C, T, a, L.id), colore = PALETTE[Math.floor(r() * PALETTE.length)]
+  const cosa = strumento ? ` ${STRUMENTI[strumento]}` : verbo === 'scrive' ? ` «${arg ?? pick(r, T.quartieri.find(x => x.id === q)?.concetti ?? ['qui'])}»` : verbo === 'incolla' ? ' un ritaglio di un\'altra zona' : ''
+  const testo = verbo === 'copre' ? `Ho coperto il muro, ${a_(L.nome)}, con${cosa}${filtro ? `, passato ${filtro === 'Risograph' ? 'al risograph' : `col filtro ${filtroDetto(filtro)}`}` : ''}${arg ? `, pensando a «${arg}»` : ''}. Sotto c'è ancora tutto.` : `Ho ${VB.passato}${cosa} ${SUPP_DETTO(supporto, L)}${filtro ? `, passato ${filtro === 'Risograph' ? 'al risograph' : `col filtro ${filtroDetto(filtro)}`}` : ''}${arg && verbo !== 'scrive' ? `, pensando a «${arg}»` : ''}.`
+  // il sapere che ha usato cresce (e ogni tanto ne nasce uno nuovo, dalla cosa che ha provato)
+  for (const [k, S] of Object.entries(SAPERI)) if ((strumento && S.str.includes(strumento)) || S.verbi.includes(verbo)) { if (v.saperi[k] != null) v.saperi[k] = Math.min(1, v.saperi[k] + 0.01); else if (r() < 0.03) v.saperi[k] = 0.1 }
+  return { chi: a.id, verbo, strumento, filtro, supporto, luogo: L.id, q, x: L.x + (r() - 0.5) * 24, y: L.y + (r() - 0.5) * 24, parola: arg, colore, testo, h }
+}
+
 // ── fondazione: i luoghi comuni attorno alla piazza, le case, le sale, i confini, le strade ──────────────────
 function fondaLuoghi(C: Citta, T: Territorio, r: () => number): Luogo[] {
   const P = T.piazza, L: Luogo[] = [{ id: 'piazza', tipo: 'piazza', nome: 'la piazza', x: P.x, y: P.y }]
@@ -166,13 +260,20 @@ export function fondaVita(C: Citta, T: Territorio, r: () => number): Vita {
   return V
 }
 function adotta(V: Vita, a: Abitante, r: () => number) {
-  if (V.ab[a.id]) { V.ab[a.id].argomenti ??= {}; return }
+  if (V.ab[a.id]) { V.ab[a.id].argomenti ??= {}; if (!V.ab[a.id].saperi) seminaSaperi(V.ab[a.id], a, r); return }
   const bis = Object.fromEntries(BISOGNI.map(b => [b, b === 'materiali' ? 0.3 : r() * 0.4])) as Record<Bisogno, number>
   const interessi = interessiDi(a, r)
-  V.ab[a.id] = { bisogni: bis, interessi, voglia: Object.fromEntries(Object.keys(interessi).map(k => [k, r() * 0.5])), rel: {}, diario: [], progetti: [], evita: {}, fatte: {}, argomenti: {} }
+  V.ab[a.id] = { bisogni: bis, interessi, voglia: Object.fromEntries(Object.keys(interessi).map(k => [k, r() * 0.5])), rel: {}, diario: [], progetti: [], evita: {}, fatte: {}, argomenti: {}, saperi: {} }
+  seminaSaperi(V.ab[a.id], a, r)
 }
 
 // ── memoria (come note/keepWorthy a Porto Vecchio) ─────────────────────────────────────────────────────────
+// i saperi entrano negli interessi e nelle letture (la tavolozza delle fonti si allarga verso quello che sa)
+function seminaSaperi(v: VitaAb, a: Abitante, r: () => number) {
+  v.saperi = saperiDi(a, r)
+  for (const [k, x] of Object.entries(v.saperi)) { for (const i of SAPERI[k].int) v.interessi[i] = Math.max(v.interessi[i] ?? 0, 0.3 + x * 0.5); for (const f of SAPERI[k].fonti) { a.fonti ??= {}; a.fonti[f] = Math.max(a.fonti[f] ?? 0, 0.3 + x * 0.5) } }
+  for (const i of Object.keys(v.interessi) as Interesse[]) v.voglia[i] ??= r() * 0.5
+}
 function nota(v: VitaAb, g: number, testo: string, tag: string, peso: number, chi?: string, dove?: string) {
   v.diario.push({ g, testo, peso, tag, chi, dove })
   if (v.diario.length > 30) { let k = 0, min = 1e9; v.diario.forEach((d, i) => { const s = d.peso / (1 + (g - d.g) * 0.3); if (s < min) { min = s; k = i } }); v.diario.splice(k, 1) }
@@ -219,6 +320,13 @@ function pianifica(V: Vita, C: Citta, a: Abitante, r: () => number): Blocco[] {
   // la vita della città degli agenti: le fasi in cui oggi ha avuto qualcosa da fare (piazza, biblioteca, bottega,
   // osservatorio, assemblea, archivio) sono ore della sua giornata, nel luogo dove succedono
   for (const f of fasiOggi.get(a.id) ?? []) { const h = ORA_FASE[f]; if (h != null && luogoDi(V, f)) inserisci(B, { h0: h, h1: h + 1, luogo: f, ogg: OGG_FASE[f], perche: PERCHE_FASE[f] }) }
+  // la giornata non è un binario: ogni tanto segue un'idea e va dove la porta (la sala del suo argomento, un confine,
+  // il posto dove ieri qualcuno ha lasciato qualcosa), per un'ora o due
+  const fughe = Math.floor(r() * (1.5 + a.carattere.visionario * 2 + a.carattere.contrario))
+  for (let k = 0; k < fughe; k++) { const h0 = 9 + Math.floor(r() * 11), arg = Object.entries(v.argomenti).sort((x, y) => y[1] - x[1])[0]?.[0]
+    const per = r() < 0.4 && arg ? V.luoghi.find(l => l.tipo === 'sala' && l.nome.toLowerCase().includes(arg.slice(0, 5))) : null
+    const recenti = V.tracce.filter(t => V.giorno - t.ultimo <= 1 && !t.luogo.startsWith('casa')), L = per ?? (recenti.length && r() < 0.5 ? luogoDi(V, pick(r, recenti).luogo) : pick(r, V.luoghi.filter(l => !['casa'].includes(l.tipo))))
+    if (L) inserisci(B, { h0, h1: h0 + 1 + Math.floor(r() * 2), luogo: L.id, perche: per ? `segue «${arg}» fino ${a_(L.nome)}` : `segue un'idea fino ${a_(L.nome)}` }) }
   // i passi dei progetti: entrano al loro orario e spostano il resto
   for (const p of v.progetti.filter(p => p.stato === 'in corso')) { const s = p.passi.find(x => !x.fatto); if (!s) continue; inserisci(B, { h0: s.h, h1: s.h + 2, luogo: s.luogo, ogg: s.ogg, perche: s.label, con: s.chi, progetto: true }) }
   return B
@@ -300,9 +408,10 @@ export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () =>
   V.fuori = (V.fuori ?? []).slice(-24)
   // quello che ha letto, cercato e detto oggi diventa argomento suo (le parole tra «»)
   for (const b of verbale) { const v = V.ab[b.chi]; if (!v) continue; for (const m of b.testo.matchAll(/«([^»]{3,40})»/g)) { const w = m[1].toLowerCase().split(/\s+/).find(x => x.length > 4) ?? m[1].toLowerCase(); if (w.length > 24) continue; v.argomenti[w] = Math.min(3, (v.argomenti[w] ?? 0) + (b.tipo === 'legge' || b.tipo === 'risposta' ? 0.5 : 0.3)) } }
+  const gestiQui = new Map<string, number>()
   const piani = new Map(C.abitanti.map(a => [a.id, pianifica(V, C, a, r)]))
   for (const a of C.abitanti) V.ab[a.id].oggi = []
-  V.atti = []
+  V.atti = []; V.gesti = []
   for (let h = 0; h < 24; h++) {
     const qui = new Map<string, { a: Abitante; ogg?: string; b: Blocco }[]>() // chi c'è, dove, quest'ora
     for (const a of C.abitanti) {
@@ -323,6 +432,12 @@ export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () =>
       if (prima && prima.luogo !== b.luogo) { const k = [prima.luogo, b.luogo].sort().join('>'); V.vie[k] = (V.vie[k] ?? 0) + 1 } // il cammino consuma la strada
       v.oggi!.push({ h, luogo: b.luogo, x: L.x, y: L.y, fa: ogg ? OGG[ogg].fa : b.perche })
       if (ogg) usa(V, a, v, ogg, prima?.luogo === b.luogo && prima.fa === OGG[ogg].fa)
+      // il gesto: libero, quando ne ha voglia, dove si trova
+      if (L.tipo !== 'casa' && h >= 8 && h <= 22 && !/dorme/.test(b.perche) && V.gesti!.filter(g => g.chi === a.id).length < 2) {
+        const spinta = 0.04 + a.carattere.visionario * 0.05 + (1 - v.bisogni.ispirazione) * 0.04 + (b.perche === 'lavora' ? 0.05 : 0) + (b.perche.startsWith('segue') ? 0.25 : 0)
+        if (r() < spinta) { const aff = V.tracce.filter(t => t.luogo === L.id).length + (gestiQui.get(L.id) ?? 0); const G = gesto(V, C, T, a, L, h, r, aff)
+          if (G) { V.gesti!.push(G); gestiQui.set(L.id, (gestiQui.get(L.id) ?? 0) + 1); verbale.push({ fase: faseDi(L), chi: a.id, tipo: 'gesto', testo: G.testo }); nota(v, C.giorno, G.testo, 'gesto', 0.4, undefined, L.id); v.bisogni.ispirazione = clamp(v.bisogni.ispirazione - 0.2) } }
+      }
       // l'atto: quello che domani si vedrà nella città (un graffito, un ritaglio, un velario, una tavola spostata…)
       if (ogg && OGG[ogg].traccia && OGG[ogg].traccia !== 'incontro' && !V.atti.some(x => x.chi === a.id && x.ogg === ogg)) V.atti.push({ chi: a.id, ogg, luogo: b.luogo, q: L.q ?? qDi(C, T, a, b.luogo), h })
     }
@@ -466,9 +581,9 @@ function consolida(V: Vita, C: Citta, parla: (chi: string, t: string, f?: Cella)
 export function vitaPerIlSito(C: Citta & { vita?: Vita }) {
   const V = C.vita; if (!V) return null
   return {
-    luoghi: V.luoghi, tracce: V.tracce, vie: Object.entries(V.vie).filter(([, n]) => n >= 1).map(([k, n]) => [...k.split('>'), +n.toFixed(1)]), cronaca: V.cronaca.slice(-20),
+    luoghi: V.luoghi, tracce: V.tracce, gesti: (V.gesti ?? []).map(g => ({ chi: g.chi, testo: g.testo, luogo: g.luogo })), vie: Object.entries(V.vie).filter(([, n]) => n >= 1).map(([k, n]) => [...k.split('>'), +n.toFixed(1)]), cronaca: V.cronaca.slice(-20),
     ab: Object.fromEntries(Object.entries(V.ab).map(([id, v]) => [id, {
-      bisogni: Object.fromEntries(Object.entries(v.bisogni).map(([k, x]) => [k, +x.toFixed(2)])), interessi: Object.keys(v.interessi).map(k => INTERESSI[k as Interesse]),
+      bisogni: Object.fromEntries(Object.entries(v.bisogni).map(([k, x]) => [k, +x.toFixed(2)])), saperi: Object.fromEntries(Object.entries(v.saperi ?? {}).sort((x, y) => y[1] - x[1]).map(([k, x]) => [k, +x.toFixed(2)])), interessi: Object.keys(v.interessi).map(k => INTERESSI[k as Interesse]),
       amici: Object.entries(v.rel).filter(([, x]) => x.aff > 0.35).sort((a, b) => b[1].aff - a[1].aff).slice(0, 5).map(([k]) => k),
       rivali: Object.entries(v.rel).filter(([, x]) => x.aff < -0.1).map(([k]) => k), progetti: v.progetti.slice(-4).map(p => ({ label: p.label, stato: p.stato, passo: p.passi.filter(x => x.fatto).length + '/' + p.passi.length })),
       pensiero: v.pensiero, diario: v.diario.slice(-5).map(d => `giorno ${d.g} · ${d.testo}`), oggi: v.oggi,
