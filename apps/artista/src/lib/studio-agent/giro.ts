@@ -546,7 +546,7 @@ export async function perLaCitta() {
     punti: Tt.punti.map(([id, x, y, q]) => { const w = works.get(id); return { id, x, y, q, t: (w?.title ?? '').slice(0, 90), g: w?.day ?? 0, i: +(w?.interest ?? 0.5).toFixed(2), k: w?.kept ? 1 : 0 } }),
     abitanti: C.abitanti.map(a => { const ins = Tt.insiemi.find(i => i.id === a.id); return { id: a.id, nome: a.nome, tipo: a.tipo, carica: a.carica, casa: ins?.casa ?? a.casa, raggio: ins?.raggio ?? a.raggio, n: ins?.n ?? 0, visti: a.visti.slice(-12), vesti: a.vesti ?? [], fem: !!a.fem, carattere: a.carattere } }),
     fili: Tt.fili ?? [],
-    costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [], geologia: (C.costruito as unknown as { geologia?: unknown }).geologia ?? null, allestimenti: C.costruito.allestimenti ?? {} } : null,
+    costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [], geologia: (C.costruito as unknown as { geologia?: unknown }).geologia ?? null, allestimenti: C.costruito.allestimenti ?? {}, parole: C.costruito.parole ?? {} } : null,
     giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
     vita: vitaPerIlSito(C as never),
     redazione: { attuale: (C as unknown as { palinsesto?: unknown }).palinsesto ?? null, storico: ((C as unknown as { storicoRedazione?: unknown[] }).storicoRedazione ?? []).slice(-6).reverse() },

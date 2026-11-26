@@ -15,7 +15,8 @@ export type Costruzione = {
   chi: string; giorno: number; nome?: string; pos?: Pos; a?: string; b?: string; q?: number; moduli?: number; dati?: Record<string, unknown>
   stato: 'in piedi' | 'in costruzione' | 'rovina' | 'coperta' | 'tolto'; storia: { giorno: number; chi: string; cosa: string }[]
 }
-export type Cantiere = { costruzioni: Costruzione[]; nomiVie: Record<string, string>; coltivato?: number[]; allestimenti?: Record<string, Allestimento> }
+export type ParolaSpazio = { x: number; y: number; z: number; vett: number[]; vicini: string[]; chi?: string; giorno: number }
+export type Cantiere = { parole?: Record<string, ParolaSpazio>; costruzioni: Costruzione[]; nomiVie: Record<string, string>; coltivato?: number[]; allestimenti?: Record<string, Allestimento> }
 export const GRIGLIA = 48 // il terreno coltivato: una griglia sopra il territorio (0..1000)
 
 type Ab = { id: string; nome: string; tipo: string; carattere: Record<string, number> }
@@ -261,6 +262,12 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   const curate = [...new Set((o.atti ?? []).filter(x => x.q != null && x.luogo.startsWith('sala:') && o.sale?.[String(x.q)]?.curatore === x.chi).map(x => x.q!))].map(q => capsulaDi(q)).filter((c): c is Costruzione => !!c && sale.includes(c))
   if (!gesti.some(g => g.supporto === 'sala')) for (const S of curate.length ? curate.slice(0, 5) : Array.from({ length: Math.min(3, sale.length) }, () => pick(r, sale))) az.push(...allestisci(K.allestimenti, S, o.sale?.[String(S.q)], T, abitanti, giorno, r))
 
+  // 16. lo spazio delle parole: un database vettoriale vero. Ogni concetto ha un vettore (in quali territori compare, e
+  // con quanta forza nelle tavole); la sua posizione nasce da lì (sopra le tavole che lo nominano) e la distanza tra due
+  // parole prova a rispecchiare quanto sono diverse. Ogni giorno chi ha occhio per lo spazio ritocca la disposizione
+  // (qualche passo di rilassamento): col tempo la rete diventa più leggibile. I vicini sono i più simili, mai a caso.
+  az.push(...ordinaParole(K, T, abitanti, giorno, r, (o.gesti ?? []).filter(g => g.supporto === 'sala').map(g => g.chi)))
+
   // 11. catalogare: l'archivio dà un nome alle strade, come in una città vera
   for (const st of di('strada')) if (!K.nomiVie[st.id] && r() < 0.4) {
     const A = K.costruzioni.find(c => c.id === st.a), B = K.costruzioni.find(c => c.id === st.b)
@@ -272,4 +279,35 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   }
   K.costruzioni = K.costruzioni.filter((c, i, l) => !['intervento', 'piano'].includes(c.tipo) || c.stato !== 'tolto' || i >= l.length - 200).slice(-600)
   return az.map(a => ({ ...a, chi: a.chi }))
+}
+
+const radiceP = (w: string) => w.toLowerCase().slice(0, Math.max(4, w.length - 2))
+export function ordinaParole(K: Cantiere, T: Territorio, abitanti: Ab[], giorno: number, r: () => number, ordinatori: string[] = []): Azione[] {
+  const Q = T.quartieri, NQ = Q.length; if (!NQ) return []
+  const qi = new Map(Q.map((q, i) => [q.id, i]))
+  // i vettori: per ogni concetto, quanto compare nei titoli delle tavole di ogni territorio (pesato dall'interesse)
+  const conc = [...new Set(Q.flatMap(q => q.concetti))].slice(0, 80), vet = new Map<string, number[]>(), cen = new Map<string, [number, number, number]>()
+  for (const w of conc) { const v = new Array(NQ).fill(0), rad = radiceP(w); let sx = 0, sy = 0, sw = 0
+    for (const p of T.punti) if (p.titolo?.toLowerCase().includes(rad)) { const k = qi.get(p.q); if (k == null) continue; const pw = 0.3 + p.peso; v[k] += pw; sx += p.x * pw; sy += p.y * pw; sw += pw }
+    const da = Q.find(q => q.concetti.includes(w)); if (!sw && da) { v[qi.get(da.id)!] = 1; sx = da.x; sy = da.y; sw = 1 }
+    const n = Math.hypot(...v) || 1; vet.set(w, v.map(x => x / n)); let H = 0; const tot = v.reduce((a, b) => a + b, 0) || 1; for (const x of v) if (x > 0) H -= (x / tot) * Math.log(x / tot)
+    cen.set(w, [sx / sw, sy / sw, NQ > 1 ? H / Math.log(NQ) : 0]) }
+  const parole = conc.filter(w => vet.has(w)).slice(0, 56), sim = (a: string, b: string) => { const A = vet.get(a)!, B = vet.get(b)!; let s = 0; for (let k = 0; k < NQ; k++) s += A[k] * B[k]; return s }
+  K.parole ??= {}
+  for (const w of parole) if (!K.parole[w]) { const c = cen.get(w)!; K.parole[w] = { x: c[0], y: c[1], z: c[2], vett: vet.get(w)!.map(x => +x.toFixed(3)), vicini: [], giorno } } else K.parole[w].vett = vet.get(w)!.map(x => +x.toFixed(3))
+  for (const w of Object.keys(K.parole)) if (!parole.includes(w)) delete K.parole[w]
+  // chi riordina oggi: chi ha sistemato una sala, altrimenti chi ha più ordine nel carattere (un passo, non un piano)
+  const chi = abitanti.find(a => ordinatori.includes(a.id)) ?? [...abitanti].sort((a, b) => (b.carattere.prudente ?? 0) - (a.carattere.prudente ?? 0) + (r() - 0.5) * 0.6)[0]
+  // rilassamento: la distanza (in piano e in quota) tende a (1 - somiglianza) * scala; l'ancora tiene ogni parola sopra le sue tavole
+  const S = 260, P = K.parole, L = parole
+  for (let it = 0; it < 40; it++) for (let i = 0; i < L.length; i++) { const a = P[L[i]], ca = cen.get(L[i])!
+    let fx = (ca[0] - a.x) * 0.02, fy = (ca[1] - a.y) * 0.02, fz = (ca[2] - a.z) * 0.05
+    for (let j = 0; j < L.length; j++) { if (i === j) continue; const b = P[L[j]], dx = a.x - b.x, dy = a.y - b.y, dz = (a.z - b.z) * S, d = Math.hypot(dx, dy, dz) || 1, voluta = (1 - sim(L[i], L[j])) * S + 18, k = (voluta - d) / d * 0.012
+      fx += dx * k; fy += dy * k; fz += dz / S * k }
+    a.x += fx; a.y += fy; a.z = Math.max(0, Math.min(1, a.z + fz)) }
+  // i vettori veri: i vicini nello spazio che sono anche simili
+  for (const w of L) { const a = P[w]; a.vicini = L.filter(x => x !== w && sim(w, x) > 0.35).map(x => [x, Math.hypot(P[x].x - a.x, P[x].y - a.y, (P[x].z - a.z) * S)] as const).sort((p, q) => p[1] - q[1]).slice(0, 3).map(x => x[0]); if (chi) a.chi = chi.id; a.giorno = giorno }
+  if (!chi) return []
+  const w0 = L[Math.floor(r() * L.length)], v0 = P[w0]?.vicini[0]
+  return [{ chi: chi.id, tipo: 'riordina', testo: v0 ? `Ho riordinato lo spazio delle parole: «${w0}» ora sta accanto a «${v0}», che le somiglia davvero.` : 'Ho riordinato lo spazio delle parole: ogni concetto un po\' più vicino ai suoi simili.' }]
 }
