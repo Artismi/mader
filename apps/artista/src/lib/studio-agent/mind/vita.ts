@@ -7,7 +7,7 @@
 // chi si trova insieme allo stesso oggetto e condivide un interesse fa un'opera a più mani.
 // Puro: niente DOM, niente rete. Tutto dal seme e dalla storia.
 
-import type { Citta, Abitante, Battuta, Cella } from './citta'
+import { vestitoDi, type Citta, type Abitante, type Battuta, type Cella } from './citta'
 import { radice, type Territorio } from './territorio'
 
 export type Bisogno = 'fame' | 'sonno' | 'cura' | 'compagnia' | 'svago' | 'rabbia' | 'paura' | 'ispirazione' | 'materiali'
@@ -68,7 +68,7 @@ export type VitaAb = {
   fatte: Partial<Record<string, number>> // quante volte ha usato ogni oggetto: la ripetizione fa il mestiere
 }
 export type TracciaSpazio = { id: string; tipo: Traccia; luogo: string; x: number; y: number; chi: string[]; dal: number; ultimo: number; volte: number; int?: Interesse; colore?: string; parola?: string; nome?: string }
-export type Vita = { gesti?: Gesto[]; atti?: { chi: string; ogg: string; luogo: string; q?: number; h: number }[]; fuori?: { t: string; s: string; g: number; detto?: number }[]; luoghi: Luogo[]; ab: Record<string, VitaAb>; tracce: TracciaSpazio[]; vie: Record<string, number>; giorno: number; cronaca: { g: number; testo: string }[] }
+export type Vita = { popolo?: Abitante[]; gesti?: Gesto[]; atti?: { chi: string; ogg: string; luogo: string; q?: number; h: number }[]; fuori?: { t: string; s: string; g: number; detto?: number }[]; luoghi: Luogo[]; ab: Record<string, VitaAb>; tracce: TracciaSpazio[]; vie: Record<string, number>; giorno: number; cronaca: { g: number; testo: string }[] }
 
 const su = (x: string) => x.replace(/^il /, 'sul ').replace(/^lo /, 'sullo ').replace(/^la /, 'sulla ').replace(/^l'/, "sull'").replace(/^i /, 'sui ').replace(/^gli /, 'sugli ').replace(/^le /, 'sulle ')
 const IN: Record<string, string> = { 'la piazza': 'in piazza', 'la biblioteca': 'in biblioteca', 'la bottega': 'in bottega', "l'officina": 'in officina', "l'archivio": 'in archivio', "l'assemblea": "all'assemblea", 'il guardaroba': 'in guardaroba' }
@@ -250,6 +250,25 @@ function gesto(V: Vita, C: Citta, T: Territorio, a: Abitante, L: Luogo, h: numbe
   // il sapere che ha usato cresce (e ogni tanto ne nasce uno nuovo, dalla cosa che ha provato)
   for (const [k, S] of Object.entries(SAPERI)) if ((strumento && S.str.includes(strumento)) || S.verbi.includes(verbo)) { if (v.saperi[k] != null) v.saperi[k] = Math.min(1, v.saperi[k] + 0.01); else if (r() < 0.03) v.saperi[k] = 0.1 }
   return { chi: a.id, verbo, strumento, filtro, supporto, luogo: L.id, q, x: L.x + (r() - 0.5) * 24, y: L.y + (r() - 0.5) * 24, parola: arg, colore, testo, h }
+}
+
+// ── il popolo: come a Porto Vecchio, la città è abitata da molti (almeno cento). Oltre alle figure che discutono in
+// piazza ci sono apprendisti, artigiani, lettori, giardinieri, ognuno con il suo nome, carattere, saperi e vestiti.
+const NOMI_M = ['Antonio', 'Giovanni', 'Salvatore', 'Efisio', 'Gavino', 'Bachisio', 'Mario', 'Nino', 'Tore', 'Piero', 'Lino', 'Aldo', 'Ettore', 'Gino', 'Renzo', 'Ugo', 'Dario', 'Elio', 'Sandro', 'Bruno', 'Ivo', 'Marco', 'Tito', 'Oreste']
+const NOMI_F = ['Maria', 'Giovanna', 'Anna', 'Rosaria', 'Tina', 'Lella', 'Pina', 'Bonaria', 'Grazia', 'Ada', 'Iris', 'Nora', 'Elsa', 'Luce', 'Marta', 'Rosa', 'Vera', 'Bice', 'Zita', 'Olga', 'Irene', 'Lia', 'Teresa', 'Dora']
+const SOPRANNOMI = ['il Rosso', 'Mezzalingua', 'Zampa', 'il Muto', 'Tredici', 'Gattone', 'Lampo', 'la Gazza', 'Matita', 'Pennino', 'Retino', 'Fumo', 'Spago', 'Colla', 'Bussola', 'Lente', 'Inchiostro', 'Cometa', 'Ruggine', 'Vetro']
+export function popola(V: Vita, C: Citta, T: Territorio, r: () => number, quanti = 100) {
+  V.popolo ??= []
+  const manca = quanti - C.abitanti.length - V.popolo.length; if (manca <= 0) return
+  for (let i = 0; i < manca; i++) {
+    const fem = r() < 0.5, nome = pick(r, fem ? NOMI_F : NOMI_M), sop = r() < 0.35 ? ' ' + pick(r, SOPRANNOMI) : '', id = `c${V.popolo.length}-${nome.toLowerCase()}`
+    const Q = pick(r, T.quartieri), c = () => r() * 0.9, car = { credulone: c(), testardo: c(), contrario: c() * 0.8, prudente: c(), trascinatore: c(), ironico: c(), malinconico: c(), visionario: c() }
+    const a: Abitante = { id, nome: nome + sop, tipo: 'cittadino' as Abitante['tipo'], carica: 'cittadino', carattere: car, interessi: Object.fromEntries((Q?.concetti ?? []).slice(0, 2).map(w => [radice(w) ?? w, 0.6])), casa: { x: (Q?.x ?? T.piazza.x) + (r() - 0.5) * 60, y: (Q?.y ?? T.piazza.y) + (r() - 0.5) * 60 }, raggio: 80, cella: 'casa', tensione: 0, peso: {}, storia: [], visti: [] }
+    const vs = vestitoDi({ id, nome: a.nome, tipo: 'mestiere', carattere: car as unknown as Record<string, number>, fem }, r); a.vesti = vs.vesti; a.fem = fem
+    V.popolo.push(a); adotta(V, a, r)
+    const sp = Object.entries(V.ab[id].saperi).sort((x, y) => y[1] - x[1])[0]?.[0]; if (sp) a.carica = `${fem ? 'apprendista' : 'apprendista'} di ${sp}`
+    V.luoghi.push({ id: 'casa:' + id, tipo: 'casa', nome: `la casa di ${a.nome}`, x: a.casa.x, y: a.casa.y, chi: id })
+  }
 }
 
 // ── fondazione: i luoghi comuni attorno alla piazza, le case, le sale, i confini, le strade ──────────────────
@@ -439,6 +458,9 @@ function rifletti(V: Vita, C: Citta, a: Abitante, r: () => number, verbale: Batt
 // ── la giornata, ora per ora ─────────────────────────────────────────────────────────────────────────────
 export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () => number, verbale: Battuta[], tavolozzaDi: (id: string) => string[] = () => PALETTE): string[] {
   const V = C.vita ??= fondaVita(C, T, r)
+  popola(V, C, T, r)
+  const veri = C.abitanti; C.abitanti = [...veri, ...(V.popolo ?? [])]
+  try {
   // chi è nato nel frattempo entra nella vita; i luoghi mancanti (quartieri nuovi) si aggiungono
   for (const a of C.abitanti) adotta(V, a, r)
   for (const Q of T.quartieri) if (!V.luoghi.some(l => l.id === 'sala:' + Q.id)) V.luoghi.push({ id: 'sala:' + Q.id, tipo: 'sala', nome: `la sala «${Q.nome}»`, x: Q.x, y: Q.y, q: Q.id })
@@ -478,7 +500,7 @@ export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () =>
       v.oggi!.push({ h, luogo: b.luogo, x: L.x, y: L.y, fa: ogg ? OGG[ogg].fa : b.perche })
       if (ogg) usa(V, a, v, ogg, prima?.luogo === b.luogo && prima.fa === OGG[ogg].fa)
       // il gesto: libero, quando ne ha voglia, dove si trova
-      if (L.tipo !== 'casa' && h >= 8 && h <= 22 && !/dorme/.test(b.perche) && V.gesti!.filter(g => g.chi === a.id).length < 2) {
+      if (L.tipo !== 'casa' && h >= 8 && h <= 22 && !/dorme/.test(b.perche) && V.gesti!.length < 40 && V.gesti!.filter(g => g.chi === a.id).length < (a.tipo === ('cittadino' as Abitante['tipo']) ? 1 : 2)) {
         const spinta = 0.04 + a.carattere.visionario * 0.05 + (1 - v.bisogni.ispirazione) * 0.04 + (b.perche === 'lavora' ? 0.05 : 0) + (b.perche.startsWith('segue') ? 0.25 : 0)
         if (r() < spinta) { const aff = V.tracce.filter(t => t.luogo === L.id).length + (gestiQui.get(L.id) ?? 0); const G = gesto(V, C, T, a, L, h, r, aff)
           if (G) { V.gesti!.push(G); gestiQui.set(L.id, (gestiQui.get(L.id) ?? 0) + 1); verbale.push({ fase: faseDi(L), chi: a.id, tipo: 'gesto', testo: G.testo }); nota(v, C.giorno, G.testo, 'gesto', 0.4, undefined, L.id); v.bisogni.ispirazione = clamp(v.bisogni.ispirazione - 0.2) } }
@@ -544,6 +566,7 @@ export function viviGiornata(C: Citta & { vita?: Vita }, T: Territorio, r: () =>
   consolida(V, C, parla, r)
   V.cronaca.push(...detti.slice(0, 6).map(t => ({ g: C.giorno, testo: t }))); V.cronaca = V.cronaca.slice(-60)
   return detti
+  } finally { C.abitanti = veri }
 }
 // in che territorio lavora chi usa un attrezzo fuori dalle sale: la sala che cura, o quella dei suoi interessi
 function qDi(C: Citta, T: Territorio, a: Abitante, luogo: string): number | undefined {
@@ -637,6 +660,7 @@ function consolida(V: Vita, C: Citta, parla: (chi: string, t: string, f?: Cella)
 export function vitaPerIlSito(C: Citta & { vita?: Vita }) {
   const V = C.vita; if (!V) return null
   return {
+    popolo: (V.popolo ?? []).map(a => ({ id: a.id, nome: a.nome, tipo: a.tipo, carica: a.carica, carattere: a.carattere, vesti: a.vesti, fem: a.fem, casa: a.casa })),
     luoghi: V.luoghi, tracce: V.tracce, gesti: (V.gesti ?? []).map(g => ({ chi: g.chi, testo: g.testo, luogo: g.luogo })), vie: Object.entries(V.vie).filter(([, n]) => n >= 1).map(([k, n]) => [...k.split('>'), +n.toFixed(1)]), cronaca: V.cronaca.slice(-20),
     ab: Object.fromEntries(Object.entries(V.ab).map(([id, v]) => [id, {
       bisogni: Object.fromEntries(Object.entries(v.bisogni).map(([k, x]) => [k, +x.toFixed(2)])), saperi: Object.fromEntries(Object.entries(v.saperi ?? {}).sort((x, y) => y[1] - x[1]).map(([k, x]) => [k, +x.toFixed(2)])), interessi: Object.keys(v.interessi).map(k => INTERESSI[k as Interesse]),
