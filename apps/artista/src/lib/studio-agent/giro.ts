@@ -38,6 +38,14 @@ const nuovaSoglia = (st: AgentState) => 0.9 + Math.random() * 1.2 + (st.temperat
 export async function giro(o: { studi: number; sequenza?: boolean; epN: number; reel?: boolean; forza?: boolean; deve?: string[]; log: (m: string) => void; oreTraPost?: number; oreMax?: number }) {
   let st: AgentState = await loadOrCreate()
   const fatte: string[] = []
+  // il fotografo del cosmo: prima di lavorare, una foto di un pianeta vero (l'ultima scoperta dell'osservatorio, o un indirizzo
+  // del giorno). Va nel rullino: lo strumento «Fotografia del cosmo» ne prende mare, coste, rocce o il disco intero.
+  try {
+    await preparaCosmo()
+    const scop = (st as unknown as { citta?: { osservatorio?: { scoperte?: { n: number }[] } } }).citta?.osservatorio?.scoperte ?? []
+    const { fotografa } = await import('./hands/fotocosmo')
+    for (const n of [scop[scop.length - 1]?.n, 1e9 + st.day * 7919].filter((x): x is number => typeof x === 'number')) { const f = await fotografa(n); if (f) { o.log(`il fotografo del cosmo: ${f.nome}${f.mare ? ', con il mare' : ''}`); break } }
+  } catch { /* senza foto si lavora lo stesso */ }
   const una = async (seq: boolean) => {
     try {
       const r = await runDay(st, { fast: true, episodio: seq ? o.epN : undefined, reel: seq && !!o.reel, reelForza: !!o.forza, log: o.log, preview: () => {}, onWork: (w: Work) => { fatte.push(w.id) }, shouldStop: () => false })

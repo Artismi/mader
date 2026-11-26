@@ -8,6 +8,7 @@ import { ricetteTenute } from '../mind/ricette'
 import { RIPOSO } from '@/components/studio/genera/recipes'
 import { acqua } from './acqua'
 import { filtro } from './filtri'
+import { fotoCosmo } from './fotocosmo'
 import { luce3d } from './luce3d'
 import { vetroTool } from './vetro'
 import { stiroTool } from './stiro'
@@ -531,4 +532,5 @@ const ricettaTool: Tool = {
   },
 }
 TOOLS.push(ricettaTool)
+TOOLS.push(fotoCosmo) // il fotografo del cosmo: pianeti veri di stateyour (disponibile solo se il giro ha scattato)
 export const toolById = (id: string) => TOOLS.find(t => t.id === id)
