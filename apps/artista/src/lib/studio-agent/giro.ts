@@ -439,7 +439,18 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   S.citta ??= fondaCitta(opere, Tt, st.seed ?? 11)
   const cerca = async (f: string, q: string, n: number) => (await T.read(`mode=fonte&f=${encodeURIComponent(f)}&q=${encodeURIComponent(q)}&n=${n}`)) as unknown as import('./mind/citta').Lettura[]
   const cosmo = await preparaCosmo()
-  const v = await giornata(S.citta, opere, Tt, { cosmo: cosmo ?? undefined, seme: st.day, cerca, ricerche: 8, giornoAgente: st.day, strumenti: (await import('./hands/tools')).TOOLS.map(t => t.id) })
+  // le giornate della città corrono più veloci delle nostre: in un giro (mezz'ora) ne passano finché c'è tempo, fino a dieci.
+  // Ogni giornata la redazione lavora al discorso in corso (concetto, poi grafica, poi pronto), come una barra che si riempie.
+  const { lavoraRedazione } = await import('./mind/redazione')
+  const strumenti = (await import('./hands/tools')).TOOLS.map(t => t.id), t0 = performance.now(), v: Awaited<ReturnType<typeof giornata>> = []
+  let quante = 0
+  while (quante < 10) {
+    const oggi = await giornata(S.citta, opere, Tt, { cosmo: cosmo ?? undefined, seme: st.day * 31 + quante, cerca, ricerche: quante ? 2 : 8, giornoAgente: st.day, strumenti })
+    for (const t of lavoraRedazione(S.citta as never, Tt, oggi as never, rng(st.day * 131 + S.citta.giorno))) oggi.push({ fase: 'archivio', chi: (S.citta as unknown as { palinsesto?: { narratore: { id: string } } }).palinsesto?.narratore.id ?? 'archivio', tipo: 'redazione', testo: t } as never)
+    v.push(...oggi); quante++
+    if (performance.now() - t0 > 150000) break
+  }
+  o.log(`la città ha vissuto ${quante} giornate in questo giro`)
   if ((globalThis as { __officina?: boolean }).__officina && !S.citta.officina?.richieste.length) { // per le prove: un giro d'officina forzato
     const m = S.citta.abitanti.filter(a => a.tipo === 'mestiere'), a = m[Math.floor(Math.random() * m.length)]
     S.citta.officina ??= { richieste: [], esiti: [], tenuti: [] }
@@ -472,12 +483,6 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
     S.citta.costruito ??= { costruzioni: [], nomiVie: {} }
     ;(S.citta.costruito as unknown as { geologia?: unknown }).geologia = { giorno: st.day, lato: N, alt: fin(G.alt, 1), cont: fin(G.cont, 1), spinta: fin(G.spinta, 100), fosse: fin(G.fosse, 100) }
   } catch (e) { o.log(`la geologia non è venuta: ${e instanceof Error ? e.message : e}`) }
-  // la redazione: la città decide cosa dire fuori (il prossimo carosello o reel nasce da qui)
-  try {
-    const { redigi } = await import('./mind/redazione')
-    const P = redigi(S.citta as never, Tt, v as never, rng(st.day * 131 + S.citta.giorno))
-    if (P) { (S.citta as unknown as { palinsesto?: unknown }).palinsesto = P; v.push({ fase: 'archivio', chi: P.narratore.id, tipo: 'redazione', testo: `In redazione: fuori diremo «${P.argomento}», un giro da «${P.tappe[0].nome}» a «${P.tappe[P.tappe.length - 1].nome}». Racconto io.` }) }
-  } catch (e) { o.log(`redazione saltata: ${e instanceof Error ? e.message : e}`) }
   // il meta-generatore di shader: i suoli rifatti oggi (o mai evoluti) si evolvono da alberi di nodi, a partire dal motivo che
   // il curatore ha scelto e dall'albero che c'era; il migliore, reso e misurato davvero, diventa il suolo dell'area
   try {
@@ -540,6 +545,8 @@ export async function perLaCitta() {
     fili: Tt.fili ?? [],
     costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [], geologia: (C.costruito as unknown as { geologia?: unknown }).geologia ?? null, allestimenti: C.costruito.allestimenti ?? {} } : null,
     giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
+    redazione: { attuale: (C as unknown as { palinsesto?: unknown }).palinsesto ?? null, storico: ((C as unknown as { storicoRedazione?: unknown[] }).storicoRedazione ?? []).slice(-6).reverse() },
+    calendario: await agenda().catch(() => null),
     decisioni: (C.decisioni ?? []).slice(-12).reverse().map(d => ({ cosa: d.cosa, stato: d.stato, fino: d.fino, esito: d.esito ?? null, chi: d.chi })),
     mostre: (C.mostre ?? []).slice(-3).reverse(),
     cantieri: (C.cantieri ?? []).slice(-6).reverse(),

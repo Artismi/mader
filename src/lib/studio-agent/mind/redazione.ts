@@ -6,7 +6,10 @@
 import type { Territorio } from './territorio'
 
 export type Tappa = { q: number; nome: string; parola: string; curatore?: string; voce?: { chi: string; nome: string; testo: string }; tavole: string[]; via?: string; colori?: string[] }
-export type Palinsesto = { giorno: number; argomento: string; perche: string; narratore: { id: string; nome: string }; tappe: Tappa[]; decisione?: string; usato?: boolean }
+export type Palinsesto = { giorno: number; argomento: string; perche: string; narratore: { id: string; nome: string }; tappe: Tappa[]; decisione?: string; usato?: boolean
+  // la lavorazione: prima il concetto (si conferma nei giorni, si raccolgono le voci), poi la grafica (i curatori preparano
+  // allestimenti e suoli delle tappe), poi è pronto e aspetta l'ora; progresso 0..1, come una barra di caricamento
+  stato?: 'concetto' | 'grafica' | 'pronto' | 'uscito' | 'lasciato'; progresso?: number; conferme?: number; dimenticato?: number; dal?: number; diario?: { giorno: number; testo: string }[] }
 type Battuta = { fase: string; chi: string; testo: string }
 type Ab = { id: string; nome: string }
 
@@ -50,4 +53,40 @@ export function schedeDaPalinsesto(P: Palinsesto): { titolo: string; schede: { r
   })
   schede.push({ ruolo: 'conclusione', titolo: P.decisione ? P.decisione.slice(0, 90) : `Su ${P.argomento} non abbiamo ancora deciso.`, corpo: P.decisione ?? `Ne riparleremo domani in piazza.`, a: P.argomento })
   return { titolo: `${P.argomento} — un giro della città`, schede }
+}
+
+
+/** la lavorazione di ogni giornata della città: il progetto in corso cresce (o si lascia), oppure se ne apre uno nuovo */
+export function lavoraRedazione(C: Parameters<typeof redigi>[0] & { palinsesto?: Palinsesto; storicoRedazione?: Palinsesto[]; sale?: Record<string, { curatore?: string; suolo?: { colori?: string[]; v?: number } }> }, T: Territorio, verbale: Battuta[], r: () => number): string[] {
+  const detto: string[] = [], P0 = C.palinsesto
+  const chiudi = (P: Palinsesto) => { C.storicoRedazione = [...(C.storicoRedazione ?? []), { ...P, tappe: P.tappe.map(t => ({ ...t, tavole: t.tavole.slice(0, 1) })) }].slice(-12) }
+  if (!P0 || P0.usato || P0.stato === 'uscito' || P0.stato === 'lasciato') {
+    if (P0) chiudi(P0)
+    const P = redigi(C, T, verbale, r); if (!P) return detto
+    Object.assign(P, { stato: 'concetto', progresso: 0.08, conferme: 0, dimenticato: 0, dal: C.giorno, diario: [{ giorno: C.giorno, testo: `aperto: «${P.argomento}»` }] })
+    C.palinsesto = P; detto.push(`In redazione apriamo un discorso nuovo: «${P.argomento}», un giro da «${P.tappe[0].nome}» a «${P.tappe[P.tappe.length - 1].nome}».`)
+    return detto
+  }
+  if (!P0.stato) Object.assign(P0, { stato: 'concetto', progresso: 0.08, conferme: 0, dimenticato: 0, dal: P0.dal ?? C.giorno, diario: P0.diario ?? [{ giorno: C.giorno, testo: `aperto: «${P0.argomento}»` }] })
+  const P = P0, rad = P.argomento.toLowerCase().slice(0, Math.max(4, P.argomento.length - 2)), oggi = verbale.filter(v => v.testo.toLowerCase().includes(rad))
+  const nota = (t: string) => { (P.diario ??= []).push({ giorno: C.giorno, testo: t }); P.diario = P.diario.slice(-20); detto.push(t) }
+  if (P.stato === 'concetto') {
+    if (oggi.length) { P.conferme = (P.conferme ?? 0) + 1; P.dimenticato = 0 } else P.dimenticato = (P.dimenticato ?? 0) + 1
+    // le voci che mancano: chi oggi ha detto qualcosa su una parola di quella tappa
+    for (const t of P.tappe) if (!t.voce) { const Q = T.quartieri.find(x => x.id === t.q); const ps = (Q?.concetti ?? []).map(w => w.toLowerCase().slice(0, 4)); const b = verbale.find(v => v.testo.length > 20 && ps.some(p => v.testo.toLowerCase().includes(p))); if (b) { t.voce = { chi: b.chi, nome: C.abitanti.find(a => a.id === b.chi)?.nome ?? b.chi, testo: b.testo }; nota(`${t.voce.nome} ha dato la voce a «${t.nome}».`) } }
+    if ((P.dimenticato ?? 0) >= 3) { P.stato = 'lasciato'; nota(`«${P.argomento}» non lo dice più nessuno da tre giorni: lo lasciamo nel cassetto.`); return detto }
+    const voci = P.tappe.filter(t => t.voce).length / P.tappe.length, conf = Math.min(1, (P.conferme ?? 0) / 3)
+    P.progresso = +(0.08 + 0.42 * (voci + conf) / 2).toFixed(3)
+    if (voci >= 0.99 && conf >= 0.99) { P.stato = 'grafica'; P.progresso = 0.5; nota(`Il concetto di «${P.argomento}» c'è: confermato ${P.conferme} giorni, una voce per ogni territorio. Passiamo alla grafica.`) }
+    return detto
+  }
+  if (P.stato === 'grafica') {
+    // la grafica: le tappe sono pronte quando il loro territorio ha un allestimento e un suolo cresciuto; ogni giorno se ne prepara una
+    const prontaT = (t: Tappa) => !!C.costruito?.allestimenti && Object.keys(C.costruito.allestimenti).length > 0 && (C.sale?.[String(t.q)]?.suolo?.v === 3)
+    const fatte = P.tappe.filter(prontaT).length, giorni = C.giorno - (P.dal ?? C.giorno)
+    P.progresso = +Math.min(0.95, 0.5 + 0.45 * Math.max(fatte / P.tappe.length, Math.min(1, giorni / 8))).toFixed(3)
+    if (P.progresso >= 0.95) { P.stato = 'pronto'; nota(`«${P.argomento}» è pronto: aspetta solo l'ora per uscire.`) }
+    return detto
+  }
+  return detto
 }

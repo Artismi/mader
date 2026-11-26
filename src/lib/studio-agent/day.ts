@@ -396,7 +396,8 @@ async function episodio(st: AgentState, r: () => number, hooks: DayHooks, intent
   // la redazione della città: se gli abitanti hanno deciso cosa dire fuori, la sequenza prende la forma del loro percorso
   // (una tappa per territorio, le strade tra l'uno e l'altro, la decisione dell'assemblea in fondo), con le loro voci
   { const P = (st as AgentState & { citta?: { palinsesto?: Palinsesto } }).citta?.palinsesto
-    if (P && !P.usato && P.tappe.length) { const X = schedeDaPalinsesto(P); plan.titolo = X.titolo; (plan as { schede: unknown[] }).schede = X.schede; P.usato = true; log(`La città ha deciso cosa dire: «${P.argomento}» (${P.perche}); racconta ${P.narratore.nome}, ${P.tappe.length} territori.`) } }
+    // esce quando è pronto; se è ora e non è finito, esce lo stesso con quello che c'è (lo dice)
+    if (P && !P.usato && P.tappe.length && (P.stato === 'pronto' || hooks.reelForza || P.stato === 'grafica')) { if (P.stato !== 'pronto') log(`È ora di uscire e «${P.argomento}» è al ${Math.round((P.progresso ?? 0) * 100)}%: esce così.`); P.stato = 'uscito'; P.progresso = 1; const X = schedeDaPalinsesto(P); plan.titolo = X.titolo; (plan as { schede: unknown[] }).schede = X.schede; P.usato = true; log(`La città ha deciso cosa dire: «${P.argomento}» (${P.perche}); racconta ${P.narratore.nome}, ${P.tappe.length} territori.`) } }
   const nEp = ((st as AgentState & { episodi?: unknown[] }).episodi?.length ?? 0) + 1
   // il linguaggio: lo sceglie (o lo inventa) per quello che sta dicendo
   const parole = [...new Set(plan.schede.flatMap(x => [x.a, x.b]).filter(Boolean) as string[])]
