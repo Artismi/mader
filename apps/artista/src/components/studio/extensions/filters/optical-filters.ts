@@ -311,7 +311,7 @@ export class HolographicFilter extends fabric.filters.BaseFilter<'HolographicFil
         float scan = sin(uv.y * 130.0 - uTime * 22.0 * uScanlineSpeed) * 0.06 * uIridescence;
         float flicker = step(0.992, fract(sin(uTime * 12.0))) * 0.12;
         
-        vec3 tint = uBaseTint / 255.0;
+        vec3 tint = uBaseTint; // già in 0..1 (sendUniformData divide per 255)
         vec3 base = color.rgb * tint;
         vec3 final = base + irid + vec3(scan + flicker) + vec3(fresnel * 0.5);
         float alpha = color.a * (0.8 + fresnel * 0.5);

@@ -14,7 +14,8 @@ type Cls = (new (o?: Record<string, number>) => { getFragmentSource?: () => stri
 const TUTTI: Record<string, unknown> = { ...O, ...M, ...S, ...T }
 // peso: quanto spesso lo sceglie (la stampa spesso, il vistoso di rado)
 const PESI: Record<string, number> = {
-  // Risograph e Duotone (escono neri) e Holographic (cancella l'immagine) sono da sistemare: per ora fuori
+  // Risograph, Duotone e Holographic: sistemati (dividevano i colori per 255 due volte, nello shader e nell'invio)
+  Risograph: 4, DuotoneFilter: 3, HolographicFilter: 0.5,
   EliteHalftone: 4, DitheringFilter: 4, FiberFilter: 4, GrainFilter: 3, PosterizeFilter: 3, OilPaintFilter: 2, EliteClay: 2,
   OutlineFilter: 2, VignetteFilter: 1, PixelateFilter: 2, PrismFilter: 2, BloomFilter: 2, WavyFilter: 2, LiquidMotionFilter: 1.5, Glitch: 1.5, VHSFilter: 1.2, AdvancedCRTFilter: 1,
   ASCIIFilter: 0.4, VolumetricDepthFilter: 1, NeonGlowFilter: 0.5, ThermalFilter: 0.4, MatrixFilter: 0.3, LiquidMetalFilter: 0.6,

@@ -61,9 +61,9 @@ export class Risograph extends fabric.filters.BaseFilter<'Risograph'> {
         float mask1 = 1.0 - smoothstep(size1 - 0.1, size1 + 0.1, dist1);
         float mask2 = 1.0 - smoothstep(size2 - 0.1, size2 + 0.1, dist2);
 
-        vec3 paper = uPaperColor / 255.0;
-        vec3 i1    = uInk1 / 255.0;
-        vec3 i2    = uInk2 / 255.0;
+        vec3 paper = uPaperColor; // già in 0..1 (sendUniformData divide per 255)
+        vec3 i1    = uInk1;
+        vec3 i2    = uInk2;
         
         vec3 result = paper;
         result = mix(result, result * i1, mask1);
@@ -398,7 +398,7 @@ export class DuotoneFilter extends fabric.filters.BaseFilter<'DuotoneFilter'> {
         float highlightMask = smoothstep(0.55, 1.0, luma);
         float midMask = 1.0 - shadowMask - highlightMask;
         
-        vec3 graded = (shadowMask * uShadowColor/255.0) + (midMask * uMidColor/255.0) + (highlightMask * uHighlightColor/255.0);
+        vec3 graded = (shadowMask * uShadowColor) + (midMask * uMidColor) + (highlightMask * uHighlightColor); // i colori arrivano già in 0..1 (sendUniformData)
         gl_FragColor = vec4(mix(color.rgb, graded, uIntensity) * color.a, color.a);
       }
     `
