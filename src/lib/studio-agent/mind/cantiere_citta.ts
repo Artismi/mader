@@ -200,6 +200,21 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
     az.push({ chi: a.id, tipo: 'interviene', testo })
   }
 
+  // 14. la revisione: ogni giorno qualcuno guarda la sala più affollata di piani e interventi e toglie un doppione
+  // (due cose dello stesso tipo nello stesso posto), perché il luogo resti leggibile. Niente si cancella: resta nella storia.
+  {
+    const aggiunte = (c: Costruzione) => K.costruzioni.filter(x => (x.tipo === 'piano' || x.tipo === 'intervento') && x.a === c.id && x.stato !== 'tolto')
+    const piena = [...sale].sort((x, y) => aggiunte(y).length - aggiunte(x).length)[0]
+    const lista = piena ? aggiunte(piena) : []
+    const doppio = lista.find((x, i) => lista.findIndex(y => y.tipo === x.tipo && y.nome === x.nome) !== i)
+    const rev = chi(x => x.id === 'urbanista' || x.id === 'curatore' || (x.carattere.prudente ?? 0) > 0.6)
+    if (piena && doppio && rev) {
+      doppio.stato = 'tolto'; doppio.storia.push({ giorno, chi: rev.id, cosa: 'l\'ha tolto: era un doppione' })
+      const testo = `In «${piena.nome}» c'erano due ${doppio.nome === 'colore' ? 'velari' : doppio.nome === 'motivo' ? 'fondali' : doppio.nome + ' uguali'}: ho tolto il più vecchio, perché si legga meglio.`
+      piena.storia.push({ giorno, chi: rev.id, cosa: testo.charAt(0).toLowerCase() + testo.slice(1, 90) }); az.push({ chi: rev.id, tipo: 'corregge', testo })
+    }
+  }
+
   // 11. catalogare: l'archivio dà un nome alle strade, come in una città vera
   for (const st of di('strada')) if (!K.nomiVie[st.id] && r() < 0.4) {
     const A = K.costruzioni.find(c => c.id === st.a), B = K.costruzioni.find(c => c.id === st.b)

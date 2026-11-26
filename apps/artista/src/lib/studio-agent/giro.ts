@@ -452,6 +452,18 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
       for (const e of esiti) v.push({ fase: 'bottega', chi: e.richiesta.autore, tipo: 'officina', testo: `${e.programma.nome}: ${e.perche} — ${e.testo}` })
     } catch (e) { o.log(`officina saltata: ${e instanceof Error ? e.message : e}`) }
   }
+  // la geologia della città: la tettonica di stateyour, con il calore del mantello dove le tavole sono fitte. Le placche,
+  // i mari e i crinali che ne escono sono il terreno su cui sta la città; ogni giorno si rifà dalla densità nuova.
+  try {
+    const TT: any = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ '/stateyour/camera/' + 'tettonica.js') // eslint-disable-line @typescript-eslint/no-explicit-any
+    const W = 128, H = 64, imp = new Float64Array(W * H)
+    for (const p of Tt.punti) { const ci = 32 + p.x / 1000 * 64, cj = 16 + p.y / 1000 * 32; for (let j = Math.max(0, Math.floor(cj - 4)); j <= Math.min(H - 1, Math.ceil(cj + 4)); j++) for (let i = Math.max(0, Math.floor(ci - 4)); i <= Math.min(W - 1, Math.ceil(ci + 4)); i++) imp[j * W + i] += Math.exp(-((i - ci) ** 2 + (j - cj) ** 2) / 6) }
+    const G = TT.evolviTettonica({ W, H, seme: st.day, impronta: imp, placche: true })
+    // la finestra della città (il centro della mappa), ricampionata a 64×64 e in interi
+    const N = 64, fin = (v: ArrayLike<number>, k: number) => { const o: number[] = []; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) o.push(Math.round(v[(16 + Math.floor(j / N * 32)) * W + 32 + Math.floor(i / N * 64)] * k)); return o }
+    S.citta.costruito ??= { costruzioni: [], nomiVie: {} }
+    ;(S.citta.costruito as unknown as { geologia?: unknown }).geologia = { giorno: st.day, lato: N, alt: fin(G.alt, 1), cont: fin(G.cont, 1), spinta: fin(G.spinta, 100), fosse: fin(G.fosse, 100) }
+  } catch (e) { o.log(`la geologia non è venuta: ${e instanceof Error ? e.message : e}`) }
   compatta(S.citta)
   S.diarioCitta = [...(S.diarioCitta ?? []), { giorno: st.day, quando: new Date().toISOString(), cittaGiorno: S.citta.giorno, verbale: v }].slice(-60)
   S.territorio = { quartieri: Tt.quartieri, piazza: Tt.piazza, insiemi: Tt.insiemi.map(i => ({ id: i.abitante.id, nome: i.abitante.nome, tipo: i.abitante.tipo, casa: i.casa, raggio: i.raggio, n: i.n })), punti: Tt.punti.map(p => [p.id, Math.round(p.x), Math.round(p.y), p.q]), fili: (() => { const per = new Map<number, [number, number, number][]>(); for (const f of Tt.fili) { for (const k of [f[0], f[1]]) { const l = per.get(k) ?? []; l.push(f); per.set(k, l) } } const tieni = new Set<string>(); for (const l of per.values()) for (const f of l.sort((x, y) => y[2] - x[2]).slice(0, 4)) tieni.add(f[0] + '|' + f[1]); return Tt.fili.filter(f => tieni.has(f[0] + '|' + f[1])).map(f => [f[0], f[1], +f[2].toFixed(3)]) })() }
@@ -476,7 +488,7 @@ export async function perLaCitta() {
     punti: Tt.punti.map(([id, x, y, q]) => { const w = works.get(id); return { id, x, y, q, t: (w?.title ?? '').slice(0, 90), g: w?.day ?? 0, i: +(w?.interest ?? 0.5).toFixed(2), k: w?.kept ? 1 : 0 } }),
     abitanti: C.abitanti.map(a => { const ins = Tt.insiemi.find(i => i.id === a.id); return { id: a.id, nome: a.nome, tipo: a.tipo, carica: a.carica, casa: ins?.casa ?? a.casa, raggio: ins?.raggio ?? a.raggio, n: ins?.n ?? 0, visti: a.visti.slice(-12), vesti: a.vesti ?? [], fem: !!a.fem, carattere: a.carattere } }),
     fili: Tt.fili ?? [],
-    costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [] } : null,
+    costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [], geologia: (C.costruito as unknown as { geologia?: unknown }).geologia ?? null } : null,
     giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
     decisioni: (C.decisioni ?? []).slice(-12).reverse().map(d => ({ cosa: d.cosa, stato: d.stato, fino: d.fino, esito: d.esito ?? null, chi: d.chi })),
     mostre: (C.mostre ?? []).slice(-3).reverse(),
