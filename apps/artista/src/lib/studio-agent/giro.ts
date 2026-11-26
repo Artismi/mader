@@ -3,6 +3,7 @@
  * gli ridà la memoria, e chiama queste funzioni: qualche studio, una sequenza, poi prepara il post
  * (per ogni tavola scelta: l'immagine e il suo pezzo di musica; il video lo monta ffmpeg fuori dal browser).
  */
+import { viviGiornata, vitaPerIlSito } from './mind/vita'
 import * as T from './transport'
 import { addestra, esito as esitoReel, type Giudice, type Tratti } from './mind/giudice'
 import { loadOrCreate, runDay } from './day'
@@ -446,6 +447,8 @@ export async function cittaGiro(o: { log: (m: string) => void }) {
   let quante = 0
   while (quante < 10) {
     const oggi = await giornata(S.citta, opere, Tt, { cosmo: cosmo ?? undefined, seme: st.day * 31 + quante, cerca, ricerche: quante ? 2 : 8, giornoAgente: st.day, strumenti })
+    // la vita: le ore della giornata, con i bisogni, gli oggetti, gli incontri, i progetti; dentro ci sono le fasi di oggi
+    viviGiornata(S.citta as never, Tt, rng(st.day * 977 + S.citta.giorno), oggi as never)
     for (const t of lavoraRedazione(S.citta as never, Tt, oggi as never, rng(st.day * 131 + S.citta.giorno))) oggi.push({ fase: 'archivio', chi: (S.citta as unknown as { palinsesto?: { narratore: { id: string } } }).palinsesto?.narratore.id ?? 'archivio', tipo: 'redazione', testo: t } as never)
     v.push(...oggi); quante++
     if (performance.now() - t0 > 150000) break
@@ -545,6 +548,7 @@ export async function perLaCitta() {
     fili: Tt.fili ?? [],
     costruito: C.costruito ? { costruzioni: C.costruito.costruzioni.map(c => ({ ...c, storia: c.storia.slice(-4) })), nomiVie: C.costruito.nomiVie, coltivato: C.costruito.coltivato ?? [], geologia: (C.costruito as unknown as { geologia?: unknown }).geologia ?? null, allestimenti: C.costruito.allestimenti ?? {} } : null,
     giornate: (S.diarioCitta ?? []).slice(-4).reverse(),
+    vita: vitaPerIlSito(C as never),
     redazione: { attuale: (C as unknown as { palinsesto?: unknown }).palinsesto ?? null, storico: ((C as unknown as { storicoRedazione?: unknown[] }).storicoRedazione ?? []).slice(-6).reverse() },
     calendario: await agenda().catch(() => null),
     decisioni: (C.decisioni ?? []).slice(-12).reverse().map(d => ({ cosa: d.cosa, stato: d.stato, fino: d.fino, esito: d.esito ?? null, chi: d.chi })),

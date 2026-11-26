@@ -32,7 +32,7 @@ function posDi(T: Territorio, opere: Opera[], q: number): Pos {
   return { livello: 0, angolo: Math.atan2(Q.y - T.piazza.y, Q.x - T.piazza.x), raggio: Math.hypot(Q.x - T.piazza.x, Q.y - T.piazza.y), x: Q.x, y: Q.y, eta: medio / max } as Pos
 }
 
-export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti: Ab[], giorno: number, r: () => number, o: { scoperte?: { n: number; testo: string }[]; cantieri?: { cosa: string; chi: string }[]; letture?: number; sale?: Record<string, { curatore: string; disposizione?: string; quante?: number; suolo?: { colori: string[] } }> } = {}): Azione[] {
+export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti: Ab[], giorno: number, r: () => number, o: { atti?: { chi: string; ogg: string; luogo: string; q?: number }[]; scoperte?: { n: number; testo: string }[]; cantieri?: { cosa: string; chi: string }[]; letture?: number; sale?: Record<string, { curatore: string; disposizione?: string; quante?: number; suolo?: { colori: string[] } }> } = {}): Azione[] {
   const az: Azione[] = []
   const nomeDi = (id: string) => abitanti.find(a => a.id === id)?.nome ?? id
   const nuova = (c: Omit<Costruzione, 'id' | 'storia' | 'stato'> & { stato?: Costruzione['stato'] }, cosa: string) => {
@@ -146,10 +146,13 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   // 8. gru: ogni cantiere aperto ha la sua gru
   for (const c of (o.cantieri ?? []).slice(-4)) if (!K.costruzioni.some(x => x.tipo === 'gru' && x.nome === c.cosa)) nuova({ tipo: 'gru', chi: c.chi, giorno, nome: c.cosa, stato: 'in costruzione' }, 'ha montato la gru')
   // 9. il gesto d'impulso: chi ha il carattere contrario copre una parete con un graffito (l'originale resta sotto)
-  const ribelle = abitanti.filter(a => (a.carattere.contrario ?? 0) > 0.7)[0]
-  if (ribelle && r() < 0.25) {
-    const caps = di('capsula'), c = caps[Math.floor(r() * caps.length)], altro = T.punti[Math.floor(r() * T.punti.length)]
-    if (c) { nuova({ tipo: 'graffito', chi: ribelle.id, giorno, a: c.id, dati: { tavola: altro.id, titolo: altro.titolo } }, 'ha coperto una parete'); az.push({ chi: ribelle.id, tipo: 'copre', testo: `Stanotte ho coperto una parete di «${c.nome}» con «${altro.titolo.slice(0, 60)}», che viene da tutt'altra parte. Sotto c'è ancora tutto.` }) }
+  // (dalla vita: chi ieri è andato al muro con la bomboletta; altrimenti, come prima, chi ha il carattere contrario)
+  const muri = (o.atti ?? []).filter(x => x.ogg === 'muro').slice(0, 2)
+  for (const at of muri.length ? muri : [null]) {
+    const ribelle = at ? abitanti.find(a => a.id === at.chi) : abitanti.filter(a => (a.carattere.contrario ?? 0) > 0.7)[0]
+    if (!ribelle || (!at && r() >= 0.25)) continue
+    const caps = di('capsula'), c = (at?.q != null ? capsulaDi(at.q) : null) ?? caps[Math.floor(r() * caps.length)], altro = T.punti[Math.floor(r() * T.punti.length)]
+    if (c) { nuova({ tipo: 'graffito', chi: ribelle.id, giorno, a: c.id, dati: { tavola: altro.id, titolo: altro.titolo } }, 'ha coperto una parete'); az.push({ chi: ribelle.id, tipo: 'copre', testo: `Ho coperto una parete di «${c.nome}» con «${altro.titolo.slice(0, 50)}». Sotto c'è ancora tutto: è una conversazione, non una cancellatura.` }) }
   }
   // 10. il monumento: la tavola più amata di sempre, se ancora non ce l'ha
   if (!di('monumento').length) { const best = [...T.punti].sort((a, b) => b.peso - a.peso)[0]; if (best) { nuova({ tipo: 'monumento', chi: 'curatore', giorno, nome: best.titolo, dati: { tavola: best.id } }, 'l\'ha eretto'); az.push({ chi: 'curatore', tipo: 'costruisce', testo: `In piazza c'è ora un monumento: «${best.titolo.slice(0, 70)}».` }) } }
@@ -158,17 +161,21 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   // l'archivio scrive una parola sul piano, chi ha il carattere contrario incolla un ritaglio da un'altra area, il visionario
   // proietta un ologramma sopra una tavola stesa. Armonia: al massimo 4 per sala; oltre, il più vecchio si toglie (resta nella storia).
   const sale = di('capsula').filter(c => c.stato === 'in piedi')
-  for (let k = 0; k < 2 && sale.length; k++) { // hanno un loro tempo: non tolgono posto alle costruzioni
-    const S = pick(r, sale), tav = T.punti.filter(p => p.q === S.q).sort((a, b) => b.peso - a.peso)
+  const INT12: Record<string, string> = { forbici: 'ritaglio', vetri: 'ologramma', leggio: 'parola', scaffali: 'parola', banco: 'rilievo', scavo: 'rilievo' }
+  const vita12 = (o.atti ?? []).filter(x => INT12[x.ogg]).slice(0, 3)
+  const salaDi = (q?: number) => { const c = q != null ? capsulaDi(q) : undefined; return c && sale.includes(c) ? c : pick(r, sale) }
+  for (let k = 0; k < (vita12.length || 2) && sale.length; k++) { // dalla vita: chi ieri ha lavorato con quell'attrezzo; altrimenti come prima
+    const at = vita12[k], modo = at ? INT12[at.ogg] : null
+    const S = salaDi(at?.q), tav = T.punti.filter(p => p.q === S.q).sort((a, b) => b.peso - a.peso)
     if (tav.length < 2) continue
     const qui = K.costruzioni.filter(c => c.tipo === 'intervento' && c.a === S.id && c.stato !== 'tolto')
-    const a = chi(x => x.tipo !== 'scienziato', x => 0.5 + (x.carattere.visionario ?? 0) + (x.carattere.contrario ?? 0) * 0.5)
+    const a = at ? abitanti.find(x => x.id === at.chi) ?? null : chi(x => x.tipo !== 'scienziato', x => 0.5 + (x.carattere.visionario ?? 0) + (x.carattere.contrario ?? 0) * 0.5)
     if (!a) continue
     const car = a.carattere, Q = T.quartieri.find(x => x.id === S.q)
     let tipo: string, dati: Record<string, unknown>, testo: string
-    if (a.id === 'curatore' || (car.prudente ?? 0) > 0.6) { tipo = 'rilievo'; dati = { tavola: tav[0].id }; testo = `Ho sollevato in rilievo «${tav[0].titolo.slice(0, 50)}», la tavola d'onore di «${S.nome}»: la sua luce diventa altezza.` }
-    else if (a.id === 'archivio' || a.tipo === 'testa') { const w = pick(r, Q?.concetti ?? ['memoria']); tipo = 'parola'; dati = { parola: w, su: pick(r, tav.slice(0, 6)).id }; testo = `Sul piano di una tavola di «${S.nome}» ho scritto «${w}».` }
-    else if ((car.contrario ?? 0) > 0.6) { const altro = pick(r, T.punti.filter(p => p.q !== S.q && p.peso > 0.5)); if (!altro) continue; tipo = 'ritaglio'; dati = { tavola: altro.id, su: pick(r, tav.slice(0, 6)).id, taglio: [r() * 0.5, r() * 0.5, 0.3 + r() * 0.4, 0.3 + r() * 0.4] }; testo = `Ho ritagliato un pezzo di «${altro.titolo.slice(0, 40)}» e l'ho incollato in «${S.nome}», che non c'entra niente: vediamo cosa si dicono.` }
+    if (modo ? modo === 'rilievo' : (a.id === 'curatore' || (car.prudente ?? 0) > 0.6)) { tipo = 'rilievo'; dati = { tavola: tav[0].id }; testo = `Ho sollevato in rilievo «${tav[0].titolo.slice(0, 50)}», la tavola d'onore di «${S.nome}»: la sua luce diventa altezza.` }
+    else if (modo ? modo === 'parola' : (a.id === 'archivio' || a.tipo === 'testa')) { const w = pick(r, Q?.concetti ?? ['memoria']); tipo = 'parola'; dati = { parola: w, su: pick(r, tav.slice(0, 6)).id }; testo = `Sul piano di una tavola di «${S.nome}» ho scritto «${w}».` }
+    else if (modo ? modo === 'ritaglio' : (car.contrario ?? 0) > 0.6) { const altro = pick(r, T.punti.filter(p => p.q !== S.q && p.peso > 0.5)); if (!altro) continue; tipo = 'ritaglio'; dati = { tavola: altro.id, su: pick(r, tav.slice(0, 6)).id, taglio: [r() * 0.5, r() * 0.5, 0.3 + r() * 0.4, 0.3 + r() * 0.4] }; testo = `Ho ritagliato un pezzo di «${altro.titolo.slice(0, 40)}» e l'ho incollato in «${S.nome}», che non c'entra niente: vediamo cosa si dicono.` }
     else { const t = pick(r, tav.slice(0, 6)); tipo = 'ologramma'; dati = { tavola: t.id }; testo = `Sopra «${t.titolo.slice(0, 50)}» ho proiettato il suo ologramma, in piedi.` }
     if (qui.length >= 4) { const v = qui[0]; v.stato = 'tolto'; v.storia.push({ giorno, chi: a.id, cosa: 'l\'ha tolto per far posto' }) }
     nuova({ tipo: 'intervento', chi: a.id, giorno, a: S.id, q: S.q, nome: tipo, dati: { ...dati, tipo } }, testo)
@@ -182,18 +189,21 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   // stende il motivo del suolo su un piano verticale dietro le tavole, chi è contrario mette una tavola di un'altra area
   // su un piano sospeso, l'archivio colora le cornici delle tavole della stessa giornata. Massimo 3 piani per sala.
   const tinta = (q?: number) => { const c = q != null ? o.sale?.[String(q)]?.suolo?.colori : undefined; return c?.length ? pick(r, c) : pick(r, ['#e3361b', '#ebe6dc', '#7fa7c9', '#c9b27f']) }
-  for (let k = 0; k < 2 && sale.length; k++) {
-    const S = pick(r, sale), a = chi(x => x.tipo !== 'scienziato', x => 0.4 + (x.carattere.visionario ?? 0) + (x.carattere.trascinatore ?? 0) * 0.5); if (!a) continue
+  const INT13: Record<string, string> = { cavalletto: 'velario', orto: 'velario', torchio: 'motivo', telaio: 'cornici', sentiero: 'soglia', telescopio: 'altrui', simulatore: 'altrui' }
+  const vita13 = (o.atti ?? []).filter(x => INT13[x.ogg]).slice(0, 3)
+  for (let k = 0; k < (vita13.length || 2) && sale.length; k++) {
+    const at = vita13[k], modo = at ? INT13[at.ogg] : null
+    const S = salaDi(at?.q), a = at ? abitanti.find(x => x.id === at.chi) ?? null : chi(x => x.tipo !== 'scienziato', x => 0.4 + (x.carattere.visionario ?? 0) + (x.carattere.trascinatore ?? 0) * 0.5); if (!a) continue
     const Q = T.quartieri.find(x => x.id === S.q), tav = T.punti.filter(p => p.q === S.q).sort((x, y) => y.peso - x.peso)
     const qui = K.costruzioni.filter(c => c.tipo === 'piano' && c.a === S.id && c.stato !== 'tolto')
     let dati: Record<string, unknown>, testo: string
-    if (a.id === 'giardiniere' || r() < 0.2) { dati = { verso: 'orizzontale', quota: 60 + r() * 30, largo: 70 + r() * 40, alto: 50 + r() * 30, contenuto: 'colore', colore: tinta(S.q), opacita: 0.12 + r() * 0.1 }; testo = `Sopra «${S.nome}» ho teso un velario colorato: la sala ora ha un cielo suo.` }
-    else if (a.id === 'urbanista' || (a.carattere.prudente ?? 0) > 0.65) {
+    if (modo ? modo === 'velario' : (a.id === 'giardiniere' || r() < 0.2)) { dati = { verso: 'orizzontale', quota: 60 + r() * 30, largo: 70 + r() * 40, alto: 50 + r() * 30, contenuto: 'colore', colore: tinta(S.q), opacita: 0.12 + r() * 0.1 }; testo = `Sopra «${S.nome}» ho teso un velario colorato: la sala ora ha un cielo suo.` }
+    else if (modo ? modo === 'soglia' : (a.id === 'urbanista' || (a.carattere.prudente ?? 0) > 0.65)) {
       const vicina = K.costruzioni.filter(c => c.tipo === 'ponte' && (c.a === String(S.q) || c.b === String(S.q)))[0], altra = vicina ? T.quartieri.find(x => String(x.id) === (vicina.a === String(S.q) ? vicina.b : vicina.a)) : null
       const comune = altra ? (Q?.concetti ?? []).find(w => altra.concetti.includes(w)) ?? altra.concetti[0] : pick(r, Q?.concetti ?? ['soglia'])
       dati = { verso: 'verticale', avanti: 1, quota: 20, largo: 50, alto: 34, contenuto: 'parola', parola: comune, colore: tinta(S.q), opacita: 0.1, verso_q: altra?.id }; testo = `All'ingresso di «${S.nome}» ho alzato una soglia trasparente con scritto «${comune}»${altra ? `, la parola che la lega a «${altra.nome}»` : ''}.`
-    } else if (a.id === 'curatore' || a.tipo === 'mestiere') { dati = { verso: 'verticale', avanti: -1, quota: 30, largo: 90, alto: 60, contenuto: 'motivo', opacita: 0.4 }; testo = `Dietro le tavole di «${S.nome}» ho steso il motivo del suolo su un piano: le tavole ci si staccano sopra.` }
-    else if ((a.carattere.contrario ?? 0) > 0.55) { const altro = pick(r, T.punti.filter(p => p.q !== S.q && p.peso > 0.5)); if (!altro) continue; dati = { verso: pick(r, ['verticale', 'orizzontale']), avanti: 0, quota: 45 + r() * 40, largo: 30, alto: 38, contenuto: 'tavola', tavola: altro.id, opacita: 0.6 }; testo = `In mezzo a «${S.nome}» ho sospeso su un piano «${altro.titolo.slice(0, 40)}», che viene da altrove.` }
+    } else if (modo ? modo === 'motivo' : (a.id === 'curatore' || a.tipo === 'mestiere')) { dati = { verso: 'verticale', avanti: -1, quota: 30, largo: 90, alto: 60, contenuto: 'motivo', opacita: 0.4 }; testo = `Dietro le tavole di «${S.nome}» ho steso il motivo del suolo su un piano: le tavole ci si staccano sopra.` }
+    else if (modo ? modo === 'altrui' : (a.carattere.contrario ?? 0) > 0.55) { const altro = pick(r, T.punti.filter(p => p.q !== S.q && p.peso > 0.5)); if (!altro) continue; dati = { verso: pick(r, ['verticale', 'orizzontale']), avanti: 0, quota: 45 + r() * 40, largo: 30, alto: 38, contenuto: 'tavola', tavola: altro.id, opacita: 0.6 }; testo = `In mezzo a «${S.nome}» ho sospeso su un piano «${altro.titolo.slice(0, 40)}», che viene da altrove.` }
     else { const g = tav[0]?.giorno, stesse = tav.filter(p => Math.abs(p.giorno - (g ?? 0)) <= 3).slice(0, 6).map(p => p.id); dati = { contenuto: 'cornici', tavole: stesse, colore: tinta(S.q) }; testo = `Ho colorato le cornici delle tavole di «${S.nome}» nate negli stessi giorni: si riconoscono tra loro.` }
     if (qui.length >= 3) { const v = qui[0]; v.stato = 'tolto'; v.storia.push({ giorno, chi: a.id, cosa: 'l\'ha tolto per far posto' }) }
     nuova({ tipo: 'piano', chi: a.id, giorno, a: S.id, q: S.q, nome: String(dati.contenuto), dati }, testo)
@@ -220,7 +230,9 @@ export function costruisci(K: Cantiere, T: Territorio, opere: Opera[], abitanti:
   // le sale nuove o che cambiano forma si appendono da capo, poi ogni giorno in tre sale qualcuno cambia qualcosa
   K.allestimenti ??= {}
   for (const S of sale) { const info = o.sale?.[String(S.q)], X = K.allestimenti[S.id]; if (!X || X.forma !== (FORMA[info?.disposizione ?? 'griglia'] ?? 'abside')) az.push(...allestisci(K.allestimenti, S, info, T, abitanti, giorno, r)) }
-  for (let k = 0; k < 3 && sale.length; k++) { const S = pick(r, sale); az.push(...allestisci(K.allestimenti, S, o.sale?.[String(S.q)], T, abitanti, giorno, r)) }
+  // ogni giorno cambia qualcosa nelle sale dove ieri il curatore ha lavorato davvero (dalla vita); altrimenti in tre a caso
+  const curate = [...new Set((o.atti ?? []).filter(x => x.q != null && x.luogo.startsWith('sala:') && o.sale?.[String(x.q)]?.curatore === x.chi).map(x => x.q!))].map(q => capsulaDi(q)).filter((c): c is Costruzione => !!c && sale.includes(c))
+  for (const S of curate.length ? curate.slice(0, 5) : Array.from({ length: Math.min(3, sale.length) }, () => pick(r, sale))) az.push(...allestisci(K.allestimenti, S, o.sale?.[String(S.q)], T, abitanti, giorno, r))
 
   // 11. catalogare: l'archivio dà un nome alle strade, come in una città vera
   for (const st of di('strada')) if (!K.nomiVie[st.id] && r() < 0.4) {
